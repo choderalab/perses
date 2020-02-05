@@ -151,7 +151,7 @@ def test_run_cdk2_iterations_repex():
         #setup_options['solvate'] = False
         #setup_options['n_cycles'] = 2
         setup_options['scheduler_address'] = None
-        for parameter in ['protein_pdb', 'ligand_file', 'small_molecule_parameters_cache']:
+        for parameter in ['protein_pdb', 'ligand_file']:
             setup_options[parameter] = os.path.join(setup_directory, setup_options[parameter])
         for parameter in ['trajectory_directory', 'trajectory_prefix', 'save_setup_pickle_as']:
             setup_options[parameter] = os.path.join(tmpdirname, setup_options[parameter])
@@ -166,6 +166,59 @@ def test_run_cdk2_iterations_repex():
 
         # TODO: Check output
 
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip slow test on TRAVIS.")
+def test_run_bace_spectator():
+    """
+    Ensure that we can instantiate and run a repex relative free energy calculation the cdk2 ligands in vacuum
+    """
+    # Enter a temporary directory
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        # Move to temporary directory
+        os.chdir(tmpdirname)
+        print(f'Running example in temporary directory: {tmpdirname}')
+
+        # Setup directory
+        setup_directory = resource_filename("perses", "data/bace-example")
+        print(f'Setup directory : {setup_directory}')
+
+        # Get options
+        from perses.app.setup_relative_calculation import getSetupOptions
+        yaml_filename = os.path.join(setup_directory, "bace_setup.yaml")
+        setup_options = getSetupOptions(yaml_filename)
+
+        # DEBUG: Print traceback for any UserWarnings
+        show_warning_stacktraces = False
+        if show_warning_stacktraces:
+            import traceback
+            import warnings
+            _old_warn = warnings.warn
+            def warn(*args, **kwargs):
+                tb = traceback.extract_stack()
+                _old_warn(*args, **kwargs)
+                print("".join(traceback.format_list(tb)[:-1]))
+            warnings.warn = warn
+
+        setup_options['scheduler_address'] = None
+        for parameter in ['protein_pdb', 'ligand_file']:
+            setup_options[parameter] = os.path.join(setup_directory, setup_options[parameter])
+            # only one spectator
+            setup_options['spectators'] = [ os.path.join(setup_directory, setup_options['spectators'][0])]
+        for parameter in ['trajectory_directory', 'trajectory_prefix', 'save_setup_pickle_as']:
+            setup_options[parameter] = os.path.join(tmpdirname, setup_options[parameter])
+
+
+        # Run setup
+        n_iterations = 2
+        setup_dict = setup_relative_calculation.run_setup(setup_options)
+        setup_dict['hybrid_samplers']['complex'].run(n_iterations=n_iterations)
+
+        # test that there is TLA in the complex system
+        found_tla = False
+        for res in setup_dict['hybrid_topology_factories']['complex'].hybrid_topology.residues:
+            if res.name == 'TLA':
+                found_tla = True
+        assert found_tla == True, 'Spectator TLA not in old topology'
 
 if __name__=="__main__":
     test_run_cdk2_iterations_repex()

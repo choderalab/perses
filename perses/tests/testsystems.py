@@ -1717,6 +1717,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
 
         # skipping molecules with undefined stereocenters
         d_smiles_to_oemol = {}
+
         good_molecules = []
         for i, smiles in enumerate(molecules):
             mol = smiles_to_oemol(smiles, f"MOL_{i}")

@@ -50,7 +50,8 @@ class RelativeFEPSetup(object):
                  protein_pdb_filename=None,receptor_mol2_filename=None, pressure=1.0 * unit.atmosphere,
                  temperature=300.0 * unit.kelvin, solvent_padding=9.0 * unit.angstroms, atom_map=None,
                  hmass=4*unit.amus, neglect_angles=False, map_strength='default', anneal_14s = False,
-                 small_molecule_forcefield='gaff-2.11', small_molecule_parameters_cache=None):
+                 small_molecule_forcefield='gaff-2.11', small_molecule_parameters_cache=None,
+                 spectator_filenames=None):
         """
         Initialize a NonequilibriumFEPSetup object
 
@@ -85,6 +86,9 @@ class RelativeFEPSetup(object):
             ['gaff-1.81', 'gaff-2.11', 'smirnoff99Frosst-1.1.0', 'openff-1.0.0']
         small_molecule_parameters_cache : str, optional, default=None
             If specified, this filename will be used for a small molecule parameter cache by the SystemGenerator.
+        spectator_filenames : list, optional, default=None
+            If specified, this list is the filenames of any non-alchemical small molecule to be part of the system.
+            These will be treated with the same small molecule forcefield as the alchemical ligands, and will only be present in the complex phase
         """
         self._pressure = pressure
         self._temperature = temperature
@@ -96,6 +100,7 @@ class RelativeFEPSetup(object):
         self._proposal_phase = None
         self._map_strength = map_strength
         self._anneal_14s = anneal_14s
+        self._spectator_filenames = spectator_filenames
 
         beta = 1.0 / (kB * temperature)
 
@@ -216,6 +221,28 @@ class RelativeFEPSetup(object):
         from openforcefield.topology import Molecule
         molecules = [ Molecule.from_openeye(oemol) for oemol in [self._ligand_oemol_old, self._ligand_oemol_new] ]
 
+        # Handle spectator molecules
+        if self._spectator_filenames is not None:
+            # we have spectator molecules to handle
+            # these are lists incase there are multiple spectators
+            self._spectator_molecules = []
+            self._spectator_positions = []
+            self._spectator_topologies = []
+            self._spectator_md_topologies = []
+            for spectator_file in self._spectator_filenames:
+                assert spectator_file[-3:] == 'sdf', 'Spectator molecules must be provided as a .sdf file, in the correct frame of reference of the protein system'
+                _logger.info(f'Setting up spectator {spectator_file}')
+                spectator_mol = createOEMolFromSDF(spectator_file)
+                spectator_mol = generate_unique_atom_names(spectator_mol)
+                self._spectator_molecules.append(spectator_mol)
+                # add this to a small molecule register
+                molecules.append(Molecule.from_openeye(spectator_mol,allow_undefined_stereo=True))
+                self._spectator_positions.append(extractPositionsFromOEMol(spectator_mol))
+                spectator_topology = forcefield_generators.generateTopologyFromOEMol(spectator_mol)
+                self._spectator_md_topologies.append(md.Topology.from_openmm(spectator_topology))
+                _logger.info(f"\tsuccessfully generated oemol, positions and topology for spectator {spectator_file}.")
+            _logger.info(f'All spectator molecules set up')
+
         # Create SystemGenerator
         from openmmforcefields.generators import SystemGenerator
         forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : self._hmass}
@@ -238,7 +265,7 @@ class RelativeFEPSetup(object):
             _logger.info(f"setting up complex phase...")
             self._setup_complex_phase(protein_pdb_filename,receptor_mol2_filename,mol_list)
             self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(
-            self._complex_topology_old, self._complex_positions_old)
+            self._complex_topology_old, self._complex_positions_old,phase='complex')
             _logger.info(f"successfully generated complex topology, positions, system")
 
             self._complex_md_topology_old_solvated = md.Topology.from_openmm(self._complex_topology_old_solvated)
@@ -281,7 +308,7 @@ class RelativeFEPSetup(object):
                 self._nonbonded_method = app.PME
                 _logger.info(f"solvating ligand...")
                 self._ligand_topology_old_solvated, self._ligand_positions_old_solvated, self._ligand_system_old_solvated = self._solvate_system(
-                self._ligand_topology_old, self._ligand_positions_old)
+                self._ligand_topology_old, self._ligand_positions_old,phase='solvent')
                 self._ligand_md_topology_old_solvated = md.Topology.from_openmm(self._ligand_topology_old_solvated)
 
                 _logger.info(f"creating TopologyProposal")
@@ -332,7 +359,7 @@ class RelativeFEPSetup(object):
             if self._proposal_phase is None:
                 _logger.info('No complex or solvent leg, so performing topology proposal for vacuum leg')
                 self._vacuum_topology_old, self._vacuum_positions_old, self._vacuum_system_old = self._solvate_system(self._ligand_topology_old,
-                                                                                                         self._ligand_positions_old,vacuum=True)
+                                                                                                         self._ligand_positions_old,phase='vacuum')
                 self._vacuum_topology_proposal = self._proposal_engine.propose(self._vacuum_system_old,
                                                                                 self._vacuum_topology_old,current_mol=self._ligand_oemol_old,proposed_mol=self._ligand_oemol_new)
                 self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
@@ -400,14 +427,31 @@ class RelativeFEPSetup(object):
             raise ValueError("You need to provide either a protein pdb or a receptor mol2 to run a complex simulation.")
 
         self._complex_md_topology_old = self._receptor_md_topology_old.join(self._ligand_md_topology_old)
+
+        n_atoms_spectators = 0
+        if self._spectator_filenames:
+            for i, spectator_topology in enumerate(self._spectator_md_topologies,1):
+                _logger.debug(f'Appending spectator number {i} to complex topology')
+                self._complex_md_topology_old = self._complex_md_topology_old.join(spectator_topology)
+                n_atoms_spectators += spectator_topology.n_atoms
         self._complex_topology_old = self._complex_md_topology_old.to_openmm()
 
-        n_atoms_complex_old = self._complex_topology_old.getNumAtoms()
+        n_atoms_total_old = self._complex_topology_old.getNumAtoms()
         n_atoms_protein_old = self._receptor_topology_old.getNumAtoms()
+        n_atoms_ligand_old = n_atoms_total_old - n_atoms_protein_old - n_atoms_spectators
 
-        self._complex_positions_old = unit.Quantity(np.zeros([n_atoms_complex_old, 3]), unit=unit.nanometers)
+        self._complex_positions_old = unit.Quantity(np.zeros([n_atoms_total_old, 3]), unit=unit.nanometers)
         self._complex_positions_old[:n_atoms_protein_old, :] = self._receptor_positions_old
-        self._complex_positions_old[n_atoms_protein_old:, :] = self._ligand_positions_old
+        self._complex_positions_old[n_atoms_protein_old:n_atoms_protein_old+n_atoms_ligand_old, :] = self._ligand_positions_old
+
+        if self._spectator_filenames:
+            start = n_atoms_protein_old+n_atoms_ligand_old
+            for i, spectator_positions in enumerate(self._spectator_positions,1):
+                _logger.info(f'Updating positions of spectator number {i} to complex positions')
+                n_atoms_spectator, _ = np.shape(spectator_positions)
+                _logger.debug(f'Number of spectator atoms: {n_atoms_spectator}')
+                self._complex_positions_old[start:start+n_atoms_spectator, :] = spectator_positions
+                start += n_atoms_spectator
 
     def _generate_solvent_topologies(self, topology_proposal, old_positions):
         """
@@ -445,7 +489,7 @@ class RelativeFEPSetup(object):
 
         # solvate the old ligand topology:
         old_solvated_topology, old_solvated_positions, old_solvated_system = self._solvate_system(
-            old_ligand_topology.to_openmm(), old_ligand_positions)
+            old_ligand_topology.to_openmm(), old_ligand_positions,phase='solvent')
 
         old_solvated_md_topology = md.Topology.from_openmm(old_solvated_topology)
 
@@ -537,7 +581,7 @@ class RelativeFEPSetup(object):
 
         return ligand_topology_proposal, old_ligand_positions
 
-    def _solvate_system(self, topology, positions, model='tip3p',vacuum=False):
+    def _solvate_system(self, topology, positions, model='tip3p',phase='complex'):
         """
         Generate a solvated topology, positions, and system for a given input topology and positions.
         For generating the system, the forcefield files provided in the constructor will be used.
@@ -565,16 +609,12 @@ class RelativeFEPSetup(object):
         # DEBUG: Write PDB file being fed into Modeller to check why MOL isn't being matched
         from simtk.openmm.app import PDBFile
         import os
-        #pdb_filename = os.path.join(os.environ['PWD'], 'modeller.pdb')
-        #with open(pdb_filename, 'w') as outfile:
-        #    PDBFile.writeFile(topology, positions, outfile)
-
         modeller = app.Modeller(topology, positions)
         # retaining protein protonation from input files
         #hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
         #modeller.delete(hs)
         #modeller.addHydrogens(forcefield=self._system_generator.forcefield)
-        if not vacuum:
+        if phase != 'vacuum':
             _logger.info(f"\tpreparing to add solvent")
             modeller.addSolvent(self._system_generator.forcefield, model=model, padding=self._padding, ionicStrength=0.15*unit.molar)
         else:
@@ -587,6 +627,11 @@ class RelativeFEPSetup(object):
         _logger.info(f"\tparameterizing...")
         solvated_system = self._system_generator.create_system(solvated_topology)
         _logger.info(f"\tSystem parameterized")
+
+        pdb_filename = f"{os.environ['PWD']}/{self._trajectory_directory}/{self._trajectory_prefix}-{phase}.pdb"
+        with open(pdb_filename, 'w') as outfile:
+            PDBFile.writeFile(solvated_topology, solvated_positions, outfile)
+
         return solvated_topology, solvated_positions, solvated_system
 
     @property

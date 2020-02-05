@@ -60,6 +60,9 @@ def getSetupOptions(filename):
     if 'small_molecule_parameters_cache' not in setup_options:
         setup_options['small_molecule_parameters_cache'] = None
 
+    if 'spectators' not in setup_options:
+        setup_options['spectators'] = None
+
     # Not sure why these are needed
     # TODO: Revisit these?
     if 'neglect_angles' not in setup_options:
@@ -333,7 +336,7 @@ def run_setup(setup_options):
         fe_setup = RelativeFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files,phases=phases,
                                           protein_pdb_filename=protein_pdb_filename,
                                           receptor_mol2_filename=receptor_mol2, pressure=pressure,
-                                          temperature=temperature, solvent_padding=solvent_padding_angstroms,
+                                          temperature=temperature, solvent_padding=solvent_padding_angstroms, spectator_filenames=setup_options['spectators'],
                                           atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'])
 
