@@ -226,6 +226,7 @@ def describe_oemol(mol):
 
 def createOEMolFromSDF(sdf_filename, index=0):
     """
+    # TODO change this to return a list of all the mols if required
     Load an SDF file into an OEMol. Since SDF files can contain multiple molecules, an index can be provided as well.
 
     Parameters
@@ -280,17 +281,17 @@ def createSMILESfromOEMol(molecule):
 
 def generate_unique_atom_names(molecule):
     """
-    Check if an oemol has unique atom names, and if not, then assigns them 
+    Check if an oemol has unique atom names, and if not, then assigns them
 
     Parameters
     ----------
     molecule : openeye.oechem.OEMol object
-        oemol object to check 
+        oemol object to check
 
     Returns
     -------
     molecule : openeye.oechem.OEMol object
-        oemol, either unchanged if atom names are already unique, or newly generated atom names 
+        oemol, either unchanged if atom names are already unique, or newly generated atom names
     """
     atom_names = []
 
@@ -302,7 +303,7 @@ def generate_unique_atom_names(molecule):
     if len(set(atom_names)) == atom_count:
         # one name per atom therefore unique
         _logger.info(f'molecule {molecule.GetTitle()} has unique atom names already')
-        return molecule 
+        return molecule
     else:
         # generating new atom names
         from collections import defaultdict
