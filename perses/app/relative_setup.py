@@ -628,7 +628,7 @@ class RelativeFEPSetup(object):
         solvated_system = self._system_generator.create_system(solvated_topology)
         _logger.info(f"\tSystem parameterized")
 
-        pdb_filename = os.path.join(os.environ['PWD'], f'modeller-{phase}.pdb')
+        pdb_filename = f"{os.environ['PWD']}/{self._trajectory_directory}/{self._trajectory_prefix}-{phase}.pdb"
         with open(pdb_filename, 'w') as outfile:
             PDBFile.writeFile(solvated_topology, solvated_positions, outfile)
 
