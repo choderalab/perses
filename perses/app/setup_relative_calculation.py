@@ -53,6 +53,7 @@ def getSetupOptions(filename):
     if 'protocol-type' not in setup_options:
         setup_options['protocol-type'] = 'default'
 
+
     if 'small_molecule_forcefield' not in setup_options:
         setup_options['small_molecule_forcefield'] = 'gaff-2.11'
 
