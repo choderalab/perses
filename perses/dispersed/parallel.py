@@ -162,9 +162,9 @@ class Parallelism(object):
         func : function
             python function to distribute
         arguments : tuple of lists, default None
-            if None, then the default workers are all workers
+            normal arguments of the function
         workers : list of str, default None
-            worker address list
+            worker address list; if None, then the default workers are all workers
 
         Returns
         ---------

@@ -266,31 +266,60 @@ class NetworkBuilder(object):
 
     def _create_ligand_network(self):
         """
-        This is the main function of the class.  It builds a networkx graph on all of the transformations.
+        This is the main function of the class.  It attempts to build a networkx graph on all of the transformations.
+
+        There will be a node for every ligand, for every phase.
+        For Example,
+        if there are two small molecules (e.g. CCC, CCCC) and the phases are given (e.g. 'vacuum', 'solvent'),
+        then there will be 4 nodes: (0, 'vacuum'), (1, 'vacuum'), (0, 'solvent'), and (1, 'solvent')
         """
         import networkx as nx
         self.network = nx.DiGraph()
 
         #first, let's add the nodes
-        for index, smiles in enumerate(self.smiles_list):
-            node_attribs = {'smiles': smiles}
-            self.network.add_node(index, **node_attribs)
+        for phase in self.proposal_arguments['phases']:
+            for index, smiles in enumerate(self.smiles_list):
+                node_attribs = {'smiles': smiles, 'oemol': self.ligand_oemols[index]}
+                self.network.add_node((index, phase), **node_attrib)
 
         #then, let's add the edge creation arguments
         _kwargs = []
+        launcher_arguments = {}
         for index, log_weight in np.ndenumerate(self.adjacency_matrix):
+            _arguments = []
             i, j = index[0], index[1]
             if log_weight != -np.inf:
-                _kwarg_dict = {'start_index': i, 'end_index': j, 'weight': np.exp(log_weight), 'edge_simulation_parameters': None}
+                #add the current and proposed oemols
+                _arguments.append(self.ligand_oemols[i])
+                _arguments.append(self.ligand_oemols[j])
+
+                #decide on the simulation parameters
+                if type(self.global_simulation_flavor) == str:
+                    assert self.simulation_parameters is None, f"if the global_simulation_flavor is set, then the self.simulation_parameters must be None"
+                    #then we have a default
+                    _simulation_flavor = self.global_simulation_flavor
+                    _simulation_parameters = self.simulation_arguments[_simulation_flavor]
+                else:
+                    assert self.simulation_parameters is not None, f"if the global_simulation_flavor is not set, then the self.simulation_parameters is not None"
+                    if (i,j) in list(self.simulation_parameters.keys()):
+                        if
+
+
+
+                #then we can add the edge to the phases
+                [self.network.add_edge((i, _phase), (j, _phase)) for _phase in self.proposal_arguments['phases']]
+
+
+                _kwarg_dict = {'start_index': i, 'end_index': j}
                 _kwargs.append(_kwarg_dict)
         num_runs = len(_kwargs)
 
         #create NetworkBuilder objects on the workers
         remote_worker = True if self.parallelism.client is not None else self
         _class = None if remote_worker == True else self
-        creation_validations = self.parallelism.run_all(func = generalized_worker_class_instantiation,
-                                                        arguments = (remote_worker, 'build_network_object', _class),
-                                                        workers = list(self.parallelism.workers.values()))
+        # creation_validations = self.parallelism.run_all(func = generalized_worker_class_instantiation,
+        #                                                 arguments = (remote_worker, 'build_network_object', _class),
+        #                                                 workers = list(self.parallelism.workers.values()))
 
         #creation_validations might be a bool if we are running locally
         if self.parallelism.client is None:
@@ -299,7 +328,7 @@ class NetworkBuilder(object):
             assert all(entry == True for entry in creation_validations), f"scattered_build_network_instantiation_futures failed"
 
         #now we have to deploy the jobs
-        run_futures = self.parallelism.deploy(func = call_worker_class_method,
+        run_futures = self.parallelism.deploy(func = NetworkBuilder._create_network_edge_attributes,
                                               arguments = tuple([[remote_worker] * num_runs,
                                                                 ['build_network_object'] * num_runs,
                                                                 ['_create_network_edge'] * num_runs,
@@ -382,23 +411,117 @@ class NetworkBuilder(object):
 
         return success
 
-    def _create_network_edge(self,
-                            current_mol_oemol, current_mol_positions, current_mol_topology,
-                            proposed_mol_oemol, proposed_mol_positions, proposed_mol_topology,
-                            edge_simulation_parameters,
-                            ):
+    @staticmethod
+    def _create_network_edge_attributes(self,
+                                        current_mol_oemol,
+                                        proposed_mol_oemol,
+                                        sampler_type,
+                                        sampler_arguments,
+                                        proposal_arguments,
+                                        system_generator,
+                                        proposal_engine,
+                                        geometry_engine):
+
         """
-        This is a method to create the necessary parameters for a network edge;
-        this method can be called on a remote worker directly
+        This is a method to create the necessary parameters for a network edge.
+        given the phases specified in the proposal parameters, it will generate any and all phases sequentially.
+        this method can be called on a remote worker directly.
+
 
         Arguments
         ---------
         current_mol_oemol : oechem.OEMol
             oemol object of the current molecule
-        current_mol_positions : [n, 3] np.ndarray
-            array of current molecule positions
-        current_mol_topology : openmm.app.Topology
-            current molecule topology
+        proposed_mol_oemol : oechem.OEMol
+            oemol object of the proposed molecule
+        sampler_type : dict of str
+            type of sampler to place on the Simulation object for each phase
+        sampler_arguments : dict
+            arguments to pass to the Simulation object for each phase
+        proposal_arguments : dict
+            dict of arguments to pass to the RelativeTransformationPhase
+        system_generator : openmmforcefields.generators.SystemGenerator
+            system generator for RelativeTransformationPhase
+        proposal_engine : proposal engine object
+            topology proposal engine
+        geometry_engine : perses.rjmc.FFAllAngleGeometryEngine
+            geometry proposal engine
+
+        Returns
+        -------
+        phase_returns : dict of dict or dict of None (if failure)
+            attributes to put on each edge of the graph, separated by phase
+        """
+        phase_returns = {phase: None for phase in proposal_arguments['phases'].keys()}
+        phase_tuples = [(phase, phase_generator) for phase, phase_generator in proposal_arguments['phases'].items()]
+        for index, _tup in enumerate(phase_tuples):
+            phase, phase_generator_class = _tup
+            phase_generator = phase_generator_class(system_generator = system_generator,
+                                                    proposal_engine = proposal_engine,
+                                                    geometry_engine = geometry_engine,
+                                                    proposal_arguments = proposal_arguments,
+                                                    old_oemol = current_mol_oemol,
+                                                    new_oemol = current_mol_oemol)
+
+            topology_proposals = [_dict['hybrid_factory']._topology_proposal for _dict in phase_returns.values() if _dict is not None]
+
+            if topology_proposal == []: #no topology proposal because we have no previously-existing topology proposal
+                try:
+                    property_dict = phase_generator.run_setup()
+                except Exception as e:
+                    property_dict = None
+                    _logger.warning(f"phase {phase} failed on account of: {e}")
+            else:
+                topology_proposal = topology_proposals[0]
+                try:
+                    property_dict = phase_generator.run_setup(topology_proposal)
+                except Exception as e:
+                    property_dict = None
+                    _logger.warning(f"phase {phase} failed on account of: {e}")
+
+
+            #attempt to place a simulation object on the attribute dictionary
+            if property_dict is not None:
+                #this is the signal that we an actually add a simulation object to the dictionary
+                simulation_object = Simulation(hybrid_factory = property_dict['hybrid_factory'],
+                                               sampler_type = sampler_type[phase],
+                                               sampler_arguments = sampler_arguments[phase])
+                property_dict['simulation'] = simulation_object
+            else:
+                #we cannot add a None object to a None object
+                pass
+
+            #update the attribute dictionary of each phase
+            phase_returns[phase] = property_dict
+
+        return phase_returns
+
+
+
+
+
+
+
+
+
+
+
+    def _create_network_edge_attributes(self,
+                                        current_mol_oemol,
+                                        proposed_mol_oemol,
+                                        edge_simulation_parameters,
+                                        proposal_arguments
+                                        ):
+        """
+        This is a method to create the necessary parameters for a network edge.
+        given the phases specified in the proposal parameters, it will generate any and all phases sequentially.
+        this method can be called on a remote worker directly.
+
+
+        Arguments
+        ---------
+        current_mol_oemol : oechem.OEMol
+            oemol object of the current molecule
         proposed_mol_oemol : oechem.OEMol
             oemol object of the proposed molecule
 
@@ -409,8 +532,11 @@ class NetworkBuilder(object):
             elif edge_simulation_parameters is None:
                 default parameters or self.simulation_parameters will be used to create the edge simulation object
 
+        proposal_arguments : dict
+
         Returns
         -------
+
         returnables : dict
             adjacency_matrix_log_weight : float
                 the log weight of the adjacency matrix entry i,j
