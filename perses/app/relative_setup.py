@@ -224,7 +224,7 @@ class RelativeFEPSetup(object):
         _logger.info("successfully created SystemGenerator to create ligand systems")
 
         _logger.info(f"executing SmallMoleculeSetProposalEngine...")
-        self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_smiles_old, self._ligand_smiles_new], self._system_generator,map_strength=self._map_strength, residue_name='MOL')
+        self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_oemol_old, self._ligand_oemol_new], self._system_generator,map_strength=self._map_strength, residue_name='MOL')
 
         _logger.info(f"instantiating FFAllAngleGeometryEngine...")
         # NOTE: we are conducting the geometry proposal without any neglected angles
