@@ -244,9 +244,9 @@ class RelativeFEPSetup(object):
             self._complex_md_topology_old_solvated = md.Topology.from_openmm(self._complex_topology_old_solvated)
 
             _logger.info(f"creating TopologyProposal...")
-            self._complex_topology_proposal = self._proposal_engine.propose_proposal_engine.propose(self._complex_system_old_solvated,
-                                                                            self._complex_topology_old_solvated,
-                                                                            current_mol_id=0, proposed_mol_id=1)
+            self._complex_topology_proposal = self._proposal_engine.propose(self._complex_system_old_solvated,
+                                          self._complex_topology_old_solvated,
+                                          current_mol_id=0, proposed_mol_id=1)
 
             self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
 
