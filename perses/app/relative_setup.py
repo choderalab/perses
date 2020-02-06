@@ -224,7 +224,7 @@ class RelativeFEPSetup(object):
         _logger.info("successfully created SystemGenerator to create ligand systems")
 
         _logger.info(f"executing SmallMoleculeSetProposalEngine...")
-        self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_oemol_old, self._ligand_oemol_new], self._system_generator,map_strength=self._map_strength, residue_name='MOL')
+        self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_oemol_old, self._ligand_oemol_new], self._system_generator, map_strength=self._map_strength, residue_name='MOL')
 
         _logger.info(f"instantiating FFAllAngleGeometryEngine...")
         # NOTE: we are conducting the geometry proposal without any neglected angles
@@ -244,8 +244,10 @@ class RelativeFEPSetup(object):
             self._complex_md_topology_old_solvated = md.Topology.from_openmm(self._complex_topology_old_solvated)
 
             _logger.info(f"creating TopologyProposal...")
-            self._complex_topology_proposal = self._proposal_engine.propose(self._complex_system_old_solvated,
-                                                                                self._complex_topology_old_solvated, current_mol=self._ligand_oemol_old,proposed_mol=self._ligand_oemol_new)
+            self._complex_topology_proposal = self._proposal_engine.propose_proposal_engine.propose(self._complex_system_old_solvated,
+                                                                            self._complex_topology_old_solvated,
+                                                                            current_mol_id=0, proposed_mol_id=1)
+
             self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
 
             self._proposal_phase = 'complex'
@@ -286,7 +288,9 @@ class RelativeFEPSetup(object):
 
                 _logger.info(f"creating TopologyProposal")
                 self._solvent_topology_proposal = self._proposal_engine.propose(self._ligand_system_old_solvated,
-                                                                                    self._ligand_topology_old_solvated,current_mol=self._ligand_oemol_old,proposed_mol=self._ligand_oemol_new)
+                                                                                self._ligand_topology_old_solvated,
+                                                                                current_mol_id=0, proposed_mol=1)
+
                 self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'solvent'
             else:
@@ -334,7 +338,9 @@ class RelativeFEPSetup(object):
                 self._vacuum_topology_old, self._vacuum_positions_old, self._vacuum_system_old = self._solvate_system(self._ligand_topology_old,
                                                                                                          self._ligand_positions_old,vacuum=True)
                 self._vacuum_topology_proposal = self._proposal_engine.propose(self._vacuum_system_old,
-                                                                                self._vacuum_topology_old,current_mol=self._ligand_oemol_old,proposed_mol=self._ligand_oemol_new)
+                                                                               self._vacuum_topology_old,
+                                                                               current_mol_id=0, proposed_mol_id=1)
+
                 self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'vacuum'
             elif self._proposal_phase == 'complex':

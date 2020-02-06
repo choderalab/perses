@@ -51,13 +51,12 @@ WEAK_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity
 # default atom expression, requires same aromaticitiy and hybridization
 # bonds need to match in bond order
 # ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
-
-DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_IntType
+DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_IntType
 DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
 # strong requires same hybridization AND the same atom type
 # bonds are same as default, require them to match in bond order
-STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization  | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms
+STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms
 STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
 ################################################################################
@@ -127,6 +126,7 @@ def has_h_mapped(atommap, mola: oechem.OEMol, molb: oechem.OEMol):
 
     return False
 
+
 class AtomMapper(object):
     """Short summary.
 
@@ -159,18 +159,19 @@ class AtomMapper(object):
     allow_ring_breaking
 
     """
-    def __init__(self, current_molecule, proposed_molecule, atom_expr=None,
-                 bond_expr=None, verbose=False, allow_ring_breaking=False):
-        self.current_molecule = current_molecule
-        self.proposed_molecule = proposed_molecule
+    def __init__(self, list_of_oemols, atom_expr=None, bond_expr=None,
+                 map_strength='default', verbose=False, allow_ring_breaking=False, **kwargs):
+        self.list_of_oemols = list_of_oemols
+        self.map_strength = map_strength
         self.atom_expr = atom_expr
         self.bond_expr = bond_expr
-        self.verbose = False
+        self.verbose = verbose
         self.allow_ring_breaking = allow_ring_breaking
 
         self.atom_map = self._get_mol_atom_map()
+        super(AtomMapper,self).__init__(**kwargs)
 
-    def _get_mol_atom_map(self):
+    def _get_mol_atom_map(self, indexA=0, indexB=1):
         """
         Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
 
@@ -188,13 +189,37 @@ class AtomMapper(object):
         matches : list of match
             list of the matches between the molecules
         """
+        self.current_molecule = self.list_of_oemols[indexA]
+        self.proposed_molecule = self.list_of_oemols[indexB]
         # TODO this needs to handle all string inputs that might be used
-        if self.atom_expr is None:
-            _logger.warning('atom_expr not set. using DEFAULT')
-            self.atom_expr = DEFAULT_ATOM_EXPRESSION
-        if self.bond_expr is None:
-            _logger.warning('bond_expr not set. using DEFAULT')
-            self.bond_expr = DEFAULT_BOND_EXPRESSION
+        if self.atom_expr is not None:
+            _logger.info(f'Using user defined atom_expr')
+            _logger.info('Any map_strength set has been ignored')
+        else:
+            # setting atom expr using map_strength
+            if self.map_strength == 'default':
+                self.atom_expr = DEFAULT_ATOM_EXPRESSION
+            elif self.map_strength == 'weak':
+                self.atom_expr = WEAK_ATOM_EXPRESSION
+            elif self.map_strength == 'strong':
+                self.atom_expr = STRONG_ATOM_EXPRESSION
+            else:
+                _logger.warning(f"User defined map_strength: {map_strength} not recognised, setting to default")
+                self.atom_expr = DEFAULT_ATOM_EXPRESSION
+        if self.bond_expr is not None:
+            _logger.info(f'Using user defined bond_expr')
+            _logger.info('Any map_strength set has been ignored')
+        else:
+            # setting atom expr using map_strength
+            if self.map_strength == 'default':
+                self.bond_expr = DEFAULT_BOND_EXPRESSION
+            elif self.map_strength == 'weak':
+                self.bond_expr = WEAK_BOND_EXPRESSION
+            elif self.map_strength == 'strong':
+                self.bond_expr = STRONG_BOND_EXPRESSION
+            else:
+                #_logger.warning(f"User defined map_strength: {map_strength} not recognised, setting to default")
+                self.bond_expr = DEFAULT_BOND_EXPRESSION
 
         # this ensures that the hybridization of the oemols is done for correct atom mapping
         oechem.OEAssignHybridization(self.current_molecule)
@@ -205,7 +230,6 @@ class AtomMapper(object):
             # assigning ring membership to prevent ring breaking
             self._assign_ring_ids(self.oegraphmol_current)
             self._assign_ring_ids(self.oegraphmol_proposed)
-        #mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
         mcs.Init(self.oegraphmol_current, self.atom_expr, self.bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
@@ -386,6 +410,9 @@ class AtomMapper(object):
 
         return top_aliph_matches
 
+    def save_atom_mapping(self,filename='atom_map.png'):
+        from perses.utils.smallmolecules import render_atom_mapping
+        render_atom_mapping(filename, self.current_mol, self.proposed_mol, self.atom_map)
 
 class TopologyProposal(object):
     """
@@ -571,10 +598,11 @@ class ProposalEngine(object):
          a list of all the chemical states that this proposal engine may visit.
     """
 
-    def __init__(self, system_generator, proposal_metadata=None, always_change=True, verbose=False):
+    def __init__(self, system_generator, proposal_metadata=None, always_change=True, verbose=False, **kwargs):
         self._system_generator = system_generator
         self.verbose = verbose
         self._always_change = always_change
+        super(ProposalEngine, self).__init__(**kwargs)
 
     def propose(self, current_system, current_topology, current_metadata=None):
         """
@@ -1960,6 +1988,7 @@ class DummySystemGenerator(SystemGenerator):
             frequency = barostat.getFrequency()
             self._barostat = (pressure, temperature, frequency)
 
+
 class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
     """
     This class proposes new small molecules from a prespecified set. It uses
@@ -1981,64 +2010,34 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
         If specified, write statistics to this storage
     """
 
-    def __init__(self, list_of_oemols, system_generator, residue_name='MOL',
-                 atom_expr=None, bond_expr=None, map_strength='default', proposal_metadata=None,
-                 storage=None, always_change=True, atom_map=None):
+    def __init__(self, list_of_oemols, system_generator, residue_name='MOL', storage=None, **kwargs):
+        super(SmallMoleculeSetProposalEngine, self).__init__(list_of_oemols=list_of_oemols,system_generator=system_generator, **kwargs)
 
-        # Default atom and bond expressions for MCSS
-        # This should move to AtomMapper
-        if atom_expr is None:
-            _logger.info(f'Setting the atom expression to {map_strength}')
-            if map_strength == 'default':
-                self.atom_expr = DEFAULT_ATOM_EXPRESSION
-            elif map_strength == 'weak':
-                self.atom_expr = WEAK_ATOM_EXPRESSION
-            elif map_strength == 'strong':
-                self.atom_expr = STRONG_ATOM_EXPRESSION
-            else:
-                _logger.warning(f"User defined map_strength: {map_strength} not recognised, setting to default")
-                self.atom_expr = DEFAULT_ATOM_EXPRESSION
-        else:
-            self.atom_expr = atom_expr
-            _logger.info(f'Setting the atom expression to user defined: {atom_expr}')
-            _logger.info('If map_strength has been set, it will be ignored')
-        if bond_expr is None:
-            _logger.info(f'Setting the bond expression to {map_strength}')
-            if map_strength == 'default':
-                self.bond_expr = DEFAULT_BOND_EXPRESSION
-            elif map_strength == 'weak':
-                self.bond_expr = WEAK_BOND_EXPRESSION
-            elif map_strength == 'strong':
-                self.bond_expr = STRONG_BOND_EXPRESSION
-            else:
-                _logger.warning(f"User defined map_strength: {map_strength} not recognised, setting to default")
-                self.bond_expr = DEFAULT_BOND_EXPRESSION
-        else:
-            self.bond_expr = bond_expr
-            _logger.info(f'Setting the bond expression to user defined: {bond_expr}')
-            _logger.info('If map_strength has been set, it will be ignored')
-        self._allow_ring_breaking = True # allow ring breaking
+        # This needs to be exposed, and only set in one place
 
-        self._oemol_list = list_of_oemols
-        self._n_molecules = len(self._oemol_list)
+        self._n_molecules = len(self.list_of_oemols)
 
         self._residue_name = residue_name
         self._generated_systems = dict()
         self._generated_topologies = dict()
         self._matches = dict()
 
-        self._storage = None
-        if storage is not None:
+        self._list_of_smiles = []
+        from perses.utils.openeye import createSMILESfromOEMol
+        for mol in self.list_of_oemols:
+            smiles = createSMILESfromOEMol(mol)
+            self._list_of_smiles.append(SmallMoleculeSetProposalEngine.canonicalize_smiles(smiles))
+
+        self._storage = storage
+        if self._storage is not None:
             self._storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
 
         _logger.info(f"creating probability matrix...")
-        self._probability_matrix = self._calculate_probability_matrix(self._oemol_list)
+        self._probability_matrix = self._calculate_probability_matrix()
 
-        self._atom_map = atom_map
 
-        super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata=proposal_metadata, always_change=always_change)
-
-    def propose(self, current_system, current_topology, current_mol=None, proposed_mol=None, current_metadata=None):
+    def propose(self, current_system, current_topology,
+                current_mol_id=0, proposed_mol_id=None, current_metadata=None):
         """
         Propose the next state, given the current state
 
@@ -2050,26 +2049,17 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
             the topology of the current state
         current_metadata : dict
             dict containing current smiles as a key
-        current_mol : OEMol, optional, default=None
-            If specified, use this OEMol instead of converting from topology
-        proposed_mol : OEMol, optional, default=None
-            If specified, use this OEMol instead of converting from topology
+        current_mol_id : int, optional, default=0
+            Index of starting oemol, default is first in list
+        proposed_mol_id : int, optional, default=None
+            If specified, index of oemol to propose, if None, an oemol from the list is chosen
 
         Returns
         -------
         proposal : TopologyProposal object
            topology proposal object
         """
-        _logger.info(f"conducting proposal from {self._smiles_list[0]} to {self._smiles_list[1]}...")
-        from perses.utils.openeye import createSMILESfromOEMol
-        # Determine SMILES string for current small molecule
-        if current_mol is None:
-            _logger.info(f"current mol was not specified (it is advisable to prespecify an oemol); creating smiles and oemol...")
-            current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
-        else:
-            _logger.info(f"current mol specified; creating associated smiles...")
-            current_mol_smiles = createSMILESfromOEMol(current_mol)
-            _logger.info(f"generated current mol smiles: {current_mol_smiles}")
+        self.current_molecule = self.list_of_oemols[current_mol_id]
 
         # Remove the small molecule from the current Topology object
         _logger.info(f"creating current receptor topology by removing small molecule from current topology...")
@@ -2087,21 +2077,19 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
         _logger.info(f"old alchemical atom indices: {old_alchemical_atoms}")
 
         # Select the next molecule SMILES given proposal probabilities
-        if proposed_mol is None:
+        if proposed_mol_id is None:
             _logger.info(f"the proposed oemol is not specified; proposing a new molecule from proposal matrix P(M_new | M_old)...")
-            proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology, current_mol_smiles)
-            _logger.info(f"proposed mol smiles: {proposed_mol_smiles}")
-            _logger.info(f"logp proposal: {logp_proposal}")
+            proposed_mol_id, self.proposed_molecule, logp_proposal = self._propose_molecule(current_system, current_topology, current_mol_id)
         else:
-            # TODO: Make sure we're using canonical mol to smiles conversion
-            proposed_mol_smiles = oechem.OEMolToSmiles(proposed_mol)
-            proposed_mol_smiles = SmallMoleculeSetProposalEngine.canonicalize_smiles(proposed_mol_smiles)
+            self.proposed_molecule = self.list_of_oemols[proposed_mol_id]
             _logger.info(f"proposed mol detected with smiles {proposed_mol_smiles} and logp_proposal of 0.0")
             logp_proposal = 0.0
 
+        _logger.info(f"conducting proposal from {self._list_of_smiles[current_mol_id]} to {self._list_of_smiles[proposed_mol_id]}...")
+
         # Build the new Topology object, including the proposed molecule
         _logger.info(f"building new topology with proposed molecule and current receptor topology...")
-        new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)
+        new_topology = self._build_new_topology(current_receptor_topology, self.proposed_molecule)
         new_mol_start_index, len_new_mol = self._find_mol_start_index(new_topology)
         self.new_mol_start_index = new_mol_start_index
         self.len_new_mol = len_new_mol
@@ -2119,9 +2107,7 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
         _logger.info(f"determining atom map between old and new molecules...")
         if not self._atom_map:
             _logger.info(f"the atom map is not specified; proceeding to generate an atom map...")
-            mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr,
-                                                  bond_expr=self.bond_expr, verbose=self.verbose,
-                                                  allow_ring_breaking=self._allow_ring_breaking)
+            mol_atom_map = self._get_mol_atom_map()
         else:
             _logger.info(f"atom map is pre-determined as {mol_atom_map}")
             mol_atom_map = self._atom_map
@@ -2143,20 +2129,26 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
         # now to correct for possible constraint problems
         adjusted_atom_map = SmallMoleculeSetProposalEngine._constraint_repairs(adjusted_atom_map, current_system, new_system, current_topology, new_topology)
         non_offset_new_to_old_atom_map = copy.deepcopy(adjusted_atom_map)
+        # TODO is the following line needed? It doesn't seem to be used
         min_keys, min_values = min(non_offset_new_to_old_atom_map.keys()), min(non_offset_new_to_old_atom_map.values())
         self.non_offset_new_to_old_atom_map = mol_atom_map
 
         # Create the TopologyProposal onbject
-        proposal = TopologyProposal(logp_proposal=logp_proposal, new_to_old_atom_map=adjusted_atom_map,
-            old_topology=current_topology, new_topology=new_topology,
-            old_system=current_system, new_system=new_system,
-            old_alchemical_atoms=old_alchemical_atoms,
-            old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles,
-            old_residue_name=self._residue_name, new_residue_name=self._residue_name)
+        proposal = TopologyProposal(logp_proposal=logp_proposal,
+                                    new_to_old_atom_map=adjusted_atom_map,
+                                    old_topology=current_topology,
+                                    new_topology=new_topology,
+                                    old_system=current_system,
+                                    new_system=new_system,
+                                    old_alchemical_atoms=old_alchemical_atoms,
+                                    old_chemical_state_key=self._list_of_smiles[current_mol_id],
+                                    new_chemical_state_key=self._list_of_smiles[proposed_mol_id],
+                                    old_residue_name=self._residue_name,
+                                    new_residue_name=self._residue_name)
 
         ndelete = proposal.old_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
         ncreate = proposal.new_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
-        _logger.info('Proposed transformation would delete %d atoms and create %d atoms.' % (ndelete, ncreate))
+        _logger.info(f'Proposed transformation would delete {ndelete} atoms and create {ncreate} atoms.')
 
         return proposal
 
@@ -2175,6 +2167,7 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
         iso_can_smiles : str
             OpenEye isomeric canonical smiles corresponding to the input
         """
+        # TODO can this go in perses/utils/openeye?
         mol = oechem.OEMol()
         oechem.OESmilesToMol(mol, smiles)
         oechem.OEAddExplicitHydrogens(mol)
@@ -2198,6 +2191,7 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
         oemol : oechem.OEMol object
             molecule
         """
+        # TODO can this go in perses/utils/openeye?
         molecule_name = self._residue_name
         _logger.info(f"\tmolecule name specified from residue: {self._residue_name}.")
 
@@ -2351,7 +2345,7 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
 
         return atom_map
 
-    def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=False):
+    def _propose_molecule(self, system, topology, current_mol_id, exclude_self=False):
         """
         Propose a new molecule given the current molecule.
 
@@ -2365,15 +2359,15 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
             The current topology
         positions : [n, 3] np.ndarray of floats (Quantity nm)
             The current positions of the system
-        molecule_smiles : string
-            The current molecule smiles
+        current_mol_id : int
+            The index of the current molecule
         exclude_self : bool, optional, default=True
             If True, exclude self-transitions
 
         Returns
         -------
-        proposed_mol_smiles : str
-             The SMILES of the proposed molecule
+        proposed_mol_id : int
+             The index of the proposed molecule
         mol : oechem.OEMol
             The next molecule to simulate
         logp_proposal : float
@@ -2384,30 +2378,24 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
         # log [P(Mold | Mnew) / P(Mnew | Mold)]
 
         # Retrieve the current molecule index
-        try:
-            current_smiles_idx = self._smiles_list.index(molecule_smiles)
-            _logger.info(f"\tcurrent smiles index: {current_smiles_idx}")
-        except ValueError as e:
-            msg = f"Current SMILES string {molecule_smiles} not found in canonical molecule set.\nMolecule set: {self._smiles_list}"
-            raise Exception(msg)
 
         # Propose a new molecule
-        molecule_probabilities = self._probability_matrix[current_smiles_idx, :]
+        molecule_probabilities = self._probability_matrix[current_mol_id, :]
         _logger.info(f"\tmolecule probabilities: {molecule_probabilities}")
-        proposed_smiles_idx = np.random.choice(range(len(self._smiles_list)), p=molecule_probabilities)
-        _logger.info(f"\tproposed smiles index chosen: {proposed_smiles_idx}")
-        reverse_probability = self._probability_matrix[proposed_smiles_idx, current_smiles_idx]
-        forward_probability = molecule_probabilities[proposed_smiles_idx]
+        proposed_mol_id = np.random.choice(range(len(self._smiles_list)), p=molecule_probabilities)
+        _logger.info(f"\tproposed molecule index: {proposed_mol_id}")
+        reverse_probability = self._probability_matrix[proposed_mol_id, current_mol_id]
+        forward_probability = molecule_probabilities[proposed_mol_id]
         _logger.info(f"\tforward probability: {forward_probability}")
         _logger.info(f"\treverse probability: {reverse_probability}")
-        proposed_smiles = self._smiles_list[proposed_smiles_idx]
-        _logger.info(f"\tproposed smiles: {proposed_smiles}")
+        proposed_smiles = self._list_of_smiles[proposed_mol_id]
+        _logger.info(f"\tproposed molecule smiles: {proposed_smiles}")
+        proposed_mol = self.list_of_oemols[proposed_mol_id]
         logp = np.log(reverse_probability) - np.log(forward_probability)
-        from perses.utils.openeye import smiles_to_oemol
-        proposed_mol = smiles_to_oemol(proposed_smiles, "MOL_%d" %proposed_smiles_idx)
-        return proposed_smiles, proposed_mol, logp
+        _logger.info(f"\tlogP proposal: {logp}")
+        return proposed_mol_id, proposed_mol, logp
 
-    def _calculate_probability_matrix(self, oemol_list):
+    def _calculate_probability_matrix(self):
         """
         Calculate the matrix of probabilities of choosing A | B
         based on normalized MCSS overlap. Does not check for torsions!
@@ -2422,13 +2410,11 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
             probability_matrix[Mold, Mnew] is the probability of choosing molecule Mnew given the current molecule is Mold
 
         """
-        n_mols = len(oemol_list)
+        n_mols = len(self.list_of_oemols)
         probability_matrix = np.zeros([n_mols, n_mols])
         for i in range(n_mols):
             for j in range(i):
-                current_mol = oemol_list[i]
-                proposed_mol = oemol_list[j]
-                atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr, bond_expr=self.bond_expr)
+                atom_map = self._get_mol_atom_map(indexA=i, indexB=j)
                 if not atom_map:
                     n_atoms_matching = 0
                     continue
@@ -2436,7 +2422,7 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
                 probability_matrix[i, j] = n_atoms_matching
                 probability_matrix[j, i] = n_atoms_matching
         #normalize the rows:
-        for i in range(n_smiles):
+        for i in range(n_mols):
             row_sum = np.sum(probability_matrix[i, :])
             try:
                 probability_matrix[i, :] /= row_sum
@@ -2486,7 +2472,7 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
             mol1, sys1, pos1, top1 = createSystemFromSMILES(smiles_pair[0])
             mol2, sys2, pos2, top2 = createSystemFromSMILES(smiles_pair[1])
 
-            new_to_old_atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol1, mol2, atom_expr=atom_opts, bond_expr=bond_opts)
+            new_to_old_atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map()
             if not new_to_old_atom_map:
                 continue
             top_proposal = TopologyProposal(new_topology=top2, old_topology=top1, new_system=sys2, old_system=sys1, new_to_old_atom_map=new_to_old_atom_map, new_chemical_state_key='e', old_chemical_state_key='w')
