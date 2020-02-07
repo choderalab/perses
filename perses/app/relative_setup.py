@@ -289,7 +289,7 @@ class RelativeFEPSetup(object):
                 _logger.info(f"creating TopologyProposal")
                 self._solvent_topology_proposal = self._proposal_engine.propose(self._ligand_system_old_solvated,
                                                                                 self._ligand_topology_old_solvated,
-                                                                                current_mol_id=0, proposed_mol=1)
+                                                                                current_mol_id=0, proposed_mol_id=1)
 
                 self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'solvent'
