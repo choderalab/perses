@@ -2036,7 +2036,7 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
         self._probability_matrix = self._calculate_probability_matrix()
 
 
-    def propose(self, current_system, current_topology,
+    def propose(self, current_system, current_topology, predefined_map=None,
                 current_mol_id=0, proposed_mol_id=None, current_metadata=None):
         """
         Propose the next state, given the current state
@@ -2059,7 +2059,6 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
         proposal : TopologyProposal object
            topology proposal object
         """
-        self.current_molecule = self.list_of_oemols[current_mol_id]
 
         # Remove the small molecule from the current Topology object
         _logger.info(f"creating current receptor topology by removing small molecule from current topology...")
@@ -2082,7 +2081,7 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
             proposed_mol_id, self.proposed_molecule, logp_proposal = self._propose_molecule(current_system, current_topology, current_mol_id)
         else:
             self.proposed_molecule = self.list_of_oemols[proposed_mol_id]
-            _logger.info(f"proposed mol detected with smiles {proposed_mol_smiles} and logp_proposal of 0.0")
+            _logger.info(f"proposed mol detected with smiles {self._list_of_smiles[proposed_mol_id]} and logp_proposal of 0.0")
             logp_proposal = 0.0
 
         _logger.info(f"conducting proposal from {self._list_of_smiles[current_mol_id]} to {self._list_of_smiles[proposed_mol_id]}...")
@@ -2104,13 +2103,12 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
             new_system = self._system_generator.build_system(new_topology)
 
         # Determine atom mapping between old and new molecules
-        _logger.info(f"determining atom map between old and new molecules...")
-        if not self._atom_map:
-            _logger.info(f"the atom map is not specified; proceeding to generate an atom map...")
+        if predefined_map is None:
+            _logger.info(f'No atom map defined, generating now...')
             mol_atom_map = self._get_mol_atom_map()
         else:
-            _logger.info(f"atom map is pre-determined as {mol_atom_map}")
-            mol_atom_map = self._atom_map
+            _logger.info(f'Atom map has been predefined : {predefined_map}')
+            mol_atom_map = predefined_map 
 
         # Adjust atom mapping indices for the presence of the receptor
         adjusted_atom_map = {}
