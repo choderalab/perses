@@ -165,7 +165,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                  bond_softening_constant=1.0,
                  angle_softening_constant=1.0,
                  neglect_angles = False,
-                 use_14_nonbondeds = True):
+                 use_14_nonbondeds = True,
+                 **kwargs):
         self._metadata = metadata
         self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
         self.pdb_filename_prefix = 'geometry-proposal' # PDB file prefix for writing sequential atom placements

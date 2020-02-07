@@ -156,9 +156,8 @@ class NetworkBuilder(object):
                  ligand_input,
                  ligand_indices = None,
                  receptor_filename = None,
-                 graph_connectivity = 'fully_connected',
-                 proposal_parameters = None,
-                 simulation_parameters = ('repex', None)):
+                 connectivity_data = None,
+                 **kwargs):
         """
         Initialize NetworkX graph and build connectivity with a `graph_connectivity` input.
 
@@ -177,43 +176,12 @@ class NetworkBuilder(object):
         receptor_filename : str, default None
             Receptor mol2 or pdb filename. If None, complex leg will be omitted.
 
-        graph_connectivity : str or np.matrix or list of tuples, default 'fully_connected'
-            The graph connectivity information for the experiment.  This accepts one of several allowable
-            strings (corresponding to connectivity defaults), a 2d np.array specifying the explicit connectivity
-            matrix for indexed ligands, or a list of tuples corresponding to pairwise ligand index connections.
-            The default is 'fully_connected', which specified a fully connected (i.e. complete or single-clique) graph.
-            If the graph_connectivity is input as a 2d numpy array, values represent the weights of the transform.  0 weights entail no connectivity.
-            The self.adjacency_matrix argument produced as a result contains the log(weights) of the transform as entries.
+        connectivity_data : dict, default None
+            dictionary with the following form:
+                key : (ligand_index_i <int>, ligand_index_j <int>, phase <str>, weight, <float>)
+                val : **kwargs
+            the **kwargs include all proposal_parameters and simulation_parameters.
 
-        proposal_parameters: dict, default None
-            The following dict is parseable from a setup yaml, but have defaults given if no setup yaml is given.
-            They mostly consist of the thermodynamic state of the graph, several potential modifications to the
-            hybrid factory (i.e. the alchemical system), the single-topology mapping criteria, and the sampler-specific
-            parameters (i.e. parameters specific to Replica Exchange, SAMS, and sMC.)
-
-            forcefield_files : list of str
-                The list of ffxml files that contain the forcefields that will be used
-            pressure : Quantity, units of pressure
-                Pressure to use in the barostat
-            temperature : Quantity, units of temperature
-                Temperature to use for the Langevin integrator
-            solvent_padding : Quantity, units of length
-                The amount of padding to use when adding solvent
-            neglect_angles : bool
-                Whether to neglect certain angle terms for the purpose of minimizing work variance in the RJMC protocol.
-            anneal_14s : bool, default False
-                Whether to anneal 1,4 interactions over the protocol;
-                    if True, then geometry_engine takes the argument use_14_nonbondeds = False;
-                    if False, then geometry_engine takes the argument use_14_nonbondeds = True;
-
-        simulation_parameters : tuple(str, (dict or None)) or dict, default ('repex', None)
-            the simulation parameters to put into the appropriate simulation object
-            if type(simulation_parameters) == tuple:
-                #then the 0th entry is a string given by 'repex', 'sams', or 'smc', the flavor of simulation
-                #and the 1st entry is a dict of parameters that are appropriate to the flavor of simulation
-                #if dict is None, then default 'repex' parameters will be used
-            elif type(simulation_parameters) == dict, each entry is a {(int, int): {<phase>: (<simulation_flavor>, dict(params))}};
-                if an transformation entry is missing, it is defaulted as above
 
         TODO:
         1. change the name of 'proposal_arguments' to something more appropriate.
@@ -228,35 +196,17 @@ class NetworkBuilder(object):
         self.ligand_input = ligand_input
         self.ligand_indices = ligand_indices
         self.receptor_filename = receptor_filename
-        self._parse_ligand_input()
-
-        #Now we must create some defaults for thermodynamic states
-        _logger.debug(f"kwargs: {proposal_parameters}")
-        self._create_proposal_parameters(proposal_parameters)
-        self.adjacency_matrix = self._create_connectivity_matrix(graph_connectivity)
-        self._validate_simulation_parameters(simulation_parameters)
-        self.beta = 1.0 / (kB * self.proposal_arguments['temperature'])
+        self._parse_ligand_input(**kwargs) #we'll only call this once, so we shan't wrap it
 
         #Now we can create a system generator for each phase.
-        self._create_system_generator()
+        self._create_system_generator(**kwargs)
 
         #Now create the proposal engine
-        self.proposal_engine = SmallMoleculeSetProposalEngine(self.smiles_list,
-                                                              self.system_generator,
-                                                              map_strength = self.proposal_arguments['map_strength'],
-                                                              residue_name='MOL')
+        self.proposal_engine = SmallMoleculeSetProposalEngine(list_of_smiles = elf.smiles_list,
+                                                              system_generator = self.system_generator,
+                                                              **kwargs)
         #create a geometry engine
-        self.geometry_engine = FFAllAngleGeometryEngine(metadata=None,
-                                                        use_sterics=False,
-                                                        n_bond_divisions=100,
-                                                        n_angle_divisions=180,
-                                                        n_torsion_divisions=360,
-                                                        verbose=True,
-                                                        storage=None,
-                                                        bond_softening_constant=1.0,
-                                                        angle_softening_constant=1.0,
-                                                        neglect_angles = self.proposal_arguments['neglect_angles'],
-                                                        use_14_nonbondeds = not self.proposal_arguments['anneal_14s'])
+        self.geometry_engine = FFAllAngleGeometryEngine(**kwargs)
 
         #create the Network
         self._create_ligand_network()
@@ -264,7 +214,8 @@ class NetworkBuilder(object):
         _logger.info(f"Network construction complete.")
 
 
-    def _create_ligand_network(self):
+    def _create_ligand_network(self,
+                               **kwargs):
         """
         This is the main function of the class.  It attempts to build a networkx graph on all of the transformations.
 
@@ -629,7 +580,8 @@ class NetworkBuilder(object):
                     simulation_object = self._create_simulation_object(hybrid_factory = hybrid_factory,
                                                                        forward_index_map = (i,j),
                                                                        phase = _phase,
-                                                                       edge_simulation_parameters = phase_edge_simulation_parameters)
+                                                                       edge_simulation_parameters = phase_edge_simulation_parameters,
+                                                                       **kwargs)
 
                     #now to append to returnables
                     returnables['hybrid_factory_dict'].update({_phase : hybrid_factory})
@@ -733,35 +685,29 @@ class NetworkBuilder(object):
             return np.log(graph_connectivity)
 
 
-    def _parse_ligand_input(self):
+    def _parse_ligand_input(self, **kwargs):
         """
         Parse the ligand input.
         Creates the following attributes:
         1. self.ligand_oemols : list of ligand oemols
         2. self.ligand_ffxml : xml for ligands
         3. self.smiles_list : list of smiles
-        4. self.ligand_md_topologies : list of mdtraj.Topology objects
-                                       corresponding to self.ligand_oemols topologies.
         """
+        from openforcefield.topology import Molecule
         self.ligand_oemols = []
         if type(self.ligand_input) == str: # the ligand has been provided as a single file
+            from perses.utils.openeye import smiles_to_oemol
             _logger.debug(f"ligand input is a str; checking for .smi and .sdf file.")
             if self.ligand_input[-3:] == 'smi':
                 _logger.info(f"Detected .smi format.  Proceeding...")
                 self.smiles_list = load_smi(self.ligand_input, index = self.ligand_indices)
-
-                #create a ligand data list to hold all ligand oemols, systems, positions, topologies
-                from openforcefield.topology import Molecule
                 self.molecules = list() # openforcefield Molecule objects
                 for smiles in self.smiles_list:
-                    _logger.debug(f"creating oemol, system, positions, and openmm.Topology for smiles: {smiles}...")
+                    _logger.debug(f"creating oemol, openmm.Topology for smiles: {smiles}...")
                     # TODO: Should we avoid createSystemFromSMILES?
-                    oemol, _, _, _ = createSystemFromSMILES(smiles, title=smiles)
+                    oemol = smiles_to_oemol(smiles, title = "MOL")
                     self.ligand_oemols.append(oemol)
                     self.molecules.append(Molecule.from_openeye(oemol))
-
-                #now make all of the oemol titles 'MOL'
-                [self.ligand_oemols[i].SetTitle("MOL") for i in range(len(self.ligand_oemols))]
 
 
             elif self.ligand_input[-3:] == 'sdf': #
@@ -773,12 +719,10 @@ class NetworkBuilder(object):
                 self.smiles_list = [ oechem.OECreateSmiString(oemol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens) for oemol in oemols]
                 self.ligand_oemols = oemols
                 # Create openforcefield Molecule objects
-                from openforcefield.topology import Molecule
                 self.molecules = [ Molecule.from_openeye(oemol) for oemol in oemols ]
 
         else:
             raise Exception(f"the ligand input can only be a string pointing to an .sdf or .smi file.  Aborting!")
-        self.ligand_md_topologies = [md.Topology.from_openmm(item[2]) for item in self.ligand_oemols]
 
     def _create_proposal_parameters(self, proposal_parameters):
         """
@@ -898,30 +842,41 @@ class NetworkBuilder(object):
                     assert type(arg) == type(self.simulation_arguments[tup[0]][keyword]), f"keyword '{keyword}' type '{type(arg)}' is not supported"
 
 
-    def _create_system_generator(self):
+    def _create_system_generator(self,
+                                 constraints = app.HBonds,
+                                 nonbondedMethod = app.PME,
+                                 hydrogen_mass = 4 * unit.amu,
+                                 temperature = 300 * unit.kelvin,
+                                 barostat_period = 50,
+                                 removeCMMotion = False,
+                                 small_molecule_parameters_cache = 'cache.json',
+                                 pressure = 1.0 * unit.atmosphere,
+                                 forcefield_files = ['amber/protein.ff14SB.xml', 'amber/tip3p_standard.xml', 'amber/tip3p_HFE_multivalent.xml'],
+                                 small_molecule_forcefield = 'openff-1.0.0',
+                                 ):
         """
         Wrap the process for generating a dict of system generators for each phase.
         """
         from openmmforcefields.generators import SystemGenerator
 
         barostat = None
-        if self.proposal_arguments['pressure'] is not None:
-            if self.nonbonded_method == app.PME:
-                barostat = openmm.MonteCarloBarostat(self.proposal_arguments['pressure'],
-                                                     self.proposal_arguments['temperature'],
-                                                     50)
+        if pressure is not None:
+            if nonbonded_method == app.PME:
+                barostat = openmm.MonteCarloBarostat(pressure,
+                                                     temperature,
+                                                     barostat_period)
 
-        forcefield_kwargs = {'removeCMMotion': False,
-                           'nonbondedMethod': self.nonbonded_method,
-                           'constraints' : app.HBonds,
-                           'hydrogenMass' : self.proposal_arguments['hmass']}
+        forcefield_kwargs = {'removeCMMotion': removeCMMotion,
+                           'nonbondedMethod': nonbonded_method,
+                           'constraints' : constraints,
+                           'hydrogenMass' : hydrogen_mass}
 
-        self.system_generator = SystemGenerator(forcefields=self.proposal_arguments['forcefield_files'],
-                                                small_molecule_forcefield=self.proposal_arguments['small_molecule_forcefield'],
-                                                cache=self.proposal_arguments['small_molecule_parameters_cache'],
-                                                molecules=self.molecules,
-                                                barostat=barostat,
-                                                forcefield_kwargs=forcefield_kwargs)
+        self.system_generator = SystemGenerator(forcefields = forcefield_files,
+                                                small_molecule_forcefield = small_molecule_forcefield,
+                                                cache = small_molecule_parameters_cache,
+                                                molecules = self.molecules,
+                                                barostat = barostat,
+                                                forcefield_kwargs = forcefield_kwargs)
 
     def _setup_complex_phase(self, ligand_oemol, ligand_positions, ligand_topology):
         """

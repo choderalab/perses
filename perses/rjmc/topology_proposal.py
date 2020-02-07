@@ -2311,9 +2311,18 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         If specified, write statistics to this storage
     """
 
-    def __init__(self, list_of_smiles, system_generator, residue_name='MOL',
-                 atom_expr=None, bond_expr=None, map_strength='default', proposal_metadata=None,
-                 storage=None, always_change=True, atom_map=None):
+    def __init__(self,
+                list_of_smiles,
+                system_generator,
+                residue_name='MOL',
+                atom_expr=None,
+                bond_expr=None,
+                map_strength='default',
+                proposal_metadata=None,
+                storage=None,
+                always_change=True,
+                atom_map=None,
+                **kwargs):
 
         # Default atom and bond expressions for MCSS
         if atom_expr is None:
