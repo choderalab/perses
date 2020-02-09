@@ -54,13 +54,12 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
     oechem.OEAssignHybridization(molecule)
     oechem.OEAddExplicitHydrogens(molecule)
-    oechem.OEPerceiveChiral(molecule)
 
     # Create atom names.
     oechem.OETriposAtomNames(molecule)
 
     #perceive chirality before attempting omega geometry proposal
-    assert oechem.OEPerceiveChiral(mol), f"chirality perception failed"
+    assert oechem.OEPerceiveChiral(molecule), f"chirality perception failed"
 
     # Assign geometry
     omega = oeomega.OEOmega()

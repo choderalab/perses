@@ -648,6 +648,15 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         added_energy_components = [(force, energy*beta) for force, energy in compute_potential_components(context)]
         for item in added_energy_components:
             _logger.debug(f"\t\t{item[0]}: {item[1]}")
+
+        #now for the corrected reduced_potential_energy
+        if direction == 'forward':
+            positions = new_positions
+        else:
+            positions = old_positions
+
+        reduced_potential_energy = self._corrected_reduced_potential(growth_system_generator, positions, platform_name, atom_proposal_order, beta)
+
         _logger.info(f"total reduced energy added from growth system: {reduced_potential_energy}")
 
         _logger.debug(f"reduced potential of final system:")
@@ -679,6 +688,35 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         return logp_proposal, new_positions, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms, omitted_growth_terms
 
+    def _corrected_reduced_potential(self, growth_system_generator, positions, platform_name, atom_proposal_order, beta):
+        """
+        in order to compute the properly-bookkept energy mismatch, we must define a growth system without the biasing torsions
+        """
+        import copy
+        from simtk import openmm
+        _integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
+        growth_system = copy.deepcopy(growth_system_generator.get_modified_system())
+        #the last thing to do for bookkeeping is to delete the torsion force associated with the extra ring-closing and chirality restraints
+
+        #first, we see if there are two CustomTorsionForce objects...
+        custom_torsion_forces = [force_index for force_index in range(growth_system.getNumForces()) if growth_system.getForce(force_index).__class__.__name__ == 'CustomTorsionForce']
+        if len(custom_torsion_forces) == 2:
+            _logger.debug(f"\tfound 2 custom torsion forces")
+            #then the first one is the normal growth torsion force object and the second is the added torsion force object used to handle chirality and ring-closing constraints
+            growth_system.removeForce(max(custom_torsion_forces))
+
+        mod_context = openmm.Context(growth_system, _integrator, openmm.Platform.getPlatformByName(platform_name))
+        growth_system_generator.set_growth_parameter_index(len(atom_proposal_order)+1, mod_context)
+        mod_context.setPositions(positions)
+        mod_state = mod_context.getState(getEnergy=True)
+        modified_reduced_potential_energy = beta * mod_state.getPotentialEnergy()
+
+        return modified_reduced_potential_energy
+
+
+
+
+
 
     def _define_no_nb_system(self,
                              system,
@@ -705,6 +743,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         from simtk import openmm, unit
         no_nb_system = copy.deepcopy(system)
         _logger.info("\tbeginning construction of no_nonbonded final system...")
+        _logger.info(f"\tinitial no-nonbonded final system forces {[force.__class__.__name__ for force in list(no_nb_system.getForces())]}")
 
         num_forces = no_nb_system.getNumForces()
         for index in reversed(range(num_forces)):
@@ -729,13 +768,13 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                     p1, p2, p3, theta0, K = force.getAngleParameters(angle_idx)
                     force.setAngleParameters(angle_idx, p1, p2, p3, theta0, unit.Quantity(value=0.0, unit=unit.kilojoule/(unit.mole*unit.radian**2)))
 
-        #the last thing to do for bookkeeping is to delete the torsion force associated with the extra ring-closing and chirality restraints
-
-        #first, we see if there are two CustomTorsionForce objects...
-        custom_torsion_forces = [force_index for force_index in no_nb_system.getNumForces() if no_nb_system.getForce(force_index).__class__.__name__ == 'CustomTorsionForce']
-        if len(custom_torsion_forces) == 2:
-            #then the first one is the normal growth torsion force object and the second is the added torsion force object used to handle chirality and ring-closing constraints
-            no_nb_system.removeForce(max(custom_torsion_forces))
+        # #the last thing to do for bookkeeping is to delete the torsion force associated with the extra ring-closing and chirality restraints
+        #
+        # #first, we see if there are two CustomTorsionForce objects...
+        # custom_torsion_forces = [force_index for force_index in range(no_nb_system.getNumForces()) if no_nb_system.getForce(force_index).__class__.__name__ == 'CustomTorsionForce']
+        # if len(custom_torsion_forces) == 2:
+        #     #then the first one is the normal growth torsion force object and the second is the added torsion force object used to handle chirality and ring-closing constraints
+        #     no_nb_system.removeForce(max(custom_torsion_forces))
 
         forces = no_nb_system.getForces()
         _logger.info(f"\tfinal no-nonbonded final system forces {[force.__class__.__name__ for force in list(no_nb_system.getForces())]}")
@@ -2056,10 +2095,10 @@ class GeometrySystemGenerator(object):
                 #then we should add it to the growth system...
                 growth_system.addForce(extra_modified_torsion_force)
 
-        if add_extra_angles:
-            if reference_topology==None:
-                raise ValueError("Need to specify topology in order to add extra angles")
-            self._determine_extra_angles(modified_angle_force, reference_topology, growth_indices)
+        # if add_extra_angles:
+        #     if reference_topology==None:
+        #         raise ValueError("Need to specify topology in order to add extra angles")
+        #     self._determine_extra_angles(modified_angle_force, reference_topology, growth_indices)
 
         # Store growth system
         self._growth_parameter_name = global_parameter_name

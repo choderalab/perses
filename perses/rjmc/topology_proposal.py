@@ -803,14 +803,13 @@ class TopologyProposal(object):
     """
 
     def __init__(self,
-                 new_topology=None, new_system=None,
-                 old_topology=None, old_system=None,
+                 new_topology, new_system,
+                 old_topology, old_system,
+                 old_networkx_residue, new_networkx_residue,
                  logp_proposal=None,
                  new_to_old_atom_map=None, old_alchemical_atoms=None,
                  old_chemical_state_key=None, new_chemical_state_key=None,
                  old_residue_name='MOL', new_residue_name='MOL',
-                 old_networkx_residue = None,
-                 new_networkx_residue = None,
                  metadata=None):
 
         if new_chemical_state_key is None or old_chemical_state_key is None:
@@ -1259,7 +1258,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         new_prev_res_C_index = [atom.index for atom in new_prev_res.atoms() if atom.name.replace(" ", "") == 'C']
         old_prev_res_C_index = [atom.index for atom in old_prev_res.atoms() if atom.name.replace(" ", "") == 'C']
-        
+
         for _list in [new_next_res_N_index, old_next_res_N_index, new_prev_res_C_index, old_prev_res_C_index]:
             assert len(_list) == 1, f"atoms in the next or prev residue are not uniquely named"
 
@@ -2988,8 +2987,11 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         self.non_offset_new_to_old_atom_map = mol_atom_map
 
         #create NetworkXMolecule for each molecule
-        old_networkx_molecule = NetworkXMolecule(mol_oemol = current_mol, mol_residue = current_topology, residue_to_oemol_map = {i: j for i, j in zip(range(old_mol_start_index, len_old_mol), range(len_old_mol - old_mol_start_index))})
-        new_networkx_molecule = NetworkXMolecule(mol_oemol = proposed_mol, mol_residue = new_topology, residue_to_oemol_map = {i: j for i, j in zip(range(new_mol_start_index, len_new_mol), range(len_new_mol - new_mol_start_index))})
+        current_residue = [res for res in current_topology.residues() if res.name == self._residue_name][0]
+        new_residue = [res for res in new_topology.residues() if res.name == self._residue_name][0]
+
+        old_networkx_molecule = NetworkXMolecule(mol_oemol = current_mol, mol_residue = current_residue, residue_to_oemol_map = {i: j for i, j in zip(range(old_mol_start_index, old_mol_start_index + len_old_mol), range(len_old_mol))})
+        new_networkx_molecule = NetworkXMolecule(mol_oemol = proposed_mol, mol_residue = new_residue, residue_to_oemol_map = {i: j for i, j in zip(range(new_mol_start_index, new_mol_start_index + len_new_mol), range(len_new_mol))})
 
         # Create the TopologyProposal object
         proposal = TopologyProposal(logp_proposal=logp_proposal, new_to_old_atom_map=adjusted_atom_map,
@@ -4342,6 +4344,9 @@ class NetworkXMolecule(object):
         #NOTE: the atoms comprising the mol_residue must be a subset fo the mol_oemol atoms
         """
         #subset assertion
+        print(f"top residue atoms: {[(atom.name, atom.index) for atom in mol_residue.atoms()]}")
+        print(f"mol atoms: {[(atom.GetName(), atom.GetIdx()) for atom in mol_oemol.GetAtoms()]}")
+        print(f"residue to oemol map: {residue_to_oemol_map}")
         assert set([atom.name for atom in mol_residue.atoms()]).issubset(set([atom.GetName() for atom in mol_oemol.GetAtoms()])), f"the mol_residue is not a subset of the mol_oemol"
 
         #the first thing to do is to create a simple undirected graph based on covalency
