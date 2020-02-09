@@ -658,11 +658,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         _logger.info(f"sum of energies: {atoms_with_positions_reduced_potential + reduced_potential_energy}")
         _logger.info(f"magnitude of difference in the energies: {abs(final_context_reduced_potential - atoms_with_positions_reduced_potential - reduced_potential_energy)}")
 
-        #the below assertion is no longer applicable since biasing forces are unaccounted for in the atoms_with_positions_system/context
-        #TODO: resurrect some validation scheme in the future for systems with exotic parametrizations
-
-        #energy_mismatch_ratio = (atoms_with_positions_reduced_potential + reduced_potential_energy) / (final_context_reduced_potential)
-        #assert (energy_mismatch_ratio < ENERGY_MISMATCH_RATIO_THRESHOLD + 1) and (energy_mismatch_ratio > 1 - ENERGY_MISMATCH_RATIO_THRESHOLD)  , f"The ratio of the calculated final energy to the true final energy is {energy_mismatch_ratio}"
+        energy_mismatch_ratio = (atoms_with_positions_reduced_potential + reduced_potential_energy) / (final_context_reduced_potential)
+        assert (energy_mismatch_ratio < ENERGY_MISMATCH_RATIO_THRESHOLD + 1) and (energy_mismatch_ratio > 1 - ENERGY_MISMATCH_RATIO_THRESHOLD)  , f"The ratio of the calculated final energy to the true final energy is {energy_mismatch_ratio}"
 
 
         # Final log proposal:
@@ -731,6 +728,14 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 for angle_idx in neglected_angle_terms:
                     p1, p2, p3, theta0, K = force.getAngleParameters(angle_idx)
                     force.setAngleParameters(angle_idx, p1, p2, p3, theta0, unit.Quantity(value=0.0, unit=unit.kilojoule/(unit.mole*unit.radian**2)))
+
+        #the last thing to do for bookkeeping is to delete the torsion force associated with the extra ring-closing and chirality restraints
+
+        #first, we see if there are two CustomTorsionForce objects...
+        custom_torsion_forces = [force_index for force_index in no_nb_system.getNumForces() if no_nb_system.getForce(force_index).__class__.__name__ == 'CustomTorsionForce']
+        if len(custom_torsion_forces) == 2:
+            #then the first one is the normal growth torsion force object and the second is the added torsion force object used to handle chirality and ring-closing constraints
+            no_nb_system.removeForce(max(custom_torsion_forces))
 
         forces = no_nb_system.getForces()
         _logger.info(f"\tfinal no-nonbonded final system forces {[force.__class__.__name__ for force in list(no_nb_system.getForces())]}")
@@ -1895,7 +1900,12 @@ class GeometrySystemGenerator(object):
         modified_torsion_force.addGlobalParameter(global_parameter_name, default_growth_index)
         for parameter_name in ['periodicity', 'phase', 'k', 'growth_idx']:
             modified_torsion_force.addPerTorsionParameter(parameter_name)
-        growth_system.addForce(modified_torsion_force)
+
+        _logger.info(f"\tcreating extra torsions force...")
+        extra_modified_torsion_force = copy.deepcopy(modified_torsion_force) #we will add this if we _do_ call the extra modified torsions force
+
+        growth_system.addForce(modified_torsion_force) #but we add this, regardlesss
+
         reference_torsion_force = reference_forces['PeriodicTorsionForce']
         _logger.info(f"\tthere are {reference_torsion_force.getNumTorsions()} torsions in reference force.")
         for torsion in range(reference_torsion_force.getNumTorsions()):
@@ -2041,7 +2051,11 @@ class GeometrySystemGenerator(object):
             _logger.debug(f"\t\tattempting to add extra torsions...")
             if reference_topology == None:
                 raise ValueError("Need to specify topology in order to add extra torsions.")
-            self._determine_extra_torsions(modified_torsion_force, reference_topology, growth_indices)
+            self._determine_extra_torsions(extra_modified_torsion_force, reference_topology, growth_indices)
+            if extra_modified_torsion_force.getNumTorsions() > 0:
+                #then we should add it to the growth system...
+                growth_system.addForce(extra_modified_torsion_force)
+
         if add_extra_angles:
             if reference_topology==None:
                 raise ValueError("Need to specify topology in order to add extra angles")
