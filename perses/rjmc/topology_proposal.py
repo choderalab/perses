@@ -168,6 +168,7 @@ class AtomMapper(object):
         self.verbose = verbose
         self.allow_ring_breaking = allow_ring_breaking
 
+
         self.atom_map = self._get_mol_atom_map()
         super(AtomMapper,self).__init__(**kwargs)
 
@@ -238,7 +239,7 @@ class AtomMapper(object):
 
         if self.allow_ring_breaking is False:
             # Filter the matches to remove any that allow ring breaking
-            matches = [m for m in matches if self.preserves_rings(m)]
+            matches = [m for m in matches if AtomMapper.preserves_rings(m)]
 
         if not matches:
             _logger.info('Cannot generate atom map without breaking rings, trying again with weaker mapping.')
@@ -248,7 +249,7 @@ class AtomMapper(object):
 
             if self.allow_ring_breaking is False:
                 # Filter the matches to remove any that allow ring breaking
-                matches = [m for m in matches if self.preserves_rings(m)]
+                matches = [m for m in matches if AtomMapper.preserves_rings(m)]
             if not matches:
                 raise Exception(f"There are no atom map matches that preserve rings!  It is advisable to conduct a manual atom mapping.")
 
@@ -257,7 +258,7 @@ class AtomMapper(object):
         max_num_atoms = max([match.NumAtoms() for match in top_matches])
         _logger.debug(f"\tthe max number of atom matches is: {max_num_atoms}; there are {len([m for m in top_matches if m.NumAtoms() == max_num_atoms])} matches herein")
         new_top_matches = [m for m in top_matches if m.NumAtoms() == max_num_atoms]
-        new_to_old_atom_maps = [self.hydrogen_mapping_exceptions(match) for match in new_top_matches]
+        new_to_old_atom_maps = [AtomMapper.hydrogen_mapping_exceptions(match, self.current_molecule, self.proposed_molecule) for match in new_top_matches]
         _logger.debug(f"\tnew to old atom maps with most atom hits: {new_to_old_atom_maps}")
 
         #now all else is equal; we will choose the map with the highest overlap of atom indices
@@ -275,7 +276,8 @@ class AtomMapper(object):
 
         return new_to_old_atom_maps[max_index]
 
-    def hydrogen_mapping_exceptions(self,match):
+    @staticmethod
+    def hydrogen_mapping_exceptions(match, current, proposed):
         """
         Returns an atom map that omits hydrogen-to-nonhydrogen atom maps AND X-H to Y-H where element(X) != element(Y)
         or aromatic(X) != aromatic(Y)
@@ -284,7 +286,7 @@ class AtomMapper(object):
 
         for matchpair in match.GetAtoms():
             old_index, new_index = matchpair.pattern.GetIdx(), matchpair.target.GetIdx()
-            old_atom, new_atom = self.current_molecule.GetAtom(oechem.OEHasAtomIdx(old_index)), self.proposed_molecule.GetAtom(oechem.OEHasAtomIdx(new_index))
+            old_atom, new_atom = current.GetAtom(oechem.OEHasAtomIdx(old_index)), proposed.GetAtom(oechem.OEHasAtomIdx(new_index))
 
             #Check if a hydrogen was mapped to a non-hydroden (basically the xor of is_h_a and is_h_b)
             if (old_atom.GetAtomicNum() == 1) != (new_atom.GetAtomicNum() == 1):
@@ -293,44 +295,66 @@ class AtomMapper(object):
             new_to_old_atom_map[new_index] = old_index
         return new_to_old_atom_map
 
-
     def _assign_ring_ids(self, molecule, max_ring_size=10):
+        """ Sets the Int of each atom in the oemol to a number
+        corresponding to the ring membership of that atom
+
+        Parameters
+        ----------
+        molecule : oechem.OEMol
+            oemol to assign ring ID to
+        max_ring_size : int, default = 10
+            Largest ring size that will be checked for
+
+        Returns
+        -------
+        """
         for atom in molecule.GetAtoms():
             rings = ''
-            for i in range(3,max_ring_size+1): # smallest feasible ring size is 3
+            for i in range(3, max_ring_size+1): # smallest feasible ring size is 3
                 rings += str(int(oechem.OEAtomIsInRingSize(atom, i)))
-            ring_as_base_ten  = int(rings,2)
+            ring_as_base_ten = int(rings, 2)
             atom.SetIntType(ring_as_base_ten)
 
-
-    def preserves_rings(self, match):
-        """Returns True if the transformation allows ring systems to be broken or created."""
-        pattern_atoms = { atom.GetIdx() : atom for atom in self.current_molecule.GetAtoms() }
-        target_atoms = { atom.GetIdx() : atom for atom in self.proposed_molecule.GetAtoms() }
-        pattern_to_target_map = { pattern_atoms[matchpair.pattern.GetIdx()] : target_atoms[matchpair.target.GetIdx()] for matchpair in match.GetAtoms() }
-        if self.breaks_rings_in_transformation(pattern_to_target_map):
+    @staticmethod
+    def preserves_rings(match, current, proposed):
+        """Returns True if the transformation allows ring
+        systems to be broken or created."""
+        pattern_atoms = {atom.GetIdx(): atom for atom in current.GetAtoms()}
+        target_atoms = {atom.GetIdx(): atom for atom in proposed.GetAtoms()}
+        pattern_to_target_map = {pattern_atoms[matchpair.pattern.GetIdx()]:
+                                 target_atoms[matchpair.target.GetIdx()]
+                                 for matchpair in match.GetAtoms()}
+        if AtomMapper.breaks_rings_in_transformation(pattern_to_target_map):
             return False
 
-        target_to_pattern_map = { target_atoms[matchpair.target.GetIdx()] : pattern_atoms[matchpair.pattern.GetIdx()] for matchpair in match.GetAtoms() }
-        if self.breaks_rings_in_transformation(target_to_pattern_map):
+        target_to_pattern_map = {target_atoms[matchpair.target.GetIdx()]:
+                                 pattern_atoms[matchpair.pattern.GetIdx()]
+                                 for matchpair in match.GetAtoms()}
+        if AtomMapper.breaks_rings_in_transformation(target_to_pattern_map):
             return False
 
         return True
 
-
-    def breaks_rings_in_transformation(self, atom_map):
+    @staticmethod
+    def breaks_rings_in_transformation(atom_map, current, proposed):
         """Return True if the transformation from molecule1 to molecule2 breaks rings.
 
         Parameters
         ----------
-        molecule1 : OEMol
-            Initial molecule whose rings are to be checked for not being broken
-        molecule2 : OEMol
-            Final molecule
         atom_map : dict of OEAtom : OEAtom
             atom_map[molecule1_atom] is the corresponding molecule2 atom
+        current : oechem.OEMol
+            Initial molecule whose rings are to be checked for not being broken
+        proposed : oechem.OEMol
+            Final molecule
+
+        Returns
+        -------
+        bool
         """
-        for cycle in self.enumerate_cycle_basis(self.current_molecule):
+        # not sure how this works if proposed isn't called??
+        for cycle in AtomMapper.enumerate_cycle_basis(current):
             cycle_size = len(cycle)
             for bond in cycle:
                 if ((bond.GetBgn() in atom_map) and (bond.GetEnd() in atom_map)):
@@ -338,9 +362,10 @@ class AtomMapper(object):
                         return True
                     if not oechem.OEAtomIsInRingSize(atom_map[bond.GetEnd()], cycle_size):
                         return True
-        return False # no rings in molecule1 are broken in molecule2
+        return False  # no rings in molecule1 are broken in molecule2
 
-    def enumerate_cycle_basis(self,molecule):
+    @staticmethod
+    def enumerate_cycle_basis(molecule):
         """Enumerate a closed cycle basis of bonds in molecule.
 
         This uses cycle_basis from NetworkX:
@@ -357,7 +382,6 @@ class AtomMapper(object):
             bond_cycle_basis[cycle_index] is a list of OEBond objects that define a cycle in the basis
             You can think of these as the minimal spanning set of ring systems to check.
         """
-        import networkx as nx
         g = nx.Graph()
         for atom in molecule.GetAtoms():
             g.add_node(atom.GetIdx())
@@ -375,20 +399,39 @@ class AtomMapper(object):
             bond_cycle_basis.append(bond_cycle)
         return bond_cycle_basis
 
-    def rank_degenerate_maps(self, matches):
-        """
-        If the atom/bond expressions for maximal substructure is relaxed, then the maps with the highest scores will likely be degenerate.
-        Consequently, it is important to reduce the degeneracy with other tests.
+    @staticmethod
+    def rank_degenerate_maps(matches, current, proposed):
+        """If the atom/bond expressions for maximal substructure is relaxed,
+         then the maps with the highest scores will likely be degenerate.
+        Consequently, it is important to reduce the degeneracy with other tests
 
-        This test will give each match a score wherein every atom matching with the same atomic number (in aromatic rings) will
+        This test will give each match a score wherein every atom matching
+        with the same atomic number (in aromatic rings) will
         receive a +1 score.
+
+        Parameters
+        ----------
+        matches : type
+            Description of parameter `matches`.
+        current : oechem.OEMol
+            oemol of first molecule
+        proposed : oechem.OEMol
+            oemol of second molecule
+
+        Returns
+        -------
+        list of matches
+            Ordered list of the matches
+
+        """
+        """
         """
         score_list = {}
         for idx, match in enumerate(matches):
             counter_arom, counter_aliph = 0, 0
             for matchpair in match.GetAtoms():
                 old_index, new_index = matchpair.pattern.GetIdx(), matchpair.target.GetIdx()
-                old_atom, new_atom = self.current_molecule.GetAtom(oechem.OEHasAtomIdx(old_index)), self.proposed_molecule.GetAtom(oechem.OEHasAtomIdx(new_index))
+                old_atom, new_atom = current.GetAtom(oechem.OEHasAtomIdx(old_index)), proposed.GetAtom(oechem.OEHasAtomIdx(new_index))
 
                 if old_atom.IsAromatic() and new_atom.IsAromatic(): #if both are aromatic
                     if old_atom.GetAtomicNum() == new_atom.GetAtomicNum():
@@ -2036,7 +2079,7 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
         self._probability_matrix = self._calculate_probability_matrix()
 
 
-    def propose(self, current_system, current_topology, predefined_map=None,
+    def propose(self, current_system, current_topology,
                 current_mol_id=0, proposed_mol_id=None, current_metadata=None):
         """
         Propose the next state, given the current state
@@ -2059,6 +2102,7 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
         proposal : TopologyProposal object
            topology proposal object
         """
+        self.current_molecule = self.list_of_oemols[current_mol_id]
 
         # Remove the small molecule from the current Topology object
         _logger.info(f"creating current receptor topology by removing small molecule from current topology...")
@@ -2081,7 +2125,7 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
             proposed_mol_id, self.proposed_molecule, logp_proposal = self._propose_molecule(current_system, current_topology, current_mol_id)
         else:
             self.proposed_molecule = self.list_of_oemols[proposed_mol_id]
-            _logger.info(f"proposed mol detected with smiles {self._list_of_smiles[proposed_mol_id]} and logp_proposal of 0.0")
+            _logger.info(f"proposed mol detected with smiles {proposed_mol_smiles} and logp_proposal of 0.0")
             logp_proposal = 0.0
 
         _logger.info(f"conducting proposal from {self._list_of_smiles[current_mol_id]} to {self._list_of_smiles[proposed_mol_id]}...")
@@ -2103,12 +2147,13 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
             new_system = self._system_generator.build_system(new_topology)
 
         # Determine atom mapping between old and new molecules
-        if predefined_map is None:
-            _logger.info(f'No atom map defined, generating now...')
+        _logger.info(f"determining atom map between old and new molecules...")
+        if not self._atom_map:
+            _logger.info(f"the atom map is not specified; proceeding to generate an atom map...")
             mol_atom_map = self._get_mol_atom_map()
         else:
-            _logger.info(f'Atom map has been predefined : {predefined_map}')
-            mol_atom_map = predefined_map 
+            _logger.info(f"atom map is pre-determined as {mol_atom_map}")
+            mol_atom_map = self._atom_map
 
         # Adjust atom mapping indices for the presence of the receptor
         adjusted_atom_map = {}
