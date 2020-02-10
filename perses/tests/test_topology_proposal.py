@@ -23,7 +23,7 @@ temperature = 300*unit.kelvin
 kT = kB * temperature
 beta = 1.0 / kT
 
-istravis = os.environ.get('TRAVIS', None) == 'true'
+running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
 def test_small_molecule_proposals():
     """
@@ -85,39 +85,41 @@ def test_mapping_strength_levels(pairs_of_smiles=[('Cc1ccccc1','c1ccc(cc1)N'),('
             render_atom_mapping(f'{index}-{example}.png', initial_molecule, proposed_molecule, proposal._new_to_old_atom_map)
 
 
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip full test on TRAVIS.")
+@skipIf(running_on_github_actions, "Skip full test on GH Actions.")
 def test_no_h_map():
-    """
-    Test that the SmallMoleculeAtomMapper can generate maps that exclude hydrogens
-    """
-    from perses.tests.testsystems import KinaseInhibitorsTestSystem
-    from perses.rjmc.topology_proposal import SmallMoleculeAtomMapper
-    import itertools
-    from perses.tests import utils
-    from openeye import oechem
-    kinase = KinaseInhibitorsTestSystem()
-    molecules = kinase.molecules
-    mapper = SmallMoleculeAtomMapper(molecules, prohibit_hydrogen_mapping=True)
-    mapper.map_all_molecules()
+   """
+   Test that the SmallMoleculeAtomMapper can generate maps that exclude hydrogens
+   """
+   from perses.tests.testsystems import KinaseInhibitorsTestSystem
+   from perses.rjmc.topology_proposal import SmallMoleculeAtomMapper
+   import itertools
+   from perses.tests import utils
+   from openeye import oechem
+   kinase = KinaseInhibitorsTestSystem()
+   molecules = kinase.molecules
+   print(molecules)
+   mapper = SmallMoleculeAtomMapper(molecules, prohibit_hydrogen_mapping=True)
+   mapper.map_all_molecules()
 
-    with open('mapperkinase_permissive.json', 'w') as outfile:
-        json_string = mapper.to_json()
-        outfile.write(json_string)
+   with open('mapperkinase_permissive.json', 'w') as outfile:
+       json_string = mapper.to_json()
+       outfile.write(json_string)
 
-    molecule_smiles = mapper.smiles_list
-    for molecule_pair in itertools.combinations(molecule_smiles, 2):
-        index_1 = molecule_smiles.index(molecule_pair[0])
-        index_2 = molecule_smiles.index(molecule_pair[1])
-        mol_a = mapper.get_oemol_from_smiles(molecule_pair[0])
-        mol_b = mapper.get_oemol_from_smiles(molecule_pair[1])
-        #fresh_atom_maps, _ = mapper._map_atoms(mol_a, mol_b)
-        stored_atom_maps = mapper.get_atom_maps(molecule_pair[0], molecule_pair[1])
+   molecule_smiles = mapper.smiles_list
+   for molecule_pair in itertools.combinations(molecule_smiles, 2):
+       index_1 = molecule_smiles.index(molecule_pair[0])
+       index_2 = molecule_smiles.index(molecule_pair[1])
+       mol_a = mapper.get_oemol_from_smiles(molecule_pair[0])
+       mol_b = mapper.get_oemol_from_smiles(molecule_pair[1])
+       #fresh_atom_maps, _ = mapper._map_atoms(mol_a, mol_b)
+       stored_atom_maps = mapper.get_atom_maps(molecule_pair[0], molecule_pair[1])
 
-        for i, atom_map in enumerate(stored_atom_maps):
-            render_atom_mapping("{}_{}_map{}_permissive.png".format(index_1, index_2, i), mol_b, mol_a, atom_map)
+       for i, atom_map in enumerate(stored_atom_maps):
+           render_atom_mapping("{}_{}_map{}_permissive.png".format(index_1, index_2, i), mol_b, mol_a, atom_map)
 
 
-    mapper.generate_and_check_proposal_matrix()
+   mapper.generate_and_check_proposal_matrix()
+
 
 def test_two_molecule_proposal_engine():
     """
