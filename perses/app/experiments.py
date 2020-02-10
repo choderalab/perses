@@ -45,6 +45,71 @@ class NetworkBuilder(object):
     Vertices represent nonalchemical states (i.e. ligands/protein mutants).
     Edges represent the alchemical transformations between nonalchemical states.
     Specifically, this class creates topology proposals, geometry_proposals, HybridTopologyFactory objects, and Simulation objects for each edge.
+
+    Possible Implementations:
+    Case 1: Vanilla
+        Give : list of ligands (from .sdf/.smi) and a receptor pdb, along with a (possibly) weighted connectivity matrix.
+        Specifications :
+            a. the topology/geometry/hybrid_system generation variables are all equal (i.e. use the same automatic mapping strength for all of the transforms)
+            b. use the same simulation object and simulation parameters for every edge of a given phase.
+
+        Return : networkx.DiGraph object with the following characteristics...
+            a. ligands specified by nodes in a given phase
+            b. edges specified by a node i --> j simulation
+
+    Case 2: edge-specific parametrizations
+        Give : same as case 1
+        Specifications :
+            a. user-specified topology/geometry/hybrid_system generation variables (e.g. the user specifies a certain mapping scheme or an atom map for a given transform)
+            b. user-specified simulation objects and parameters for every edge (e.g. the user wants to use neq for all complex phase simulations but repex on all solvent phase sims)
+
+        Return : as in case 1
+
+    Case 3: adding generalizable phases
+        Give : same as case 1, but allow for different phases to be handled with (tip3p, tip4p, octanol/water, different protein mutations)
+        Specifications : in principle, we can connect (vertically) the ligands in different mutant forms... and sample theses edges based on the ease of a given transformation
+        Return : as in case 1
+
+
+    Following pseudocode demonstrates the way we (may) want to implement the NetworkBuilder
+
+    #first, we want to make a client to distribute edge-building across the graph and add them as the attributes return asynchronously
+    network_builder_parallelism = Parallelism()
+    network_builder_parallelism.activate_client(library = ('dask', 'LSF'),
+                                                num_processes = 10,
+                                                timeout = 3600,
+                                                processor = 'cpu', #we only need cpus to build the edges
+                                                )
+
+    connectivity_data = {(0,1, 'solvent', 1) : {'anneal_14s': True,
+                                                'softcore_LJ_v2': False,
+                                                'simulation_flavor': 'repex',
+                                                'n_states': 11,
+                                                'n_cycles': 5000
+                                                }
+                         (0,1, 'complex', 1) : {'softcore_LJ_v2': True,
+                                                'simulation_flavor': 'neq',
+                                                'protocol_forward': range(0,1,10000),
+                                                'num_particles': 100
+                                                },
+                        (1,2,'solvent', 1): None,
+                        (1,2, 'complex', 1): None,
+                        }
+    network_engine = NetworkBuilder(parallelism = network_builder_parallelism,
+                                    ligand_input = f"ligands.sdf", #suppose this just has ligands 0, 1, 2
+                                    receptor_filename = f"thrombin.pdb",
+                                    connectivity_data = connectivity_data)
+
+    network = network_engine.network
+
+    #perhaps we want to change an edge weight:
+    network_engine.add_edge(ligand_i = 0, ligand_j = 2, weight = 1, parameters = {'softcore_LJ_v2': True, 'simulation_flavor': 'neq'} )
+
+    #change weight
+    network_edge.network.edges(0,1)['weight'] = 2
+
+
+
     """
     proposal_arguments = {'pressure': 1.0 * unit.atmosphere,
                          'temperature': 300.0 * unit.kelvin,
