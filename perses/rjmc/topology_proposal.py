@@ -128,22 +128,26 @@ def has_h_mapped(atommap, mola: oechem.OEMol, molb: oechem.OEMol):
 
 
 class AtomMapper(object):
-    """Short summary.
+    """ Generates map between two molecules.
+    As this doesn't generate a system, it will not be
+    accurate for whether hydrogens are mapped or not.
+    It also doesn't check that this is feasible to simulate,
+    but is just helpful for testing options.
 
     Parameters
     ----------
-    current_molecule : type
-        Description of parameter `current_molecule`.
-    proposed_molecule : type
-        Description of parameter `proposed_molecule`.
-    atom_expr : type
-        Description of parameter `atom_expr`.
-    bond_expr : type
-        Description of parameter `bond_expr`.
-    verbose : type
-        Description of parameter `verbose`.
-    allow_ring_breaking : type
-        Description of parameter `allow_ring_breaking`.
+    current_molecule : oechem.OEMol
+        starting molecule
+    proposed_molecule : oechem.OEMol
+        molecule to move to
+    atom_expr : oechem.OEExprOpts
+        atom requirement to consider two bonds as the same
+    bond_expr : oechem.OEExprOpts
+        bond requirement to consider two bonds as the same
+    verbose : bool
+        wether to be verbose or not
+    allow_ring_breaking : bool, default=True
+        Wether or not to allow ring breaking in map
 
     Attributes
     ----------
@@ -172,7 +176,7 @@ class AtomMapper(object):
         self.atom_map = self._get_mol_atom_map()
         super(AtomMapper,self).__init__(**kwargs)
 
-    def _get_mol_atom_map(self, indexA=0, indexB=1):
+    def _get_mol_atom_map(self, indexA=0, indexB=1, allow_ring_breaking=False):
         """
         Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
 
@@ -182,7 +186,7 @@ class AtomMapper(object):
              The current molecule in the sampler
         proposed_molecule : openeye.oechem.oemol object
              The proposed new molecule
-        allow_ring_breaking : bool, optional, default=True
+        allow_ring_breaking : bool, optional, default=False
              If False, will check to make sure rings are not being broken or formed.
 
         Returns
@@ -239,7 +243,7 @@ class AtomMapper(object):
 
         if self.allow_ring_breaking is False:
             # Filter the matches to remove any that allow ring breaking
-            matches = [m for m in matches if AtomMapper.preserves_rings(m)]
+            matches = [m for m in matches if AtomMapper.preserves_rings(m, self.current_mol, self.proposed_mol)]
 
         if not matches:
             _logger.info('Cannot generate atom map without breaking rings, trying again with weaker mapping.')
@@ -249,7 +253,7 @@ class AtomMapper(object):
 
             if self.allow_ring_breaking is False:
                 # Filter the matches to remove any that allow ring breaking
-                matches = [m for m in matches if AtomMapper.preserves_rings(m)]
+                matches = [m for m in matches if AtomMapper.preserves_rings(m, self.current_mol, self.proposed_mol)]
             if not matches:
                 raise Exception(f"There are no atom map matches that preserve rings!  It is advisable to conduct a manual atom mapping.")
 
