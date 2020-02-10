@@ -50,6 +50,7 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
 
     # Create atom names.
     oechem.OETriposAtomNames(molecule)
+    oechem.OETriposBondTypeNames(molecule)
 
     # Assign geometry
     omega = oeomega.OEOmega()
@@ -57,7 +58,6 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     omega.SetIncludeInput(False)
     omega.SetStrictStereo(True)
     omega(molecule)
-
     return molecule
 
 

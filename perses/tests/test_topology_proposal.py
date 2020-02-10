@@ -14,7 +14,7 @@ except:
 from nose.plugins.attrib import attr
 from openmmtools.constants import kB
 from perses.utils.data import get_data_filename
-from perses.utils.openeye import OEMol_to_omm_ff
+from perses.utils.openeye import OEMol_to_omm_ff, smiles_to_oemol
 from perses.utils.smallmolecules import render_atom_mapping
 from unittest import skipIf
 
@@ -24,26 +24,6 @@ kT = kB * temperature
 beta = 1.0 / kT
 
 istravis = os.environ.get('TRAVIS', None) == 'true'
-
-def generate_initial_molecule(mol_smiles):
-    """
-    Generate an oemol with a geometry
-    """
-    import openeye.oechem as oechem
-    import openeye.oeomega as oeomega
-    mol = oechem.OEMol()
-    oechem.OESmilesToMol(mol, mol_smiles)
-    mol.SetTitle("MOL")
-    # Assign aromaticity and hydrogens and hybridization.
-    oechem.OEAddExplicitHydrogens(mol)
-    oechem.OEAssignAromaticFlags(mol, oechem.OEAroModelOpenEye)
-    oechem.OEAssignHybridization(mol)
-    oechem.OETriposAtomNames(mol)
-    oechem.OETriposBondTypeNames(mol)
-    omega = oeomega.OEOmega()
-    omega.SetMaxConfs(1)
-    omega(mol)
-    return mol
 
 def test_small_molecule_proposals():
     """
@@ -57,7 +37,7 @@ def test_small_molecule_proposals():
     list_of_smiles = ['CCCC','CCCCC','CCCCCC']
     list_of_mols = []
     for smi in list_of_smiles:
-        mol = generate_initial_molecule(smi)
+        mol = smiles_to_oemol(smi)
         list_of_mols.append(mol)
     gaff_xml_filename = get_data_filename('data/gaff.xml')
     stats_dict = defaultdict(lambda: 0)
@@ -93,8 +73,8 @@ def test_mapping_strength_levels(pairs_of_smiles=[('Cc1ccccc1','c1ccc(cc1)N'),('
 
     for example in mapping:
         for index, (lig_a, lig_b) in enumerate(pairs_of_smiles):
-            initial_molecule = generate_initial_molecule(lig_a)
-            proposed_molecule = generate_initial_molecule(lig_b)
+            initial_molecule = smiles_to_oemol(lig_a)
+            proposed_molecule = smiles_to_oemol(lig_b)
             system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
             proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine([initial_molecule, proposed_molecule], system_generator,map_strength=example)
             initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(initial_molecule)
