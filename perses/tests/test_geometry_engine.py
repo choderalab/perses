@@ -2029,7 +2029,7 @@ def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'pro
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
     geometry_engine = geometry.FFAllAngleGeometryEngine(n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, neglect_angles = neglect_angles)
     proposal_engine = SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
+        [current_mol, proposed_mol], system_generator, residue_name=current_mol_name)
 
     #generate topology proposal
     topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol=current_mol, proposed_mol=proposed_mol)
