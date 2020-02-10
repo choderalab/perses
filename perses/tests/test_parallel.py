@@ -15,7 +15,7 @@ import pymbar
 from perses.dispersed import parallel
 ###
 
-istravis = os.environ.get('TRAVIS', None) == 'true'
+running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
 
 
@@ -37,22 +37,24 @@ def test_Parallelism_local():
 
     run_parallelism(_parallel, data)
 
-@skipIf(istravis, "Skip helper function on travis")
-def test_Parallelism_distributed():
-    """
-    following function will create a distributed Parallelism instance and run all of the used methods.
-    Note : this can only be run on a nosetest since travis cannot access dask_jobqueue or any python distributed libraries.
-    """
-    _parallel = parallel.Parallelism()
 
-    #test client activation
-    _parallel.activate_client(library = ('dask', 'LSF'), num_processes = 2)
-    data = np.arange(10)
-    run_parallelism(_parallel, data)
+# Run this test on a cluster to test parallelism
+@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+def test_Parallelism_distributed():
+   """
+   following function will create a distributed Parallelism instance and run all of the used methods.
+   Note : this can only be run on a nosetest since GH Actions cannot access dask_jobqueue or any python distributed libraries.
+   """
+   _parallel = parallel.Parallelism()
+
+   #test client activation
+   _parallel.activate_client(library = ('dask', 'LSF'), num_processes = 2)
+   data = np.arange(10)
+   run_parallelism(_parallel, data)
 
 
 @nottest
-@skipIf(istravis, "Skip helper function on travis")
+@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
 def run_parallelism(_parallel, data):
     """
     helper function to run through the parallelism tests
@@ -115,7 +117,7 @@ def run_parallelism(_parallel, data):
 
 
 @nottest
-@skipIf(istravis, "Skip helper function on travis")
+@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
 def dummy_function(_arg):
     """
     dummy function to distribute;

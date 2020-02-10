@@ -57,7 +57,7 @@ beta = 1.0/kT # unit-bearing inverse thermal energy
 CARBON_MASS = 12.01 # float (implicitly in units of AMU)
 REFERENCE_PLATFORM = openmm.Platform.getPlatformByName("Reference")
 proposal_test = namedtuple("proposal_test", ["topology_proposal", "current_positions"])
-istravis = os.environ.get('TRAVIS', None) == 'true'
+running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 LOGP_FORWARD_THRESHOLD = 1e3
 
 ################################################################################
@@ -930,10 +930,10 @@ def align_molecules(mol1, mol2):
 
 @attr('advanced')
 @nottest
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip advanced test on TRAVIS")
+@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 def test_mutate_quick(): # TODO: fix protein mutations
     """
-    Abbreviated version of test_mutate_all for travis.
+    Abbreviated version of test_mutate_all for GH Actions.
     """
     import perses.rjmc.topology_proposal as topology_proposal
     import perses.rjmc.geometry as geometry
@@ -994,7 +994,7 @@ def test_mutate_quick(): # TODO: fix protein mutations
 
 @attr('advanced')
 @nottest
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip advanced test on TRAVIS")
+@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 def test_mutate_from_all_to_all(): # TODO: fix protein mutations
     """
     Make sure mutations are successful between every possible pair of before-and-after residues
@@ -1060,7 +1060,7 @@ def test_mutate_from_all_to_all(): # TODO: fix protein mutations
 
 @attr('advanced')
 @nottest
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip advanced test on TRAVIS")
+@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 def test_propose_lysozyme_ligands(): # TODO: fix protein mutations
     """
     Try proposing geometries for all T4 ligands from all T4 ligands
@@ -1073,7 +1073,7 @@ def test_propose_lysozyme_ligands(): # TODO: fix protein mutations
 
 @attr('advanced')
 @nottest
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip advanced test on TRAVIS")
+@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 def test_propose_kinase_inhibitors(): # TODO: fix protein mutations
     from perses.tests.testsystems import KinaseInhibitorsTestSystem
     testsystem = KinaseInhibitorsTestSystem()

@@ -57,7 +57,7 @@ from openmmtools.states import ThermodynamicState, SamplerState
 # TEST SYSTEMS
 ################################################################################
 
-istravis = os.environ.get('TRAVIS', None) == 'true'
+running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
 class PersesTestSystem(object):
     """
@@ -1717,6 +1717,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
 
         # skipping molecules with undefined stereocenters
         d_smiles_to_oemol = {}
+
         good_molecules = []
         for i, smiles in enumerate(molecules):
             mol = smiles_to_oemol(smiles, f"MOL_{i}")
