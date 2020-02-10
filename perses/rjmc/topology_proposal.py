@@ -62,8 +62,8 @@ STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 #specific to proteins
 # PROTEIN_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_EqAromatic
 # PROTEIN_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity
-PROTEIN_ATOM_EXPRESSION = STRONG_ATOM_EXPRESSION
-PROTEIN_BOND_EXPRESSION = STRONG_BOND_EXPRESSION
+PROTEIN_ATOM_EXPRESSION = DEFAULT_ATOM_EXPRESSION
+PROTEIN_BOND_EXPRESSION = DEFAULT_BOND_EXPRESSION
 
 
 ################################################################################
@@ -4344,9 +4344,9 @@ class NetworkXMolecule(object):
         #NOTE: the atoms comprising the mol_residue must be a subset fo the mol_oemol atoms
         """
         #subset assertion
-        print(f"top residue atoms: {[(atom.name, atom.index) for atom in mol_residue.atoms()]}")
-        print(f"mol atoms: {[(atom.GetName(), atom.GetIdx()) for atom in mol_oemol.GetAtoms()]}")
-        print(f"residue to oemol map: {residue_to_oemol_map}")
+        # print(f"top residue atoms: {[(atom.name, atom.index) for atom in mol_residue.atoms()]}")
+        # print(f"mol atoms: {[(atom.GetName(), atom.GetIdx()) for atom in mol_oemol.GetAtoms()]}")
+        # print(f"residue to oemol map: {residue_to_oemol_map}")
         assert set([atom.name for atom in mol_residue.atoms()]).issubset(set([atom.GetName() for atom in mol_oemol.GetAtoms()])), f"the mol_residue is not a subset of the mol_oemol"
 
         #the first thing to do is to create a simple undirected graph based on covalency

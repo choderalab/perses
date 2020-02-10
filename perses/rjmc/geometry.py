@@ -21,7 +21,7 @@ from openeye import oechem, oeomega
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("geometry")
-_logger.setLevel(logging.WARNING)
+_logger.setLevel(logging.INFO)
 
 
 
@@ -482,7 +482,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         #Print the energy of the system before unique_new/old atoms are placed...
         state = atoms_with_positions_context.getState(getEnergy=True)
         atoms_with_positions_reduced_potential = beta*state.getPotentialEnergy()
-        atoms_with_positions_reduced_potential_components = [(force, energy*beta) for force, energy in compute_potential_components(atoms_with_positions_context)]
+        atoms_with_positions_reduced_potential_components = [(force, energy) for force, energy in compute_potential_components(atoms_with_positions_context)]
         atoms_with_positions_methods_differences = abs(atoms_with_positions_reduced_potential - sum([i[1] for i in atoms_with_positions_reduced_potential_components]))
         assert atoms_with_positions_methods_differences < ENERGY_THRESHOLD, f"the difference between the atoms_with_positions_reduced_potential and the sum of atoms_with_positions_reduced_potential_components is {abs(atoms_with_positions_reduced_potential - sum([i[1] for i in atoms_with_positions_reduced_potential_components]))}"
 
@@ -694,6 +694,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         import copy
         from simtk import openmm
+        from perses.tests.utils import compute_potential_components
         _integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
         growth_system = copy.deepcopy(growth_system_generator.get_modified_system())
         #the last thing to do for bookkeeping is to delete the torsion force associated with the extra ring-closing and chirality restraints
@@ -710,6 +711,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         mod_context.setPositions(positions)
         mod_state = mod_context.getState(getEnergy=True)
         modified_reduced_potential_energy = beta * mod_state.getPotentialEnergy()
+
+        added_energy_components = [(force, energy) for force, energy in compute_potential_components(mod_context)]
+        print(f"added energy components: {added_energy_components}")
 
         return modified_reduced_potential_energy
 

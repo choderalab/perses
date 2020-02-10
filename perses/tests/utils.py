@@ -277,7 +277,7 @@ def compute_potential(system, positions, platform=None):
         raise NaNException("Potential energy is NaN")
     return potential
 
-def compute_potential_components(context):
+def compute_potential_components(context, beta = beta):
     """
     Compute potential energy, raising an exception if it is not finite.
 
@@ -311,7 +311,7 @@ def compute_potential_components(context):
         force = system.getForce(index)
         forcename = force.__class__.__name__
         groups = 1<<index
-        potential = context.getState(getEnergy=True, groups=groups).getPotentialEnergy()
+        potential = beta * context.getState(getEnergy=True, groups=groups).getPotentialEnergy()
         energy_components.append((forcename, potential))
     del context, integrator
     return energy_components
@@ -748,7 +748,7 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
         energy_comps = compute_potential_components(context)
         for name, force in energy_comps:
            print("\t\t\t{}: {}".format(name, force))
-        print(f'added forces:{sum([energy*beta for name, energy in energy_comps])}')
+        print(f'added forces:{sum([energy for name, energy in energy_comps])}')
         print(f'rp: {rp}')
         del context, integrator
 
