@@ -69,51 +69,50 @@ def test_run_nonequilibrium_switching_move():
         assert context.getParameter("lambda_sterics") == 1.0
         assert integrator.getGlobalVariableByName("lambda") == 1.0
 
-        
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip slow test on TRAVIS.")
-def test_run_cdk2_iterations_neq():
-    """
-    Ensure that we can instantiate and run a nonequilibrium relative free energy calculation for the cdk2 ligands in vacuum
-    """
-    setup_directory = resource_filename("perses", "data/cdk2-example")
-    os.chdir(setup_directory)
-    n_iterations = 2
 
-    yaml_filename = "cdk2_setup_neq.yaml"
-    yaml_file = open(yaml_filename, "r")
-    setup_options = yaml.safe_load(yaml_file)
-    yaml_file.close()
-
-    if not os.path.exists(setup_options['trajectory_directory']):
-        os.makedirs(setup_options['trajectory_directory'])
-
-    setup_options['solvate'] = False
-    setup_options['scheduler_address'] = None
-
-    length_of_protocol = setup_options['n_steps_ncmc_protocol']
-    write_interval = setup_options['n_steps_per_move_application']
-
-    n_work_values_per_iteration = length_of_protocol // write_interval
-
-    setup_dict = setup_relative_calculation.run_setup(setup_options)
-
-    setup_dict['ne_fep']['solvent'].run(n_iterations=n_iterations)
-
-    #now check that the correct number of iterations was written out:
-    os.chdir(setup_options['trajectory_directory'])
-    import glob
-
-    #for the verification of work writing, we add one to the work dimension, since the first work value is always zero
-
-    #check for lambda zero
-    lambda_zero_filenames = glob.glob("*0.cw.npy")
-    lambda_zero_npy = np.stack([np.load(filename) for filename in lambda_zero_filenames])
-    assert np.shape(lambda_zero_npy) == (n_iterations, n_work_values_per_iteration+1)
-
-    #check for lambda one
-    lambda_one_filenames = glob.glob("*1.cw.npy")
-    lambda_one_npy = np.stack([np.load(filename) for filename in lambda_one_filenames])
-    assert np.shape(lambda_one_npy) == (n_iterations, n_work_values_per_iteration+1)
+#@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip slow test on TRAVIS.")
+#def test_run_cdk2_iterations_neq():
+#    """
+#    Ensure that we can instantiate and run a nonequilibrium relative free energy calculation for the cdk2 ligands in vacuum
+#    """
+#    setup_directory = resource_filename("perses", "data/cdk2-example")
+#    os.chdir(setup_directory)
+#    n_iterations = 2
+#
+#    yaml_filename = "cdk2_setup_neq.yaml"
+#    from perses.app.setup_relative_calculation import getSetupOptions
+#    setup_options = getSetupOptions(yaml_filename)
+#
+#    if not os.path.exists(setup_options['trajectory_directory']):
+#        os.makedirs(setup_options['trajectory_directory'])
+#
+#    setup_options['solvate'] = False
+#    setup_options['scheduler_address'] = None
+#
+#    length_of_protocol = setup_options['n_steps_ncmc_protocol']
+#    write_interval = setup_options['n_steps_per_move_application']
+#
+#    n_work_values_per_iteration = length_of_protocol // write_interval
+#
+#    setup_dict = setup_relative_calculation.run_setup(setup_options)
+#
+#    setup_dict['ne_fep']['solvent'].run(n_iterations=n_iterations)
+#
+#    #now check that the correct number of iterations was written out:
+#    os.chdir(setup_options['trajectory_directory'])
+#    import glob
+#
+#    #for the verification of work writing, we add one to the work dimension, since the first work value is always zero
+#
+#    #check for lambda zero
+#    lambda_zero_filenames = glob.glob("*0.cw.npy")
+#    lambda_zero_npy = np.stack([np.load(filename) for filename in lambda_zero_filenames])
+#    assert np.shape(lambda_zero_npy) == (n_iterations, n_work_values_per_iteration+1)
+#
+#    #check for lambda one
+#    lambda_one_filenames = glob.glob("*1.cw.npy")
+#    lambda_one_npy = np.stack([np.load(filename) for filename in lambda_one_filenames])
+#    assert np.shape(lambda_one_npy) == (n_iterations, n_work_values_per_iteration+1)
 
 @skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip slow test on TRAVIS.")
 def test_run_cdk2_iterations_repex():
@@ -153,7 +152,7 @@ def test_run_cdk2_iterations_repex():
         setup_options['scheduler_address'] = None
         for parameter in ['protein_pdb', 'ligand_file']:
             setup_options[parameter] = os.path.join(setup_directory, setup_options[parameter])
-        for parameter in ['trajectory_directory', 'trajectory_prefix', 'save_setup_pickle_as']:
+        for parameter in ['trajectory_directory', 'save_setup_pickle_as']:
             setup_options[parameter] = os.path.join(tmpdirname, setup_options[parameter])
 
         #length_of_protocol = setup_options['n_steps_ncmc_protocol']

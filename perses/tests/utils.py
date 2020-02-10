@@ -502,7 +502,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         solvated_system = system_generator.build_system(solvated_topology)
 
         #now to create proposal
-        top_proposal = proposal_engine.propose(current_system = solvated_system, current_topology = solvated_topology, current_mol = old_oemol, proposed_mol = new_oemol)
+        top_proposal = proposal_engine.propose(current_system = solvated_system, current_topology = solvated_topology, current_mol_id=0, proposed_mol_id=1)
         new_positions, _ = geometry_engine.propose(top_proposal, solvated_positions, beta)
 
         if render_atom_mapping:
