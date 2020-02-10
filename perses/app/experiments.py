@@ -95,6 +95,8 @@ class NetworkBuilder(object):
                         (1,2,'solvent', 1): None,
                         (1,2, 'complex', 1): None,
                         }
+    #we probably need a check to make sure that if the ligand_i, ligand_j is specified, that there is an edge for each appropriate phase
+    
     network_engine = NetworkBuilder(parallelism = network_builder_parallelism,
                                     ligand_input = f"ligands.sdf", #suppose this just has ligands 0, 1, 2
                                     receptor_filename = f"thrombin.pdb",
@@ -107,6 +109,8 @@ class NetworkBuilder(object):
 
     #change weight
     network_edge.network.edges(0,1)['weight'] = 2
+
+
 
 
 
