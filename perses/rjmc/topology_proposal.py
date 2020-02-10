@@ -243,7 +243,7 @@ class AtomMapper(object):
 
         if self.allow_ring_breaking is False:
             # Filter the matches to remove any that allow ring breaking
-            matches = [m for m in matches if AtomMapper.preserves_rings(m, self.current_mol, self.proposed_mol)]
+            matches = [m for m in matches if AtomMapper.preserves_rings(m, self.current_molecule, self.proposed_molecule)]
 
         if not matches:
             _logger.info('Cannot generate atom map without breaking rings, trying again with weaker mapping.')
@@ -253,7 +253,7 @@ class AtomMapper(object):
 
             if self.allow_ring_breaking is False:
                 # Filter the matches to remove any that allow ring breaking
-                matches = [m for m in matches if AtomMapper.preserves_rings(m, self.current_mol, self.proposed_mol)]
+                matches = [m for m in matches if AtomMapper.preserves_rings(m, self.current_molecule, self.proposed_molecule)]
             if not matches:
                 raise Exception(f"There are no atom map matches that preserve rings!  It is advisable to conduct a manual atom mapping.")
 
