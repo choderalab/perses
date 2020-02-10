@@ -257,7 +257,7 @@ class AtomMapper(object):
             if not matches:
                 raise Exception(f"There are no atom map matches that preserve rings!  It is advisable to conduct a manual atom mapping.")
 
-        top_matches = self.rank_degenerate_maps(matches) #remove the matches with the lower rank score (filter out bad degeneracies)
+        top_matches = self.rank_degenerate_maps(matches, self.current_molecule, self.proposed_molecule) #remove the matches with the lower rank score (filter out bad degeneracies)
         _logger.debug(f"\tthere are {len(top_matches)} top matches")
         max_num_atoms = max([match.NumAtoms() for match in top_matches])
         _logger.debug(f"\tthe max number of atom matches is: {max_num_atoms}; there are {len([m for m in top_matches if m.NumAtoms() == max_num_atoms])} matches herein")
@@ -329,13 +329,17 @@ class AtomMapper(object):
         pattern_to_target_map = {pattern_atoms[matchpair.pattern.GetIdx()]:
                                  target_atoms[matchpair.target.GetIdx()]
                                  for matchpair in match.GetAtoms()}
-        if AtomMapper.breaks_rings_in_transformation(pattern_to_target_map):
+        if AtomMapper.breaks_rings_in_transformation(pattern_to_target_map,
+                                                     current,
+                                                     proposed):
             return False
 
         target_to_pattern_map = {target_atoms[matchpair.target.GetIdx()]:
                                  pattern_atoms[matchpair.pattern.GetIdx()]
                                  for matchpair in match.GetAtoms()}
-        if AtomMapper.breaks_rings_in_transformation(target_to_pattern_map):
+        if AtomMapper.breaks_rings_in_transformation(target_to_pattern_map,
+                                                     current,
+                                                     proposed):
             return False
 
         return True
@@ -2129,6 +2133,7 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
             proposed_mol_id, self.proposed_molecule, logp_proposal = self._propose_molecule(current_system, current_topology, current_mol_id)
         else:
             self.proposed_molecule = self.list_of_oemols[proposed_mol_id]
+            proposed_mol_smiles = self._list_of_smiles[proposed_mol_id]
             _logger.info(f"proposed mol detected with smiles {proposed_mol_smiles} and logp_proposal of 0.0")
             logp_proposal = 0.0
 
@@ -2152,12 +2157,12 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
 
         # Determine atom mapping between old and new molecules
         _logger.info(f"determining atom map between old and new molecules...")
-        if not self._atom_map:
+        if not self.atom_map:
             _logger.info(f"the atom map is not specified; proceeding to generate an atom map...")
             mol_atom_map = self._get_mol_atom_map()
         else:
-            _logger.info(f"atom map is pre-determined as {mol_atom_map}")
-            mol_atom_map = self._atom_map
+            _logger.info(f"atom map is pre-determined as {self.atom_map}")
+            mol_atom_map = self.atom_map
 
         # Adjust atom mapping indices for the presence of the receptor
         adjusted_atom_map = {}

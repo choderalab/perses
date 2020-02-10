@@ -2032,11 +2032,11 @@ def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'pro
         [current_mol, proposed_mol], system_generator, residue_name=current_mol_name)
 
     #generate topology proposal
-    topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol=current_mol, proposed_mol=proposed_mol)
+    topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol_id=0, proposed_mol_id=1)
 
     # show atom mapping
     filename = str(current_mol_name)+str(proposed_mol_name)+'.pdf'
-    render_atom_mapping(filename,current_mol,proposed_mol,topology_proposal.new_to_old_atom_map)
+    render_atom_mapping(filename, current_mol, proposed_mol, topology_proposal.new_to_old_atom_map)
 
     total_works = []
     for _ in tqdm.trange(num_iterations):
