@@ -1,5 +1,5 @@
 [![Travis Build Status](https://travis-ci.org/choderalab/perses.svg?branch=master)](https://travis-ci.org/choderalab/perses/branches)
-[![GH Actions Status](https://github.com/choderalab/perses/workflows/CI/badge.svg)
+[![GH Actions Status](https://github.com/choderalab/perses/workflows/CI/badge.svg)]
 [![codecov](https://codecov.io/gh/choderalab/perses/branch/master/graph/badge.svg)](https://codecov.io/gh/choderalab/perses/branch/master)
 [![Documentation Status](https://readthedocs.org/projects/perses/badge/?version=latest)](http://perses.readthedocs.io/en/latest/?badge=latest)
 
