@@ -18,6 +18,7 @@ requirements:
   run:
     - python
     - setuptools
+    - ambertools ==19.0
     - numpy >=1.14
     - scipy
     - pymbar
