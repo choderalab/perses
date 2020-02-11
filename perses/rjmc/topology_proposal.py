@@ -2040,7 +2040,7 @@ class DummySystemGenerator(SystemGenerator):
             self._barostat = (pressure, temperature, frequency)
 
 
-class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
+class SmallMoleculeSetProposalEngine(AtomMapper, ProposalEngine):
     """
     This class proposes new small molecules from a prespecified set. It uses
     uniform proposal probabilities, but can be extended. The user is responsible
@@ -2063,7 +2063,6 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
 
     def __init__(self, list_of_oemols, system_generator, residue_name='MOL', storage=None, **kwargs):
         super(SmallMoleculeSetProposalEngine, self).__init__(list_of_oemols=list_of_oemols,system_generator=system_generator, **kwargs)
-
         # This needs to be exposed, and only set in one place
 
         self._n_molecules = len(self.list_of_oemols)
@@ -2110,7 +2109,16 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
         proposal : TopologyProposal object
            topology proposal object
         """
-        self.current_molecule = self.list_of_oemols[current_mol_id]
+        self.current_mol_id = current_mol_id
+        len(self.list_of_mols) == 2:
+            # only two molecules so...
+            if self.current_mol_id = 0:
+                self.proposed_mol_id = 1
+            elif self.current_mol_id = 1:
+                self.proposed_mol_id = 0
+        else:
+            self.proposed_mol_id = proposed_mol_id
+        self.current_molecule = self.list_of_oemols[self.current_mol_id]
 
         # Remove the small molecule from the current Topology object
         _logger.info(f"creating current receptor topology by removing small molecule from current topology...")
@@ -2128,16 +2136,16 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
         _logger.info(f"old alchemical atom indices: {old_alchemical_atoms}")
 
         # Select the next molecule SMILES given proposal probabilities
-        if proposed_mol_id is None:
+        if self.proposed_mol_id is None:
             _logger.info(f"the proposed oemol is not specified; proposing a new molecule from proposal matrix P(M_new | M_old)...")
-            proposed_mol_id, self.proposed_molecule, logp_proposal = self._propose_molecule(current_system, current_topology, current_mol_id)
+            self.proposed_mol_id, self.proposed_molecule, logp_proposal = self._propose_molecule(current_system, current_topology, self.current_mol_id)
         else:
-            self.proposed_molecule = self.list_of_oemols[proposed_mol_id]
-            proposed_mol_smiles = self._list_of_smiles[proposed_mol_id]
+            self.proposed_molecule = self.list_of_oemols[self.proposed_mol_id]
+            proposed_mol_smiles = self._list_of_smiles[self.proposed_mol_id]
             _logger.info(f"proposed mol detected with smiles {proposed_mol_smiles} and logp_proposal of 0.0")
             logp_proposal = 0.0
 
-        _logger.info(f"conducting proposal from {self._list_of_smiles[current_mol_id]} to {self._list_of_smiles[proposed_mol_id]}...")
+        _logger.info(f"conducting proposal from {self._list_of_smiles[self.current_mol_id]} to {self._list_of_smiles[self.proposed_mol_id]}...")
 
         # Build the new Topology object, including the proposed molecule
         _logger.info(f"building new topology with proposed molecule and current receptor topology...")
@@ -2193,8 +2201,8 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
                                     old_system=current_system,
                                     new_system=new_system,
                                     old_alchemical_atoms=old_alchemical_atoms,
-                                    old_chemical_state_key=self._list_of_smiles[current_mol_id],
-                                    new_chemical_state_key=self._list_of_smiles[proposed_mol_id],
+                                    old_chemical_state_key=self._list_of_smiles[self.current_mol_id],
+                                    new_chemical_state_key=self._list_of_smiles[self.proposed_mol_id],
                                     old_residue_name=self._residue_name,
                                     new_residue_name=self._residue_name)
 
@@ -2434,7 +2442,7 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
         # Propose a new molecule
         molecule_probabilities = self._probability_matrix[current_mol_id, :]
         _logger.info(f"\tmolecule probabilities: {molecule_probabilities}")
-        proposed_mol_id = np.random.choice(range(len(self._smiles_list)), p=molecule_probabilities)
+        proposed_mol_id = np.random.choice(range(len(self._list_of_smiles)), p=molecule_probabilities)
         _logger.info(f"\tproposed molecule index: {proposed_mol_id}")
         reverse_probability = self._probability_matrix[proposed_mol_id, current_mol_id]
         forward_probability = molecule_probabilities[proposed_mol_id]
@@ -2483,14 +2491,14 @@ class SmallMoleculeSetProposalEngine(AtomMapper,ProposalEngine):
                 raise
 
         if self._storage:
-            self._storage.write_object('molecule_smiles_list', molecule_smiles_list)
+            self._storage.write_object('molecule_smiles_list', self._list_of_smiles)
             self._storage.write_array('probability_matrix', probability_matrix)
 
         return probability_matrix
 
     @property
     def chemical_state_list(self):
-         return self._smiles_list
+         return self._list_smiles_list
 
     @staticmethod
     def clean_molecule_list(smiles_list, atom_opts, bond_opts):
@@ -2686,18 +2694,23 @@ class TwoMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
     functionality.
     """
 
-    def __init__(self, old_mol, new_mol, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True, atom_map=None):
-        self._old_mol_smiles = oechem.OECreateSmiString(old_mol, OESMILES_OPTIONS)
-        self._new_mol_smiles = oechem.OECreateSmiString(new_mol, OESMILES_OPTIONS)
-        self._old_mol = old_mol
-        self._new_mol = new_mol
+    def __init__(self, list_of_mols, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True, atom_map=None, **kwargs):
+        if len(list_of_mols) != 2:
+            _logger.warning(f'TwoMoleculeSetProposalEngine only takes TWO molecules as input')
+            _logger.warning(f'Only first two oemols of the list provided (of {len(list_of_mols)}) will be considered')
+        self.current_molecule = list_of_mols[0]
+        self.proposed_molecule = list_of_mols[1]
+        self._old_mol_smiles = oechem.OECreateSmiString(self.current_molecule, OESMILES_OPTIONS)
+        self._new_mol_smiles = oechem.OECreateSmiString(self.proposed_molecule, OESMILES_OPTIONS)
+        self.current_mol_id = 0
+        self.proposed_mol_id = 1
 
-        super(TwoMoleculeSetProposalEngine, self).__init__([old_mol, new_mol], system_generator, residue_name=residue_name, atom_expr=atom_expr, bond_expr=bond_expr, atom_map=atom_map)
+        super(TwoMoleculeSetProposalEngine, self).__init__(list_of_oemols=[self.current_molecule, self.proposed_molecule],system_generator=system_generator, **kwargs)
 
         self._allow_ring_breaking = False # don't allow ring breaking
 
     def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=False):
-        return self._new_mol_smiles, self._new_mol, 0.0
+        return self._new_mol_smiles, self.proposed_molecule, 0.0
 
 class NullProposalEngine(SmallMoleculeSetProposalEngine):
     """

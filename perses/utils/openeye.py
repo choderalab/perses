@@ -178,7 +178,7 @@ def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
 
     return system, positions, topology
 
-def createSystemFromIUPAC(iupac_name):
+def createSystemFromIUPAC(iupac_name, title="MOL"):
     """
     Create an openmm system out of an oemol
 
@@ -201,7 +201,7 @@ def createSystemFromIUPAC(iupac_name):
 
     # Create OEMol
     # TODO write our own of this function so we can be sure of the oe flags that are being used
-    molecule = iupac_to_oemol(iupac_name)
+    molecule = iupac_to_oemol(iupac_name, title=title)
 
     molecule = generate_conformers(molecule, max_confs=1)
 

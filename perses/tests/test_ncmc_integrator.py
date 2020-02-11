@@ -82,15 +82,3 @@ def collect_switching_data(system, positions, functions, temperature, collision_
     # Clean up
     del context, integrator
     return work_n
-
-@skipIf(running_on_github_actions, "Skip expensive test on GH Actions")
-def test_ncmc_integrator_harmonic_oscillator():
-   """
-   Check NCMC integrator switching works for 0, 1, and 50 switching steps with a harmonic oscillator.
-
-   """
-   for integrator_type in ["VV", "GHMC"]:
-       for ncmc_nsteps in [0, 1, 50]:
-           f = partial(check_harmonic_oscillator_ncmc, ncmc_nsteps, ncmc_integrator=integrator_type)
-           f.description = "Testing %s NCMC switching using harmonic oscillator with %d NCMC steps" % (integrator_type, ncmc_nsteps)
-           yield f

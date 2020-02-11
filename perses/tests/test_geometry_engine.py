@@ -1998,7 +1998,7 @@ def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'pro
     from perses.utils.smallmolecules import render_atom_mapping
     import tqdm
 
-    current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
+    current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name,title=current_mol_name[0:4])
     proposed_mol = iupac_to_oemol(proposed_mol_name)
     proposed_mol = generate_conformers(proposed_mol,max_confs=1)
 
@@ -2015,7 +2015,7 @@ def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'pro
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
     geometry_engine = geometry.FFAllAngleGeometryEngine(n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, neglect_angles = neglect_angles)
     proposal_engine = SmallMoleculeSetProposalEngine(
-        [current_mol, proposed_mol], system_generator, residue_name=current_mol_name)
+        [current_mol, proposed_mol], system_generator, residue_name=current_mol_name[0:4])
 
     #generate topology proposal
     topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol_id=0, proposed_mol_id=1)

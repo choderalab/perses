@@ -642,9 +642,12 @@ class RelativeFEPSetup(object):
         solvated_system = self._system_generator.create_system(solvated_topology)
         _logger.info(f"\tSystem parameterized")
 
-        pdb_filename = f"{self._trajectory_directory}/{self._trajectory_prefix}-{phase}.pdb"
-        with open(pdb_filename, 'w') as outfile:
-            PDBFile.writeFile(solvated_topology, solvated_positions, outfile)
+        if self._trajectory_directory is not None and self._trajectory_prefix is not None:
+            pdb_filename = f"{self._trajectory_directory}/{self._trajectory_prefix}-{phase}.pdb"
+            with open(pdb_filename, 'w') as outfile:
+                PDBFile.writeFile(solvated_topology, solvated_positions, outfile)
+        else:
+            _logger.info('Both trajectory_directory and trajectory_prefix need to be provided to save .pdb')
 
         return solvated_topology, solvated_positions, solvated_system
 
