@@ -8,7 +8,7 @@ __author__ = 'John D. Chodera'
 
 
 from openeye import oechem,oegraphsim
-from openmoltools.openeye import iupac_to_oemol, generate_conformers
+from openmoltools.openeye import generate_conformers
 import simtk.unit as unit
 import numpy as np
 import logging
@@ -33,7 +33,7 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     molecule : openeye.oechem.OEMol
         OEMol object of the molecule
     """
-    from openeye import oeiupac, oeomega
+    from openeye import oeomega
 
     # Create molecule
     molecule = oechem.OEMol()
@@ -60,6 +60,49 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     omega(molecule)
     return molecule
 
+
+def iupac_to_oemol(iupac, title='MOL', max_confs=1):
+    """
+    Generate an oemol from an IUPAC name
+    Parameters
+    ----------
+    iupac : str
+        iupac name of molecule
+    title : str, default 'MOL'
+        title of OEMol molecule
+    max_confs : int, default 1
+        maximum number of conformers to generate
+    Returns
+    -------
+    molecule : openeye.oechem.OEMol
+        OEMol object of the molecule
+    """
+    from openeye import oeiupac, oeomega
+
+    # Create molecule
+    molecule = oechem.OEMol()
+    oeiupac.OEParseIUPACName(molecule, iupac)
+
+    # Set title.
+    molecule.SetTitle(title)
+
+    # Assign aromaticity and hydrogens.
+    oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
+    oechem.OEAssignHybridization(molecule)
+    oechem.OEAddExplicitHydrogens(molecule)
+    oechem.OEPerceiveChiral(molecule)
+
+    # Create atom names.
+    oechem.OETriposAtomNames(molecule)
+    oechem.OETriposBondTypeNames(molecule)
+
+    # Assign geometry
+    omega = oeomega.OEOmega()
+    omega.SetMaxConfs(max_confs)
+    omega.SetIncludeInput(False)
+    omega.SetStrictStereo(True)
+    omega(molecule)
+    return molecule
 
 def extractPositionsFromOEMol(molecule,units=unit.angstrom):
     """
