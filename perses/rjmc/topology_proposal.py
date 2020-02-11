@@ -2110,7 +2110,7 @@ class SmallMoleculeSetProposalEngine(AtomMapper, ProposalEngine):
            topology proposal object
         """
         self.current_mol_id = current_mol_id
-        len(self.list_of_mols) == 2:
+        if len(self.list_of_mols) == 2:
             # only two molecules so...
             if self.current_mol_id = 0:
                 self.proposed_mol_id = 1
