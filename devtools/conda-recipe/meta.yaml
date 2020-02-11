@@ -41,6 +41,7 @@ requirements:
     - progressbar2
     - parmed
     - tqdm
+    - dask-jobqueue
     #- openmm-forcefields # uncomment once openmm-forcefields package is pushed to conda
 
 about:
