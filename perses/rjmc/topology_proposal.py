@@ -174,7 +174,7 @@ class AtomMapper(object):
 
 
         self.atom_map = self._get_mol_atom_map()
-        super(AtomMapper,self).__init__(**kwargs)
+        super(AtomMapper, self).__init__(**kwargs)
 
     def _get_mol_atom_map(self, indexA=0, indexB=1, allow_ring_breaking=False):
         """
@@ -249,7 +249,7 @@ class AtomMapper(object):
             _logger.info('Cannot generate atom map without breaking rings, trying again with weaker mapping.')
             mcs.SetMCSFunc(oechem.OEMCSMaxAtoms())
             unique = False
-            matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
+            matches = [m for m in mcs.Match(self.oegraphmol_proposed, unique)]
 
             if self.allow_ring_breaking is False:
                 # Filter the matches to remove any that allow ring breaking
