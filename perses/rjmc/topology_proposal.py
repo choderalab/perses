@@ -2112,9 +2112,9 @@ class SmallMoleculeSetProposalEngine(AtomMapper, ProposalEngine):
         self.current_mol_id = current_mol_id
         if len(self.list_of_mols) == 2:
             # only two molecules so...
-            if self.current_mol_id = 0:
+            if self.current_mol_id == 0:
                 self.proposed_mol_id = 1
-            elif self.current_mol_id = 1:
+            elif self.current_mol_id == 1:
                 self.proposed_mol_id = 0
         else:
             self.proposed_mol_id = proposed_mol_id
