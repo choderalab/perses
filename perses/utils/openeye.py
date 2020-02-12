@@ -7,7 +7,7 @@ Utility functions for simulations using openeye toolkits
 __author__ = 'John D. Chodera'
 
 
-from openeye import oechem,oegraphsim
+from openeye import oechem, oegraphsim
 from openmoltools.openeye import generate_conformers
 import simtk.unit as unit
 import numpy as np
@@ -386,3 +386,37 @@ def has_undefined_stereocenters(mol):
             if not bond.HasStereoSpecified():
                 return True #we have a geometric isomer that isn't specified!
     return False # nothing bad found
+
+
+def generate_expression(list):
+    """Turns a list of strings into an oechem atom or bond expression
+    This allows us to pass in matching expressions in the input .yaml
+    Note: strings are case sensitive
+
+    >>> atom_expr = generate_expression("Hybridization", "IntType")
+
+    Parameters
+    ----------
+    list : list of strings
+        List of strings
+
+    Returns
+    -------
+    integer
+        Integer that openeye magically understands for matching expressions
+
+    """
+    total_expr = 0
+
+    for string in list:
+        try:
+            expr = getattr(oechem, f'OEExprOpts_{string}')
+        except AttributeError:
+            raise Exception(f'{string} not recognised, no expression of oechem.OEExprOpts_{string}.\
+            This is case sensitive, so please check carefully and see , \
+            https://docs.eyesopen.com/toolkits/python/oechemtk/OEChemConstants/OEExprOpts.html\
+            for options')
+        # doing bitwise OR check
+        total_expr = total_expr | expr
+
+    return total_expr

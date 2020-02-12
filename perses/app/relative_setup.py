@@ -49,7 +49,8 @@ class RelativeFEPSetup(object):
     def __init__(self, ligand_input, old_ligand_index, new_ligand_index, forcefield_files, phases,
                  protein_pdb_filename=None, receptor_mol2_filename=None, pressure=1.0 * unit.atmosphere,
                  temperature=300.0 * unit.kelvin, solvent_padding=9.0 * unit.angstroms, atom_map=None,
-                 hmass=4*unit.amus, neglect_angles=False, map_strength='default', anneal_14s = False,
+                 hmass=4*unit.amus, neglect_angles=False, map_strength='default', atom_expr=None,
+                 bond_expr=None, anneal_14s=False,
                  small_molecule_forcefield='gaff-2.11', small_molecule_parameters_cache=None,
                  trajectory_directory=None, trajectory_prefix=None,
                  spectator_filenames=None):
@@ -104,6 +105,8 @@ class RelativeFEPSetup(object):
         _logger.info(f"\t\t\t_hmass: {hmass}.\n")
         self._proposal_phase = None
         self._map_strength = map_strength
+        self._atom_expr = atom_expr
+        self._bond_expr = bond_expr
         self._anneal_14s = anneal_14s
         self._spectator_filenames = spectator_filenames
 
@@ -259,7 +262,7 @@ class RelativeFEPSetup(object):
         _logger.info("successfully created SystemGenerator to create ligand systems")
 
         _logger.info(f"executing SmallMoleculeSetProposalEngine...")
-        self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_oemol_old, self._ligand_oemol_new], self._system_generator, map_strength=self._map_strength, residue_name='MOL')
+        self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_oemol_old, self._ligand_oemol_new], self._system_generator, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr, residue_name='MOL')
 
         _logger.info(f"instantiating FFAllAngleGeometryEngine...")
         # NOTE: we are conducting the geometry proposal without any neglected angles
