@@ -46,7 +46,6 @@ jobs:
         conda config --add channels omnia --add channels conda-forge --add channels openeye
         conda update --quiet --all
         conda install conda conda-build jinja2 anaconda-client
-        conda install --yes tinydb "openforcefield>=0.6.0" "openforcefields>=1.0.0"
         conda info
         conda list
     - name: Decrypt OpenEye license
@@ -69,6 +68,9 @@ jobs:
         conda activate
         conda create -n test -c local ${PACKAGENAME}-dev nose nose-timer
         conda activate test
+        # Install openmm-forcefields via pip (until available via omnia)
+        conda install --yes tinydb "openforcefield>=0.6.0" "openforcefields>=1.0.0"
+        pip install git+https://github.com/openmm/openmm-forcefields.git
         case ${{ matrix.cfg.openmm }} in
           latest)
             echo "Using latest release OpenMM."
