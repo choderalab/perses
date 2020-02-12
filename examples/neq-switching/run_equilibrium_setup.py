@@ -4,7 +4,7 @@ import tqdm
 from openeye import oechem, oeiupac
 from openmmtools import integrators, states, mcmc, constants
 from openmoltools import forcefield_generators
-from perses.rjmc.topology_proposal import TopologyProposal, SystemGenerator, SmallMoleculeAtomMapper
+from perses.rjmc.topology_proposal import TopologyProposal, SystemGenerator
 from perses.utils.openeye import extractPositionsFromOEMol
 from simtk import openmm, unit
 from io import StringIO
@@ -279,9 +279,10 @@ if __name__=="__main__":
         smiles_list.append(oechem.OECreateSmiString(mol, OESMILES_OPTIONS))
 
     #smiles_list = [oechem.OECreateSmiString(mol, OESMILES_OPTIONS)]
-    atom_mapper = SmallMoleculeAtomMapper(smiles_list)
+
+    atom_mapper = AtomMapper(mol_list)
     atom_mapper.map_all_molecules()
-    atom_mapper.generate_and_check_proposal_matrix()    
+    atom_mapper.generate_and_check_proposal_matrix()
 
     atom_mapper_filename = os.path.join(output_directory, "{}_atom_mapper.json".format(project_prefix))
     with open(atom_mapper_filename, 'w') as map_outfile:

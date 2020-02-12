@@ -2110,7 +2110,7 @@ class SmallMoleculeSetProposalEngine(AtomMapper, ProposalEngine):
            topology proposal object
         """
         self.current_mol_id = current_mol_id
-        if len(self.list_of_mols) == 2:
+        if len(self.list_of_oemols) == 2:
             # only two molecules so...
             if self.current_mol_id == 0:
                 self.proposed_mol_id = 1
@@ -2498,7 +2498,7 @@ class SmallMoleculeSetProposalEngine(AtomMapper, ProposalEngine):
 
     @property
     def chemical_state_list(self):
-         return self._list_smiles_list
+        return self._list_of_smiles
 
     @staticmethod
     def clean_molecule_list(smiles_list, atom_opts, bond_opts):
@@ -2694,12 +2694,12 @@ class TwoMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
     functionality.
     """
 
-    def __init__(self, list_of_mols, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True, atom_map=None, **kwargs):
-        if len(list_of_mols) != 2:
+    def __init__(self, list_of_oemols, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True, atom_map=None, **kwargs):
+        if len(list_of_oemols) != 2:
             _logger.warning(f'TwoMoleculeSetProposalEngine only takes TWO molecules as input')
-            _logger.warning(f'Only first two oemols of the list provided (of {len(list_of_mols)}) will be considered')
-        self.current_molecule = list_of_mols[0]
-        self.proposed_molecule = list_of_mols[1]
+            _logger.warning(f'Only first two oemols of the list provided (of {len(list_of_oemols)}) will be considered')
+        self.current_molecule = list_of_oemols[0]
+        self.proposed_molecule = list_of_oemols[1]
         self._old_mol_smiles = oechem.OECreateSmiString(self.current_molecule, OESMILES_OPTIONS)
         self._new_mol_smiles = oechem.OECreateSmiString(self.proposed_molecule, OESMILES_OPTIONS)
         self.current_mol_id = 0
