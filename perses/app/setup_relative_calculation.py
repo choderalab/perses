@@ -216,19 +216,17 @@ def getSetupOptions(filename):
     else:
         _logger.info(f"\t'neglect_angles' detected: {setup_options['neglect_angles']}.")
 
+    setup_options['atom_expr'] = None
     if 'atom_expression' in setup_options:
         # need to convert the list to Integer
         from perses.utils.openeye import generate_expression
-        atom_expr = generate_expression(setup_options['atom_expression'])
-    else:
-        atom_expr = None
-
+        setup_options['atom_expr'] = generate_expression(setup_options['atom_expression'])
+        
+    setup_options['bond_expr'] = None
     if 'bond_expression' in setup_options:
         # need to convert the list to Integer
         from perses.utils.openeye import generate_expression
-        bond_expr = generate_expression(setup_options['bond_expression'])
-    else:
-        bond_expr = None
+        setup_options['bond_expr'] = generate_expression(setup_options['bond_expression'])
 
     if 'map_strength' not in setup_options:
         setup_options['map_strength'] = 'default'
@@ -352,7 +350,7 @@ def run_setup(setup_options):
                                           receptor_mol2_filename=receptor_mol2, pressure=pressure,
                                           temperature=temperature, solvent_padding=solvent_padding_angstroms, spectator_filenames=setup_options['spectators'],
                                           map_strength=setup_options['map_strength'],
-                                          atom_expr=atom_expr, bond_expr=bond_expr,
+                                          atom_expr=setup_options['atom_expr'], bond_expr=setup_options['bond_expr'],
                                           atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
                                           trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'])
