@@ -54,6 +54,7 @@ def test_analysis():
            testsystem.mcmc_samplers[environment].verbose = False
            testsystem.mcmc_samplers[environment].nsteps = 5 # use fewer MD steps to speed things up
            testsystem.exen_samplers[environment].verbose = False
+            # HBM this line is broken - ExpandedEnsembleSampler doesn't have attribute ncmc_engine
            testsystem.exen_samplers[environment].ncmc_engine.nsteps = 5 # NCMC switching
            testsystem.sams_samplers[environment].verbose = False
 

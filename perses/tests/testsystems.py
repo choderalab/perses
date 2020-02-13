@@ -1769,7 +1769,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         positions['explicit'] = modeller.getPositions()
 
         # Set up the proposal engines.
-        from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, PremappedSmallMoleculeSetProposalEngine, SmallMoleculeAtomMapper
+        from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, PremappedSmallMoleculeSetProposalEngine
         proposal_metadata = { }
         proposal_engines = dict()
 
@@ -1778,13 +1778,8 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
             mol = smiles_to_oemol(smiles)
             list_of_oemols.append(mol)
 
-        if not premapped_json_dict:
-            for environment in environments:
-                proposal_engines[environment] = SmallMoleculeSetProposalEngine(list_of_oemols, system_generators[environment], residue_name=d_smiles_to_oemol[smiles].GetTitle())
-        else:
-            atom_mapper = SmallMoleculeAtomMapper.from_json(premapped_json_dict)
-            for environment in environments:
-                proposal_engines[environment] = PremappedSmallMoleculeSetProposalEngine(atom_mapper, system_generators[environment], residue_name=d_smiles_to_oemol[smiles].GetTitle())
+        for environment in environments:
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(list_of_oemols, system_generators[environment], residue_name=d_smiles_to_oemol[smiles].GetTitle())
 
         # Generate systems
         systems = dict()

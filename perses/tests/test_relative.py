@@ -413,7 +413,7 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
     Make an atom map where the molecule at either lambda endpoint is identical, and check that the energies are also the same.
     """
     from openmmtools import alchemy, states
-    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal, AtomMapper
     from perses.annihilation.relative import HybridTopologyFactory
     import simtk.openmm as openmm
 
@@ -428,7 +428,7 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
     refmol = generate_conformers(refmol,max_confs=1)
 
     #map one of the rings
-    atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol, refmol)
+    atom_map = AtomMapper([mol, refmol]).atom_map 
 
     #now use the mapped atoms to generate a new and old system with identical atoms mapped. This will result in the
     #same molecule with the same positions for lambda=0 and 1, and ensures a contiguous atom map
