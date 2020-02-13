@@ -32,7 +32,21 @@ from perses.rjmc import coordinate_numba
 from perses.rjmc.geometry import check_dimensionality
 from perses.utils.data import get_data_filename
 
+
 from nose.tools import nottest #protein mutations will be omitted (for the time being)
+
+################################################################################
+# Test for travis to silence tqdm
+# TODO: Look into this for later
+# https://stackoverflow.com/questions/37091673/silence-tqdms-output-while-running-tests-or-running-the-code-via-cron
+################################################################################
+
+import os
+if os.environ.get("TRAVIS", None) == 'true':
+    ISTRAVIS = True
+else:
+    ISTRAVIS = False
+
 ################################################################################
 # Suppress matplotlib logging
 ################################################################################
@@ -1769,7 +1783,7 @@ class AnalyticalBeadSystems(object):
         final_positions = []
         logPs = np.zeros([n_replicates, 4])
         _geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=10000, n_angle_divisions=1800, n_torsion_divisions=3600, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = True)
-        for _replicate_idx in tqdm.trange(n_replicates):
+        for _replicate_idx in tqdm.trange(n_replicates, disable=ISTRAVIS):
             _old_positions = configurations_initial[_replicate_idx, :, :]
             _new_positions, _lp = _geometry_engine.propose(topology_proposal, _old_positions, beta)
             _lp_reverse = _geometry_engine.logp_reverse(topology_proposal, _new_positions, _old_positions, beta)
@@ -1813,7 +1827,7 @@ class AnalyticalBeadSystems(object):
 
         _iid_positions_A = unit.Quantity(np.zeros([self.num_iterations, self.transformation[0],3]), unit=unit.nanometers)
 
-        for _iteration in tqdm.trange(self.num_iterations):
+        for _iteration in tqdm.trange(self.num_iterations, disable=ISTRAVIS):
             _integrator.step(1000)
             _state=_ctx.getState(getPositions=True)
             _iid_positions_A[_iteration,:,:]=_state.getPositions(asNumpy=True)
@@ -2025,7 +2039,7 @@ def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'pro
     render_atom_mapping(filename, current_mol, proposed_mol, topology_proposal.new_to_old_atom_map)
 
     total_works = []
-    for _ in tqdm.trange(num_iterations):
+    for _ in tqdm.trange(num_iterations, disable=ISTRAVIS):
         #generate new positions with geometry engine
         new_positions, logp_forward = geometry_engine.propose(topology_proposal, pos_old, beta)
         logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos_old, beta)
