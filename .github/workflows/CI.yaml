@@ -45,7 +45,7 @@ jobs:
         conda config --set always_yes True
         conda config --add channels omnia --add channels conda-forge --add channels openeye
         conda update --quiet --all
-        conda install conda conda-build jinja2 anaconda-client
+        conda install --quiet conda conda-build jinja2 anaconda-client
         conda info
         conda list
     - name: Decrypt OpenEye license
@@ -60,27 +60,27 @@ jobs:
       run: |
         . devtools/scripts/initialize_conda.sh
         conda activate
-        conda build --python=${{ matrix.cfg.python-version }} devtools/conda-recipe
+        conda build --quiet --python=${{ matrix.cfg.python-version }} devtools/conda-recipe
     - name: Prepare test environment
       shell: bash
       run: |
         . devtools/scripts/initialize_conda.sh
         conda activate
-        conda create -n test -c local ${PACKAGENAME}-dev nose nose-timer
+        conda create --quiet -n test -c local ${PACKAGENAME}-dev nose nose-timer
         conda activate test
         case ${{ matrix.cfg.openmm }} in
           latest)
             echo "Using latest release OpenMM."
-            conda install -c omnia openmm;;
+            conda install --quiet -c omnia openmm;;
           beta)
             echo "Using OpenMM beta"
-            conda install -c omnia/label/beta openmm;;
+            conda install --quiet -c omnia/label/beta openmm;;
           nightly)
             echo "Using OpenMM nightly dev build."
-            conda install -c omnia-dev openmm;;
+            conda install --quiet -c omnia-dev openmm;;
           conda-forge)
             echo "Using OpenMM conda-forge testing build."
-            conda install -c conda-forge/label/testing openmm;;
+            conda install --quiet -c conda-forge/label/testing openmm;;
         esac
     - name: Test the package
       shell: bash
