@@ -226,7 +226,7 @@ def getSetupOptions(filename):
     if 'bond_expression' in setup_options:
         # need to convert the list to Integer
         from perses.utils.openeye import generate_expression
-        bond_expr = generate_expression(setup_options['atom_expression'])
+        bond_expr = generate_expression(setup_options['bond_expression'])
     else:
         bond_expr = None
 
