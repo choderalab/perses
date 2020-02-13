@@ -198,8 +198,8 @@ class AtomMapper(object):
         self.proposed_molecule = self.list_of_oemols[indexB]
         # TODO this needs to handle all string inputs that might be used
         if self.atom_expr is not None:
-            _logger.info(f'Using user defined atom_expr')
-            _logger.info('Any map_strength set has been ignored')
+            _logger.debug(f'Using user defined atom_expr')
+            _logger.debug('Any map_strength set has been ignored')
         else:
             # setting atom expr using map_strength
             if self.map_strength == 'default':
@@ -212,8 +212,8 @@ class AtomMapper(object):
                 _logger.warning(f"User defined map_strength: {map_strength} not recognised, setting to default")
                 self.atom_expr = DEFAULT_ATOM_EXPRESSION
         if self.bond_expr is not None:
-            _logger.info(f'Using user defined bond_expr')
-            _logger.info('Any map_strength set has been ignored')
+            _logger.debug(f'Using user defined bond_expr')
+            _logger.debug('Any map_strength set has been ignored')
         else:
             # setting atom expr using map_strength
             if self.map_strength == 'default':
@@ -1330,7 +1330,7 @@ class PointMutationEngine(PolymerProposalEngine):
     """
 
     # TODO: Overhaul API to make it easier to specify mutations
-    def __init__(self, wildtype_topology, system_generator, chain_id, proposal_metadata=None, max_point_mutants=1, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False, always_change=True, aggregate=False):
+    def __init__(self, wildtype_topology, system_generator, chain_id='1', proposal_metadata=None, max_point_mutants=1, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False, always_change=True, aggregate=False):
         """
         Create a PointMutationEngine for proposing point mutations of a biopolymer component of a system.
 
