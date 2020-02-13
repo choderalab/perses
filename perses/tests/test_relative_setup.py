@@ -76,7 +76,7 @@ def test_run_nonequilibrium_switching_move():
 #    Ensure that we can instantiate and run a nonequilibrium relative free energy calculation for the cdk2 ligands in vacuum
 #    """
 #    setup_directory = resource_filename("perses", "data/cdk2-example")
-#    os.chdir(setup_directory)
+#    os.chdir(setup_directory) # WARNING: DON'T CHANGE THE WORKING DIRECTORY BECAUSE IT WILL BREAK SUBSEQUENT TESTS
 #    n_iterations = 2
 #
 #    yaml_filename = "cdk2_setup_neq.yaml"
@@ -99,7 +99,7 @@ def test_run_nonequilibrium_switching_move():
 #    setup_dict['ne_fep']['solvent'].run(n_iterations=n_iterations)
 #
 #    #now check that the correct number of iterations was written out:
-#    os.chdir(setup_options['trajectory_directory'])
+#    os.chdir(setup_options['trajectory_directory']) # WARNING: DON'T CHANGE THE WORKING DIRECTORY BECAUSE IT WILL BREAK SUBSEQUENT TESTS
 #    import glob
 #
 #    #for the verification of work writing, we add one to the work dimension, since the first work value is always zero
@@ -120,10 +120,9 @@ def test_run_cdk2_iterations_repex():
     Ensure that we can instantiate and run a repex relative free energy calculation the cdk2 ligands in vacuum
     """
     # Enter a temporary directory
-    import tempfile
-    with tempfile.TemporaryDirectory() as tmpdirname:
+    from perses.tests.utils import enter_temp_directory
+    with enter_temp_directory() as tmpdirname:
         # Move to temporary directory
-        os.chdir(tmpdirname)
         print(f'Running example in temporary directory: {tmpdirname}')
 
         # Setup directory
@@ -171,10 +170,9 @@ def test_run_bace_spectator():
     Ensure that we can instantiate and run a repex relative free energy calculation the cdk2 ligands in vacuum
     """
     # Enter a temporary directory
-    import tempfile
-    with tempfile.TemporaryDirectory() as tmpdirname:
+    from perses.tests.utils import enter_temp_directory
+    with enter_temp_directory() as tmpdirname:
         # Move to temporary directory
-        os.chdir(tmpdirname)
         print(f'Running example in temporary directory: {tmpdirname}')
 
         # Setup directory
