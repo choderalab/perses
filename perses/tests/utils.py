@@ -726,8 +726,12 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
 
     #create copies of old/new systems and set the dispersion correction
     top_proposal = copy.deepcopy(topology_proposal)
-    top_proposal._old_system.getForce(3).setUseDispersionCorrection(False)
-    top_proposal._new_system.getForce(3).setUseDispersionCorrection(False)
+    forces = { top_proposal._old_system.getForce(index).__class__.__name__ : top_proposal._old_system.getForce(index) for index in range(top_proposal._old_system.getNumForces()) }
+    force = forces['NonbondedForce']
+    force.setUseDispersionCorrection(False)
+    forces = { top_proposal._new_system.getForce(index).__class__.__name__ : top_proposal._new_system.getForce(index) for index in range(top_proposal._new_system.getNumForces()) }
+    force = forces['NonbondedForce']
+    force.setUseDispersionCorrection(False)
 
     #create copy of hybrid system, define old and new positions, and turn off dispersion correction
     hybrid_system = copy.deepcopy(htf.hybrid_system)
