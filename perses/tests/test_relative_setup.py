@@ -70,7 +70,6 @@ def test_run_nonequilibrium_switching_move():
         assert integrator.getGlobalVariableByName("lambda") == 1.0
 
 
-#@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip slow test on TRAVIS.")
 #def test_run_cdk2_iterations_neq():
 #    """
 #    Ensure that we can instantiate and run a nonequilibrium relative free energy calculation for the cdk2 ligands in vacuum
@@ -114,7 +113,7 @@ def test_run_nonequilibrium_switching_move():
 #    lambda_one_npy = np.stack([np.load(filename) for filename in lambda_one_filenames])
 #    assert np.shape(lambda_one_npy) == (n_iterations, n_work_values_per_iteration+1)
 
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip slow test on TRAVIS.")
+@skipIf(running_on_github_actions, "Skip analysis test on GH Actions. SLOW")
 def test_run_cdk2_iterations_repex():
     """
     Ensure that we can instantiate and run a repex relative free energy calculation the cdk2 ligands in vacuum
@@ -164,7 +163,7 @@ def test_run_cdk2_iterations_repex():
 
         # TODO: Check output
 
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip slow test on TRAVIS.")
+@skipIf(running_on_github_actions, "Skip analysis test on GH Actions. SLOW")
 def test_run_bace_spectator():
     """
     Ensure that we can instantiate and run a repex relative free energy calculation the cdk2 ligands in vacuum
