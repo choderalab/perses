@@ -88,6 +88,7 @@ jobs:
         . devtools/scripts/initialize_conda.sh
         conda activate test
         export OE_LICENSE="$HOME/oe_license.txt"
+        export TRAVIS=true
         pushd .
         nosetests ${PACKAGENAME} --nocapture --verbosity=3 --with-timer -a '!advanced'
         popd
