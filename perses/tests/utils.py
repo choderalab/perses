@@ -400,7 +400,7 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
 
     return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
 
-def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene", current_mol_smiles = None, proposed_mol_smiles = None, vacuum = False, render_atom_mapping = False):
+def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene", current_mol_smiles = None, proposed_mol_smiles = None, vacuum = False, render_atom_mapping = False,atom_expression=['Hybridization'],bond_expression=['Hybridization']):
     """
     This function will generate a topology proposal, old positions, and new positions with a geometry proposal (either vacuum or solvated) given a set of input iupacs or smiles.
     The function will (by default) read the iupac names first.  If they are set to None, then it will attempt to read a set of current and new smiles.
@@ -419,6 +419,10 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         whether to render a vacuum or solvated topology_proposal
     render_atom_mapping : bool (default False)
         whether to render the atom map of the current_mol_name and proposed_mol_name
+    atom_expression : list(str), optional
+        list of atom mapping criteria
+    bond_expression : list(str), optional
+        list of bond mapping criteria
 
     Returns
     -------
@@ -440,6 +444,10 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
     from perses.rjmc.topology_proposal import TopologyProposal, SystemGenerator, SmallMoleculeSetProposalEngine
     import simtk.unit as unit
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    from perses.utils.openeye import generate_expression 
+
+    atom_expr = generate_expression(atom_expression)
+    bond_expr = generate_expression(bond_expression)
 
     if current_mol_name != None and proposed_mol_name != None:
         try:
@@ -486,7 +494,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
     system_generator = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],barostat = barostat, forcefield_kwargs={'removeCMMotion': False,'nonbondedMethod': nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : 4.0*unit.amu})
     system_generator._forcefield.loadFile(StringIO(ffxml))
 
-    proposal_engine = SmallMoleculeSetProposalEngine([old_oemol, new_oemol], system_generator, residue_name = 'MOL')
+    proposal_engine = SmallMoleculeSetProposalEngine([old_oemol, new_oemol], system_generator, residue_name = 'MOL',atom_expr=atom_expr,bond_expr=bond_expr)
     geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
 
     if not vacuum:
@@ -569,7 +577,7 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
     geometry_engine = geometry.FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
-        [current_mol, proposed_mol], system_generator, residue_name=current_mol_name)
+        [current_mol, proposed_mol], system_generator, residue_name=current_mol_name,atom_expr=atom_expr,bond_expr=bond_expr)
 
     #generate topology proposal
     topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol_id=0, proposed_mol_id=1)
