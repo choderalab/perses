@@ -215,7 +215,6 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         chain_id = ' '
         allowed_mutations = [('2','VAL'),('2','LEU'),('2','ILE')]
         for environment in environments:
-            print([chain.id for chain in topologies[environment].chains()])
             proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
 
         # Generate systems
@@ -2510,7 +2509,6 @@ def run_abl_imatinib_resistance():
     testsystem = AblImatinibResistanceTestSystem(ncmc_nsteps=20000, mcmc_nsteps=20000)
     #for environment in testsystem.environments:
     for environment in ['vacuum-complex']:
-        print(environment)
         testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-%s.pdb' % environment, 'w')
         testsystem.exen_samplers[environment].geometry_pdbfile = open('abl-imatinib-%s-geometry-proposals.pdb' % environment, 'w')
         #testsystem.mcmc_samplers[environment].run(niterations=5)
