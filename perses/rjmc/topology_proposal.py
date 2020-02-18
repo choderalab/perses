@@ -45,7 +45,7 @@ OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | 
 # weak requirements for mapping atoms == more atoms mapped, more in core
 # atoms need to match in aromaticity. Same with bonds.
 # maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
-WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic | oechem.OEExprOpts_IntType 
+WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic | oechem.OEExprOpts_IntType
 WEAK_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
 # default atom expression, requires same aromaticitiy and hybridization
@@ -126,6 +126,14 @@ def has_h_mapped(atommap, mola: oechem.OEMol, molb: oechem.OEMol):
 
     return False
 
+class InvalidMappingException(Exception):
+    def __init__(self, message, errors):
+
+        # Call the base class constructor with the parameters it needs
+        super().__init__(message)
+
+        # Now for your custom code...
+        self.errors = errors
 
 class AtomMapper(object):
     """ Generates map between two molecules.
@@ -192,7 +200,8 @@ class AtomMapper(object):
         Returns
         -------
         matches : list of match
-            list of the matches between the molecules
+            list of the matches between the molecules, or None if no matches possible
+
         """
         self.current_molecule = self.list_of_oemols[indexA]
         self.proposed_molecule = self.list_of_oemols[indexB]
@@ -256,7 +265,7 @@ class AtomMapper(object):
                 # Filter the matches to remove any that allow ring breaking
                 matches = [m for m in matches if AtomMapper.preserves_rings(m, self.current_molecule, self.proposed_molecule)]
             if not matches:
-                raise Exception(f"There are no atom map matches that preserve rings!  It is advisable to conduct a manual atom mapping.")
+                return None
 
         top_matches = self.rank_degenerate_maps(matches, self.current_molecule, self.proposed_molecule) #remove the matches with the lower rank score (filter out bad degeneracies)
         _logger.debug(f"\tthere are {len(top_matches)} top matches")
