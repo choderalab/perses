@@ -433,7 +433,7 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene",atom_express
     refmol = generate_conformers(refmol,max_confs=1)
 
     #map one of the rings
-    atom_map = AtomMapper([mol, refmol], atom_expr=atom_expr, bond_expr=bond_expr).atom_map 
+    atom_map = AtomMapper([mol, refmol], atom_expr=atom_expr, bond_expr=bond_expr,allow_ring_breaking=True).atom_map 
 
     #now use the mapped atoms to generate a new and old system with identical atoms mapped. This will result in the
     #same molecule with the same positions for lambda=0 and 1, and ensures a contiguous atom map
