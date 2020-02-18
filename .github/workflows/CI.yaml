@@ -1,7 +1,6 @@
 name: CI
 
 on:
-  push:
   pull_request:
   schedule:
     # nightly tests
@@ -18,8 +17,7 @@ jobs:
         cfg:
           - {python-version: 3.6, openmm: "latest"}
           - {python-version: 3.7, openmm: "latest"}
-          - {python-version: 3.7, openmm: "beta"}
-          - {python-version: 3.7, openmm: "nightly"}
+          - {python-version: 3.7, openmm: "nightly"} # Can we have this run only nightly?
           - {python-version: 3.7, openmm: "conda-forge"}
 
     env:
