@@ -255,7 +255,7 @@ class AtomMapper(object):
                 # Filter the matches to remove any that allow ring breaking
                 matches = [m for m in matches if AtomMapper.preserves_rings(m, self.current_molecule, self.proposed_molecule)]
             if not matches:
-                raise Exception(f"There are no atom map matches that preserve rings!  It is advisable to conduct a manual atom mapping.")
+                return None
 
         top_matches = self.rank_degenerate_maps(matches, self.current_molecule, self.proposed_molecule) #remove the matches with the lower rank score (filter out bad degeneracies)
         _logger.debug(f"\tthere are {len(top_matches)} top matches")
@@ -330,47 +330,56 @@ class AtomMapper(object):
                                  target_atoms[matchpair.target.GetIdx()]
                                  for matchpair in match.GetAtoms()}
         if AtomMapper.breaks_rings_in_transformation(pattern_to_target_map,
-                                                     current,
-                                                     proposed):
+                                                     current):
             return False
 
         target_to_pattern_map = {target_atoms[matchpair.target.GetIdx()]:
                                  pattern_atoms[matchpair.pattern.GetIdx()]
                                  for matchpair in match.GetAtoms()}
         if AtomMapper.breaks_rings_in_transformation(target_to_pattern_map,
-                                                     current,
-                                                     proposed):
+                                                     current):
             return False
 
         return True
 
     @staticmethod
-    def breaks_rings_in_transformation(atom_map, current, proposed):
-        """Return True if the transformation from molecule1 to molecule2 breaks rings.
-
-        Parameters
-        ----------
-        atom_map : dict of OEAtom : OEAtom
-            atom_map[molecule1_atom] is the corresponding molecule2 atom
-        current : oechem.OEMol
-            Initial molecule whose rings are to be checked for not being broken
-        proposed : oechem.OEMol
-            Final molecule
-
-        Returns
-        -------
-        bool
-        """
-        # not sure how this works if proposed isn't called??
-        for cycle in AtomMapper.enumerate_cycle_basis(current):
-            cycle_size = len(cycle)
-            for bond in cycle:
-                if ((bond.GetBgn() in atom_map) and (bond.GetEnd() in atom_map)):
-                    if not oechem.OEAtomIsInRingSize(atom_map[bond.GetBgn()], cycle_size):
-                        return True
-                    if not oechem.OEAtomIsInRingSize(atom_map[bond.GetEnd()], cycle_size):
-                        return True
-        return False  # no rings in molecule1 are broken in molecule2
+    def breaks_rings_in_transformation(atom_map, current):
+            """Return True if the transformation from molecule1 to molecule2 breaks rings.
+    
+            Parameters
+            ----------
+            atom_map : dict of OEAtom : OEAtom
+                atom_map[molecule1_atom] is the corresponding molecule2 atom
+            current : oechem.OEMol
+                Initial molecule whose rings are to be checked for not being broken
+    
+            Returns
+            -------
+            bool
+            """
+            # not sure how this works if proposed isn't called??
+            for cycle in AtomMapper.enumerate_cycle_basis(current):
+                cycle_size = len(cycle)
+                # first check that ALL of the ring is in the map or out
+                atoms_in_cycle = set([bond.GetBgn() for bond in cycle] + [bond.GetEnd() for bond in cycle])
+                number_of_cycle_atoms_mapped = 0
+                for atom in atoms_in_cycle:
+                    if atom in atom_map:
+                        number_of_cycle_atoms_mapped += 1
+                if number_of_cycle_atoms_mapped == 0:
+                    # none of the ring is mapped - ALL unique, so continue
+                    continue
+                if number_of_cycle_atoms_mapped != len(atoms_in_cycle):
+                    return True # not all atoms in ring are mapped
+                # now we are sure the ring is either fully core or fully unique, check the same is true of the proposed
+                for bond in cycle:
+                    # then check that all of the new ring is in the map
+                    if ((bond.GetBgn() in atom_map) and (bond.GetEnd() in atom_map)):
+                        if not oechem.OEAtomIsInRingSize(atom_map[bond.GetBgn()], cycle_size):
+                            return True
+                        if not oechem.OEAtomIsInRingSize(atom_map[bond.GetEnd()], cycle_size):
+                            return True
+            return False  # no rings in molecule1 are broken in molecule2
 
     @staticmethod
     def enumerate_cycle_basis(molecule):
