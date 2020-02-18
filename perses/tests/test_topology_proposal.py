@@ -67,7 +67,7 @@ def test_mapping_strength_levels(pairs_of_smiles=[('Cc1ccccc1','c1ccc(cc1)N'),('
     gaff_xml_filename = get_data_filename('data/gaff.xml')
 
     correct_results = {0:{'default': (1,0), 'weak':(1,0), 'strong':(4,3)},
-                       1:{'default': (7,3), 'weak':(5,1), 'strong':(7,3)},
+                       1:{'default': (7,3), 'weak':(6,2), 'strong':(7,3)},
                        2:{'default': (0,0), 'weak':(0,0), 'strong':(2,2)}}
 
     mapping = ['weak','default','strong']
@@ -82,8 +82,8 @@ def test_mapping_strength_levels(pairs_of_smiles=[('Cc1ccccc1','c1ccc(cc1)N'),('
             proposal = proposal_engine.propose(initial_system, initial_topology)
             print(lig_a, lig_b,'length OLD and NEW atoms',len(proposal.unique_old_atoms), len(proposal.unique_new_atoms))
             if test:
+                render_atom_mapping(f'{index}-{example}.png', initial_molecule, proposed_molecule, proposal._new_to_old_atom_map)
                 assert ( (len(proposal.unique_old_atoms), len(proposal.unique_new_atoms)) == correct_results[index][example])
-            render_atom_mapping(f'{index}-{example}.png', initial_molecule, proposed_molecule, proposal._new_to_old_atom_map)
 
 # HBM SmallMoleculeAtomMapper is depreciated
 # HBM replace with AtomMapper test

@@ -46,7 +46,7 @@ OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | 
 # atoms need to match in aromaticity. Same with bonds.
 # maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
 WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic | oechem.OEExprOpts_IntType
-WEAK_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity
+WEAK_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
 # default atom expression, requires same aromaticitiy and hybridization
 # bonds need to match in bond order
@@ -126,6 +126,14 @@ def has_h_mapped(atommap, mola: oechem.OEMol, molb: oechem.OEMol):
 
     return False
 
+class InvalidMappingException(Exception):
+    def __init__(self, message, errors):
+
+        # Call the base class constructor with the parameters it needs
+        super().__init__(message)
+
+        # Now for your custom code...
+        self.errors = errors
 
 class AtomMapper(object):
     """ Generates map between two molecules.
@@ -192,7 +200,8 @@ class AtomMapper(object):
         Returns
         -------
         matches : list of match
-            list of the matches between the molecules
+            list of the matches between the molecules, or None if no matches possible
+
         """
         self.current_molecule = self.list_of_oemols[indexA]
         self.proposed_molecule = self.list_of_oemols[indexB]
@@ -201,6 +210,7 @@ class AtomMapper(object):
             _logger.debug(f'Using user defined atom_expr')
             _logger.debug('Any map_strength set has been ignored')
         else:
+            _logger.info(f'Map strength of {self.map_strength}')
             # setting atom expr using map_strength
             if self.map_strength == 'default':
                 self.atom_expr = DEFAULT_ATOM_EXPRESSION
@@ -1217,8 +1227,8 @@ class PolymerProposalEngine(ProposalEngine):
                 first_atom_index_new = atom.index
                 break
 
-            old_oemol_res = FFAllAngleGeometryEngine.oemol_from_residue(old_res)
-            new_oemol_res = FFAllAngleGeometryEngine.oemol_from_residue(new_res)
+            old_oemol_res = FFAllAngleGeometryEngine._oemol_from_residue(old_res)
+            new_oemol_res = FFAllAngleGeometryEngine._oemol_from_residue(new_res)
             # local_atom_map : dict, key : index of atom in new residue, value : index of atom in old residue.
             local_atom_map = self._get_mol_atom_matches(old_oemol_res, new_oemol_res, first_atom_index_old, first_atom_index_new)
             for backbone_name in ['CA','N']:
@@ -1240,7 +1250,7 @@ class PolymerProposalEngine(ProposalEngine):
             The index of the first atom in the old resiude/current molecule
         first_atom_index_new : int
             The index of the first atom in the new residue/proposed molecule
-        Note: Since FFAllAngleGeometryEngine.oemol_from_residue creates a new topology for the specified residue,
+        Note: Since FFAllAngleGeometryEngine._oemol_from_residue creates a new topology for the specified residue,
         the atom indices in the output oemol (i.e. current_molecule and proposed_molecule) are reset to start at 0.
         Therefore, first_atom_index_old and first_atom_index_new are used to correct the indices such that they match
         the atom indices of the original old and new residues.
@@ -1339,7 +1349,7 @@ class PointMutationEngine(PolymerProposalEngine):
     """
 
     # TODO: Overhaul API to make it easier to specify mutations
-    def __init__(self, wildtype_topology, system_generator, chain_id='1', proposal_metadata=None, max_point_mutants=1, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False, always_change=True, aggregate=False):
+    def __init__(self, wildtype_topology, system_generator, chain_id, proposal_metadata=None, max_point_mutants=1, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False, always_change=True, aggregate=False):
         """
         Create a PointMutationEngine for proposing point mutations of a biopolymer component of a system.
 

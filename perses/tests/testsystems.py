@@ -213,7 +213,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
             }
         proposal_engines = dict()
         chain_id = ' '
-        allowed_mutations = [[('2','VAL')],[('2','LEU')],[('2','ILE')]]
+        allowed_mutations = [('2','VAL'),('2','LEU'),('2','ILE')]
         for environment in environments:
             proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
 
@@ -1884,6 +1884,23 @@ class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
         molecules = list()
         molecules += self.read_smiles(resource_filename('perses', 'data/L99A-binders.txt'))
         molecules += self.read_smiles(resource_filename('perses', 'data/L99A-non-binders.txt'))
+        # Filter only molecules with benzene substructure (c1ccccc1)
+        def contains_benzene(smiles):
+            from openeye import oechem
+            mol = oechem.OEGraphMol()
+            oechem.OESmilesToMol(mol, smiles)
+            # create a substructure search object
+            ss = oechem.OESubSearch("c1ccccc1") # benzene
+            oechem.OEPrepareSearch(mol, ss)
+            if ss.SingleMatch(mol):
+                return True
+            else:
+                return False
+        print('Filtering out molecules that do not contain benzene substructure')
+        print(f'{len(molecules)} before filtering')
+        molecules = [smiles for smiles in molecules if contains_benzene(smiles)]
+        print(f'{len(molecules)} remain after filtering')
+        # Store molecules
         self.molecules = molecules
         # Intialize
         super(T4LysozymeInhibitorsTestSystem, self).__init__(**kwargs)
@@ -2509,7 +2526,6 @@ def run_abl_imatinib_resistance():
     testsystem = AblImatinibResistanceTestSystem(ncmc_nsteps=20000, mcmc_nsteps=20000)
     #for environment in testsystem.environments:
     for environment in ['vacuum-complex']:
-        print(environment)
         testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-%s.pdb' % environment, 'w')
         testsystem.exen_samplers[environment].geometry_pdbfile = open('abl-imatinib-%s-geometry-proposals.pdb' % environment, 'w')
         #testsystem.mcmc_samplers[environment].run(niterations=5)
