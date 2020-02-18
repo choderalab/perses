@@ -51,6 +51,7 @@ class Molecule(object):
         return oechem.OECount(self.mol, oechem.OEIsHeavy())
 
 class Simulation(object):
+    from simtk import unit
     def __init__(self,A,B):
         self.ligA = A
         self.ligB = B
@@ -69,30 +70,23 @@ class Simulation(object):
         self.solddg_history = []
         self.comddg_history = []
 
-        self.vacdg_history_es = []
-        self.soldg_history_es = []
-        self.comdg_history_es = []
-        self.vacddg_history_es = []
-        self.solddg_history_es = []
-        self.comddg_history_es = []
-
         self.count = 0
         self.load_data()
 
         if self.vacdg is not None and self.soldg is not None:
             self.hydrationdg = self.vacdg - self.soldg
             self.hydrationddg = (self.vacddg + self.solddg)**0.5
-            self.hydrationdg_es = self.vacf_ij[0,-1] - self.solf_ij[0,-1]
-            self.hydrationddg_es = (self.vacdf_ij[0,-1] + self.soldf_ij[0,-1])**0.5
         else:
             print('Both vacuum and solvent legs need to be run for hydration free energies')
         if self.comdg is not None and self.soldg is not None:
             self.bindingdg = self.soldg - self.comdg
             self.bindingddg = (self.comddg + self.solddg)**0.5
-            self.bindingdg_es = self.solf_ij[0,-1] - self.comf_ij[0,-1]
-            self.bindingddg_es = (self.soldf_ij[0,-1] + self.comdf_ij[0,-1])**0.5
         else:
             print('Both solvent and complex legs need to be run for binding free energies')
+
+    def _kt_to_kcal(x):
+        q = unit.quantity.Quantity(x, unit = unit.kilojoules_per_mole)
+        return q.in_units_of(unit.kilocalories_per_mole)._value
 
     def load_data(self):
         """ Calculate relative free energy details from the simulation by performing MBAR on the vacuum and solvent legs of the simualtion.
@@ -120,24 +114,24 @@ class Simulation(object):
                 vacuum_reporter = MultiStateReporter(f'{self.directory}/{out}')
                 vacuum_analyzer = MultiStateSamplerAnalyzer(vacuum_reporter)
                 f_ij, df_ij = vacuum_analyzer.get_free_energy()
-                self.vacdg = f_ij[1, -2]
-                self.vacddg = df_ij[1, -2] ** 2
+                self.vacdg = _kt_to_kcal(f_ij[0, -1])
+                self.vacddg = _kt_to_kcal(df_ij[0, -1] ** 2)
                 self.vacf_ij = f_ij
                 self.vacdf_ij = df_ij
             elif'solvent' in out:
                 solvent_reporter = MultiStateReporter(f'{self.directory}/{out}')
                 solvent_analyzer = MultiStateSamplerAnalyzer(solvent_reporter)
                 f_ij, df_ij = solvent_analyzer.get_free_energy()
-                self.soldg = f_ij[1, -2]
-                self.solddg = df_ij[1, -2] ** 2
+                self.soldg = _kt_to_kcal(f_ij[0, -1])
+                self.solddg = _kt_to_kcal(df_ij[0, -1] ** 2)
                 self.solf_ij = f_ij
                 self.soldf_ij = df_ij
             elif 'complex' in out:
                 complex_reporter = MultiStateReporter(f'{self.directory}/{out}')
                 complex_analyzer = MultiStateSamplerAnalyzer(complex_reporter)
                 f_ij, df_ij = complex_analyzer.get_free_energy()
-                self.comdg = f_ij[1, -2]
-                self.comddg = df_ij[1, -2] ** 2
+                self.comdg = _kt_to_kcal(f_ij[0, -1])
+                self.comddg = _kt_to_kcal(df_ij[0, -1] ** 2)
                 self.comf_ij = f_ij
                 self.comdf_ij = df_ij
         return
@@ -161,10 +155,8 @@ class Simulation(object):
                 for step in range(stepsize, n_iterations, stepsize):
                     vacuum_analyzer = MultiStateSamplerAnalyzer(vacuum_reporter,max_n_iterations=step)
                     f_ij, df_ij = vacuum_analyzer.get_free_energy()
-                    self.vacdg_history.append(f_ij[1, -2])
-                    self.vacddg_history.append(df_ij[1,-2])
-                    self.vacdg_history_es.append(f_ij[0, -1])
-                    self.vacddg_history_es.append(df_ij[0,-1])
+                    self.vacdg_history.append(_kt_to_kcal(f_ij[0, -1]))
+                    self.vacddg_history.append(_kt_to_kcal(df_ij[0,-1]))
             if 'solvent' in out:
                 solvent_reporter = MultiStateReporter(f'{self.directory}/{out}')
                 ncfile = utils.open_netcdf(f'{self.directory}/{out}')
@@ -172,10 +164,8 @@ class Simulation(object):
                 for step in range(stepsize, n_iterations, stepsize):
                     solvent_analyzer = MultiStateSamplerAnalyzer(solvent_reporter,max_n_iterations=step)
                     f_ij, df_ij = solvent_analyzer.get_free_energy()
-                    self.soldg_history.append(f_ij[1, -2])
-                    self.solddg_history.append(df_ij[1,-2])
-                    self.soldg_history_es.append(f_ij[0, -1])
-                    self.solddg_history_es.append(df_ij[0,-1])
+                    self.soldg_history.append(_kt_to_kcal(f_ij[0, -1]))
+                    self.solddg_history.append(_kt_to_kcal(df_ij[0,-1]))
             if 'complex' in out:
                 complex_reporter = MultiStateReporter(f'{self.directory}/{out}')
                 ncfile = utils.open_netcdf(f'{self.directory}/{out}')
@@ -183,10 +173,8 @@ class Simulation(object):
                 for step in range(stepsize, n_iterations, stepsize):
                     complex_analyzer = MultiStateSamplerAnalyzer(complex_reporter,max_n_iterations=step)
                     f_ij, df_ij = complex_analyzer.get_free_energy()
-                    self.comdg_history.append(f_ij[1, -2])
-                    self.comddg_history.append(df_ij[1,-2])
-                    self.comdg_history_es.append(f_ij[0, -1])
-                    self.comddg_history_es.append(df_ij[0,-1])
+                    self.comdg_history.append(_kt_to_kcal(f_ij[0, -1]))
+                    self.comddg_history.append(_kt_to_kcal(df_ij[0,-1]))
         return
 
 
