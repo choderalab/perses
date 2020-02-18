@@ -7,8 +7,8 @@ Utility functions for simulations using openeye toolkits
 __author__ = 'John D. Chodera'
 
 
-from openeye import oechem,oegraphsim
-from openmoltools.openeye import iupac_to_oemol, generate_conformers
+from openeye import oechem, oegraphsim
+from openmoltools.openeye import generate_conformers
 import simtk.unit as unit
 import numpy as np
 import logging
@@ -33,7 +33,7 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     molecule : openeye.oechem.OEMol
         OEMol object of the molecule
     """
-    from openeye import oeiupac, oeomega
+    from openeye import oeomega
 
     # Create molecule
     molecule = oechem.OEMol()
@@ -50,6 +50,7 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
 
     # Create atom names.
     oechem.OETriposAtomNames(molecule)
+    oechem.OETriposBondTypeNames(molecule)
 
     # Assign geometry
     omega = oeomega.OEOmega()
@@ -57,9 +58,51 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     omega.SetIncludeInput(False)
     omega.SetStrictStereo(True)
     omega(molecule)
-
     return molecule
 
+
+def iupac_to_oemol(iupac, title='MOL', max_confs=1):
+    """
+    Generate an oemol from an IUPAC name
+    Parameters
+    ----------
+    iupac : str
+        iupac name of molecule
+    title : str, default 'MOL'
+        title of OEMol molecule
+    max_confs : int, default 1
+        maximum number of conformers to generate
+    Returns
+    -------
+    molecule : openeye.oechem.OEMol
+        OEMol object of the molecule
+    """
+    from openeye import oeiupac, oeomega
+
+    # Create molecule
+    molecule = oechem.OEMol()
+    oeiupac.OEParseIUPACName(molecule, iupac)
+
+    # Set title.
+    molecule.SetTitle(title)
+
+    # Assign aromaticity and hydrogens.
+    oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
+    oechem.OEAssignHybridization(molecule)
+    oechem.OEAddExplicitHydrogens(molecule)
+    oechem.OEPerceiveChiral(molecule)
+
+    # Create atom names.
+    oechem.OETriposAtomNames(molecule)
+    oechem.OETriposBondTypeNames(molecule)
+
+    # Assign geometry
+    omega = oeomega.OEOmega()
+    omega.SetMaxConfs(max_confs)
+    omega.SetIncludeInput(False)
+    omega.SetStrictStereo(True)
+    omega(molecule)
+    return molecule
 
 def extractPositionsFromOEMol(molecule,units=unit.angstrom):
     """
@@ -135,7 +178,7 @@ def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
 
     return system, positions, topology
 
-def createSystemFromIUPAC(iupac_name):
+def createSystemFromIUPAC(iupac_name, title="MOL"):
     """
     Create an openmm system out of an oemol
 
@@ -158,7 +201,7 @@ def createSystemFromIUPAC(iupac_name):
 
     # Create OEMol
     # TODO write our own of this function so we can be sure of the oe flags that are being used
-    molecule = iupac_to_oemol(iupac_name)
+    molecule = iupac_to_oemol(iupac_name, title=title)
 
     molecule = generate_conformers(molecule, max_confs=1)
 
@@ -226,6 +269,7 @@ def describe_oemol(mol):
 
 def createOEMolFromSDF(sdf_filename, index=0):
     """
+    # TODO change this to return a list of all the mols if required
     Load an SDF file into an OEMol. Since SDF files can contain multiple molecules, an index can be provided as well.
 
     Parameters
@@ -280,17 +324,17 @@ def createSMILESfromOEMol(molecule):
 
 def generate_unique_atom_names(molecule):
     """
-    Check if an oemol has unique atom names, and if not, then assigns them 
+    Check if an oemol has unique atom names, and if not, then assigns them
 
     Parameters
     ----------
     molecule : openeye.oechem.OEMol object
-        oemol object to check 
+        oemol object to check
 
     Returns
     -------
     molecule : openeye.oechem.OEMol object
-        oemol, either unchanged if atom names are already unique, or newly generated atom names 
+        oemol, either unchanged if atom names are already unique, or newly generated atom names
     """
     atom_names = []
 
@@ -302,7 +346,7 @@ def generate_unique_atom_names(molecule):
     if len(set(atom_names)) == atom_count:
         # one name per atom therefore unique
         _logger.info(f'molecule {molecule.GetTitle()} has unique atom names already')
-        return molecule 
+        return molecule
     else:
         # generating new atom names
         from collections import defaultdict
@@ -342,3 +386,37 @@ def has_undefined_stereocenters(mol):
             if not bond.HasStereoSpecified():
                 return True #we have a geometric isomer that isn't specified!
     return False # nothing bad found
+
+
+def generate_expression(list):
+    """Turns a list of strings into an oechem atom or bond expression
+    This allows us to pass in matching expressions in the input .yaml
+    Note: strings are case sensitive
+
+    >>> atom_expr = generate_expression("Hybridization", "IntType")
+
+    Parameters
+    ----------
+    list : list of strings
+        List of strings
+
+    Returns
+    -------
+    integer
+        Integer that openeye magically understands for matching expressions
+
+    """
+    total_expr = 0
+
+    for string in list:
+        try:
+            expr = getattr(oechem, f'OEExprOpts_{string}')
+        except AttributeError:
+            raise Exception(f'{string} not recognised, no expression of oechem.OEExprOpts_{string}.\
+            This is case sensitive, so please check carefully and see , \
+            https://docs.eyesopen.com/toolkits/python/oechemtk/OEChemConstants/OEExprOpts.html\
+            for options')
+        # doing bitwise OR check
+        total_expr = total_expr | expr
+
+    return total_expr

@@ -1,6 +1,6 @@
 from perses.annihilation.ncmc_switching import NCMCEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
-from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, SystemGenerator, SmallMoleculeAtomMapper, PremappedSmallMoleculeSetProposalEngine
+from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, SystemGenerator, PremappedSmallMoleculeSetProposalEngine
 from openmmtools import states, constants
 import tqdm
 from simtk import openmm, unit
@@ -135,4 +135,3 @@ if __name__=="__main__":
         os.mkdir(nonequilibrium_output_directory)
 
     np.save(os.path.join(nonequilibrium_output_directory, "{}_{}_{}.npy".format(project_prefix, initial_ligand, proposal_ligand)), results)
-

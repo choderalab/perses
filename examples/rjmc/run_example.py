@@ -20,19 +20,8 @@ import perses.rjmc.topology_proposal as topology_proposal
 import perses.bias.bias_engine as bias_engine
 import perses.rjmc.geometry as geometry
 import perses.annihilation.ncmc_switching as ncmc_switching
+from perses.utils.openeye import smiles_to_oemol
 
-
-def generate_initial_molecule(mol_smiles):
-    """
-    Generate an oemol with a geometry
-    """
-    mol = oechem.OEMol()
-    oechem.OESmilesToMol(mol, mol_smiles)
-    oechem.OEAddExplicitHydrogens(mol)
-    omega = oeomega.OEOmega()
-    omega.SetMaxConfs(1)
-    omega(mol)
-    return mol
 
 def oemol_to_openmm_system(oemol, molecule_name):
     """
@@ -56,7 +45,7 @@ def oemol_to_openmm_system(oemol, molecule_name):
 def run():
     # Create initial model system, topology, and positions.
     smiles_list = ["CC", "CCC", "CCCC"]
-    initial_molecule = generate_initial_molecule("CC")
+    initial_molecule = smiles_to_oemol("CC")
     initial_sys, initial_pos, initial_top = oemol_to_openmm_system(initial_molecule, "ligand_old")
     smiles = 'CC'
     stats = {ms : 0 for ms in smiles_list}

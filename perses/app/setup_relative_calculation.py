@@ -143,7 +143,7 @@ def getSetupOptions(filename):
                     raise Exception(f"{path} could not be found.  Aborting!")
         elif setup_options['run_type'] == 'None':
             setup_options['run_type'] = None
-        elif setup_options['run_type'] not in ['None', 'anneal', 'equilibrate']:
+        elif str(setup_options['run_type']) not in ['None', 'anneal', 'equilibrate']:
             raise Exception(f"'run_type' must be None, 'anneal', or 'equilibrate'; input was specified as {setup_options['run_type']} with type {type(setup_options['run_type'])}")
 
         #to instantiate the particles:
@@ -216,8 +216,20 @@ def getSetupOptions(filename):
     else:
         _logger.info(f"\t'neglect_angles' detected: {setup_options['neglect_angles']}.")
 
-    if 'mapping_strength' not in setup_options:
-        setup_options['mapping_strength'] = 'default'
+    setup_options['atom_expr'] = None
+    if 'atom_expression' in setup_options:
+        # need to convert the list to Integer
+        from perses.utils.openeye import generate_expression
+        setup_options['atom_expr'] = generate_expression(setup_options['atom_expression'])
+        
+    setup_options['bond_expr'] = None
+    if 'bond_expression' in setup_options:
+        # need to convert the list to Integer
+        from perses.utils.openeye import generate_expression
+        setup_options['bond_expr'] = generate_expression(setup_options['bond_expression'])
+
+    if 'map_strength' not in setup_options:
+        setup_options['map_strength'] = 'default'
 
     if 'anneal_1,4s' not in setup_options:
         setup_options['anneal_1,4s'] = False
@@ -226,7 +238,7 @@ def getSetupOptions(filename):
     if 'softcore_v2' not in setup_options:
         setup_options['softcore_v2'] = False
         _logger.info(f"\t'softcore_v2' not specified: default to 'False'")
- 
+
     _logger.info(f"\tCreating '{trajectory_directory}'...")
     assert (not os.path.exists(trajectory_directory)), f'Output trajectory directory "{trajectory_directory}" already exists. Refusing to overwrite'
     os.makedirs(trajectory_directory)
@@ -337,8 +349,11 @@ def run_setup(setup_options):
                                           protein_pdb_filename=protein_pdb_filename,
                                           receptor_mol2_filename=receptor_mol2, pressure=pressure,
                                           temperature=temperature, solvent_padding=solvent_padding_angstroms, spectator_filenames=setup_options['spectators'],
+                                          map_strength=setup_options['map_strength'],
+                                          atom_expr=setup_options['atom_expr'], bond_expr=setup_options['bond_expr'],
                                           atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
-                                          small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'])
+                                          small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
+                                          trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'])
 
         _logger.info(f"\twriting pickle output...")
         with open(os.path.join(os.getcwd(), trajectory_directory, setup_pickle_file), 'wb') as f:

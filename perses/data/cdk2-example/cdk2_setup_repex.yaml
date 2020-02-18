@@ -35,7 +35,7 @@ solvent_padding: 9.0 # angstroms
 save_setup_pickle_as: fesetup_hbonds.pkl
 
 # Number of equilibrium steps per move application
-n_steps_per_move_application: 250
+n_steps_per_move_application: 50
 
 #the type of free energy calculation.
 #currently, this could be either nonequilibrium or sams
@@ -45,10 +45,10 @@ fe_type: repex
 checkpoint_interval: 250
 
 #number of iterations
-n_cycles: 5000
+n_cycles: 2
 
 #The number of SAMS states
-n_states: 16
+n_states: 6
 
 # Number of equilibration iterations:
 n_equilibration_iterations: 0

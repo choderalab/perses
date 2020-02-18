@@ -47,10 +47,12 @@ class RelativeFEPSetup(object):
     Importantly, it ensures that the atom maps in the solvent and complex phases match correctly.
     """
     def __init__(self, ligand_input, old_ligand_index, new_ligand_index, forcefield_files, phases,
-                 protein_pdb_filename=None,receptor_mol2_filename=None, pressure=1.0 * unit.atmosphere,
+                 protein_pdb_filename=None, receptor_mol2_filename=None, pressure=1.0 * unit.atmosphere,
                  temperature=300.0 * unit.kelvin, solvent_padding=9.0 * unit.angstroms, atom_map=None,
-                 hmass=4*unit.amus, neglect_angles=False, map_strength='default', anneal_14s = False,
+                 hmass=4*unit.amus, neglect_angles=False, map_strength='default', atom_expr=None,
+                 bond_expr=None, anneal_14s=False,
                  small_molecule_forcefield='gaff-2.11', small_molecule_parameters_cache=None,
+                 trajectory_directory=None, trajectory_prefix=None,
                  spectator_filenames=None):
         """
         Initialize a NonequilibriumFEPSetup object
@@ -86,6 +88,10 @@ class RelativeFEPSetup(object):
             ['gaff-1.81', 'gaff-2.11', 'smirnoff99Frosst-1.1.0', 'openff-1.0.0']
         small_molecule_parameters_cache : str, optional, default=None
             If specified, this filename will be used for a small molecule parameter cache by the SystemGenerator.
+        trajectory_directory : str, default None
+            Where to write out trajectories resulting from the calculation. If none, no writing is done.
+        trajectory_prefix : str, default None
+            What prefix to use for this calculation's trajectory files. If none, no writing is done.
         spectator_filenames : list, optional, default=None
             If specified, this list is the filenames of any non-alchemical small molecule to be part of the system.
             These will be treated with the same small molecule forcefield as the alchemical ligands, and will only be present in the complex phase
@@ -99,8 +105,13 @@ class RelativeFEPSetup(object):
         _logger.info(f"\t\t\t_hmass: {hmass}.\n")
         self._proposal_phase = None
         self._map_strength = map_strength
+        self._atom_expr = atom_expr
+        self._bond_expr = bond_expr
         self._anneal_14s = anneal_14s
         self._spectator_filenames = spectator_filenames
+
+        self._trajectory_prefix = trajectory_prefix
+        self._trajectory_directory = trajectory_directory
 
         beta = 1.0 / (kB * temperature)
 
@@ -251,7 +262,7 @@ class RelativeFEPSetup(object):
         _logger.info("successfully created SystemGenerator to create ligand systems")
 
         _logger.info(f"executing SmallMoleculeSetProposalEngine...")
-        self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_smiles_old, self._ligand_smiles_new], self._system_generator,map_strength=self._map_strength, residue_name='MOL')
+        self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_oemol_old, self._ligand_oemol_new], self._system_generator, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr, residue_name='MOL')
 
         _logger.info(f"instantiating FFAllAngleGeometryEngine...")
         # NOTE: we are conducting the geometry proposal without any neglected angles
@@ -272,7 +283,9 @@ class RelativeFEPSetup(object):
 
             _logger.info(f"creating TopologyProposal...")
             self._complex_topology_proposal = self._proposal_engine.propose(self._complex_system_old_solvated,
-                                                                                self._complex_topology_old_solvated, current_mol=self._ligand_oemol_old,proposed_mol=self._ligand_oemol_new)
+                                          self._complex_topology_old_solvated,
+                                          current_mol_id=0, proposed_mol_id=1)
+
             self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
 
             self._proposal_phase = 'complex'
@@ -313,7 +326,9 @@ class RelativeFEPSetup(object):
 
                 _logger.info(f"creating TopologyProposal")
                 self._solvent_topology_proposal = self._proposal_engine.propose(self._ligand_system_old_solvated,
-                                                                                    self._ligand_topology_old_solvated,current_mol=self._ligand_oemol_old,proposed_mol=self._ligand_oemol_new)
+                                                                                self._ligand_topology_old_solvated,
+                                                                                current_mol_id=0, proposed_mol_id=1)
+
                 self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'solvent'
             else:
@@ -361,7 +376,9 @@ class RelativeFEPSetup(object):
                 self._vacuum_topology_old, self._vacuum_positions_old, self._vacuum_system_old = self._solvate_system(self._ligand_topology_old,
                                                                                                          self._ligand_positions_old,phase='vacuum')
                 self._vacuum_topology_proposal = self._proposal_engine.propose(self._vacuum_system_old,
-                                                                                self._vacuum_topology_old,current_mol=self._ligand_oemol_old,proposed_mol=self._ligand_oemol_new)
+                                                                               self._vacuum_topology_old,
+                                                                               current_mol_id=0, proposed_mol_id=1)
+
                 self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'vacuum'
             elif self._proposal_phase == 'complex':
@@ -628,9 +645,12 @@ class RelativeFEPSetup(object):
         solvated_system = self._system_generator.create_system(solvated_topology)
         _logger.info(f"\tSystem parameterized")
 
-        pdb_filename = f"{os.environ['PWD']}/{self._trajectory_directory}/{self._trajectory_prefix}-{phase}.pdb"
-        with open(pdb_filename, 'w') as outfile:
-            PDBFile.writeFile(solvated_topology, solvated_positions, outfile)
+        if self._trajectory_directory is not None and self._trajectory_prefix is not None:
+            pdb_filename = f"{self._trajectory_directory}/{self._trajectory_prefix}-{phase}.pdb"
+            with open(pdb_filename, 'w') as outfile:
+                PDBFile.writeFile(solvated_topology, solvated_positions, outfile)
+        else:
+            _logger.info('Both trajectory_directory and trajectory_prefix need to be provided to save .pdb')
 
         return solvated_topology, solvated_positions, solvated_system
 

@@ -30,14 +30,16 @@ solvent_padding: 9.0 # angstroms
 save_setup_pickle_as: fesetup_hbonds.pkl
 
 #number of equilibrium steps per move application
-n_steps_per_move_application: 250
+n_steps_per_move_application: 100
 
 #The name of the pickle file where we will save the setup object
 save_setup_pickle_as: fesetup_hbonds.pkl
 
 #the type of free energy calculation.
 #currently, this could be either nonequilibrium or sams
-fe_type: repex
+fe_type: neq
+
+n_steps_ncmc_protocol: 100
 
 #checkpoint interval in iterations:
 checkpoint_interval: 250
@@ -47,6 +49,10 @@ n_cycles: 5000
 
 #The number of SAMS states
 n_states: 16
+
+lambdas: 16
+
+n_particles: 1
 
 # Number of equilibration iterations:
 n_equilibration_iterations: 0

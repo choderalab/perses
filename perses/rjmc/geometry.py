@@ -760,18 +760,19 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                     p1, p2, p3, theta0, K = force.getAngleParameters(angle_idx)
                     force.setAngleParameters(angle_idx, p1, p2, p3, theta0, unit.Quantity(value=0.0, unit=unit.kilojoule/(unit.mole*unit.radian**2)))
 
-        forces = no_nb_system.getForces()
-        _logger.info(f"\tfinal no-nonbonded final system forces {[force.__class__.__name__ for force in list(no_nb_system.getForces())]}")
+        forces = { no_nb_system.getForce(index).__class__.__name__ : no_nb_system.getForce(index) for index in range(no_nb_system.getNumForces()) }
+        _logger.info(f"\tfinal no-nonbonded final system forces {forces.keys()}")
+
         #bonds
-        bond_forces = no_nb_system.getForce(0)
+        bond_forces = forces['HarmonicBondForce'] 
         _logger.info(f"\tthere are {bond_forces.getNumBonds()} bond forces in the no-nonbonded final system")
 
         #angles
-        angle_forces = no_nb_system.getForce(1)
+        angle_forces = forces['HarmonicAngleForce'] 
         _logger.info(f"\tthere are {angle_forces.getNumAngles()} angle forces in the no-nonbonded final system")
 
         #torsions
-        torsion_forces = no_nb_system.getForce(2)
+        torsion_forces = forces['PeriodicTorsionForce'] 
         _logger.info(f"\tthere are {torsion_forces.getNumTorsions()} torsion forces in the no-nonbonded final system")
 
 

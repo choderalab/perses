@@ -213,7 +213,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
             }
         proposal_engines = dict()
         chain_id = ' '
-        allowed_mutations = [[('2','VAL')],[('2','LEU')],[('2','ILE')]]
+        allowed_mutations = [('2','VAL'),('2','LEU'),('2','ILE')]
         for environment in environments:
             proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
 
@@ -1112,11 +1112,18 @@ class AblAffinityTestSystem(PersesTestSystem):
         from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
         proposal_metadata = { }
         proposal_engines = dict()
+
+        from perses.utils.openeye import smiles_to_oemol
+        list_of_oemols = []
+        for smi in molecules:
+            mol = smiles_to_oemol(smi)
+            list_of_oemols.append(mol)
+
         for environment in environments:
             storage = None
             if self.storage:
                 storage = NetCDFStorageView(self.storage, envname=environment)
-            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name='MOL', storage=storage)
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(list_of_oemols, system_generators[environment], residue_name='MOL', storage=storage)
 
         # Generate systems
         systems = dict()
@@ -1327,10 +1334,15 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         # Set up the proposal engines.
         print('Initializing proposal engines...')
         from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
-        proposal_metadata = { }
         proposal_engines = dict()
+
+        list_of_oemols = []
+        from perses.utils.openeye import smiles_to_oemol
+        for smiles in molecules:
+            mol = smiles_to_oemol(smiles)
+            list_of_oemols.append(mol)
         for environment in environments:
-            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name='MOL')
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(list_of_oemols, system_generators[environment], residue_name='MOL')
 
         # Generate systems
         print('Building systems...')
@@ -1544,13 +1556,18 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
         print('Initializing proposal engines...')
         residue_name = 'UNL' # TODO: Figure out residue name automatically
         from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
-        proposal_metadata = { }
         proposal_engines = dict()
+
+        from perses.utils.openeye import smiles_to_oemol
+        list_of_oemols = []
+        for smiles in molecules:
+            mol = smiles_to_oemol(smiles)
+            list_of_oemols.append(mol)
         for environment in environments:
             storage = None
             if self.storage is not None:
                 storage = NetCDFStorageView(self.storage, envname=environment)
-            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name=residue_name, storage=storage)
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(list_of_oemols, system_generators[environment], residue_name=residue_name, storage=storage)
 
         # Generate systems
         print('Building systems...')
@@ -1752,17 +1769,17 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         positions['explicit'] = modeller.getPositions()
 
         # Set up the proposal engines.
-        from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, PremappedSmallMoleculeSetProposalEngine, SmallMoleculeAtomMapper
+        from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, PremappedSmallMoleculeSetProposalEngine
         proposal_metadata = { }
         proposal_engines = dict()
 
-        if not premapped_json_dict:
-            for environment in environments:
-                proposal_engines[environment] = SmallMoleculeSetProposalEngine(good_molecules, system_generators[environment], residue_name=d_smiles_to_oemol[smiles].GetTitle())
-        else:
-            atom_mapper = SmallMoleculeAtomMapper.from_json(premapped_json_dict)
-            for environment in environments:
-                proposal_engines[environment] = PremappedSmallMoleculeSetProposalEngine(atom_mapper, system_generators[environment], residue_name=d_smiles_to_oemol[smiles].GetTitle())
+        list_of_oemols = []
+        for smiles in good_molecules:
+            mol = smiles_to_oemol(smiles)
+            list_of_oemols.append(mol)
+
+        for environment in environments:
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(list_of_oemols, system_generators[environment], residue_name=d_smiles_to_oemol[smiles].GetTitle())
 
         # Generate systems
         systems = dict()
@@ -1867,6 +1884,23 @@ class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
         molecules = list()
         molecules += self.read_smiles(resource_filename('perses', 'data/L99A-binders.txt'))
         molecules += self.read_smiles(resource_filename('perses', 'data/L99A-non-binders.txt'))
+        # Filter only molecules with benzene substructure (c1ccccc1)
+        def contains_benzene(smiles):
+            from openeye import oechem
+            mol = oechem.OEGraphMol()
+            oechem.OESmilesToMol(mol, smiles)
+            # create a substructure search object
+            ss = oechem.OESubSearch("c1ccccc1") # benzene
+            oechem.OEPrepareSearch(mol, ss)
+            if ss.SingleMatch(mol):
+                return True
+            else:
+                return False
+        print('Filtering out molecules that do not contain benzene substructure')
+        print(f'{len(molecules)} before filtering')
+        molecules = [smiles for smiles in molecules if contains_benzene(smiles)]
+        print(f'{len(molecules)} remain after filtering')
+        # Store molecules
         self.molecules = molecules
         # Intialize
         super(T4LysozymeInhibitorsTestSystem, self).__init__(**kwargs)
@@ -1952,10 +1986,15 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
 
         # Set up the proposal engines.
         from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
-        proposal_metadata = { }
+
+        from perses.utils.openeye import smiles_to_oemol
+        list_of_oemols = []
+        for smiles in molecules:
+            mol = smiles_to_oemol(smiles)
+            list_of_oemols.append(mol)
         proposal_engines = dict()
         for environment in environments:
-            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment])
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(list_of_oemols, system_generators[environment])
 
         # Generate systems
         systems = dict()
@@ -2487,7 +2526,6 @@ def run_abl_imatinib_resistance():
     testsystem = AblImatinibResistanceTestSystem(ncmc_nsteps=20000, mcmc_nsteps=20000)
     #for environment in testsystem.environments:
     for environment in ['vacuum-complex']:
-        print(environment)
         testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-%s.pdb' % environment, 'w')
         testsystem.exen_samplers[environment].geometry_pdbfile = open('abl-imatinib-%s-geometry-proposals.pdb' % environment, 'w')
         #testsystem.mcmc_samplers[environment].run(niterations=5)

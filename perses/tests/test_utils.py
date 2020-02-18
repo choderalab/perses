@@ -156,3 +156,11 @@ def run_oemol_test_suite(iupac='ethane'):
 
    # check that the two systems have the same numbers of atoms
    assert (oemol.NumAtoms() == smiles_oemol.NumAtoms()), "Discrepancy between molecule generated from IUPAC and SMILES"
+
+
+def test_generate_expression():
+    from perses.utils.openeye import generate_expression
+    list_to_check = ['Hybridization', 'IntType']
+    value = generate_expression(list_to_check)
+    assert value == 134217984, 'generate_expression didn\'t return expected value'
+    # TODO write test for failures too

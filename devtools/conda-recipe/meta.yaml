@@ -18,6 +18,7 @@ requirements:
   run:
     - python
     - setuptools
+    - ambertools >=19.11
     - numpy >=1.14
     - scipy
     - pymbar
@@ -40,7 +41,8 @@ requirements:
     - progressbar2
     - parmed
     - tqdm
-    #- openmm-forcefields # uncomment once openmm-forcefields package is pushed to conda
+    - dask-jobqueue
+    - openmmforcefields 
 
 about:
   home: https://github.com/choderalab/perses
