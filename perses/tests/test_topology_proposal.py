@@ -14,7 +14,7 @@ except:
 from nose.plugins.attrib import attr
 from openmmtools.constants import kB
 from perses.utils.data import get_data_filename
-from perses.utils.openeye import OEMol_to_omm_ff
+from perses.utils.openeye import OEMol_to_omm_ff, smiles_to_oemol
 from perses.utils.smallmolecules import render_atom_mapping
 from unittest import skipIf
 
@@ -23,27 +23,7 @@ temperature = 300*unit.kelvin
 kT = kB * temperature
 beta = 1.0 / kT
 
-istravis = os.environ.get('TRAVIS', None) == 'true'
-
-def generate_initial_molecule(mol_smiles):
-    """
-    Generate an oemol with a geometry
-    """
-    import openeye.oechem as oechem
-    import openeye.oeomega as oeomega
-    mol = oechem.OEMol()
-    oechem.OESmilesToMol(mol, mol_smiles)
-    mol.SetTitle("MOL")
-    # Assign aromaticity and hydrogens and hybridization.
-    oechem.OEAddExplicitHydrogens(mol)
-    oechem.OEAssignAromaticFlags(mol, oechem.OEAroModelOpenEye)
-    oechem.OEAssignHybridization(mol)
-    oechem.OETriposAtomNames(mol)
-    oechem.OETriposBondTypeNames(mol)
-    omega = oeomega.OEOmega()
-    omega.SetMaxConfs(1)
-    omega(mol)
-    return mol
+running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
 def test_small_molecule_proposals():
     """
@@ -53,13 +33,18 @@ def test_small_molecule_proposals():
     from openmoltools import forcefield_generators
     from collections import defaultdict
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
+    from perses.utils.openeye import smiles_to_oemol
     import openeye.oechem as oechem
     list_of_smiles = ['CCCC','CCCCC','CCCCCC']
+    list_of_mols = []
+    for smi in list_of_smiles:
+        mol = smiles_to_oemol(smi)
+        list_of_mols.append(mol)
     gaff_xml_filename = get_data_filename('data/gaff.xml')
     stats_dict = defaultdict(lambda: 0)
     system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
-    proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_smiles, system_generator)
-    initial_molecule = generate_initial_molecule('CCCC')
+    proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_mols, system_generator)
+    initial_molecule = smiles_to_oemol('CCCC')
     initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(initial_molecule)
     proposal = proposal_engine.propose(initial_system, initial_topology)
     for i in range(50):
@@ -80,76 +65,81 @@ def test_mapping_strength_levels(pairs_of_smiles=[('Cc1ccccc1','c1ccc(cc1)N'),('
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
     from perses.rjmc import topology_proposal
     gaff_xml_filename = get_data_filename('data/gaff.xml')
-   
+
     correct_results = {0:{'default': (1,0), 'weak':(1,0), 'strong':(4,3)},
-                       1:{'default': (7,3), 'weak':(5,1), 'strong':(7,3)},
+                       1:{'default': (7,3), 'weak':(6,2), 'strong':(7,3)},
                        2:{'default': (0,0), 'weak':(0,0), 'strong':(2,2)}}
-     
+
     mapping = ['weak','default','strong']
 
     for example in mapping:
         for index, (lig_a, lig_b) in enumerate(pairs_of_smiles):
-            initial_molecule = generate_initial_molecule(lig_a) 
-            proposed_molecule = generate_initial_molecule(lig_b)
+            initial_molecule = smiles_to_oemol(lig_a)
+            proposed_molecule = smiles_to_oemol(lig_b)
             system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
-            proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine([lig_a, lig_b], system_generator,map_strength=example)
+            proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine([initial_molecule, proposed_molecule], system_generator,map_strength=example)
             initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(initial_molecule)
             proposal = proposal_engine.propose(initial_system, initial_topology)
             print(lig_a, lig_b,'length OLD and NEW atoms',len(proposal.unique_old_atoms), len(proposal.unique_new_atoms))
             if test:
+                render_atom_mapping(f'{index}-{example}.png', initial_molecule, proposed_molecule, proposal._new_to_old_atom_map)
                 assert ( (len(proposal.unique_old_atoms), len(proposal.unique_new_atoms)) == correct_results[index][example])
-            render_atom_mapping(f'{index}-{example}.png', initial_molecule, proposed_molecule, proposal._new_to_old_atom_map) 
 
+# HBM SmallMoleculeAtomMapper is depreciated
+# HBM replace with AtomMapper test
+#@skipIf(running_on_github_actions, "Skip full test on GH Actions.")
+#def test_no_h_map():
+#   """
+#   Test that the SmallMoleculeAtomMapper can generate maps that exclude hydrogens
+#   """
+#   from perses.tests.testsystems import KinaseInhibitorsTestSystem
+#   from perses.rjmc.topology_proposal import SmallMoleculeAtomMapper
+#   import itertools
+#   from perses.tests import utils
+#   from openeye import oechem
+#   kinase = KinaseInhibitorsTestSystem()
+#   molecules = kinase.molecules
+#
+#   mapper = SmallMoleculeAtomMapper(molecules, prohibit_hydrogen_mapping=True)
+#   mapper.map_all_molecules()
+#
+#   with open('mapperkinase_permissive.json', 'w') as outfile:
+#       json_string = mapper.to_json()
+#       outfile.write(json_string)
+#
+#   molecule_smiles = mapper.smiles_list
+#   for molecule_pair in itertools.combinations(molecule_smiles, 2):
+#       index_1 = molecule_smiles.index(molecule_pair[0])
+#       index_2 = molecule_smiles.index(molecule_pair[1])
+#       mol_a = mapper.get_oemol_from_smiles(molecule_pair[0])
+#       mol_b = mapper.get_oemol_from_smiles(molecule_pair[1])
+#       #fresh_atom_maps, _ = mapper._map_atoms(mol_a, mol_b)
+#       stored_atom_maps = mapper.get_atom_maps(molecule_pair[0], molecule_pair[1])
+#
+#       for i, atom_map in enumerate(stored_atom_maps):
+#           render_atom_mapping("{}_{}_map{}_permissive.png".format(index_1, index_2, i), mol_b, mol_a, atom_map)
+#
+#
+#   mapper.generate_and_check_proposal_matrix()
 
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip full test on TRAVIS.")
-def test_no_h_map():
-    """
-    Test that the SmallMoleculeAtomMapper can generate maps that exclude hydrogens
-    """
-    from perses.tests.testsystems import KinaseInhibitorsTestSystem
-    from perses.rjmc.topology_proposal import SmallMoleculeAtomMapper
-    import itertools
-    from perses.tests import utils
-    from openeye import oechem
-    kinase = KinaseInhibitorsTestSystem()
-    molecules = kinase.molecules
-    mapper = SmallMoleculeAtomMapper(molecules, prohibit_hydrogen_mapping=True)
-    mapper.map_all_molecules()
-
-    with open('mapperkinase_permissive.json', 'w') as outfile:
-        json_string = mapper.to_json()
-        outfile.write(json_string)
-
-    molecule_smiles = mapper.smiles_list
-    for molecule_pair in itertools.combinations(molecule_smiles, 2):
-        index_1 = molecule_smiles.index(molecule_pair[0])
-        index_2 = molecule_smiles.index(molecule_pair[1])
-        mol_a = mapper.get_oemol_from_smiles(molecule_pair[0])
-        mol_b = mapper.get_oemol_from_smiles(molecule_pair[1])
-        #fresh_atom_maps, _ = mapper._map_atoms(mol_a, mol_b)
-        stored_atom_maps = mapper.get_atom_maps(molecule_pair[0], molecule_pair[1])
-
-        for i, atom_map in enumerate(stored_atom_maps):
-            render_atom_mapping("{}_{}_map{}_permissive.png".format(index_1, index_2, i), mol_b, mol_a, atom_map)
-
-
-    mapper.generate_and_check_proposal_matrix()
 
 def test_two_molecule_proposal_engine():
     """
     Test TwoMoleculeSetProposalEngine
     """
+    from perses.utils.openeye import smiles_to_oemol
+
     # Create a proposal engine for butane -> pentane
-    old_mol = generate_initial_molecule('CCCC')
-    new_mol = generate_initial_molecule('CCCCC')
+    old_mol = smiles_to_oemol('CCCC')
+    new_mol = smiles_to_oemol('CCCCC')
     from perses.rjmc import topology_proposal
     gaff_xml_filename = get_data_filename('data/gaff.xml')
     system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
     from perses.rjmc.topology_proposal import TwoMoleculeSetProposalEngine
-    proposal_engine = TwoMoleculeSetProposalEngine(old_mol, new_mol, system_generator)
+    proposal_engine = TwoMoleculeSetProposalEngine([old_mol, new_mol], system_generator)
     initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(old_mol)
     # Propose a transformation
-    proposal = proposal_engine.propose(initial_system, initial_topology)
+    proposal = proposal_engine.propose(initial_system, initial_topology, proposed_mol_id=1)
     # Check proposal
     assert (proposal.new_system.getNumParticles() == 17), "new_system (pentane) should have 17 atoms (actual: %d)" % proposal.new_system.getNumParticles()
     assert (proposal.old_system.getNumParticles() == 14), "old_system (butane) should have 14 atoms (actual: %d)" % proposal.old_system.getNumParticles()
@@ -603,7 +593,7 @@ def test_ring_breaking_detection():
     Test the detection of ring-breaking transformations.
 
     """
-    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, AtomMapper
     from openmoltools.openeye import iupac_to_oemol, generate_conformers
     molecule1 = iupac_to_oemol("naphthalene")
     molecule2 = iupac_to_oemol("benzene")
@@ -611,7 +601,7 @@ def test_ring_breaking_detection():
     molecule2 = generate_conformers(molecule2,max_confs=1)
 
     # Allow ring breaking
-    new_to_old_atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(molecule1, molecule2, allow_ring_breaking=True)
+    new_to_old_atom_map = AtomMapper([molecule1, molecule2], allow_ring_breaking=True).atom_map
     if not len(new_to_old_atom_map) > 0:
         filename = 'mapping-error.png'
         render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map)
@@ -620,8 +610,8 @@ def test_ring_breaking_detection():
         msg += str(new_to_old_atom_map)
         raise Exception(msg)
 
-    new_to_old_atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(molecule1, molecule2, allow_ring_breaking=False)
-    if not len(new_to_old_atom_map)==0:
+    new_to_old_atom_map = AtomMapper([molecule1, molecule2], allow_ring_breaking=False).atom_map
+    if not len(new_to_old_atom_map)==1: # atom mapper allows for the mapping of one hydrogen
         filename = 'mapping-error.png'
         render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map)
         msg = 'Napthalene -> benzene transformation with allow_ring_breaking=False is erroneously allowing ring breaking\n'
@@ -635,7 +625,7 @@ def test_molecular_atom_mapping():
 
     """
     from openeye import oechem
-    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, AtomMapper
     from itertools import combinations
 
     # Test mappings for JACS dataset ligands
@@ -652,7 +642,7 @@ def test_molecular_atom_mapping():
         #for (molecule1, molecule2) in combinations(molecules, 2): # too slow
         molecule1 = molecules[0]
         for i, molecule2 in enumerate(molecules[1:]):
-            new_to_old_atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(molecule1, molecule2)
+            new_to_old_atom_map = AtomMapper([molecule1, molecule2]).atom_map
             # Make sure we aren't mapping hydrogens onto anything else
             atoms1 = [atom for atom in molecule1.GetAtoms()]
             atoms2 = [atom for atom in molecule2.GetAtoms()]
@@ -676,11 +666,11 @@ def test_simple_heterocycle_mapping(iupac_pairs = [('benzene', 'pyridine')]):
     # TODO: generalize this to test for ring breakage and closure.
     from openmoltools.openeye import iupac_to_oemol
     from openeye import oechem
-    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
+    from perses.rjmc.topology_proposal import AtomMapper
 
     for iupac_pair in iupac_pairs:
         old_oemol, new_oemol = iupac_to_oemol(iupac_pair[0]), iupac_to_oemol(iupac_pair[1])
-        new_to_old_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(old_oemol, new_oemol, atom_expr=None, bond_expr=None, verbose=False, allow_ring_breaking = False)
+        new_to_old_map = AtomMapper([old_oemol, new_oemol], verbose=False, allow_ring_breaking = False).atom_map
 
         #assert that the number of ring members is consistent in the mapping...
         num_hetero_maps = 0

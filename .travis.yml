@@ -19,11 +19,9 @@ matrix:
   include:
     - env: python=3.6 CONDA_PY=36 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="latest"
     - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="latest"
-    - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="beta"
     - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="nightly"
     - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="conda-forge"
   allow_failures:
-    - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="beta"
     - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="nightly"
     - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="conda-forge"
 
@@ -69,7 +67,6 @@ script:
 env:
   global:
     - ORGNAME="omnia"
-    - OE_LICENSE="$HOME/oe_license.txt"
     - PACKAGENAME="perses"
     # Location of decrypted OpenEye license file
     - OE_LICENSE="$HOME/oe_license.txt"

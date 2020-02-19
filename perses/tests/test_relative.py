@@ -28,7 +28,7 @@ import pymbar.timeseries as timeseries
 import copy
 import pymbar
 
-istravis = os.environ.get('TRAVIS', None) == 'true'
+running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
 try:
     cache.global_context_cache.platform = openmm.Platform.getPlatformByName("Reference")
@@ -218,7 +218,7 @@ def test_simple_overlap_pairs(pairs=None):
         test_simple_overlap(pair[1],pair[0])
 
 @nottest #this is, in fact, a helper function that is called in other working tests
-@skipIf(istravis, "Skip helper function on travis")
+@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
 def test_simple_overlap(name1='pentane', name2='butane', forcefield_kwargs=None, system_generator_kwargs=None):
     """Test that the variance of the hybrid -> real perturbation in vacuum is sufficiently small.
 
@@ -247,7 +247,7 @@ def test_simple_overlap(name1='pentane', name2='butane', forcefield_kwargs=None,
             message += str(e)
             raise Exception(message)
 
-@skipIf(istravis, "Skip expensive test on travis")
+@skipIf(running_on_github_actions, "Skip expensive test on GH Actions")
 def test_hostguest_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for host-guest system in vacuum"""
     topology_proposal, current_positions, new_positions = utils.generate_vacuum_hostguest_proposal()
@@ -261,7 +261,7 @@ def test_hostguest_overlap():
             message += str(e)
             raise Exception(message)
 
-@skipIf(istravis, "Skip broken test on travis")
+@skipIf(running_on_github_actions, "Skip broken test on GH Actions")
 @nottest # at the moment, the mapping between imatinib and nilotinib is faulty
 def test_difficult_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for imatinib->nilotinib in solvent"""
@@ -408,17 +408,22 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
 
     return results, non_potential, hybrid_potential
 
-def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
+def compare_energies(mol_name="naphthalene", ref_mol_name="benzene",atom_expression=['Hybridization'],bond_expression=['Hybridization']):
     """
     Make an atom map where the molecule at either lambda endpoint is identical, and check that the energies are also the same.
     """
     from openmmtools import alchemy, states
-    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal, AtomMapper
     from perses.annihilation.relative import HybridTopologyFactory
     import simtk.openmm as openmm
 
     from perses.utils.openeye import createSystemFromIUPAC
     from openmoltools.openeye import iupac_to_oemol,generate_conformers
+
+    from perses.utils.openeye import generate_expression 
+
+    atom_expr = generate_expression(atom_expression)
+    bond_expr = generate_expression(bond_expression)
 
     mol = iupac_to_oemol(mol_name)
     mol = generate_conformers(mol, max_confs=1)
@@ -428,7 +433,7 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
     refmol = generate_conformers(refmol,max_confs=1)
 
     #map one of the rings
-    atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol, refmol)
+    atom_map = AtomMapper([mol, refmol], atom_expr=atom_expr, bond_expr=bond_expr,allow_ring_breaking=True).atom_map 
 
     #now use the mapped atoms to generate a new and old system with identical atoms mapped. This will result in the
     #same molecule with the same positions for lambda=0 and 1, and ensures a contiguous atom map

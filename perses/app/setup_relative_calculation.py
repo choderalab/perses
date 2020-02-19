@@ -53,6 +53,23 @@ def getSetupOptions(filename):
     if 'protocol-type' not in setup_options:
         setup_options['protocol-type'] = 'default'
 
+
+    if 'small_molecule_forcefield' not in setup_options:
+        setup_options['small_molecule_forcefield'] = 'gaff-2.11'
+
+    if 'small_molecule_parameters_cache' not in setup_options:
+        setup_options['small_molecule_parameters_cache'] = None
+
+    if 'spectators' not in setup_options:
+        setup_options['spectators'] = None
+
+    # Not sure why these are needed
+    # TODO: Revisit these?
+    if 'neglect_angles' not in setup_options:
+        setup_options['neglect_angles'] = False
+    if 'anneal_1,4s' not in setup_options:
+        setup_options['anneal_1,4s'] = False
+
     if 'run_type' not in setup_options:
         _logger.info(f"\t\t\trun_type is not specified; default to None")
         setup_options['run_type'] = None
@@ -72,6 +89,8 @@ def getSetupOptions(filename):
         if 'beta_factor' not in setup_options:
             setup_options['beta_factor'] = 0.8
             _logger.info(f"\t\t\tbeta_factor not specified: default to 0.8.")
+        if 'n_replicas' not in setup_options:
+            setup_options['n_replicas'] = 1
     elif setup_options['fe_type'] == 'repex':
         _logger.info(f"\t\tfe_type: repex")
         if 'offline-freq' not in setup_options:
@@ -124,7 +143,7 @@ def getSetupOptions(filename):
                     raise Exception(f"{path} could not be found.  Aborting!")
         elif setup_options['run_type'] == 'None':
             setup_options['run_type'] = None
-        elif setup_options['run_type'] not in ['None', 'anneal', 'equilibrate']:
+        elif str(setup_options['run_type']) not in ['None', 'anneal', 'equilibrate']:
             raise Exception(f"'run_type' must be None, 'anneal', or 'equilibrate'; input was specified as {setup_options['run_type']} with type {type(setup_options['run_type'])}")
 
         #to instantiate the particles:
@@ -197,8 +216,20 @@ def getSetupOptions(filename):
     else:
         _logger.info(f"\t'neglect_angles' detected: {setup_options['neglect_angles']}.")
 
-    if 'mapping_strength' not in setup_options:
-        setup_options['mapping_strength'] = 'default'
+    setup_options['atom_expr'] = None
+    if 'atom_expression' in setup_options:
+        # need to convert the list to Integer
+        from perses.utils.openeye import generate_expression
+        setup_options['atom_expr'] = generate_expression(setup_options['atom_expression'])
+        
+    setup_options['bond_expr'] = None
+    if 'bond_expression' in setup_options:
+        # need to convert the list to Integer
+        from perses.utils.openeye import generate_expression
+        setup_options['bond_expr'] = generate_expression(setup_options['bond_expression'])
+
+    if 'map_strength' not in setup_options:
+        setup_options['map_strength'] = 'default'
 
     if 'anneal_1,4s' not in setup_options:
         setup_options['anneal_1,4s'] = False
@@ -208,10 +239,10 @@ def getSetupOptions(filename):
         setup_options['softcore_v2'] = False
         _logger.info(f"\t'softcore_v2' not specified: default to 'False'")
 
-    _logger.info(f"\ttrajectory_directory detected: {trajectory_directory}.  making dir...")
-    if setup_options['run_type'] != 'anneal':
-        assert (os.path.exists(trajectory_directory) == False), 'Output trajectory directory already exists. Refusing to overwrite'
-        os.makedirs(trajectory_directory)
+    _logger.info(f"\tCreating '{trajectory_directory}'...")
+    assert (not os.path.exists(trajectory_directory)), f'Output trajectory directory "{trajectory_directory}" already exists. Refusing to overwrite'
+    os.makedirs(trajectory_directory)
+
 
     return setup_options
 
@@ -264,7 +295,7 @@ def run_setup(setup_options):
 
     if "timestep" in setup_options:
         timestep = setup_options['timestep'] * unit.femtoseconds
-        _logger.info(f"\ttimestep: {timestep}fs.")
+        _logger.info(f"\ttimestep: {timestep}.")
     else:
         timestep = 1.0 * unit.femtoseconds
         _logger.info(f"\tno timestep detected: setting default as 1.0fs.")
@@ -317,9 +348,12 @@ def run_setup(setup_options):
         fe_setup = RelativeFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files,phases=phases,
                                           protein_pdb_filename=protein_pdb_filename,
                                           receptor_mol2_filename=receptor_mol2, pressure=pressure,
-                                          temperature=temperature, solvent_padding=solvent_padding_angstroms,
-                                          atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'])
-        _logger.info(f"\n\n\n")
+                                          temperature=temperature, solvent_padding=solvent_padding_angstroms, spectator_filenames=setup_options['spectators'],
+                                          map_strength=setup_options['map_strength'],
+                                          atom_expr=setup_options['atom_expr'], bond_expr=setup_options['bond_expr'],
+                                          atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
+                                          small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
+                                          trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'])
 
         _logger.info(f"\twriting pickle output...")
         with open(os.path.join(os.getcwd(), trajectory_directory, setup_pickle_file), 'wb') as f:
@@ -503,7 +537,7 @@ def run_setup(setup_options):
                                                hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
                                                gamma0=setup_options['gamma0'])
-                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
+                hss[phase].setup(n_states=n_states, n_replicas=n_replicas, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
             elif setup_options['fe_type'] == 'repex':
                 hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
                                                                                              collision_rate=5.0 / unit.picosecond,

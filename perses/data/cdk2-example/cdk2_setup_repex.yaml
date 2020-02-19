@@ -1,0 +1,69 @@
+# Relative path to protein PDB file (with no missing heavy atoms)
+protein_pdb: CDK2_fixed_nohet.pdb
+
+# Relative path to ligand SDF file
+ligand_file: CDK2_ligands.sdf
+
+# Indices of the ligands in the ligand_file between which we should compute a relative free energy
+# (zero-indexed)
+old_ligand_index: 14
+new_ligand_index: 15
+
+# OpenMM ffxml force field files installed via the openmm-forcefields package
+# for biopolymers and solvents.
+# Note that small molecule force field files should NOT be included here.
+forcefield_files:
+    - amber/protein.ff14SB.xml # ff14SB protein force field
+    - amber/tip3p_standard.xml # TIP3P and recommended monovalent ion parameters
+    - amber/tip3p_HFE_multivalent.xml # for divalent ions
+
+# Small molecule force field
+# We recommnd one of ['gaff-1.81', 'gaff-2.11', 'smirnoff99Frosst-1.1.0', 'openff-1.0.0']
+small_molecule_forcefield: gaff-2.11
+
+# Small molecule parameters cache
+# If specified, this will cache small molecule parameters so they do not need to be regenerated.
+# The cache can contain parameters for many different choices of 'small_molecule_forcefield' without fear of collisions
+small_molecule_parameters_cache: cdk2-cache.json
+
+# Thermodynamic state and system setup information
+pressure: 1.0 # atmospheres
+temperature: 300.0 # kelvin
+solvent_padding: 9.0 # angstroms
+
+# Pickle file to be generated to save the setup object
+save_setup_pickle_as: fesetup_hbonds.pkl
+
+# Number of equilibrium steps per move application
+n_steps_per_move_application: 50
+
+#the type of free energy calculation.
+#currently, this could be either nonequilibrium or sams
+fe_type: repex
+
+#checkpoint interval in iterations:
+checkpoint_interval: 250
+
+#number of iterations
+n_cycles: 2
+
+#The number of SAMS states
+n_states: 6
+
+# Number of equilibration iterations:
+n_equilibration_iterations: 0
+
+# Destination for trajectories
+trajectory_directory: output
+
+#how to prefix the trajectory files (project-specific name)
+trajectory_prefix: out
+
+#which atoms to save (MDTraj selection syntax)
+atom_selection: not water
+
+#which phases do we want to run. Any combination or number of complex, solvent or vacuum will be accepted
+phases:
+    - complex
+    - solvent
+    - vacuum

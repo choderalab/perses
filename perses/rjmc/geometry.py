@@ -19,7 +19,7 @@ from openeye import oechem, oeomega
 ################################################################################
 
 import logging
-logging.basicConfig(level = logging.NOTSET)
+logging.basicConfig(level=logging.NOTSET)
 _logger = logging.getLogger("geometry")
 _logger.setLevel(logging.INFO)
 
@@ -780,18 +780,19 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         #     #then the first one is the normal growth torsion force object and the second is the added torsion force object used to handle chirality and ring-closing constraints
         #     no_nb_system.removeForce(max(custom_torsion_forces))
 
-        forces = no_nb_system.getForces()
-        _logger.info(f"\tfinal no-nonbonded final system forces {[force.__class__.__name__ for force in list(no_nb_system.getForces())]}")
+        forces = { no_nb_system.getForce(index).__class__.__name__ : no_nb_system.getForce(index) for index in range(no_nb_system.getNumForces()) }
+        _logger.info(f"\tfinal no-nonbonded final system forces {forces.keys()}")
+
         #bonds
-        bond_forces = no_nb_system.getForce(0)
+        bond_forces = forces['HarmonicBondForce']
         _logger.info(f"\tthere are {bond_forces.getNumBonds()} bond forces in the no-nonbonded final system")
 
         #angles
-        angle_forces = no_nb_system.getForce(1)
+        angle_forces = forces['HarmonicAngleForce']
         _logger.info(f"\tthere are {angle_forces.getNumAngles()} angle forces in the no-nonbonded final system")
 
         #torsions
-        torsion_forces = no_nb_system.getForce(2)
+        torsion_forces = forces['PeriodicTorsionForce']
         _logger.info(f"\tthere are {torsion_forces.getNumTorsions()} torsion forces in the no-nonbonded final system")
 
 

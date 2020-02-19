@@ -21,7 +21,7 @@ kT = kB * temperature # unit-bearing thermal energy
 beta = 1.0/kT # unit-bearing inverse thermal energy
 CARBON_MASS = 12.01 # float (implicitly in units of AMU)
 REFERENCE_PLATFORM = openmm.Platform.getPlatformByName("Reference")
-istravis = os.environ.get('TRAVIS', None) == 'true'
+running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 #########################################
 # Tests
 #########################################

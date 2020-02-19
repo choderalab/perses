@@ -32,7 +32,12 @@ from perses.rjmc import coordinate_numba
 from perses.rjmc.geometry import check_dimensionality
 from perses.utils.data import get_data_filename
 
+
 from nose.tools import nottest #protein mutations will be omitted (for the time being)
+
+################################################################################
+# TODO: Look into this for later
+# https://stackoverflow.com/questions/37091673/silence-tqdms-output-while-running-tests-or-running-the-code-via-cron
 ################################################################################
 # Suppress matplotlib logging
 ################################################################################
@@ -57,7 +62,7 @@ beta = 1.0/kT # unit-bearing inverse thermal energy
 CARBON_MASS = 12.01 # float (implicitly in units of AMU)
 REFERENCE_PLATFORM = openmm.Platform.getPlatformByName("Reference")
 proposal_test = namedtuple("proposal_test", ["topology_proposal", "current_positions"])
-istravis = os.environ.get('TRAVIS', None) == 'true'
+running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 LOGP_FORWARD_THRESHOLD = 1e3
 
 ################################################################################
@@ -862,21 +867,6 @@ def generate_molecule_from_smiles(smiles, idx=0):
     omega(mol)
     return mol
 
-def generate_initial_molecule(iupac_name):
-    """
-    Generate an oemol with a geometry
-    """
-    mol = oechem.OEMol()
-    oeiupac.OEParseIUPACName(mol, iupac_name)
-    oechem.OEAddExplicitHydrogens(mol)
-    oechem.OETriposAtomNames(mol)
-    oechem.OETriposBondTypeNames(mol)
-    omega = oeomega.OEOmega()
-    omega.SetStrictStereo(False)
-    omega.SetMaxConfs(1)
-    omega(mol)
-    return mol
-
 def oemol_to_openmm_system(oemol, molecule_name=None, forcefield=['data/gaff.xml']):
     from perses.rjmc import topology_proposal
     from openmoltools import forcefield_generators
@@ -930,10 +920,10 @@ def align_molecules(mol1, mol2):
 
 @attr('advanced')
 @nottest
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip advanced test on TRAVIS")
+@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 def test_mutate_quick(): # TODO: fix protein mutations
     """
-    Abbreviated version of test_mutate_all for travis.
+    Abbreviated version of test_mutate_all for GH Actions.
     """
     import perses.rjmc.topology_proposal as topology_proposal
     import perses.rjmc.geometry as geometry
@@ -994,7 +984,7 @@ def test_mutate_quick(): # TODO: fix protein mutations
 
 @attr('advanced')
 @nottest
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip advanced test on TRAVIS")
+@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 def test_mutate_from_all_to_all(): # TODO: fix protein mutations
     """
     Make sure mutations are successful between every possible pair of before-and-after residues
@@ -1060,7 +1050,7 @@ def test_mutate_from_all_to_all(): # TODO: fix protein mutations
 
 @attr('advanced')
 @nottest
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip advanced test on TRAVIS")
+@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 def test_propose_lysozyme_ligands(): # TODO: fix protein mutations
     """
     Try proposing geometries for all T4 ligands from all T4 ligands
@@ -1073,7 +1063,7 @@ def test_propose_lysozyme_ligands(): # TODO: fix protein mutations
 
 @attr('advanced')
 @nottest
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip advanced test on TRAVIS")
+@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 def test_propose_kinase_inhibitors(): # TODO: fix protein mutations
     from perses.tests.testsystems import KinaseInhibitorsTestSystem
     testsystem = KinaseInhibitorsTestSystem()
@@ -1220,13 +1210,14 @@ def run_geometry_engine(index=0):
     import logging
     logging.basicConfig(level=logging.DEBUG)
     import copy
+    from perses.utils.openeye import iupac_to_oemol
     molecule_name_1 = 'benzene'
     molecule_name_2 = 'biphenyl'
     #molecule_name_1 = 'imatinib'
     #molecule_name_2 = 'erlotinib'
 
-    molecule1 = generate_initial_molecule(molecule_name_1)
-    molecule2 = generate_initial_molecule(molecule_name_2)
+    molecule1 = iupac_to_oemol(molecule_name_1)
+    molecule2 = iupac_to_oemol(molecule_name_2)
     new_to_old_atom_mapping = align_molecules(molecule1, molecule2)
 
     sys1, pos1, top1 = oemol_to_openmm_system(molecule1, molecule_name_1)
@@ -1293,9 +1284,10 @@ def test_existing_coordinates():
     """
     for each torsion, calculate position of atom1
     """
+    from perses.utils.openeye import iupac_to_oemol
     ATOM_POSITION_TOLERANCE = 1e-6
     molecule_name_2 = 'butane'
-    molecule2 = generate_initial_molecule(molecule_name_2)
+    molecule2 = iupac_to_oemol(molecule_name_2)
     sys, pos, top = oemol_to_openmm_system(molecule2, molecule_name_2)
     import perses.rjmc.geometry as geometry
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
@@ -1317,11 +1309,10 @@ def run_logp_reverse():
     """
     molecule_name_1 = 'erlotinib'
     molecule_name_2 = 'imatinib'
-    #molecule_name_1 = 'benzene'
-    #molecule_name_2 = 'biphenyl'
+    from perses.utils.openeye import iupac_to_oemol
 
-    molecule1 = generate_initial_molecule(molecule_name_1)
-    molecule2 = generate_initial_molecule(molecule_name_2)
+    molecule1 = iupac_to_oemol(molecule_name_1)
+    molecule2 = iupac_to_oemol(molecule_name_2)
     new_to_old_atom_mapping = align_molecules(molecule1, molecule2)
 
     sys1, pos1, top1 = oemol_to_openmm_system(molecule1, molecule_name_1)
@@ -1352,35 +1343,32 @@ def _get_capped_amino_acid(amino_acid='ALA'):
     saveamberparm system {amino_acid}.prmtop {amino_acid}.inpcrd
     quit
     """.format(amino_acid=amino_acid)
-    cwd = os.getcwd()
-    temp_dir = tempfile.mkdtemp()
-    os.chdir(temp_dir)
-    tleap_file = open('tleap_commands', 'w')
-    tleap_file.writelines(tleapstr)
-    tleap_file.close()
-    tleap_cmd_str = "tleap -f %s " % tleap_file.name
+    from perses.tests.utils import enter_temp_directory
+    with enter_temp_directory() as tmpdirname:
+        tleap_file = open('tleap_commands', 'w')
+        tleap_file.writelines(tleapstr)
+        tleap_file.close()
+        tleap_cmd_str = "tleap -f %s " % tleap_file.name
 
-    #call tleap, log output to logger
-    output = getoutput(tleap_cmd_str)
-    logging.debug(output)
+        #call tleap, log output to logger
+        output = getoutput(tleap_cmd_str)
+        logging.debug(output)
 
-    prmtop = app.AmberPrmtopFile("{amino_acid}.prmtop".format(amino_acid=amino_acid))
-    inpcrd = app.AmberInpcrdFile("{amino_acid}.inpcrd".format(amino_acid=amino_acid))
-    topology = prmtop.topology
-    positions = inpcrd.positions
+        prmtop = app.AmberPrmtopFile("{amino_acid}.prmtop".format(amino_acid=amino_acid))
+        inpcrd = app.AmberInpcrdFile("{amino_acid}.inpcrd".format(amino_acid=amino_acid))
+        topology = prmtop.topology
+        positions = inpcrd.positions
 
-    debug = False
-    if debug:
-        system = prmtop.createSystem()
-        integrator = openmm.VerletIntegrator(1)
-        context = openmm.Context(system, integrator)
-        context.setPositions(positions)
-        openmm.LocalEnergyMinimizer.minimize(context)
-        state = context.getState(getEnergy=True)
-        print("%s energy: %s" % (amino_acid, str(state.getPotentialEnergy())))
+        debug = False
+        if debug:
+            system = prmtop.createSystem()
+            integrator = openmm.VerletIntegrator(1)
+            context = openmm.Context(system, integrator)
+            context.setPositions(positions)
+            openmm.LocalEnergyMinimizer.minimize(context)
+            state = context.getState(getEnergy=True)
+            print("%s energy: %s" % (amino_acid, str(state.getPotentialEnergy())))
 
-    os.chdir(cwd)
-    shutil.rmtree(temp_dir)
     return topology, positions
 
 def _tleap_all():
@@ -1786,7 +1774,7 @@ class AnalyticalBeadSystems(object):
         final_positions = []
         logPs = np.zeros([n_replicates, 4])
         _geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=10000, n_angle_divisions=1800, n_torsion_divisions=3600, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = True)
-        for _replicate_idx in tqdm.trange(n_replicates):
+        for _replicate_idx in tqdm.trange(n_replicates, disable=running_on_github_actions):
             _old_positions = configurations_initial[_replicate_idx, :, :]
             _new_positions, _lp = _geometry_engine.propose(topology_proposal, _old_positions, beta)
             _lp_reverse = _geometry_engine.logp_reverse(topology_proposal, _new_positions, _old_positions, beta)
@@ -1830,7 +1818,7 @@ class AnalyticalBeadSystems(object):
 
         _iid_positions_A = unit.Quantity(np.zeros([self.num_iterations, self.transformation[0],3]), unit=unit.nanometers)
 
-        for _iteration in tqdm.trange(self.num_iterations):
+        for _iteration in tqdm.trange(self.num_iterations, disable=running_on_github_actions):
             _integrator.step(1000)
             _state=_ctx.getState(getPositions=True)
             _iid_positions_A[_iteration,:,:]=_state.getPositions(asNumpy=True)
@@ -2008,14 +1996,14 @@ def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'pro
     """
     from openmoltools import forcefield_generators
     from perses.rjmc.topology_proposal import SystemGenerator, TopologyProposal, SmallMoleculeSetProposalEngine
-    from perses.utils.openeye import createSystemFromIUPAC
-    from openmoltools.openeye import iupac_to_oemol,generate_conformers
+    from perses.utils.openeye import createSystemFromIUPAC, iupac_to_oemol
+    from openmoltools.openeye import generate_conformers
     from perses.utils.data import get_data_filename
     from perses.rjmc import geometry
     from perses.utils.smallmolecules import render_atom_mapping
     import tqdm
 
-    current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
+    current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name,title=current_mol_name[0:4])
     proposed_mol = iupac_to_oemol(proposed_mol_name)
     proposed_mol = generate_conformers(proposed_mol,max_confs=1)
 
@@ -2032,17 +2020,17 @@ def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'pro
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
     geometry_engine = geometry.FFAllAngleGeometryEngine(n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, neglect_angles = neglect_angles)
     proposal_engine = SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
+        [current_mol, proposed_mol], system_generator, residue_name=current_mol_name[0:4])
 
     #generate topology proposal
-    topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol=current_mol, proposed_mol=proposed_mol)
+    topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol_id=0, proposed_mol_id=1)
 
     # show atom mapping
     filename = str(current_mol_name)+str(proposed_mol_name)+'.pdf'
-    render_atom_mapping(filename,current_mol,proposed_mol,topology_proposal.new_to_old_atom_map)
+    render_atom_mapping(filename, current_mol, proposed_mol, topology_proposal.new_to_old_atom_map)
 
     total_works = []
-    for _ in tqdm.trange(num_iterations):
+    for _ in tqdm.trange(num_iterations, disable=running_on_github_actions):
         #generate new positions with geometry engine
         new_positions, logp_forward = geometry_engine.propose(topology_proposal, pos_old, beta)
         logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos_old, beta)
