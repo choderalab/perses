@@ -42,7 +42,9 @@ requirements:
     - parmed
     - tqdm
     - dask-jobqueue
-    - openmmforcefields 
+    - openmmforcefields
+  - pip:
+    - codecov
 
 about:
   home: https://github.com/choderalab/perses
