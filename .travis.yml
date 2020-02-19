@@ -64,6 +64,8 @@ script:
   # Test the package
   - cd devtools && nosetests perses --nocapture --verbosity=3 --with-timer -a '!advanced' && cd ..
 
+  - nosetests  --cov=perses perses/tests/
+
 env:
   global:
     - ORGNAME="omnia"
