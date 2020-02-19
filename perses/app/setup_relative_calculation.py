@@ -551,7 +551,8 @@ def run_setup(setup_options):
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 
-if __name__ == "__main__":
+
+def run():
     _logger.info("Beginning Setup...")
     try:
        yaml_filename = sys.argv[1]
@@ -753,3 +754,6 @@ if __name__ == "__main__":
                 _logger.info(f"\n\n")
 
                 _logger.info(f"\t\tFinished phase {phase}")
+
+if __name__ == "__main__":
+    run()
