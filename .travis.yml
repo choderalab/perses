@@ -75,5 +75,6 @@ env:
     - secure: "RRvLDPu9mPoNaRWIseaJdgShOXI+PaHPWKAIJvW7VYWcAS6iEN7W4Fj4zD5hkocQxc3ou97EtkgID+ApH10bSGKxCykyU0urSY9jsSOJX2m0AE19X0dVr6ySIQkwCWE6kUMVlvQYQo80fM2EMElD+btr4G9XBAhArAO7HvZHkoQ="
 
 after_success:
+  - codecov
   - echo "after_success"
   - if [ "$TRAVIS_SECURE_ENV_VARS" == true ]; then source devtools/travis-ci/after_success.sh; fi
