@@ -229,9 +229,12 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     oechem.OEGenerate2DCoordinates(rmol)
     rdisp = oedepict.OE2DMolDisplay(rmol, opts)
     
-    oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEPink),oedepict.OEHighlightStyle_Stick, core1)
-    oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEPurple),oedepict.OEHighlightStyle_Stick, core2)
-    oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEGreen),oedepict.OEHighlightStyle_Stick, core_change)
+    if core1.NumAtoms() != 0:
+        oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEPink),oedepict.OEHighlightStyle_Stick, core1)
+    if core2.NumAtoms() != 0:
+        oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEPurple),oedepict.OEHighlightStyle_Stick, core2)
+    if core_change.NumAtoms() != 0:
+        oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEGreen),oedepict.OEHighlightStyle_Stick, core_change)
     oedepict.OERenderMolecule(ofs, ext, rdisp)
     ofs.close()
 
