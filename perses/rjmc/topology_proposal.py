@@ -1410,7 +1410,6 @@ class PolymerProposalEngine(ProposalEngine):
         old_oemol_res = createOEMolFromSDF(resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{old_res_name}.pdb")), add_hydrogens = True)
         new_oemol_res = createOEMolFromSDF(resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{new_res_name}.pdb")), add_hydrogens = True)
 
-<<<<<<< HEAD
 
         #assert the names are unique:
         if not len(set([atom.GetName() for atom in old_oemol_res.GetAtoms()])) == len([atom.GetName() for atom in old_oemol_res.GetAtoms()]):
@@ -1542,17 +1541,6 @@ class PolymerProposalEngine(ProposalEngine):
 
             #and all of the environment atoms should already be handled
         return adjusted_atom_map, old_res_to_oemol_map, new_res_to_oemol_map, local_atom_map_stereo_sidechain, old_oemol_res, new_oemol_res, old_oemol_res_copy, new_oemol_res_copy
-=======
-            old_oemol_res = FFAllAngleGeometryEngine._oemol_from_residue(old_res)
-            new_oemol_res = FFAllAngleGeometryEngine._oemol_from_residue(new_res)
-            # local_atom_map : dict, key : index of atom in new residue, value : index of atom in old residue.
-            local_atom_map = self._get_mol_atom_matches(old_oemol_res, new_oemol_res, first_atom_index_old, first_atom_index_new)
-            for backbone_name in ['CA','N']:
-                new_index, old_index = match_backbone(old_residues[index], modified_residues[index], backbone_name)
-                local_atom_map[new_index] = old_index
-            atom_map.update(local_atom_map)
-        return atom_map
->>>>>>> master
 
     def _get_mol_atom_matches(self, current_molecule, proposed_molecule, first_atom_index_old, first_atom_index_new):
         """
