@@ -43,8 +43,8 @@ requirements:
     - tqdm
     - dask-jobqueue
     - openmmforcefields
-  - pip:
-    - codecov
+#  - pip:
+#    - codecov
 
 about:
   home: https://github.com/choderalab/perses
