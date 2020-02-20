@@ -213,7 +213,7 @@ def test_specify_allowed_mutants():
     system = ff.createSystem(modeller.topology)
     chain_id = 'A'
 
-    allowed_mutations = [[('5','GLU')],[('5','ASN'),('14','PHE')]]
+    allowed_mutations = [('5','GLU'),('5','ASN'),('14','PHE')]
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
@@ -259,10 +259,10 @@ def test_propose_self():
         if chain.id == chain_id:
             residues = chain._residues
     mutant_res = np.random.choice(residues)
-    allowed_mutations = [[(mutant_res.id,mutant_res.name)]]
+    allowed_mutations = [(mutant_res.id,mutant_res.name)]
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, allowed_mutations=allowed_mutations, verbose=True)
+    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, allowed_mutations=allowed_mutations)
     print('Self mutation:')
     pm_top_proposal = pm_top_engine.propose(system, modeller.topology)
     assert pm_top_proposal.old_topology == pm_top_proposal.new_topology
@@ -305,7 +305,7 @@ def test_alanine_dipeptide_map():
     modeller = app.Modeller(pdbfile.topology, pdbfile.positions)
 
     ff_filename = "amber99sbildn.xml"
-    allowed_mutations = [[('2', 'PHE')]]
+    allowed_mutations = [('2', 'PHE')]
 
     ff = app.ForceField(ff_filename)
     system = ff.createSystem(modeller.topology)
@@ -380,9 +380,9 @@ def test_mutate_from_every_amino_to_every_other():
     current_topology = modeller.topology
     current_positions = modeller.positions
 
-    pm_top_engine._allowed_mutations = [list()]
+    pm_top_engine._allowed_mutations = list()
     for k, proposed_amino in enumerate(aminos):
-        pm_top_engine._allowed_mutations[0].append((str(k+2),proposed_amino))
+        pm_top_engine._allowed_mutations.append((str(k+2),proposed_amino))
     pm_top_proposal = pm_top_engine.propose(current_system, current_topology)
     current_system = pm_top_proposal.new_system
     current_topology = pm_top_proposal.new_topology
@@ -426,7 +426,7 @@ def test_mutate_from_every_amino_to_every_other():
         original_residue_name = chain._residues[proposed_location].name
         matching_amino_found = 0
         for proposed_amino in aminos:
-            pm_top_engine._allowed_mutations = [[(str(proposed_location+1),proposed_amino)]]
+            pm_top_engine._allowed_mutations = [(str(proposed_location+1),proposed_amino)]
             new_topology = app.Topology()
             append_topology(new_topology, current_topology)
             old_system = current_system
@@ -670,7 +670,7 @@ def test_simple_heterocycle_mapping(iupac_pairs = [('benzene', 'pyridine')]):
 
     for iupac_pair in iupac_pairs:
         old_oemol, new_oemol = iupac_to_oemol(iupac_pair[0]), iupac_to_oemol(iupac_pair[1])
-        new_to_old_map = AtomMapper([old_oemol, new_oemol], verbose=False, allow_ring_breaking = False).atom_map
+        new_to_old_map = AtomMapper([old_oemol, new_oemol], allow_ring_breaking = False).atom_map
 
         #assert that the number of ring members is consistent in the mapping...
         num_hetero_maps = 0
