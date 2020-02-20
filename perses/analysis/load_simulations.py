@@ -84,6 +84,7 @@ class Simulation(object):
         else:
             print('Both solvent and complex legs need to be run for binding free energies')
 
+    @staticmethod
     def _kt_to_kcal(x):
         q = unit.quantity.Quantity(x, unit = unit.kilojoules_per_mole)
         return q.in_units_of(unit.kilocalories_per_mole)._value
