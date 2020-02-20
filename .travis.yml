@@ -62,9 +62,7 @@ script:
   - if [ "$OPENMM" == "nightly" ]; then echo "Using OpenMM nightly dev build."; conda install --yes -c omnia-dev openmm; fi
   - if [ "$OPENMM" == "conda-forge" ]; then echo "Using OpenMM conda-forge testing build."; conda install --yes -c conda-forge/label/testing openmm; fi
   # Test the package
-  - cd devtools && nosetests perses --nocapture --verbosity=3 --with-timer -a '!advanced' && cd ..
-
-  - nosetests  --cov=perses perses/tests/
+  - cd devtools && nosetests perses --with-coverage --verbosity=3 --with-timer -a '!advanced' && cd ..
 
 env:
   global:
