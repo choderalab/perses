@@ -346,7 +346,7 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
             }
         proposal_engines = dict()
         chain_id = ' '
-        allowed_mutations = [[('2','PHE')]]
+        allowed_mutations = [('2','PHE')]
         proposal_metadata = {"always_change":True}
         for environment in environments:
             proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations, always_change=True)
@@ -560,15 +560,15 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
 
         # Set up the proposal engines.
         allowed_mutations = [
-            [('99','GLY')],
-            [('102','GLN')],
-            [('102','HIS')],
-            [('102','GLU')],
-            [('102','LEU')],
-            [('153','ALA')],
-            [('108','VAL')],
-            [('99','GLY'),('108','VAL')]
-        ]
+            ('99','GLY'),
+            ('102','GLN'),
+            ('102','HIS'),
+            ('102','GLU'),
+            ('102','LEU'),
+            ('153','ALA'),
+            ('108','VAL'),
+            ('99','GLY'),
+            ('108','VAL')]
         from perses.rjmc.topology_proposal import PointMutationEngine
         proposal_metadata = { 'ffxmls' : ['amber99sbildn.xml'] }
         proposal_engines = dict()
@@ -737,7 +737,7 @@ class MybTestSystem(PersesTestSystem):
         allowed_mutations = list()
         for resid in ['91', '99', '103', '105']:
             for resname in ['ALA', 'LEU', 'VAL', 'PHE', 'CYS', 'THR', 'TRP', 'TYR', 'GLU', 'ASP', 'LYS', 'ARG', 'ASN']:
-                allowed_mutations.append([(resid, resname)])
+                allowed_mutations.append((resid, resname))
         from perses.rjmc.topology_proposal import PointMutationEngine
         proposal_metadata = {
             'ffxmls' : ['amber99sbildn.xml'], # take sidechain definitions from this ffxml file
@@ -911,7 +911,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
         # TODO: Expand this beyond the ATP binding site
         for resid in ['22', '37', '52', '55', '65', '81', '125', '128', '147', '148']:
             for resname in ['ALA', 'CYS', 'ASP', 'GLU', 'PHE', 'HIS', 'ILE', 'LYS', 'LEU', 'MET', 'ASN', 'PRO', 'GLN', 'ARG', 'SER', 'THR', 'VAL', 'TRP', 'TYR']:
-                allowed_mutations.append([(resid, resname)])
+                allowed_mutations.append((resid, resname))
         from perses.rjmc.topology_proposal import PointMutationEngine
         proposal_metadata = { 'ffxmls' : ['amber99sbildn.xml'] }
         proposal_engines = dict()
