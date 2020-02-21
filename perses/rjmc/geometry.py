@@ -395,7 +395,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             growth_system_generator = GeometrySystemGenerator(top_proposal.new_system,
                                                               torsion_proposal_order,
                                                               omitted_bonds = omitted_bonds,
-                                                              networkx_structure = top_proposal._new_networkx_residue,
+                                                              reference_topology = top_proposal._new_topology,
                                                               global_parameter_name=growth_parameter_name,
                                                               reference_topology=top_proposal.new_topology,
                                                               use_sterics=self.use_sterics,
@@ -419,7 +419,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             growth_system_generator = GeometrySystemGenerator(top_proposal.old_system,
                                                               torsion_proposal_order,
                                                               omitted_bonds = omitted_bonds,
-                                                              networkx_structure = top_proposal._old_networkx_residue,
+                                                              reference_topology = top_proposal._old_topology,
                                                               global_parameter_name=growth_parameter_name,
                                                               reference_topology=top_proposal.old_topology,
                                                               use_sterics=self.use_sterics,
@@ -1749,7 +1749,7 @@ class GeometrySystemGenerator(object):
                  reference_system,
                  torsion_proposal_order,
                  omitted_bonds,
-                 networkx_structure,
+                 reference_topology,
                  global_parameter_name='growth_index',
                  add_extra_torsions = True,
                  add_extra_angles = False,
@@ -1769,7 +1769,7 @@ class GeometrySystemGenerator(object):
             The order in which the torsion indices will be proposed
         omitted_bonds : list of tuple of int
             list of atom index tuples (corresponding to reference_topology atoms) which have been omitted in the atom proposal
-        networkx_structure : NetworkXMolecule object
+        reference_topology : simtk.openmm.topology.Topology (augmented)
             used to probe the topology for rotamers, chiral centers, etc.
         global_parameter_name : str, optional, default='growth_index'
             The name of the global context parameter
@@ -1809,7 +1809,7 @@ class GeometrySystemGenerator(object):
         self.extra_torsion_terms = {}
         self.extra_angle_terms = {}
 
-        self.networkx_structure = networkx_structure
+        self.reference_topology = reference_topology
 
         # Check that we're not using the reserved name
         if global_parameter_name == 'growth_idx':
@@ -2184,7 +2184,7 @@ class GeometrySystemGenerator(object):
         # Note that only torsions involving heavy atoms are enumerated here.
         rotor = oechem.OEIsRotor()
         torsion_predicate = oechem.OENotBond(rotor)
-        non_rotor_torsions = list(oechem.OEGetTorsions(self.networkx_structure.mol_oemol, torsion_predicate))
+        non_rotor_torsions = list(oechem.OEGetTorsions(self.reference_topology.residue_oemol, torsion_predicate))
         relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
 
         #now, for each torsion, extract the set of indices and the angle
@@ -2199,9 +2199,9 @@ class GeometrySystemGenerator(object):
                                torsion.b.GetIdx(),
                                torsion.c.GetIdx(),
                                torsion.d.GetIdx()]
-            if all(_idx in list(self.networkx_structure.reverse_residue_to_oemol_map.keys()) for _idx in oe_atom_indices):
+            if all(_idx in list(self.reference_topology.reverse_residue_to_oemol_map.keys()) for _idx in oe_atom_indices):
                 #then every atom in the oemol lives in the openmm topology/residue, so we can consider it
-                topology_index_map = [self.networkx_structure.reverse_residue_to_oemol_map[q] for q in oe_atom_indices]
+                topology_index_map = [self.reference_topology.reverse_residue_to_oemol_map[q] for q in oe_atom_indices]
             else:
                 topology_index_map = None
 
@@ -2240,17 +2240,18 @@ class GeometrySystemGenerator(object):
         #render a 3d structure: note that this fucks up the rjmc proposal (since we cannot enumerate the number of possible conformers)
 
         #add the improper torsions associated with the chiral center
-        coords = self.networkx_structure.mol_oemol.GetCoords()
+        coords = self.reference_topology.residue_oemol.GetCoords()
+        networkx_graph = self.reference_topology._get_networkx_molecule()
         #CIP_perceptions = {0: 'R', 1: 'S'}
         #iterate over all of the atoms with chiral centers
-        _logger.debug(f"\t\t\t\tnodes: {self.networkx_structure.graph.nodes()}")
-        for _node in self.networkx_structure.graph.nodes(data = True):
+        _logger.debug(f"\t\t\t\tnodes: {networkx_graph.nodes()}")
+        for _node in networkx_graph.nodes(data = True):
             _logger.debug(f"\t\t\t\tquerying node {_node[0]}")
             _logger.debug(f"\t\t\t\tnode attributes: {_node[1]}")
             if _node[1]['oechem_atom'].IsChiral():
                 _logger.debug(f"\t\t\t\tnode is chiral...")
                 assert(_node[1]['oechem_atom']).HasStereoSpecified(), f"atom {_node[1]['oechem_atom']} is chiral, but the chirality is not specified."
-                _stereo = stereo = oechem.OEPerceiveCIPStereo(self.networkx_structure.mol_oemol, _node[1]['oechem_atom'])
+                _stereo = stereo = oechem.OEPerceiveCIPStereo(self.reference_topology.mol_oemol, _node[1]['oechem_atom'])
                 #_logger.debug(f"\t\t\t\t\tis chiral with CIP: {CIP_perceptions[_stereo]}")
                 #get the neighbors
                 #nbrs_top : list(int) of topology indices
@@ -2259,16 +2260,16 @@ class GeometrySystemGenerator(object):
 
                 #get the neighbors of the chiral atom of interest
                 nbrs_top, nbrs_oemol, nbrs = [], [], []
-                for nbr in self.networkx_structure.graph[_node[0]]:
+                for nbr in networkx_graph[_node[0]]:
                     nbrs_top.append(nbr)
-                    nbrs_oemol.append(self.networkx_structure.residue_to_oemol_map[nbr])
-                    nbrs.append(self.networkx_structure.graph.nodes[nbr]['oechem_atom'])
-                _logger.debug(f"\t\t\t\t\tquerying neighbors: {nbrs_top} with data: {[self.networkx_structure.graph.nodes[lst_nbr]['openmm_atom'] for lst_nbr in nbrs_top]}")
+                    nbrs_oemol.append(self.reference_topology.residue_to_oemol_map[nbr])
+                    nbrs.append(networkx_graph.nodes[nbr]['oechem_atom'])
+                _logger.debug(f"\t\t\t\t\tquerying neighbors: {nbrs_top} with data: {[networkx_graph.nodes[lst_nbr]['openmm_atom'] for lst_nbr in nbrs_top]}")
                 growth_idx = self._calculate_growth_idx(nbrs_top, growth_indices)
                 _logger.debug(f"\t\t\t\t\tthe growth index of the neighbors is {growth_idx}")
                 if growth_idx > 0:
 
-                    if len(list(self.networkx_structure.graph[_node[0]])) == 4:
+                    if len(list(networkx_graph[_node[0]])) == 4:
                         _logger.debug(f"\t\t\t\t\tthe number of neighbors is 4; proceeding")
                         # TODO: handle chiral centers where the valency of the chiral center > 4
 
@@ -2287,7 +2288,7 @@ class GeometrySystemGenerator(object):
                         _logger.debug(f"\t\t\t\t\tgrowth indices of neighbors: {_nbr_to_growth_index_tuple}")
 
                         if [tup[1] for tup in _nbr_to_growth_index_tuple].count(0) == 3:
-                            _logger.warning(f"\t\t\t\t\tchiral atom {_node[1]['openmm_atom']} with neighbors {[self.networkx_structure.graph.nodes[lst_nbr]['openmm_atom'] for lst_nbr in nbrs_top]} is surrounded by 3 core neighbors.  omitting chirality bias torsion")
+                            _logger.warning(f"\t\t\t\t\tchiral atom {_node[1]['openmm_atom']} with neighbors {[networkx_graph.nodes[lst_nbr]['openmm_atom'] for lst_nbr in nbrs_top]} is surrounded by 3 core neighbors.  omitting chirality bias torsion")
                         else:
 
                             #find p1:
@@ -2307,7 +2308,7 @@ class GeometrySystemGenerator(object):
                             _logger.debug(f"\t\t\t\t\tgrowth index carrying this improper: {p4_target_growth_index}")
 
                             #now convert p1-p4 to oemol indices
-                            oemol_indices = [self.networkx_structure.residue_to_oemol_map[q] for q in [p1, p2, p3, p4]]
+                            oemol_indices = [self.reference_topology.residue_to_oemol_map[q] for q in [p1, p2, p3, p4]]
 
                             #calculate the improper torsion
                             # coords is dict of {idx: (x_0, y_0, z_0)}
@@ -2485,6 +2486,8 @@ class NetworkXProposalOrder(object):
             Container class for the transformation
         direction: str, default forward
             Whether to go forward or in reverse for the proposal.
+
+        TODO : reorganize this
         """
         from simtk.openmm import app
 
@@ -2498,13 +2501,13 @@ class NetworkXProposalOrder(object):
             self._new_atoms = self._topology_proposal.unique_new_atoms
             self._destination_topology = self._topology_proposal.new_topology
             self._atoms_with_positions = self._topology_proposal.new_to_old_atom_map.keys()
-            _nx_graph = self._topology_proposal._new_networkx_residue
+            _nx_graph = self._topology_proposal._new_topology._get_networkx_molecule()
         elif direction == "reverse":
             self._destination_system = self._topology_proposal.old_system
             self._new_atoms = self._topology_proposal.unique_old_atoms
             self._destination_topology = self._topology_proposal.old_topology
             self._atoms_with_positions = self._topology_proposal.old_to_new_atom_map.keys()
-            _nx_graph = self._topology_proposal._old_networkx_residue
+            _nx_graph = self._topology_proposal._old_topology._get_networkx_molecule()
         else:
             raise ValueError("Direction must be either forward or reverse.")
 
@@ -2532,7 +2535,7 @@ class NetworkXProposalOrder(object):
         # Choose the first of the new atoms to find the corresponding residue:
         #transforming_residue = self._new_atom_objects[self._new_atoms[0]].residue
 
-        self._residue_graph = _nx_graph.graph
+        self._residue_graph = _nx_graph
         self._reference_connectivity_graph = self._create_reference_connectivity_graph()
 
     def _create_reference_connectivity_graph(self):
@@ -2599,6 +2602,10 @@ class NetworkXProposalOrder(object):
         for omitted_bond in omitted_bonds_forward_pass:
             if omitted_bond[::-1] not in list(self._reference_connectivity_graph.edges()):
                 omitted_bonds.append(omitted_bond)
+
+        #delete the residue graph and reference connectivity graph since they cannot be pickled...
+        del self._residue_graph
+        del self._reference_connectivity_graph
 
         return proposal_order, heavy_logp + hydrogen_logp, omitted_bonds
 

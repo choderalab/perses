@@ -29,6 +29,7 @@ import base64
 import progressbar
 from typing import List, Dict
 from perses.rjmc.geometry import NoTorsionError
+from functools import partial
 try:
     from subprocess import getoutput  # If python 3
 except ImportError:
@@ -78,6 +79,130 @@ _logger.setLevel(logging.WARNING)
 ################################################################################
 # UTILITIES
 ################################################################################
+
+def add_method(object, function):
+        """
+        Bind a function to an object instance
+
+        Arguments
+        ---------
+        object : class instance
+            object to which function will be bound
+        function : function
+            function which will be bound to object
+        """
+        setattr(object, function.__name__, partial(function, object))
+
+def set_residue_oemol_and_openmm_topology_attributes(object, residue_oemol, residue_topology, residue_to_oemol_map):
+    """
+    Add the following attributes to an openmm.Topology:
+        current openmm topology with a residue oemol,
+        openmm.Topology.residue,
+        and the corresponding index map.
+
+    Arguments
+    ---------
+    object : class instance
+        object to which function will be bound
+    residue_oemol : openeye.oechem.OEMol
+        oemol of the residue of interest
+    residue_topology : simtk.openmm.Topology.residue
+        the residue of interest
+    residue_to_oemol_map : dict
+        dictionary of the residue_topology indices to the residue_oemol indices
+
+    NOTE: the atoms comprising the residue_topology must be a subset fo the residue_oemol atoms
+    """
+    assert set([atom.name for atom in residue_topology.atoms()]).issubset(set([atom.GetName() for atom in residue_oemol.GetAtoms()])), f"the self.residue_topology is not a subset of the self.residue_oemol"
+    for attribute, name in zip([residue_oemol, residue_topology, residue_to_oemol_map], ['residue_oemol', 'residue_topology', 'residue_to_oemol_map']):
+        setattr(object, name, attribute)
+
+    self.reverse_residue_to_oemol_map = {val : key for key, val in self.residue_to_oemol.items()}
+
+    def _get_networkx_molecule(self):
+        """
+        Returns
+        -------
+        graph : NetworkX.Graph
+            networkx representation of the residue
+        """
+        graph = nx.Graph()
+
+        oemol_atom_dict = {atom.GetIdx() : atom for atom in self.residue_oemol.GetAtoms()}
+        _logger.debug(f"\toemol_atom_dict: {oemol_atom_dict}")
+        reverse_oemol_atom_dict = {val : key for key, val in oemol_atom_dict.items()}
+
+        #try to perceive chirality
+        for atom in self.residue_oemol.GetAtoms():
+            nbrs = [] #we have to get the neighbors first
+            for bond in atom.GetBonds():
+                nbor = bond.GetNbr(atom)
+                nbrs.append(nbor)
+
+            match_found = False
+
+            if atom.IsChiral() and len(nbrs) >= 4:
+                stereo = oechem.OEPerceiveCIPStereo(self.residue_oemol, atom)
+                oechem.OESetCIPStereo(self.residue_oemol, atom, stereo)
+                match_found = True
+                if not match_found:
+                    raise Exception("Error: Stereochemistry was not assigned to all chiral atoms from the smiles string. (i.e. stereochemistry is undefined)")
+
+        #add atoms
+        _logger.debug(f"\tadding atoms to networkx graph")
+        for atom in residue_topology.atoms():
+            atom_index = atom.index
+            _logger.debug(f"\t\tadding top atom index: {atom_index}")
+            graph.add_node(atom_index)
+            graph.nodes[atom_index]['openmm_atom'] = atom
+            _logger.debug(f"\t\tcorresponding oemol index: {self.residue_to_oemol[atom_index]}")
+            graph.nodes[atom_index]['oechem_atom'] = oemol_atom_dict[self.residue_to_oemol[atom_index]]
+
+        #make a simple list of the nodes for bookkeeping purposes
+        #if the res is bonded to another res, then we do not want to include that in the oemol...
+        nodes_set = set(list(graph.nodes()))
+        for bond in residue_topology.bonds():
+            bond_atom0, bond_atom1 = bond[0].index, bond[1].index
+            if set([bond_atom0, bond_atom1]).issubset(nodes_set):
+                graph.add_edge(bond[0].index, bond[1].index)
+                graph.edges[bond[0].index, bond[1].index]['openmm_bond'] = bond
+            else:
+                pass
+
+        for bond in self.residue_oemol.GetBonds():
+            index_a, index_b = bond.GetBgnIdx(), bond.GetEndIdx()
+            try:
+                index_rev_a = self.reverse_residue_to_oemol_map[index_a]
+                index_rev_b = self.reverse_residue_to_oemol_map[index_b]
+
+                if (index_rev_a, index_rev_b) in list(graph.edges()) or (index_rev_b, index_rev_a) in list(graph.edges()):
+                    graph.edges[index_rev_a, index_rev_b]['oemol_bond'] = bond
+            except Exception as e:
+                _logger.debug(f"\tbond oemol loop exception: {e}")
+                pass
+
+        _logger.debug(f"\tgraph nodes: {graph.nodes()}")
+        return graph
+
+def augment_openmm_topology(topology, residue_oemol, residue_topology, residue_to_oemol_map):
+    """
+    Add the networkx builder tools as attribute and methods to the specified topology
+
+    Arguments
+    ---------
+    topology : simtk.openmm.topology.Topology
+        topology that will be augmented
+    residue_oemol : openeye.oechem.OEMol
+        oemol of the residue of interest
+    residue_topology : simtk.openmm.Topology.residue
+        the residue of interest
+    residue_to_oemol_map : dict
+        dictionary of the residue_topology indices to the residue_oemol indices
+    """
+    set_residue_oemol_and_openmm_topology_attributes(topology, residue_oemol, residue_topology, residue_to_oemol_map)
+    add_method(topology, _get_networkx_molecule)
+
+
 
 def append_topology(destination_topology, source_topology, exclude_residue_name=None):
     """
@@ -573,11 +698,11 @@ class TopologyProposal(object):
 
     Arguments
     ---------
-    new_topology : simtk.openmm.Topology object
+    new_topology : simtk.openmm.topology.Topology object (augmented)
         openmm Topology representing the proposed new system
     new_system : simtk.openmm.System object
         openmm System of the newly proposed state
-    old_topology : simtk.openmm.Topology object
+    old_topology : simtk.openmm.topology.Topology object (augmented)
         openmm Topology of the current system
     old_system : simtk.openmm.System object
         openm System of the current state
@@ -595,11 +720,11 @@ class TopologyProposal(object):
 
     Properties
     ----------
-    new_topology : simtk.openmm.Topology object
+    new_topology : simtk.openmm.topology.Topology object (augmented)
         openmm Topology representing the proposed new system
     new_system : simtk.openmm.System object
         openmm System of the newly proposed state
-    old_topology : simtk.openmm.Topology object
+    old_topology : simtk.openmm.topology.Topology object (augmented)
         openmm Topology of the current system
     old_system : simtk.openmm.System object
         openm System of the current state
@@ -635,10 +760,6 @@ class TopologyProposal(object):
         Name of the old residue
     new_residue_name : str
         Name of the new residue
-    _old_networkx_residue : NetworkXMolecule
-        networkx molecule of old residue
-    _new_networkx_residue : NetworkXMolecule
-        networkx molecule of new residue
     metadata : dict
         additional information of interest about the state
     """
@@ -669,12 +790,9 @@ class TopologyProposal(object):
         self._unique_old_atoms = list(set(range(self._old_topology.getNumAtoms()))-set(self._new_to_old_atom_map.values()))
         self._old_alchemical_atoms = set(old_alchemical_atoms) if (old_alchemical_atoms is not None) else {atom for atom in range(old_system.getNumParticles())}
         self._new_alchemical_atoms = set([self._old_to_new_atom_map[old_alch_atom] for old_alch_atom in self._old_alchemical_atoms if old_alch_atom in list(self._new_to_old_atom_map.values())]).union(set(self._unique_new_atoms))
-        #self._new_alchemical_atoms = set(self._old_to_new_atom_map.values()).union(self._unique_new_atoms)
         self._old_environment_atoms = set(range(old_system.getNumParticles())) - self._old_alchemical_atoms
         self._new_environment_atoms = set(range(new_system.getNumParticles())) - self._new_alchemical_atoms
         self._metadata = metadata
-        self._old_networkx_residue = old_networkx_residue
-        self._new_networkx_residue = new_networkx_residue
         self._core_new_to_old_atom_map = {new_atom: old_atom for new_atom, old_atom in self._new_to_old_atom_map.items() if new_atom in self._new_alchemical_atoms and old_atom in self._old_alchemical_atoms}
 
     @property
@@ -1005,21 +1123,20 @@ class PolymerProposalEngine(ProposalEngine):
         # Create TopologyProposal.
         current_res = [res for res in current_topology.residues() if res.index == chosen_res_index][0]
         proposed_res = [res for res in new_topology.residues() if res.index == chosen_res_index][0]
-        old_networkx_molecule = NetworkXMolecule(mol_oemol=old_oemol_res_copy, mol_residue = current_res, residue_to_oemol_map = old_res_to_oemol_map)
-        new_networkx_molecule = NetworkXMolecule(mol_oemol=new_oemol_res_copy, mol_residue = proposed_res, residue_to_oemol_map = new_res_to_oemol_map)
+        augment_openmm_topology(topology = old_topology, residue_oemol = old_oemol_res_copy, residue_topology = current_res, residue_to_oemol_map = old_res_to_oemol_map)
+        augment_openmm_topology(topology = new_topology, residue_oemol = new_oemol_res_copy, residue_topology = proposed_res, residue_to_oemol_map = new_res_to_oemol_map)
+
         topology_proposal = TopologyProposal(logp_proposal = 0.,
                                              new_to_old_atom_map = atom_map,
                                              old_topology = old_topology,
-                                             new_topology = new_topology,
+                                             new_topology  = new_topology,
                                              old_system = old_system,
                                              new_system = new_system,
                                              old_alchemical_atoms = [atom.index for atom in current_res.atoms()] + list(extra_atom_map.values()),
                                              old_chemical_state_key = old_chemical_state_key,
                                              new_chemical_state_key = new_chemical_state_key,
                                              old_residue_name = old_res_name,
-                                             new_residue_name = new_res_name,
-                                             old_networkx_residue = old_networkx_molecule,
-                                             new_networkx_residue = new_networkx_molecule)
+                                             new_residue_name = new_res_name)
 
         # Check that old_topology and old_system have same number of atoms.
         old_topology_natoms = old_topology.getNumAtoms()  # number of topology atoms
@@ -2794,8 +2911,8 @@ class SmallMoleculeSetProposalEngine(AtomMapper, ProposalEngine):
         current_residue = [res for res in current_topology.residues() if res.name == self._residue_name][0]
         new_residue = [res for res in new_topology.residues() if res.name == self._residue_name][0]
 
-        old_networkx_molecule = NetworkXMolecule(mol_oemol=self.current_molecule, mol_residue=current_residue, residue_to_oemol_map = {i: j for i, j in zip(range(old_mol_start_index, old_mol_start_index + len_old_mol), range(len_old_mol))})
-        new_networkx_molecule = NetworkXMolecule(mol_oemol=self.proposed_molecule, mol_residue=new_residue, residue_to_oemol_map = {i: j for i, j in zip(range(new_mol_start_index, new_mol_start_index + len_new_mol), range(len_new_mol))})
+        augment_openmm_topology(topology = current_topology, residue_oemol = current_residue, residue_topology = self.current_molecule, residue_to_oemol_map = {i: j for i, j in zip(range(old_mol_start_index, old_mol_start_index + len_old_mol), range(len_old_mol))})
+        augment_openmm_topology(topology = new_topology, residue_oemol = proposed_residue, residue_topology = self.proposed_molecule, residue_to_oemol_map = {i: j for i, j in zip(range(new_mol_start_index, new_mol_start_index + len_new_mol), range(len_new_mol))})
 
         # Create the TopologyProposal object
         proposal = TopologyProposal(logp_proposal=logp_proposal,
@@ -2808,9 +2925,7 @@ class SmallMoleculeSetProposalEngine(AtomMapper, ProposalEngine):
                                     old_chemical_state_key=self._list_of_smiles[self.current_mol_id],
                                     new_chemical_state_key=self._list_of_smiles[self.proposed_mol_id],
                                     old_residue_name=self._residue_name,
-                                    new_residue_name=self._residue_name,
-                                    old_networkx_residue=old_networkx_molecule,
-                                    new_networkx_residue=new_networkx_molecule)
+                                    new_residue_name=self._residue_name)
 
         ndelete = proposal.old_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
         ncreate = proposal.new_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
@@ -3708,37 +3823,37 @@ class NetworkXMolecule(object):
     """
     Creates a networkx representation of an atom set to allow for easy querying
     """
-    def __init__(self, mol_oemol, mol_residue, residue_to_oemol_map):
+    def __init__(self, residue_oemol, residue_topology, residue_to_oemol_map):
         """
-        mol_oemol : oechem.OEMol
+        residue_oemol : oechem.OEMol
             oemol object to interpret atom topologies in terms of oemol characteristics
-        mol_residue : simtk.openmm.app.topology.Residue
+        residue_topology : simtk.openmm.app.topology.Residue
             base from which to interpret a molecule
         residue_to_oemol_map : dict
             map of the residue indices to the oemol indices
 
-        #NOTE: the atoms comprising the mol_residue must be a subset fo the mol_oemol atoms
+        #NOTE: the atoms comprising the residue_topology must be a subset fo the residue_oemol atoms
         """
         #subset assertion
-        # print(f"top residue atoms: {[(atom.name, atom.index) for atom in mol_residue.atoms()]}")
-        # print(f"mol atoms: {[(atom.GetName(), atom.GetIdx()) for atom in mol_oemol.GetAtoms()]}")
+        # print(f"top residue atoms: {[(atom.name, atom.index) for atom in residue_topology.atoms()]}")
+        # print(f"mol atoms: {[(atom.GetName(), atom.GetIdx()) for atom in residue_oemol.GetAtoms()]}")
         # print(f"residue to oemol map: {residue_to_oemol_map}")
-        assert set([atom.name for atom in mol_residue.atoms()]).issubset(set([atom.GetName() for atom in mol_oemol.GetAtoms()])), f"the mol_residue is not a subset of the mol_oemol"
+        assert set([atom.name for atom in residue_topology.atoms()]).issubset(set([atom.GetName() for atom in residue_oemol.GetAtoms()])), f"the residue_topology is not a subset of the residue_oemol"
 
         #the first thing to do is to create a simple undirected graph based on covalency
-        self.mol_oemol = mol_oemol
-        self.mol_residue = mol_residue
+        self.residue_oemol = residue_oemol
+        self.residue_topology = residue_topology
         self.residue_to_oemol_map = residue_to_oemol_map
         _logger.debug(f"\tresidue_to_oemol_map: {residue_to_oemol_map}")
-        self.graph = nx.Graph()
+        graph = nx.Graph()
 
         self.reverse_residue_to_oemol_map = {val : key for key, val in residue_to_oemol_map.items()}
-        oemol_atom_dict = {atom.GetIdx() : atom for atom in self.mol_oemol.GetAtoms()}
+        oemol_atom_dict = {atom.GetIdx() : atom for atom in self.residue_oemol.GetAtoms()}
         _logger.debug(f"\toemol_atom_dict: {oemol_atom_dict}")
         reverse_oemol_atom_dict = {val : key for key, val in oemol_atom_dict.items()}
 
         #try to perceive chirality
-        for atom in self.mol_oemol.GetAtoms():
+        for atom in self.residue_oemol.GetAtoms():
             nbrs = [] #we have to get the neighbors first
             for bond in atom.GetBonds():
                 nbor = bond.GetNbr(atom)
@@ -3747,52 +3862,52 @@ class NetworkXMolecule(object):
             match_found = False
 
             if atom.IsChiral() and len(nbrs) >= 4:
-                stereo = oechem.OEPerceiveCIPStereo(self.mol_oemol, atom)
-                oechem.OESetCIPStereo(self.mol_oemol, atom, stereo)
+                stereo = oechem.OEPerceiveCIPStereo(self.residue_oemol, atom)
+                oechem.OESetCIPStereo(self.residue_oemol, atom, stereo)
                 match_found = True
                 if not match_found:
                     raise Exception("Error: Stereochemistry was not assigned to all chiral atoms from the smiles string. (i.e. stereochemistry is undefined)")
 
         #add atoms
         _logger.debug(f"\tadding atoms to networkx graph")
-        for atom in mol_residue.atoms():
+        for atom in residue_topology.atoms():
             atom_index = atom.index
             _logger.debug(f"\t\tadding top atom index: {atom_index}")
-            self.graph.add_node(atom_index)
-            self.graph.nodes[atom_index]['openmm_atom'] = atom
+            graph.add_node(atom_index)
+            graph.nodes[atom_index]['openmm_atom'] = atom
             _logger.debug(f"\t\tcorresponding oemol index: {residue_to_oemol_map[atom_index]}")
-            self.graph.nodes[atom_index]['oechem_atom'] = oemol_atom_dict[residue_to_oemol_map[atom_index]]
+            graph.nodes[atom_index]['oechem_atom'] = oemol_atom_dict[residue_to_oemol_map[atom_index]]
 
         #make a simple list of the nodes for bookkeeping purposes
         #if the res is bonded to another res, then we do not want to include that in the oemol...
-        nodes_set = set(list(self.graph.nodes()))
-        for bond in mol_residue.bonds():
+        nodes_set = set(list(graph.nodes()))
+        for bond in residue_topology.bonds():
             bond_atom0, bond_atom1 = bond[0].index, bond[1].index
             if set([bond_atom0, bond_atom1]).issubset(nodes_set):
-                self.graph.add_edge(bond[0].index, bond[1].index)
-                self.graph.edges[bond[0].index, bond[1].index]['openmm_bond'] = bond
+                graph.add_edge(bond[0].index, bond[1].index)
+                graph.edges[bond[0].index, bond[1].index]['openmm_bond'] = bond
             else:
                 pass
 
-        for bond in self.mol_oemol.GetBonds():
+        for bond in self.residue_oemol.GetBonds():
             index_a, index_b = bond.GetBgnIdx(), bond.GetEndIdx()
             try:
                 index_rev_a = self.reverse_residue_to_oemol_map[index_a]
                 index_rev_b = self.reverse_residue_to_oemol_map[index_b]
 
-                if (index_rev_a, index_rev_b) in list(self.graph.edges()) or (index_rev_b, index_rev_a) in list(self.graph.edges()):
-                    self.graph.edges[index_rev_a, index_rev_b]['oemol_bond'] = bond
+                if (index_rev_a, index_rev_b) in list(graph.edges()) or (index_rev_b, index_rev_a) in list(graph.edges()):
+                    graph.edges[index_rev_a, index_rev_b]['oemol_bond'] = bond
             except Exception as e:
                 _logger.debug(f"\tbond oemol loop exception: {e}")
                 pass
 
-        _logger.debug(f"\tgraph nodes: {self.graph.nodes()}")
+        _logger.debug(f"\tgraph nodes: {graph.nodes()}")
 
     def remove_oemols_from_graph(self):
         """
         Remove oemol atoms and bonds from the graph
         """
-        for atom in self.graph.nodes(data=True):
+        for atom in graph.nodes(data=True):
             atom[1]['oechem_atom'] = None
-        for bond in self.graph.edges(data=True):
+        for bond in graph.edges(data=True):
             bond[2]['oemol_bond'] = None
