@@ -70,6 +70,9 @@ def getSetupOptions(filename):
     if 'anneal_1,4s' not in setup_options:
         setup_options['anneal_1,4s'] = False
 
+    if 'nonbonded_method' not in setup_options:
+        setup_options['nonbonded_method'] = 'PME'
+
     if 'run_type' not in setup_options:
         _logger.info(f"\t\t\trun_type is not specified; default to None")
         setup_options['run_type'] = None
@@ -221,7 +224,7 @@ def getSetupOptions(filename):
         # need to convert the list to Integer
         from perses.utils.openeye import generate_expression
         setup_options['atom_expr'] = generate_expression(setup_options['atom_expression'])
-        
+
     setup_options['bond_expr'] = None
     if 'bond_expression' in setup_options:
         # need to convert the list to Integer
@@ -353,7 +356,7 @@ def run_setup(setup_options):
                                           atom_expr=setup_options['atom_expr'], bond_expr=setup_options['bond_expr'],
                                           atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
-                                          trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'])
+                                          trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'])
 
         _logger.info(f"\twriting pickle output...")
         with open(os.path.join(os.getcwd(), trajectory_directory, setup_pickle_file), 'wb') as f:

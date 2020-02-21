@@ -53,7 +53,7 @@ class RelativeFEPSetup(object):
                  bond_expr=None, anneal_14s=False,
                  small_molecule_forcefield='gaff-2.11', small_molecule_parameters_cache=None,
                  trajectory_directory=None, trajectory_prefix=None,
-                 spectator_filenames=None):
+                 spectator_filenames=None, nonbonded_method = 'PME'):
         """
         Initialize a NonequilibriumFEPSetup object
 
@@ -95,6 +95,8 @@ class RelativeFEPSetup(object):
         spectator_filenames : list, optional, default=None
             If specified, this list is the filenames of any non-alchemical small molecule to be part of the system.
             These will be treated with the same small molecule forcefield as the alchemical ligands, and will only be present in the complex phase
+        nonbonded_method : str, default = 'PME'
+            nonbonded method, chose one of ['PME','CutoffNonPeriodic','CutoffPeriodic','NoCutoff']
         """
         self._pressure = pressure
         self._temperature = temperature
@@ -109,6 +111,18 @@ class RelativeFEPSetup(object):
         self._bond_expr = bond_expr
         self._anneal_14s = anneal_14s
         self._spectator_filenames = spectator_filenames
+
+        try:
+            self._nonbonded_method = getattr(app,nonbonded_method)
+        except AttributeError:
+            _logger.warning(f'Nonbonded method {nonbonded_method} not recognised')
+            if 'complex' in phases or 'solvent' in phases:
+                _logger.warning(f"Detected complex or solvent phases: setting PME nonbonded method.")
+                self._nonbonded_method = app.PME
+            else:
+                _logger.info(f"Detected vacuum phase: setting noCutoff nonbonded method.")
+                self._nonbonded_method = app.NoCutoff
+
 
         self._trajectory_prefix = trajectory_prefix
         self._trajectory_directory = trajectory_directory
@@ -207,16 +221,8 @@ class RelativeFEPSetup(object):
         self._ligand_md_topology_new = md.Topology.from_openmm(self._ligand_topology_new)
         _logger.info(f"Created mdtraj topologies for both ligands.")
 
-        if 'complex' in phases or 'solvent' in phases:
-            self._nonbonded_method = app.PME
-            _logger.info(f"Detected complex or solvent phases: setting PME nonbonded method.")
-        else:
-            self._nonbonded_method = app.NoCutoff
-            _logger.info(f"Detected vacuum phase: setting noCutoff nonbonded method.")
-
         # Select barostat
-        from simtk.openmm.app import NoCutoff, CutoffNonPeriodic
-        NONPERIODIC_NONBONDED_METHODS = [NoCutoff, CutoffNonPeriodic]
+        NONPERIODIC_NONBONDED_METHODS = [app.NoCutoff, app.CutoffNonPeriodic]
         if pressure is not None:
             if self._nonbonded_method not in NONPERIODIC_NONBONDED_METHODS:
                 barostat = openmm.MonteCarloBarostat(self._pressure, self._temperature, self._barostat_period)
@@ -272,7 +278,6 @@ class RelativeFEPSetup(object):
         # this is tracked using _proposal_phase
         if 'complex' in phases:
             _logger.info('Generating the topology proposal from the complex leg')
-            self._nonbonded_method = app.PME
             _logger.info(f"setting up complex phase...")
             self._setup_complex_phase(protein_pdb_filename,receptor_mol2_filename,mol_list)
             self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(
