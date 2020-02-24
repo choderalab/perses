@@ -397,7 +397,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                                                               omitted_bonds = omitted_bonds,
                                                               reference_topology = top_proposal._new_topology,
                                                               global_parameter_name=growth_parameter_name,
-                                                              reference_topology=top_proposal.new_topology,
                                                               use_sterics=self.use_sterics,
                                                               neglect_angles = self.neglect_angles,
                                                               use_14_nonbondeds = self._use_14_nonbondeds)
@@ -421,7 +420,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                                                               omitted_bonds = omitted_bonds,
                                                               reference_topology = top_proposal._old_topology,
                                                               global_parameter_name=growth_parameter_name,
-                                                              reference_topology=top_proposal.old_topology,
                                                               use_sterics=self.use_sterics,
                                                               neglect_angles = self.neglect_angles,
                                                               use_14_nonbondeds = self._use_14_nonbondeds)
@@ -1753,7 +1751,6 @@ class GeometrySystemGenerator(object):
                  global_parameter_name='growth_index',
                  add_extra_torsions = True,
                  add_extra_angles = False,
-                 reference_topology=None,
                  use_sterics=False,
                  force_names=None,
                  force_parameters=None,
@@ -2159,7 +2156,7 @@ class GeometrySystemGenerator(object):
         ----------
         torsion_force : openmm.CustomTorsionForce object
             the new/old torsion force if forward/backward
-        reference_topology : openmm.app.Topology object
+        reference_topology : openmm.app.Topology object (augmented)
             the new/old topology if forward/backward
         oemol : openeye.oechem.OEMol
             An OEMol representing the new (old) system if forward (backward)
@@ -2184,7 +2181,7 @@ class GeometrySystemGenerator(object):
         # Note that only torsions involving heavy atoms are enumerated here.
         rotor = oechem.OEIsRotor()
         torsion_predicate = oechem.OENotBond(rotor)
-        non_rotor_torsions = list(oechem.OEGetTorsions(self.reference_topology.residue_oemol, torsion_predicate))
+        non_rotor_torsions = list(oechem.OEGetTorsions(reference_topology.residue_oemol, torsion_predicate))
         relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
 
         #now, for each torsion, extract the set of indices and the angle
@@ -2199,9 +2196,9 @@ class GeometrySystemGenerator(object):
                                torsion.b.GetIdx(),
                                torsion.c.GetIdx(),
                                torsion.d.GetIdx()]
-            if all(_idx in list(self.reference_topology.reverse_residue_to_oemol_map.keys()) for _idx in oe_atom_indices):
+            if all(_idx in list(reference_topology.reverse_residue_to_oemol_map.keys()) for _idx in oe_atom_indices):
                 #then every atom in the oemol lives in the openmm topology/residue, so we can consider it
-                topology_index_map = [self.reference_topology.reverse_residue_to_oemol_map[q] for q in oe_atom_indices]
+                topology_index_map = [reference_topology.reverse_residue_to_oemol_map[q] for q in oe_atom_indices]
             else:
                 topology_index_map = None
 
@@ -2240,8 +2237,8 @@ class GeometrySystemGenerator(object):
         #render a 3d structure: note that this fucks up the rjmc proposal (since we cannot enumerate the number of possible conformers)
 
         #add the improper torsions associated with the chiral center
-        coords = self.reference_topology.residue_oemol.GetCoords()
-        networkx_graph = self.reference_topology._get_networkx_molecule()
+        coords = reference_topology.residue_oemol.GetCoords()
+        networkx_graph = reference_topology._get_networkx_molecule()
         #CIP_perceptions = {0: 'R', 1: 'S'}
         #iterate over all of the atoms with chiral centers
         _logger.debug(f"\t\t\t\tnodes: {networkx_graph.nodes()}")
@@ -2251,7 +2248,7 @@ class GeometrySystemGenerator(object):
             if _node[1]['oechem_atom'].IsChiral():
                 _logger.debug(f"\t\t\t\tnode is chiral...")
                 assert(_node[1]['oechem_atom']).HasStereoSpecified(), f"atom {_node[1]['oechem_atom']} is chiral, but the chirality is not specified."
-                _stereo = stereo = oechem.OEPerceiveCIPStereo(self.reference_topology.mol_oemol, _node[1]['oechem_atom'])
+                _stereo = stereo = oechem.OEPerceiveCIPStereo(reference_topology.residue_oemol, _node[1]['oechem_atom'])
                 #_logger.debug(f"\t\t\t\t\tis chiral with CIP: {CIP_perceptions[_stereo]}")
                 #get the neighbors
                 #nbrs_top : list(int) of topology indices
@@ -2262,7 +2259,7 @@ class GeometrySystemGenerator(object):
                 nbrs_top, nbrs_oemol, nbrs = [], [], []
                 for nbr in networkx_graph[_node[0]]:
                     nbrs_top.append(nbr)
-                    nbrs_oemol.append(self.reference_topology.residue_to_oemol_map[nbr])
+                    nbrs_oemol.append(reference_topology.residue_to_oemol_map[nbr])
                     nbrs.append(networkx_graph.nodes[nbr]['oechem_atom'])
                 _logger.debug(f"\t\t\t\t\tquerying neighbors: {nbrs_top} with data: {[networkx_graph.nodes[lst_nbr]['openmm_atom'] for lst_nbr in nbrs_top]}")
                 growth_idx = self._calculate_growth_idx(nbrs_top, growth_indices)
@@ -2308,7 +2305,7 @@ class GeometrySystemGenerator(object):
                             _logger.debug(f"\t\t\t\t\tgrowth index carrying this improper: {p4_target_growth_index}")
 
                             #now convert p1-p4 to oemol indices
-                            oemol_indices = [self.reference_topology.residue_to_oemol_map[q] for q in [p1, p2, p3, p4]]
+                            oemol_indices = [reference_topology.residue_to_oemol_map[q] for q in [p1, p2, p3, p4]]
 
                             #calculate the improper torsion
                             # coords is dict of {idx: (x_0, y_0, z_0)}

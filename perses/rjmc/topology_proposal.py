@@ -74,7 +74,7 @@ PROTEIN_BOND_EXPRESSION = DEFAULT_BOND_EXPRESSION
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("proposal_generator")
-_logger.setLevel(logging.WARNING)
+_logger.setLevel(logging.DEBUG)
 
 ################################################################################
 # UTILITIES
@@ -117,72 +117,73 @@ def set_residue_oemol_and_openmm_topology_attributes(object, residue_oemol, resi
     for attribute, name in zip([residue_oemol, residue_topology, residue_to_oemol_map], ['residue_oemol', 'residue_topology', 'residue_to_oemol_map']):
         setattr(object, name, attribute)
 
-    self.reverse_residue_to_oemol_map = {val : key for key, val in self.residue_to_oemol.items()}
+    reverse_residue_to_oemol_map = {val : key for key, val in residue_to_oemol_map.items()}
+    setattr(object, 'reverse_residue_to_oemol_map', reverse_residue_to_oemol_map)
 
-    def _get_networkx_molecule(self):
-        """
-        Returns
-        -------
-        graph : NetworkX.Graph
-            networkx representation of the residue
-        """
-        graph = nx.Graph()
+def _get_networkx_molecule(self):
+    """
+    Returns
+    -------
+    graph : NetworkX.Graph
+        networkx representation of the residue
+    """
+    graph = nx.Graph()
 
-        oemol_atom_dict = {atom.GetIdx() : atom for atom in self.residue_oemol.GetAtoms()}
-        _logger.debug(f"\toemol_atom_dict: {oemol_atom_dict}")
-        reverse_oemol_atom_dict = {val : key for key, val in oemol_atom_dict.items()}
+    oemol_atom_dict = {atom.GetIdx() : atom for atom in self.residue_oemol.GetAtoms()}
+    _logger.debug(f"\toemol_atom_dict: {oemol_atom_dict}")
+    reverse_oemol_atom_dict = {val : key for key, val in oemol_atom_dict.items()}
 
-        #try to perceive chirality
-        for atom in self.residue_oemol.GetAtoms():
-            nbrs = [] #we have to get the neighbors first
-            for bond in atom.GetBonds():
-                nbor = bond.GetNbr(atom)
-                nbrs.append(nbor)
+    #try to perceive chirality
+    for atom in self.residue_oemol.GetAtoms():
+        nbrs = [] #we have to get the neighbors first
+        for bond in atom.GetBonds():
+            nbor = bond.GetNbr(atom)
+            nbrs.append(nbor)
 
-            match_found = False
+        match_found = False
 
-            if atom.IsChiral() and len(nbrs) >= 4:
-                stereo = oechem.OEPerceiveCIPStereo(self.residue_oemol, atom)
-                oechem.OESetCIPStereo(self.residue_oemol, atom, stereo)
-                match_found = True
-                if not match_found:
-                    raise Exception("Error: Stereochemistry was not assigned to all chiral atoms from the smiles string. (i.e. stereochemistry is undefined)")
+        if atom.IsChiral() and len(nbrs) >= 4:
+            stereo = oechem.OEPerceiveCIPStereo(self.residue_oemol, atom)
+            oechem.OESetCIPStereo(self.residue_oemol, atom, stereo)
+            match_found = True
+            if not match_found:
+                raise Exception("Error: Stereochemistry was not assigned to all chiral atoms from the smiles string. (i.e. stereochemistry is undefined)")
 
-        #add atoms
-        _logger.debug(f"\tadding atoms to networkx graph")
-        for atom in residue_topology.atoms():
-            atom_index = atom.index
-            _logger.debug(f"\t\tadding top atom index: {atom_index}")
-            graph.add_node(atom_index)
-            graph.nodes[atom_index]['openmm_atom'] = atom
-            _logger.debug(f"\t\tcorresponding oemol index: {self.residue_to_oemol[atom_index]}")
-            graph.nodes[atom_index]['oechem_atom'] = oemol_atom_dict[self.residue_to_oemol[atom_index]]
+    #add atoms
+    _logger.debug(f"\tadding atoms to networkx graph")
+    for atom in self.residue_topology.atoms():
+        atom_index = atom.index
+        _logger.debug(f"\t\tadding top atom index: {atom_index}")
+        graph.add_node(atom_index)
+        graph.nodes[atom_index]['openmm_atom'] = atom
+        _logger.debug(f"\t\tcorresponding oemol index: {self.residue_to_oemol_map[atom_index]}")
+        graph.nodes[atom_index]['oechem_atom'] = oemol_atom_dict[self.residue_to_oemol_map[atom_index]]
 
-        #make a simple list of the nodes for bookkeeping purposes
-        #if the res is bonded to another res, then we do not want to include that in the oemol...
-        nodes_set = set(list(graph.nodes()))
-        for bond in residue_topology.bonds():
-            bond_atom0, bond_atom1 = bond[0].index, bond[1].index
-            if set([bond_atom0, bond_atom1]).issubset(nodes_set):
-                graph.add_edge(bond[0].index, bond[1].index)
-                graph.edges[bond[0].index, bond[1].index]['openmm_bond'] = bond
-            else:
-                pass
+    #make a simple list of the nodes for bookkeeping purposes
+    #if the res is bonded to another res, then we do not want to include that in the oemol...
+    nodes_set = set(list(graph.nodes()))
+    for bond in self.residue_topology.bonds():
+        bond_atom0, bond_atom1 = bond[0].index, bond[1].index
+        if set([bond_atom0, bond_atom1]).issubset(nodes_set):
+            graph.add_edge(bond[0].index, bond[1].index)
+            graph.edges[bond[0].index, bond[1].index]['openmm_bond'] = bond
+        else:
+            pass
 
-        for bond in self.residue_oemol.GetBonds():
-            index_a, index_b = bond.GetBgnIdx(), bond.GetEndIdx()
-            try:
-                index_rev_a = self.reverse_residue_to_oemol_map[index_a]
-                index_rev_b = self.reverse_residue_to_oemol_map[index_b]
+    for bond in self.residue_oemol.GetBonds():
+        index_a, index_b = bond.GetBgnIdx(), bond.GetEndIdx()
+        try:
+            index_rev_a = self.reverse_residue_to_oemol_map[index_a]
+            index_rev_b = self.reverse_residue_to_oemol_map[index_b]
 
-                if (index_rev_a, index_rev_b) in list(graph.edges()) or (index_rev_b, index_rev_a) in list(graph.edges()):
-                    graph.edges[index_rev_a, index_rev_b]['oemol_bond'] = bond
-            except Exception as e:
-                _logger.debug(f"\tbond oemol loop exception: {e}")
-                pass
+            if (index_rev_a, index_rev_b) in list(graph.edges()) or (index_rev_b, index_rev_a) in list(graph.edges()):
+                graph.edges[index_rev_a, index_rev_b]['oemol_bond'] = bond
+        except Exception as e:
+            _logger.debug(f"\tbond oemol loop exception: {e}")
+            pass
 
-        _logger.debug(f"\tgraph nodes: {graph.nodes()}")
-        return graph
+    _logger.debug(f"\tgraph nodes: {graph.nodes()}")
+    return graph
 
 def augment_openmm_topology(topology, residue_oemol, residue_topology, residue_to_oemol_map):
     """
@@ -314,7 +315,13 @@ class AtomMapper(object):
         super(AtomMapper, self).__init__(**kwargs)
 
     @staticmethod
-    def _get_mol_atom_map(current_oemol, proposed_oemol, atom_expr=None, bond_expr=None, map_strength='default', allow_ring_breaking=False):
+    def _get_mol_atom_map(current_oemol, 
+                          proposed_oemol, 
+                          atom_expr=None, 
+                          bond_expr=None, 
+                          map_strength='default', 
+                          allow_ring_breaking=True,
+                          matching_criterion = 'index'):
         """
         Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
 
@@ -333,8 +340,15 @@ class AtomMapper(object):
         map_strength : str default='default'
             string corresponding to pre-set atom map strengths
             ['default','weak','strong']
-        allow_ring_breaking : bool, optional, default=False
+        allow_ring_breaking : bool, optional, default=True
              If False, will check to make sure rings are not being broken or formed.
+        matching_criterion : str, default 'index'
+             The best atom map is pulled based on some ranking criteria;
+             if 'index', the best atom map is chosen based on the map with the maximum number of atomic index matches;
+             if 'name', the best atom map is chosen based on the map with the maximum number of atom name matches
+             else: raise Exception.
+             NOTE : the matching criterion pulls patterns and target matches based on indices or names;
+                    if 'names' is chosen, it is first asserted that the current_oemol and the proposed_oemol have atoms that are uniquely named
 
         Returns
         -------
@@ -378,7 +392,7 @@ class AtomMapper(object):
         unique = False
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
 
-        if allow_ring_breaking is False:
+        if not allow_ring_breaking:
             # Filter the matches to remove any that allow ring breaking
             matches = [m for m in matches if AtomMapper.preserves_rings(m, current_oemol, proposed_oemol)]
 
@@ -394,25 +408,41 @@ class AtomMapper(object):
             if not matches:
                 return None
 
-        print(matches)
-        print(current_oemol)
-        print(proposed_oemol)
-        top_matches = AtomMapper.rank_degenerate_maps(matches, current_oemol, proposed_oemol) #remove the matches with the lower rank score (filter out bad degeneracies)
+        _logger.debug(f"matches before degeneracy ranking: {matches}")
+        _logger.debug(f"ranking match degeneracy w.r.t. current oemol ({current_oemol}) and proposed oemol({proposed_oemol})")
+        try:
+            top_matches = AtomMapper.rank_degenerate_maps(matches, current_oemol, proposed_oemol) #remove the matches with the lower rank score (filter out bad degeneracies)
+        except Exception as e:
+            _logger.warning(f"\trank_degenerate_maps: {e}")
+            top_matches = matches
+
         _logger.debug(f"\tthere are {len(top_matches)} top matches")
         max_num_atoms = max([match.NumAtoms() for match in top_matches])
         _logger.debug(f"\tthe max number of atom matches is: {max_num_atoms}; there are {len([m for m in top_matches if m.NumAtoms() == max_num_atoms])} matches herein")
         new_top_matches = [m for m in top_matches if m.NumAtoms() == max_num_atoms]
-        new_to_old_atom_maps = [AtomMapper.hydrogen_mapping_exceptions(match, current_oemol, proposed_oemol) for match in new_top_matches]
+        new_to_old_atom_maps = [AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion) for match in new_top_matches]
         _logger.debug(f"\tnew to old atom maps with most atom hits: {new_to_old_atom_maps}")
 
         #now all else is equal; we will choose the map with the highest overlap of atom indices
         index_overlap_numbers = []
-        for map in new_to_old_atom_maps:
-            hit_number = 0
-            for key, value in map.items():
-                if key == value:
-                    hit_number += 1
-            index_overlap_numbers.append(hit_number)
+        if matching_criterion == 'index':
+            for map in new_to_old_atom_maps:
+                hit_number = 0
+                for key, value in map.items():
+                    if key == value:
+                        hit_number += 1
+                index_overlap_numbers.append(hit_number)
+        elif matching_criterion == 'name':
+            for map in new_to_old_atom_maps:
+                hit_number = 0
+                map_tuples = list(map.items())
+                atom_map = {atom_new: atom_old for atom_new, atom_old in zip(list(proposed_oemol.GetAtoms()), list(current_oemol.GetAtoms())) if (atom_new.GetIdx(), atom_old.GetIdx()) in map_tuples}
+                for key, value in atom_map.items():
+                    if key.GetName() == value.GetName():
+                        hit_number += 1
+                index_overlap_numbers.append(hit_number)
+        else:
+            raise Exception(f"the ranking criteria {ranking_criteria} is not supported.")
 
         max_index_overlap_number = max(index_overlap_numbers)
         max_index = index_overlap_numbers.index(max_index_overlap_number)
@@ -421,22 +451,65 @@ class AtomMapper(object):
         return new_to_old_atom_maps[max_index]
 
     @staticmethod
-    def hydrogen_mapping_exceptions(match, current, proposed):
+    def _create_pattern_to_target_map(current_mol, proposed_mol, match, matching_criterion = 'index'):
+        """
+        Create a dict of {pattern_atom: target_atom}
+
+        Arguments
+        ---------
+        current_mol : openeye.oechem.oemol object
+        proposed_mol : openeye.oechem.oemol object
+        match : oechem.OEMCSSearch.Match iter
+            entry in oechem.OEMCSSearch.Match object
+        matching_criterion : str, default 'index'
+            whether the pattern to target map is chosen based on atom indices or names (which should be uniquely defined)
+            allowables: ['index', 'name']
+        Returns
+        -------
+        pattern_to_target_map : dict
+            {pattern_atom: target_atom}
+        """
+        if matching_criterion == 'index':
+            pattern_atoms = { atom.GetIdx() : atom for atom in current_mol.GetAtoms() }
+            target_atoms = { atom.GetIdx() : atom for atom in proposed_mol.GetAtoms() }
+            pattern_to_target_map = { pattern_atoms[matchpair.pattern.GetIdx()] : target_atoms[matchpair.target.GetIdx()] for matchpair in match.GetAtoms() }
+        elif matching_criterion == 'name':
+            pattern_atoms = {atom.GetName(): atom for atom in current_mol.GetAtoms()}
+            target_atoms = {atom.GetName(): atom for atom in proposed_mol.GetAtoms()}
+            pattern_to_target_map = {pattern_atoms[matchpair.pattern.GetName()]: target_atoms[matchpair.target.GetName()] for matchpair in match.GetAtoms()}
+        else:
+            raise Exception(f"matching criterion {matching_criterion} is not currently supported")
+        return pattern_to_target_map
+
+    @staticmethod
+    def hydrogen_mapping_exceptions(old_mol,
+                                    new_mol,
+                                    match,
+                                    matching_criterion):
         """
         Returns an atom map that omits hydrogen-to-nonhydrogen atom maps AND X-H to Y-H where element(X) != element(Y)
         or aromatic(X) != aromatic(Y)
+        Arguments
+        ---------
+        old_mol : openeye.oechem.oemol object
+        new_mol : openeye.oechem.oemol object
+        match : oechem.OEMCSSearch.Match iter
+        matching_criterion : str, default 'index'
+            whether the pattern to target map is chosen based on atom indices or names (which should be uniquely defined)
+            allowables: ['index', 'name']
         """
         new_to_old_atom_map = {}
-
-        for matchpair in match.GetAtoms():
-            old_index, new_index = matchpair.pattern.GetIdx(), matchpair.target.GetIdx()
-            old_atom, new_atom = current.GetAtom(oechem.OEHasAtomIdx(old_index)), proposed.GetAtom(oechem.OEHasAtomIdx(new_index))
+        pattern_to_target_map = AtomMapper._create_pattern_to_target_map(old_mol, new_mol, match, matching_criterion)
+        for pattern_atom, target_atom in pattern_to_target_map.items():
+            old_index, new_index = pattern_atom.GetIdx(), target_atom.GetIdx()
+            old_atom, new_atom = pattern_atom, target_atom
 
             #Check if a hydrogen was mapped to a non-hydroden (basically the xor of is_h_a and is_h_b)
             if (old_atom.GetAtomicNum() == 1) != (new_atom.GetAtomicNum() == 1):
                 continue
 
             new_to_old_atom_map[new_index] = old_index
+
         return new_to_old_atom_map
 
     @staticmethod
@@ -1169,7 +1242,7 @@ class PolymerProposalEngine(ProposalEngine):
         #assert PolymerProposalEngine.validate_core_atoms_with_system(topology_proposal)
 
 
-        return topology_proposal, local_atom_map_stereo_sidechain, new_oemol_res, old_oemol_res
+        return topology_proposal, local_atom_map_stereo_sidechain, proposed_oemol, current_oemol
 
     def _find_adjacent_special_atoms(self, old_topology, new_topology, mutated_residue_index):
         """
@@ -1525,9 +1598,9 @@ class PolymerProposalEngine(ProposalEngine):
             key: int (index);  value: int (index)
         local_atom_map_stereo_sidechain : dict
             chirality-corrected map of new_oemol_res to old_oemol_res
-        old_oemol_res : openeye.oechem.oemol object
+        current_oemol : openeye.oechem.oemol object
             copy of modified old oemol sidechain
-        new_oemol_res : openeye.oechem.oemol object
+        proposed_oemol : openeye.oechem.oemol object
             copy of modified new oemol sidechain
         old_oemol_res_copy : openeye.oechem.oemol object
             copy of modified old oemol
@@ -1673,7 +1746,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         #now we can get the mol atom map of the sidechain
         #NOTE: since the sidechain oemols are NOT zero-indexed anymore, we need to match by name (since they are unique identifiers)
-        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, allow_ring_breaking=True)
+        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength = 'default', matching_criterion = 'name')
 
         #check the atom map thus far:
         _logger.debug(f"\t\t\tlocal atom map nonstereo sidechain: {local_atom_map_nonstereo_sidechain}")
