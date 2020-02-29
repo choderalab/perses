@@ -18,9 +18,28 @@ from perses.utils.smallmolecules import render_atom_mapping
 from perses.tests.utils import validate_endstate_energies
 from perses.dispersed.smc import SequentialMonteCarlo
 
-logging.basicConfig(level = logging.NOTSET)
-_logger = logging.getLogger("setup_relative_calculation")
+import datetime
+class TimeFilter(logging.Filter):
+    def filter(self, record):
+        try:
+          last = self.last
+        except AttributeError:
+          last = record.relativeCreated
+        delta = datetime.datetime.fromtimestamp(record.relativeCreated/1000.0) - datetime.datetime.fromtimestamp(last/1000.0)
+        record.relative = '{0:.2f}'.format(delta.seconds + delta.microseconds/1000000.0)
+        self.last = record.relativeCreated
+        return True
+
+fmt = logging.Formatter(fmt="%(asctime)s:(%(relative)ss):%(name)s:%(message)s")
+#logging.basicConfig(level = logging.NOTSET)
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S')
+_logger = logging.getLogger()
 _logger.setLevel(logging.INFO)
+[hndl.addFilter(TimeFilter()) for hndl in _logger.handlers]
+[hndl.setFormatter(fmt) for hndl in _logger.handlers]
 
 ENERGY_THRESHOLD = 1e-4
 from openmmtools.constants import kB
@@ -532,7 +551,7 @@ def run_setup(setup_options):
                                                                                              n_steps=n_steps_per_move_application,
                                                                                              reassign_velocities=False,
                                                                                              n_restart_attempts=20,
-                                                                                             splitting="V R R R O R R R V",
+                                                                                             splitting="V R O R V",
                                                                                              constraint_tolerance=1e-06),
                                                hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
@@ -544,7 +563,7 @@ def run_setup(setup_options):
                                                                                              n_steps=n_steps_per_move_application,
                                                                                              reassign_velocities=False,
                                                                                              n_restart_attempts=20,
-                                                                                             splitting="V R R R O R R R V",
+                                                                                             splitting="V R O R V",
                                                                                              constraint_tolerance=1e-06),
                                                                                              hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
                 hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
