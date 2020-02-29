@@ -315,11 +315,11 @@ class AtomMapper(object):
         super(AtomMapper, self).__init__(**kwargs)
 
     @staticmethod
-    def _get_mol_atom_map(current_oemol, 
-                          proposed_oemol, 
-                          atom_expr=None, 
-                          bond_expr=None, 
-                          map_strength='default', 
+    def _get_mol_atom_map(current_oemol,
+                          proposed_oemol,
+                          atom_expr=None,
+                          bond_expr=None,
+                          map_strength='default',
                           allow_ring_breaking=True,
                           matching_criterion = 'index'):
         """
@@ -1142,6 +1142,7 @@ class PolymerProposalEngine(ProposalEngine):
         _logger.debug(f"\tadding indices of the 'C' backbone atom in the next residue and the 'N' atom in the previous")
         _logger.debug(f"\t{list(index_to_new_residues.keys())[0]}")
         extra_atom_map = self._find_adjacent_special_atoms(old_topology, new_topology, list(index_to_new_residues.keys())[0])
+        _logger.debug(f"\tfound extra atom map: {extra_atom_map}")
 
         #now to add all of the other residue atoms to the atom map...
         all_other_residues_new = [res for res in new_topology.residues() if res.index != list(index_to_new_residues.keys())[0]]
@@ -1279,22 +1280,25 @@ class PolymerProposalEngine(ProposalEngine):
         assert new_prev_res.name == old_prev_res.name, f"the new residue left adjacent to mutation res (name {new_prev_res.name}) is not the name of the old residue left adjacent to mutation res (name {old_prev_res.name})"
         assert new_next_res.name == new_next_res.name, f"the new residue right adjacent to mutation res (name {new_next_res.name}) is not the name of the old residue right adjacent to mutation res (name {old_next_res.name})"
 
-        # new_next_res_to_old_next_res_map = {new_atom.index : old_atom.index for new_atom, old_atom in zip(new_next_res.atoms(), old_next_res.atoms())}
-        # new_prev_res_to_old_prev_res_map = {new_atom.index : old_atom.index for new_atom, old_atom in zip(new_prev_res.atoms(), old_prev_res.atoms())}
+        new_next_res_to_old_next_res_map = {new_atom.index : old_atom.index for new_atom, old_atom in zip(new_next_res.atoms(), old_next_res.atoms())}
+        new_prev_res_to_old_prev_res_map = {new_atom.index : old_atom.index for new_atom, old_atom in zip(new_prev_res.atoms(), old_prev_res.atoms())}
+        _logger.debug(f"\t\tnew_next_res_to_old_next_res_map : {new_next_res_to_old_next_res_map}")
+        _logger.debug(f"\t\tnew_prev_res_to_old_prev_res_map : {new_prev_res_to_old_prev_res_map}")
 
-        new_next_res_N_index = [atom.index for atom in new_next_res.atoms() if atom.name.replace(" ", "") == 'N']
-        old_next_res_N_index = [atom.index for atom in old_next_res.atoms() if atom.name.replace(" ", "") == 'N']
+        # new_next_res_N_index = [atom.index for atom in new_next_res.atoms() if atom.name.replace(" ", "") == 'N']
+        # old_next_res_N_index = [atom.index for atom in old_next_res.atoms() if atom.name.replace(" ", "") == 'N']
+        #
+        # new_prev_res_C_index = [atom.index for atom in new_prev_res.atoms() if atom.name.replace(" ", "") == 'C']
+        # old_prev_res_C_index = [atom.index for atom in old_prev_res.atoms() if atom.name.replace(" ", "") == 'C']
+        #
+        # for _list in [new_next_res_N_index, old_next_res_N_index, new_prev_res_C_index, old_prev_res_C_index]:
+        #     assert len(_list) == 1, f"atoms in the next or prev residue are not uniquely named"
+        #
+        # new_to_old_map = {new_next_res_N_index[0]: old_next_res_N_index[0],
+        #                   new_prev_res_C_index[0]: old_prev_res_C_index[0]}
 
-        new_prev_res_C_index = [atom.index for atom in new_prev_res.atoms() if atom.name.replace(" ", "") == 'C']
-        old_prev_res_C_index = [atom.index for atom in old_prev_res.atoms() if atom.name.replace(" ", "") == 'C']
-
-        for _list in [new_next_res_N_index, old_next_res_N_index, new_prev_res_C_index, old_prev_res_C_index]:
-            assert len(_list) == 1, f"atoms in the next or prev residue are not uniquely named"
-
-        new_to_old_map = {new_next_res_N_index[0]: old_next_res_N_index[0],
-                          new_prev_res_C_index[0]: old_prev_res_C_index[0]}
-
-        #new_to_old_map = new_next_res_to_old_next_res_map.update(new_prev_res_to_old_prev_res_map)
+        new_next_res_to_old_next_res_map.update(new_prev_res_to_old_prev_res_map)
+        new_to_old_map = new_next_res_to_old_next_res_map
         return new_to_old_map
 
 

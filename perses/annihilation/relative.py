@@ -718,12 +718,12 @@ class HybridTopologyFactory(object):
 
         #add the force to the system
         self._hybrid_system.addForce(custom_core_force)
-        self._hybrid_system_forces['core_torsion_force'] = custom_core_force
+        self._hybrid_system_forces['custom_torsion_force'] = custom_core_force
 
         #create and add the torsion term for unique/environment atoms
-        standard_torsion_force = openmm.PeriodicTorsionForce()
-        self._hybrid_system.addForce(standard_torsion_force)
-        self._hybrid_system_forces['standard_torsion_force'] = standard_torsion_force
+        unique_atom_torsion_force = openmm.PeriodicTorsionForce()
+        self._hybrid_system.addForce(unique_atom_torsion_force)
+        self._hybrid_system_forces['unique_atom_torsion_force'] = unique_atom_torsion_force
 
     def _add_nonbonded_force_terms(self):
         """
@@ -1278,14 +1278,13 @@ class HybridTopologyFactory(object):
 
     def handle_periodic_torsion_force(self):
         """
-        Handle the torsions in the hybrid system in the same way as the angles and bonds.
+        Handle the torsions defined in the new and old systems as such:
+            1. old system torsions will enter the `custom_torsion_force` if they do not contain `unique_old_atoms` and will interpolate from `on` to `off` from lambda_torsions = 0 to 1, respectively
+            2. new system torsions will enter the `custom_torsion_force` if they do not contain `unique_new_atoms` and will interpolate from `off` to `on` from lambda_torsions = 0 to 1, respectively
+            3. old _and_ new system torsions will enter the `unique_atom_torsion_force`(standard_torsion_force) and will _not_ be interpolated.
         """
         old_system_torsion_force = self._old_system_forces['PeriodicTorsionForce']
         new_system_torsion_force = self._new_system_forces['PeriodicTorsionForce']
-
-        #first, loop through all the torsions in the old system to determine what to do with them. We will only use the
-        #custom torsion force if all atoms are part of "core." Otherwise, they are either unique to one system or never
-        #change.
 
         #we need to keep track of what torsions we added so that we do not double count.
         added_torsions = []
@@ -1303,60 +1302,17 @@ class HybridTopologyFactory(object):
 
             #if all atoms are in the core, we'll need to find the corresponding parameters in the old system and
             #interpolate
-            if hybrid_index_set.issubset(self._atom_classes['core_atoms']):
-                _logger.debug(f"\t\thandle_periodic_torsion_forces: torsion_index {torsion_index} is a core (to custom torsion force).")
-                torsion_indices = torsion_parameters[:4]
-
-                #if we've already added these indices (they may appear >once for high periodicities)
-                #then just continue to the next torsion.
-                if torsion_indices in added_torsions:
-                    continue #it doesn't matter if the torsion indices are already in the new hybrid torsion force object...some torsions have high periodicity
-                #get the new indices so we can get the new angle parameters, as well as all old parameters of the old torsion
-                #The reason we do it like this is to take care of varying periodicity between new and old system.
-                torsion_parameters_list = self._find_torsion_parameters(old_system_torsion_force, torsion_indices)
-                #_logger.debug(f"\t\thandle_periodic_torsion_forces: old torsion parameters: {torsion_parameters_list}")
-                new_indices = [self._topology_proposal.old_to_new_atom_map[old_index] for old_index in torsion_indices]
-                #_logger.debug(f"\t\thandle_periodic_torsion_forces: new indices: {new_indices}")
-                new_torsion_parameters_list = self._find_torsion_parameters(new_system_torsion_force, new_indices)
-                #_logger.debug(f"\t\thandle_periodic_torsion_forces: new torsion parameters: {new_torsion_parameters_list}")
-
-                #for old torsions, have the energy scale from full at lambda=0 to off at lambda=1
-                for torsion_parameters in torsion_parameters_list:
-                    hybrid_force_parameters = [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], 0.0, 0.0, 0.0]
-                    self._hybrid_system_forces['core_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
-
-                #for new torsions, have the energy scale from 0 at lambda=0 to full at lambda=1
-                for torsion_parameters in new_torsion_parameters_list:
-                    #add to the hybrid force:
-                    #the parameters at indices 3 and 4 represent theta0 and k, respectively.
-                    hybrid_force_parameters = [0.0, 0.0, 0.0,torsion_parameters[4], torsion_parameters[5], torsion_parameters[6]]
-                    self._hybrid_system_forces['core_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
-
-                added_torsions.append(torsion_indices)
-
-            #otherwise, just add the parameters to the regular force:
+            if hybrid_index_set.intersection(self._atom_classes['unique_old_atoms']) != set():
+                #then it goes to a standard force...
+                self._hybrid_system_forces['unique_atom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
+                                                                        hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
+                                                                        torsion_parameters[5], torsion_parameters[6])
             else:
-                #TODO: make considerations for environment-core valence interactions.  THESE will be important in protein mutation studies...
-                if hybrid_index_set.intersection(self._atom_classes['unique_old_atoms']) != set():
-                    assert hybrid_index_set.intersection(self._atom_classes['environment_atoms']) == set(), f"we disallow unique_old-environment torsion terms"
-                    _logger.debug(f"\t\thandle_periodic_torsion_forces: torsion_index {torsion_index} is a core-unique_old or unique_old-unique_old  (to standard torsion force).")
-                    self._hybrid_system_forces['standard_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
-                                                                            hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
-                                                                            torsion_parameters[5], torsion_parameters[6])
-                elif hybrid_index_set.issubset(self._atom_classes['environment_atoms']):
-                    _logger.debug(f"\t\thandle_periodic_torsion_forces: torsion_index {torsion_index} is an environment (to standard torsion force).")
-                    self._hybrid_system_forces['standard_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
-                                                                            hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
-                                                                            torsion_parameters[5], torsion_parameters[6])
-                elif hybrid_index_set.intersection(self._atom_classes['environment_atoms']) != set():
-                    _logger.debug(f"\t\thandle_periodic_torsion_forces: torsion_index {torsion_index} contains environment atoms.")
-                    assert hybrid_index_set.intersection(self._atom_classes['unique_old_atoms']) == set(), f"we disallow unique_old-environment torsion terms"
-                    self._hybrid_system_forces['standard_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
-                                                                            hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
-                                                                            torsion_parameters[5], torsion_parameters[6])
-                else:
-                    raise Exception(f"\t\thybrid index list {hybrid_index_list[:4]} does not fit a canonical atom type")
-
+                #it is a core-only term, an environment-only term, or a core/env term;
+                #in any case, it goes to the core torsion_force
+                torsion_indices = torsion_parameters[:4]
+                hybrid_force_parameters = [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], 0.0, 0.0, 0.0]
+                self._hybrid_system_forces['custom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
 
 
         _logger.info("\thandle_periodic_torsion_forces: looping through new_system to add relevant terms...")
@@ -1368,50 +1324,17 @@ class HybridTopologyFactory(object):
             hybrid_index_list = [self._new_to_hybrid_map[new_index] for new_index in torsion_parameters[:4]]
             hybrid_index_set = set(hybrid_index_list)
 
-            #if any are part of the unique new atoms, we will add them to the standard torsion force:
-            if len(hybrid_index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
-                assert hybrid_index_set.intersection(self._atom_classes['environment_atoms']) == set(), f"we disallow unique_new-environment torsion terms"
-                _logger.debug(f"\t\thandle_periodic_torsion_forces: torsion_index {torsion_index} is core-unique_new or unique_new-unique_new (to standard torsion force).")
-                self._hybrid_system_forces['standard_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
-                                                                            hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
-                                                                            torsion_parameters[5], torsion_parameters[6])
-            elif hybrid_index_set.issubset(self._atom_classes['environment_atoms']):
-                #env terms are already added
-                _logger.debug(f"\t\thandle_periodic_torsion_forces: is environment; already added")
-                pass
-
-            elif hybrid_index_set.issubset(self._atom_classes['core_atoms']):
-                #these are already added, with a single exception handled below
-                _logger.debug(f"\t\thandle_periodic_torsion_forces: is core; already added")
-                pass
-
-            elif hybrid_index_set.intersection(self._atom_classes['environment_atoms']) != set() and hybrid_index_set.intersection(self._atom_classes['core_atoms']) != set():
-                _logger.debug(f"\t\thandle_periodic_torsion_forces: contains environment and core; already added.")
-                assert hybrid_index_set.intersection(self._atom_classes['unique_new_atoms']) == set(), f"we disallow unique_new-environment torsion terms"
+            if hybrid_index_set.intersection(self._atom_classes['unique_new_atoms']) != set():
+                #then it goes to a standard force...
+                self._hybrid_system_forces['unique_atom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
+                                                                        hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
+                                                                        torsion_parameters[5], torsion_parameters[6])
             else:
-                raise Exception(f"\t\tthe term {hybrid_index_list[:4]} is not a canonical atom type")
 
-            #another consideration has to be made for when a core-core-core-core torsion force appears in the new_system but is not present in the old system;
-            #this would not have been caught by the previous `for` loop over the old system core torsions
-            if hybrid_index_set.issubset(self._atom_classes['core_atoms']):
-                _logger.debug(f"\t\thandle_periodic_torsion_forces: torsion_index {torsion_index} is a core (to custom torsion force).")
                 torsion_indices = torsion_parameters[:4]
-                old_index_list = [self._hybrid_to_old_map[hybr_idx] for hybr_idx in hybrid_index_list]
-                old_index_list_reversed = [i for i in reversed(old_index_list)]
 
-                  #if we've already added these indices (they may appear >once for high periodicities)
-                #then just continue to the next torsion.
-                if (old_index_list in added_torsions) or (old_index_list_reversed in added_torsions):
-                    continue
-                new_torsion_parameters_list = self._find_torsion_parameters(new_system_torsion_force, torsion_indices)
-                for torsion_parameters in new_torsion_parameters_list:
-                    #add to the hybrid force:
-                    #the parameters at indices 3 and 4 represent theta0 and k, respectively.
-                    hybrid_force_parameters = [0.0, 0.0, 0.0,torsion_parameters[4], torsion_parameters[5], torsion_parameters[6]]
-                    self._hybrid_system_forces['core_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
-                added_torsions.append(old_index_list)
-                added_torsions.append(old_index_list_reversed)
-
+                hybrid_force_parameters = [0.0, 0.0, 0.0, torsion_parameters[4], torsion_parameters[5], torsion_parameters[6]]
+                self._hybrid_system_forces['custom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
 
     def handle_nonbonded(self):
         """
