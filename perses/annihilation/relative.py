@@ -1286,6 +1286,10 @@ class HybridTopologyFactory(object):
         old_system_torsion_force = self._old_system_forces['PeriodicTorsionForce']
         new_system_torsion_force = self._new_system_forces['PeriodicTorsionForce']
 
+        #auxiliary_custom_torsion_force = copy.deepcopy(self._hybrid_system_forces['custom_torsion_force'])
+        auxiliary_custom_torsion_force = []
+        old_custom_torsions_to_standard = []
+
         #we need to keep track of what torsions we added so that we do not double count.
         added_torsions = []
         _logger.info("\thandle_periodic_torsion_forces: looping through old_system to add relevant terms...")
@@ -1312,8 +1316,8 @@ class HybridTopologyFactory(object):
                 #in any case, it goes to the core torsion_force
                 torsion_indices = torsion_parameters[:4]
                 hybrid_force_parameters = [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], 0.0, 0.0, 0.0]
-                self._hybrid_system_forces['custom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
-
+                #self._hybrid_system_forces['custom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
+                auxiliary_custom_torsion_force.append([hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters[:3]])
 
         _logger.info("\thandle_periodic_torsion_forces: looping through new_system to add relevant terms...")
         for torsion_index in range(new_system_torsion_force.getNumTorsions()):
@@ -1334,7 +1338,28 @@ class HybridTopologyFactory(object):
                 torsion_indices = torsion_parameters[:4]
 
                 hybrid_force_parameters = [0.0, 0.0, 0.0, torsion_parameters[4], torsion_parameters[5], torsion_parameters[6]]
-                self._hybrid_system_forces['custom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
+
+                #check to see if this term is in the olds...
+                if [hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters[3:]] in auxiliary_custom_torsion_force:
+                    #print('hooray!')
+                    #then this terms has to go to standard and be deleted...
+                    old_index = auxiliary_custom_torsion_force.index([hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters[3:]])
+                    old_custom_torsions_to_standard.append(old_index)
+                    self._hybrid_system_forces['unique_atom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
+                                                                            hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
+                                                                            torsion_parameters[5], torsion_parameters[6])
+                else:
+                    #then this term has to go to the core force...
+                    self._hybrid_system_forces['custom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
+                    #auxiliary_custom_torsion_force.addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters[3:])
+
+        #now we have to loop through the aux custom torsion force
+        #print(f"old_custom_torsions_to_standard: {old_custom_torsions_to_standard}")
+        for index in [q for q in range(len(auxiliary_custom_torsion_force)) if q not in old_custom_torsions_to_standard]:
+            terms = auxiliary_custom_torsion_force[index]
+            hybrid_index_list = terms[:4]
+            hybrid_force_parameters = terms[4] + [0., 0., 0.]
+            self._hybrid_system_forces['custom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
 
     def handle_nonbonded(self):
         """
