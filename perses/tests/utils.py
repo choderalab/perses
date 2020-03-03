@@ -28,7 +28,7 @@ else:
 from openmmtools.constants import kB
 from openmmtools import alchemy, states
 import contextlib
-
+from openmmtools import utils
 ################################################################################
 # CONSTANTS
 ################################################################################
@@ -37,6 +37,7 @@ temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 ENERGY_THRESHOLD = 1e-1
+DEFAULT_PLATFORM = utils.get_fastest_platform()
 
 ################################################################################
 # UTILITIES
@@ -291,7 +292,7 @@ def compute_potential(system, positions, platform=None):
         raise NaNException("Potential energy is NaN")
     return potential
 
-def compute_potential_components(context, beta = beta):
+def compute_potential_components(context, beta = beta, platform = DEFAULT_PLATFORM):
     """
     Compute potential energy, raising an exception if it is not finite.
 
@@ -315,7 +316,6 @@ def compute_potential_components(context, beta = beta):
         force.setForceGroup(index)
     # Create new Context.
     integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-    platform = openmm.Platform.getPlatformByName('Reference')
     context = openmm.Context(system, integrator, platform)
     context.setPositions(positions)
     for (parameter, value) in parameters.items():
@@ -444,7 +444,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
     from perses.rjmc.topology_proposal import TopologyProposal, SystemGenerator, SmallMoleculeSetProposalEngine
     import simtk.unit as unit
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
-    from perses.utils.openeye import generate_expression 
+    from perses.utils.openeye import generate_expression
 
     atom_expr = generate_expression(atom_expression)
     bond_expr = generate_expression(bond_expression)
@@ -705,7 +705,7 @@ def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_it
 
     return conformers, rj_works
 
-def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_energy, beta = 1.0/kT, ENERGY_THRESHOLD = 1e-6):
+def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_energy, beta = 1.0/kT, ENERGY_THRESHOLD = 1e-6, platform = DEFAULT_PLATFORM):
     """
     Function to validate that the difference between the nonalchemical versus alchemical state at lambda = 0,1 is
     equal to the difference in valence energy (forward and reverse).
@@ -735,11 +735,9 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
     #create copies of old/new systems and set the dispersion correction
     top_proposal = copy.deepcopy(topology_proposal)
     forces = { top_proposal._old_system.getForce(index).__class__.__name__ : top_proposal._old_system.getForce(index) for index in range(top_proposal._old_system.getNumForces()) }
-    force = forces['NonbondedForce']
-    force.setUseDispersionCorrection(False)
+    forces['NonbondedForce'].setUseDispersionCorrection(False)
     forces = { top_proposal._new_system.getForce(index).__class__.__name__ : top_proposal._new_system.getForce(index) for index in range(top_proposal._new_system.getNumForces()) }
-    force = forces['NonbondedForce']
-    force.setUseDispersionCorrection(False)
+    forces['NonbondedForce'].setUseDispersionCorrection(False)
 
     #create copy of hybrid system, define old and new positions, and turn off dispersion correction
     hybrid_system = copy.deepcopy(htf.hybrid_system)
@@ -762,7 +760,6 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
                     (nonalch_one, new_positions, top_proposal._new_system.getDefaultPeriodicBoxVectors())]
 
     rp_list = []
-    platform = openmm.Platform.getPlatformByName('Reference')
     for (state, pos, box_vectors) in attrib_list:
         #print("\t\t\t{}".format(state))
         integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)

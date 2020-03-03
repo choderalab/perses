@@ -738,7 +738,6 @@ class AtomMapper(object):
             for matchpair in match.GetAtoms():
                 old_index, new_index = matchpair.pattern.GetIdx(), matchpair.target.GetIdx()
                 old_atom, new_atom = current.GetAtom(oechem.OEHasAtomIdx(old_index)), proposed.GetAtom(oechem.OEHasAtomIdx(new_index))
-                print(old_atom, new_atom)
 
                 if old_atom.IsAromatic() and new_atom.IsAromatic(): #if both are aromatic
                     if old_atom.GetAtomicNum() == new_atom.GetAtomicNum():
@@ -1024,6 +1023,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         This base class is not meant to be invoked directly.
         """
+        import pickle
         from perses.utils.smallmolecules import render_atom_mapping
         _logger.debug(f"Instantiating PolymerProposalEngine")
         super(PolymerProposalEngine,self).__init__(system_generator=system_generator, proposal_metadata=proposal_metadata, always_change=always_change)
@@ -1031,6 +1031,27 @@ class PolymerProposalEngine(ProposalEngine):
         self._aminos = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'PHE',
                         'SER', 'THR', 'TRP', 'TYR', 'VAL'] # common naturally-occurring amino acid names
                         # Note this does not include PRO since there's a problem with OpenMM's template DEBUG
+        self._aminos_3letter_to_1letter_map = {'ALA' : 'A' ,
+                                                'ARG' : 'R' ,
+                                                'ASN' : 'N' ,
+                                                'ASP' : 'D' ,
+                                                'CYS' : 'C' ,
+                                                'GLN' : 'Q' ,
+                                                'GLU' : 'E' ,
+                                                'GLY' : 'G' ,
+                                                'HIS' : 'H' ,
+                                                'ILE' : 'I' ,
+                                                'LEU' : 'L' ,
+                                                'LYS' : 'K' ,
+                                                'MET' : 'M' ,
+                                                'PHE' : 'F' ,
+                                                'PRO' : 'P' ,
+                                                'SER' : 'S' ,
+                                                'THR' : 'T' ,
+                                                'TRP' : 'W' ,
+                                                'TYR' : 'Y' ,
+                                                'VAL' : 'V' }
+
         self._aggregate = aggregate # ?????????
 
     def propose(self,
@@ -1137,7 +1158,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         # index_to_new_residues : dict, key : int (index) , value : str (three letter name of proposed residue)
         _logger.debug(f"\tconstructing atom map for TopologyProposal...")
-        atom_map, old_res_to_oemol_map, new_res_to_oemol_map, local_atom_map_stereo_sidechain, current_oemol, proposed_oemol, old_oemol_res_copy, new_oemol_res_copy  = self._construct_atom_map(residue_map, old_topology, index_to_new_residues, new_topology)
+        atom_map, old_res_to_oemol_map, new_res_to_oemol_map, local_atom_map_stereo_sidechain, current_oemol_sidechain, proposed_oemol_sidechain, old_oemol_res_copy, new_oemol_res_copy  = self._construct_atom_map(residue_map, old_topology, index_to_new_residues, new_topology)
 
         _logger.debug(f"\tadding indices of the 'C' backbone atom in the next residue and the 'N' atom in the previous")
         _logger.debug(f"\t{list(index_to_new_residues.keys())[0]}")
@@ -1243,7 +1264,7 @@ class PolymerProposalEngine(ProposalEngine):
         #assert PolymerProposalEngine.validate_core_atoms_with_system(topology_proposal)
 
 
-        return topology_proposal, local_atom_map_stereo_sidechain, proposed_oemol, current_oemol
+        return topology_proposal
 
     def _find_adjacent_special_atoms(self, old_topology, new_topology, mutated_residue_index):
         """
@@ -1611,7 +1632,7 @@ class PolymerProposalEngine(ProposalEngine):
         new_oemol_res_copy : openeye.oechem.oemol object
             copy of modified new oemol
         """
-        from perses.utils.openeye import createOEMolFromSDF
+        import pickle
         from pkg_resources import resource_filename
 
         # atom_map : dict, key : int (index of atom in old topology) , value : int (index of same atom in new topology)
@@ -1664,39 +1685,45 @@ class PolymerProposalEngine(ProposalEngine):
         his_templates = ['HIE', 'HID']
         if old_res_name in his_templates:
             old_res_name = 'HIS'
-        elif new_res_name in his_templates:
+        if new_res_name in his_templates:
             new_res_name = 'HIS'
         else:
             pass
 
         # TODO dom changing these lines to caching
-        current_oemol = createOEMolFromSDF(resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{old_res_name}.pdb")), add_hydrogens = True)
-        proposed_oemol = createOEMolFromSDF(resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{new_res_name}.pdb")), add_hydrogens = True)
+        with open(resource_filename('perses', os.path.join('data', 'amino_acid_oemols', f"{self._aminos_3letter_to_1letter_map[old_res_name]}.pkl")), 'rb') as f:
+            current_oemol = pickle.load(f)
+
+        with open(resource_filename('perses', os.path.join('data', 'amino_acid_oemols', f"{self._aminos_3letter_to_1letter_map[new_res_name]}.pkl")), 'rb') as f:
+            proposed_oemol = pickle.load(f)
+
+        # current_oemol = createOEMolFromSDF(resource_filename('perses', os.path.join('data', 'amino_acid_oemols', f"{old_res_name}.pdb")), add_hydrogens = True)
+        # proposed_oemol = createOEMolFromSDF(resource_filename('perses', os.path.join('data', 'amino_acid_oemols', f"{new_res_name}.pdb")), add_hydrogens = True)
 
 
-        #assert the names are unique:
-        if not len(set([atom.GetName() for atom in current_oemol.GetAtoms()])) == len([atom.GetName() for atom in current_oemol.GetAtoms()]):
-            _logger.warning(f"\t\t\tthe sidechain atoms in the old res are not uniquely named")
-            return {}
-        elif not len(set([atom.GetName() for atom in proposed_oemol.GetAtoms()])) == len([atom.GetName() for atom in proposed_oemol.GetAtoms()]):
-            _logger.warning(f"\t\t\tthe sidechain atoms in the new res are not uniquely named")
-            return {}
-
-        #fix atom names (spaces and numbers before letters correction)
-        for atom in current_oemol.GetAtoms():
-            # TODO dom change
-            name_with_spaces = atom.GetName()
-            name_without_spaces = name_with_spaces.replace(" ", "")
-            if name_without_spaces[0].isdigit():
-                name_without_spaces = name_without_spaces[1:] + name_without_spaces[0]
-            atom.SetName(name_without_spaces)
-
-        for atom in proposed_oemol.GetAtoms():
-            name_with_spaces = atom.GetName()
-            name_without_spaces = name_with_spaces.replace(" ", "")
-            if name_without_spaces[0].isdigit():
-                name_without_spaces = name_without_spaces[1:] + name_without_spaces[0]
-            atom.SetName(name_without_spaces)
+        # #assert the names are unique:
+        # if not len(set([atom.GetName() for atom in current_oemol.GetAtoms()])) == len([atom.GetName() for atom in current_oemol.GetAtoms()]):
+        #     _logger.warning(f"\t\t\tthe sidechain atoms in the old res are not uniquely named")
+        #     return {}
+        # elif not len(set([atom.GetName() for atom in proposed_oemol.GetAtoms()])) == len([atom.GetName() for atom in proposed_oemol.GetAtoms()]):
+        #     _logger.warning(f"\t\t\tthe sidechain atoms in the new res are not uniquely named")
+        #     return {}
+        #
+        # #fix atom names (spaces and numbers before letters correction)
+        # for atom in current_oemol.GetAtoms():
+        #     # TODO dom change
+        #     name_with_spaces = atom.GetName()
+        #     name_without_spaces = name_with_spaces.replace(" ", "")
+        #     if name_without_spaces[0].isdigit():
+        #         name_without_spaces = name_without_spaces[1:] + name_without_spaces[0]
+        #     atom.SetName(name_without_spaces)
+        #
+        # for atom in proposed_oemol.GetAtoms():
+        #     name_with_spaces = atom.GetName()
+        #     name_without_spaces = name_with_spaces.replace(" ", "")
+        #     if name_without_spaces[0].isdigit():
+        #         name_without_spaces = name_without_spaces[1:] + name_without_spaces[0]
+        #     atom.SetName(name_without_spaces)
 
         old_oemol_res_copy = copy.deepcopy(current_oemol)
         new_oemol_res_copy = copy.deepcopy(proposed_oemol)
@@ -2072,6 +2099,7 @@ class PointMutationEngine(PolymerProposalEngine):
             each proposal to contain multiple mutations.
 
         """
+        import pickle
         super(PointMutationEngine, self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata, always_change=always_change, aggregate=aggregate)
 
         assert isinstance(wildtype_topology, app.Topology)
