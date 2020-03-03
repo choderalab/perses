@@ -18,9 +18,28 @@ from perses.utils.smallmolecules import render_atom_mapping
 from perses.tests.utils import validate_endstate_energies
 from perses.dispersed.smc import SequentialMonteCarlo
 
-logging.basicConfig(level = logging.NOTSET)
-_logger = logging.getLogger("setup_relative_calculation")
+import datetime
+class TimeFilter(logging.Filter):
+    def filter(self, record):
+        try:
+          last = self.last
+        except AttributeError:
+          last = record.relativeCreated
+        delta = datetime.datetime.fromtimestamp(record.relativeCreated/1000.0) - datetime.datetime.fromtimestamp(last/1000.0)
+        record.relative = '{0:.2f}'.format(delta.seconds + delta.microseconds/1000000.0)
+        self.last = record.relativeCreated
+        return True
+
+fmt = logging.Formatter(fmt="%(asctime)s:(%(relative)ss):%(name)s:%(message)s")
+#logging.basicConfig(level = logging.NOTSET)
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S')
+_logger = logging.getLogger()
 _logger.setLevel(logging.INFO)
+[hndl.addFilter(TimeFilter()) for hndl in _logger.handlers]
+[hndl.setFormatter(fmt) for hndl in _logger.handlers]
 
 ENERGY_THRESHOLD = 1e-4
 from openmmtools.constants import kB
@@ -69,6 +88,9 @@ def getSetupOptions(filename):
         setup_options['neglect_angles'] = False
     if 'anneal_1,4s' not in setup_options:
         setup_options['anneal_1,4s'] = False
+
+    if 'nonbonded_method' not in setup_options:
+        setup_options['nonbonded_method'] = 'PME'
 
     if 'run_type' not in setup_options:
         _logger.info(f"\t\t\trun_type is not specified; default to None")
@@ -221,7 +243,7 @@ def getSetupOptions(filename):
         # need to convert the list to Integer
         from perses.utils.openeye import generate_expression
         setup_options['atom_expr'] = generate_expression(setup_options['atom_expression'])
-        
+
     setup_options['bond_expr'] = None
     if 'bond_expression' in setup_options:
         # need to convert the list to Integer
@@ -353,7 +375,7 @@ def run_setup(setup_options):
                                           atom_expr=setup_options['atom_expr'], bond_expr=setup_options['bond_expr'],
                                           atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
-                                          trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'])
+                                          trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'])
 
         _logger.info(f"\twriting pickle output...")
         with open(os.path.join(os.getcwd(), trajectory_directory, setup_pickle_file), 'wb') as f:
@@ -532,7 +554,7 @@ def run_setup(setup_options):
                                                                                              n_steps=n_steps_per_move_application,
                                                                                              reassign_velocities=False,
                                                                                              n_restart_attempts=20,
-                                                                                             splitting="V R R R O R R R V",
+                                                                                             splitting="V R O R V",
                                                                                              constraint_tolerance=1e-06),
                                                hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
@@ -544,14 +566,15 @@ def run_setup(setup_options):
                                                                                              n_steps=n_steps_per_move_application,
                                                                                              reassign_velocities=False,
                                                                                              n_restart_attempts=20,
-                                                                                             splitting="V R R R O R R R V",
+                                                                                             splitting="V R O R V",
                                                                                              constraint_tolerance=1e-06),
                                                                                              hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
                 hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 
-if __name__ == "__main__":
+
+def run():
     _logger.info("Beginning Setup...")
     try:
        yaml_filename = sys.argv[1]
@@ -753,3 +776,6 @@ if __name__ == "__main__":
                 _logger.info(f"\n\n")
 
                 _logger.info(f"\t\tFinished phase {phase}")
+
+if __name__ == "__main__":
+    run()
