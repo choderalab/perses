@@ -420,7 +420,7 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene",atom_express
     from perses.utils.openeye import createSystemFromIUPAC
     from openmoltools.openeye import iupac_to_oemol,generate_conformers
 
-    from perses.utils.openeye import generate_expression 
+    from perses.utils.openeye import generate_expression
 
     atom_expr = generate_expression(atom_expression)
     bond_expr = generate_expression(bond_expression)
@@ -433,7 +433,7 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene",atom_express
     refmol = generate_conformers(refmol,max_confs=1)
 
     #map one of the rings
-    atom_map = AtomMapper([mol, refmol], atom_expr=atom_expr, bond_expr=bond_expr,allow_ring_breaking=True).atom_map 
+    atom_map = AtomMapper([mol, refmol], atom_expr=atom_expr, bond_expr=bond_expr,allow_ring_breaking=True).atom_map
 
     #now use the mapped atoms to generate a new and old system with identical atoms mapped. This will result in the
     #same molecule with the same positions for lambda=0 and 1, and ensures a contiguous atom map
@@ -506,7 +506,7 @@ def test_generate_endpoint_thermodynamic_states():
             raise Exception('Interaction {} not set to 1. at lambda = 1. {} set to {}'.format(value,value, getattr(lambda_one_thermodynamic_state, value)))
 
 
-def HybridTopologyFactory_energies(current_mol = 'toluene', proposed_mol = '1,2-bis(trifluoromethyl) benzene'):
+def HybridTopologyFactory_energies(current_mol = 'toluene', proposed_mol = '1,2-bis(trifluoromethyl) benzene', validate_geometry_energy_bookkeeping = True):
     """
     Test whether the difference in the nonalchemical zero and alchemical zero states is the forward valence energy.  Also test for the one states.
     """
@@ -523,12 +523,13 @@ def HybridTopologyFactory_energies(current_mol = 'toluene', proposed_mol = '1,2-
 
     # run geometry engine to generate old and new positions
     _geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
-    _new_positions, _lp = _geometry_engine.propose(top_proposal, old_positions, beta)
-    _lp_rev = _geometry_engine.logp_reverse(top_proposal, _new_positions, old_positions, beta)
+    _new_positions, _lp = _geometry_engine.propose(top_proposal, old_positions, beta, validate_geometry_energy_bookkeeping)
+    _lp_rev = _geometry_engine.logp_reverse(top_proposal, _new_positions, old_positions, beta, validate_geometry_energy_bookkeeping)
 
     # make the hybrid system, reset the CustomNonbondedForce cutoff
     HTF = HybridTopologyFactory(top_proposal, old_positions, _new_positions)
     hybrid_system = HTF.hybrid_system
+
     nonalch_zero, nonalch_one, alch_zero, alch_one = generate_endpoint_thermodynamic_states(hybrid_system, top_proposal)
 
     # compute reduced energies
@@ -560,10 +561,10 @@ def HybridTopologyFactory_energies(current_mol = 'toluene', proposed_mol = '1,2-
     print(f"Abs difference in zero alchemical vs nonalchemical systems: {abs(nonalch_zero_rp - alch_zero_rp + forward_added_valence_energy)}")
     print(f"Abs difference in one alchemical vs nonalchemical systems: {abs(nonalch_one_rp - alch_one_rp + reverse_subtracted_valence_energy)}")
 
-def test_HybridTopologyFactory_energies(molecule_perturbation_list = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene']]):
+def test_HybridTopologyFactory_energies(molecule_perturbation_list = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene']], validations = [False, True, False]):
     """
     Test whether the difference in the nonalchemical zero and alchemical zero states is the forward valence energy.  Also test for the one states.
     """
-    for molecule_pair in molecule_perturbation_list:
+    for molecule_pair, validate in zip(molecule_perturbation_list, validations):
         print(f"\tconduct energy comparison for {molecule_pair[0]} --> {molecule_pair[1]}")
-        HybridTopologyFactory_energies(current_mol = molecule_pair[0], proposed_mol = molecule_pair[1])
+        HybridTopologyFactory_energies(current_mol = molecule_pair[0], proposed_mol = molecule_pair[1], validate_geometry_energy_bookkeeping = validate)

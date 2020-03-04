@@ -195,7 +195,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             self._storage = None
         self.neglect_angles = neglect_angles
 
-    def propose(self, top_proposal, current_positions, beta):
+    def propose(self, top_proposal, current_positions, beta, validate_energy_bookkeeping = True):
         """
         Make a geometry proposal for the appropriate atoms.
 
@@ -207,6 +207,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             The current positions
         beta : simtk.unit.Quantity with units compatible with 1/(kilojoules_per_mole)
             The inverse thermal energy
+        validate_energy_bookkeeping : bool
+            whether to validate the energy mismatch ratio; this is no longer strictly necessary, and will certainly fail if ring closure or non-conservative perturbations are conducted
+            (non-conservative transformations are defined as transformations wherein not _all_ of the valence energies are used to make topology proposals...)
 
         Returns
         -------
@@ -233,7 +236,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             self.forward_final_growth_system = None
         else:
             _logger.info("propose: unique new atoms detected; proceeding to _logp_propose...")
-            logp_proposal, new_positions, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms, omitted_terms = self._logp_propose(top_proposal, current_positions, beta, direction='forward')
+            logp_proposal, new_positions, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms, omitted_terms = self._logp_propose(top_proposal, current_positions, beta, direction='forward', validate_energy_bookkeeping = validate_energy_bookkeeping)
             self.nproposed += 1
 
         check_dimensionality(new_positions, unit.nanometers)
@@ -247,7 +250,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return new_positions, logp_proposal
 
 
-    def logp_reverse(self, top_proposal, new_coordinates, old_coordinates, beta):
+    def logp_reverse(self, top_proposal, new_coordinates, old_coordinates, beta, validate_energy_bookkeeping = True):
         """
         Calculate the logp for the given geometry proposal
 
@@ -261,6 +264,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             The coordinates of the system before the proposal
         beta : simtk.unit.Quantity with units compatible with 1/(kilojoules_per_mole)
             The inverse thermal energy
+        validate_energy_bookkeeping : bool
+            whether to validate the energy mismatch ratio; this is no longer strictly necessary, and will certainly fail if ring closure or non-conservative perturbations are conducted
+            (non-conservative transformations are defined as transformations wherein not _all_ of the valence energies are used to make topology proposals...)
 
         Returns
         -------
@@ -282,7 +288,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         # Compute log proposal probability for reverse direction
         _logger.info("logp_reverse: unique new atoms detected; proceeding to _logp_propose...")
-        logp_proposal, new_positions, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms, omitted_terms = self._logp_propose(top_proposal, old_coordinates, beta, new_positions=new_coordinates, direction='reverse')
+        logp_proposal, new_positions, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms, omitted_terms = self._logp_propose(top_proposal, old_coordinates, beta, new_positions=new_coordinates, direction='reverse', validate_energy_bookkeeping = validate_energy_bookkeeping)
         self.reverse_new_positions, self.reverse_rjmc_info = new_positions, rjmc_info
         self.reverse_atoms_with_positions_reduced_potential, self.reverse_final_context_reduced_potential = atoms_with_positions_reduced_potential, final_context_reduced_potential
         self.reverse_neglected_angle_terms = neglected_angle_terms
@@ -321,7 +327,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         pdbfile.flush()
         pdbfile.write('ENDMDL\n')
 
-    def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward'):
+    def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward', validate_energy_bookkeeping = True):
         """
         This is an INTERNAL function that handles both the proposal and the logp calculation,
         to reduce code duplication. Whether it proposes or just calculates a logp is based on
@@ -341,6 +347,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             The coordinates of the system after the proposal, or None for forward proposals
         direction : str
             Whether to make a proposal ('forward') or just calculate logp ('reverse')
+        validate_energy_bookkeeping : bool
+            whether to validate the energy mismatch ratio; this is no longer strictly necessary, and will certainly fail if ring closure or non-conservative perturbations are conducted
+            (non-conservative transformations are defined as transformations wherein not _all_ of the valence energies are used to make topology proposals...)
 
         Returns
         -------
@@ -666,7 +675,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         _logger.info(f"magnitude of difference in the energies: {abs(final_context_reduced_potential - atoms_with_positions_reduced_potential - reduced_potential_energy)}")
 
         energy_mismatch_ratio = (atoms_with_positions_reduced_potential + reduced_potential_energy) / (final_context_reduced_potential)
-        assert (energy_mismatch_ratio < ENERGY_MISMATCH_RATIO_THRESHOLD + 1) and (energy_mismatch_ratio > 1 - ENERGY_MISMATCH_RATIO_THRESHOLD)  , f"The ratio of the calculated final energy to the true final energy is {energy_mismatch_ratio}"
+
+        if validate_energy_bookkeeping:
+            assert (energy_mismatch_ratio < ENERGY_MISMATCH_RATIO_THRESHOLD + 1) and (energy_mismatch_ratio > 1 - ENERGY_MISMATCH_RATIO_THRESHOLD)  , f"The ratio of the calculated final energy to the true final energy is {energy_mismatch_ratio}"
 
 
         # Final log proposal:
