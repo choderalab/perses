@@ -3014,10 +3014,10 @@ class SmallMoleculeSetProposalEngine(AtomMapper, ProposalEngine):
 
         #create NetworkXMolecule for each molecule
         current_residue = [res for res in current_topology.residues() if res.name == self._residue_name][0]
-        new_residue = [res for res in new_topology.residues() if res.name == self._residue_name][0]
+        proposed_residue = [res for res in new_topology.residues() if res.name == self._residue_name][0]
 
-        augment_openmm_topology(topology = current_topology, residue_oemol = current_residue, residue_topology = self.current_molecule, residue_to_oemol_map = {i: j for i, j in zip(range(old_mol_start_index, old_mol_start_index + len_old_mol), range(len_old_mol))})
-        augment_openmm_topology(topology = new_topology, residue_oemol = proposed_residue, residue_topology = self.proposed_molecule, residue_to_oemol_map = {i: j for i, j in zip(range(new_mol_start_index, new_mol_start_index + len_new_mol), range(len_new_mol))})
+        augment_openmm_topology(topology = current_topology, residue_oemol = self.current_molecule, residue_topology = current_residue, residue_to_oemol_map = {i: j for i, j in zip(range(old_mol_start_index, old_mol_start_index + len_old_mol), range(len_old_mol))})
+        augment_openmm_topology(topology = new_topology, residue_oemol = self.proposed_molecule, residue_topology = proposed_residue, residue_to_oemol_map = {i: j for i, j in zip(range(new_mol_start_index, new_mol_start_index + len_new_mol), range(len_new_mol))})
 
         # Create the TopologyProposal object
         proposal = TopologyProposal(logp_proposal=logp_proposal,
