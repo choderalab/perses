@@ -52,7 +52,7 @@ WEAK_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 # default atom expression, requires same aromaticitiy and hybridization
 # bonds need to match in bond order
 # ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
-DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_IntType
+DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_IntType
 DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
 # strong requires same hybridization AND the same atom type
@@ -356,7 +356,6 @@ class AtomMapper(object):
             list of the matches between the molecules, or None if no matches possible
 
         """
-        print(f"internal map strength: {map_strength}")
         map_strength_dict = {'default': (DEFAULT_ATOM_EXPRESSION, DEFAULT_BOND_EXPRESSION),
                              'weak': (WEAK_ATOM_EXPRESSION, WEAK_BOND_EXPRESSION),
                              'strong': (STRONG_ATOM_EXPRESSION, STRONG_BOND_EXPRESSION)}
@@ -374,7 +373,6 @@ class AtomMapper(object):
             oegraphmol_current = AtomMapper._assign_ring_ids(oegraphmol_current)
             oegraphmol_proposed = AtomMapper._assign_ring_ids(oegraphmol_proposed)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
-        print(f"info: {atom_expr}, {bond_expr}")
         mcs.Init(oegraphmol_current, atom_expr, bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = False
@@ -2344,7 +2342,6 @@ class PointMutationEngine(PolymerProposalEngine):
                 residue_id_to_index = {residue.id: residue.index for residue in chain.residues()}
                 if self._residues_allowed_to_mutate is None:
                     chain_residues = [res for res in chain.residues() if res.index != 0 and res.index != topology.getNumResidues()-1 and res.name in self._aminos]
-                    print([res.name for res in chain_residues])
                     # num_residues : int
                     num_residues = len(chain_residues)
                 else:
@@ -2862,7 +2859,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     """
 
     def __init__(self, list_of_oemols, system_generator, residue_name='MOL', storage=None, **kwargs):
-        super(SmallMoleculeSetProposalEngine, self).__init__(list_of_oemols=list_of_oemols, system_generator=system_generator, **kwargs)
+        super(SmallMoleculeSetProposalEngine, self).__init__(system_generator=system_generator, **kwargs)
         # This needs to be exposed, and only set in one place
         self.system_generator = system_generator
         self.list_of_oemols = list_of_oemols
@@ -2978,13 +2975,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         # Determine atom mapping between old and new molecules
         _logger.info(f"determining atom map between old and new molecules...")
-        print(f"this is ALWAYS called...")
         if atom_map is None:
             _logger.info(f"the atom map is not specified; proceeding to generate an atom map...")
-            print(f"before call map_strength: {map_strength} ")
             mol_atom_map = AtomMapper._get_mol_atom_map(self.current_molecule, self.proposed_molecule, atom_expr=atom_expr, bond_expr=bond_expr, map_strength=map_strength)
         else:
-            print(f"before call map_strength: {map_strength} ")
             _logger.info(f"atom map is pre-determined as {atom_map}")
             mol_atom_map = atom_map
 
