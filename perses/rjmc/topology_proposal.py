@@ -1620,6 +1620,7 @@ class PolymerProposalEngine(ProposalEngine):
         """
         import pickle
         from pkg_resources import resource_filename
+        import openeye.oechem as oechem #must this be explicit?
 
         # atom_map : dict, key : int (index of atom in old topology) , value : int (index of same atom in new topology)
         atom_map = dict()
