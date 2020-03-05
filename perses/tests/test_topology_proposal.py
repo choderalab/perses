@@ -75,16 +75,20 @@ def test_mapping_strength_levels(pairs_of_smiles=[('Cc1ccccc1','c1ccc(cc1)N'),('
 
     for example in mapping:
         for index, (lig_a, lig_b) in enumerate(pairs_of_smiles):
+            print(f"conducting {example} mapping with ligands {lig_a}, {lig_b}")
             initial_molecule = smiles_to_oemol(lig_a)
             proposed_molecule = smiles_to_oemol(lig_b)
             system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
-            proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine([initial_molecule, proposed_molecule], system_generator,map_strength=example)
+            proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine([initial_molecule, proposed_molecule], system_generator)
             initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(initial_molecule)
-            proposal = proposal_engine.propose(initial_system, initial_topology)
+            print(f"running now!!")
+            proposal = proposal_engine.propose(initial_system, initial_topology, map_strength = example)
             print(lig_a, lig_b,'length OLD and NEW atoms',len(proposal.unique_old_atoms), len(proposal.unique_new_atoms))
             if test:
                 render_atom_mapping(f'{index}-{example}.png', initial_molecule, proposed_molecule, proposal._new_to_old_atom_map)
-                assert ( (len(proposal.unique_old_atoms), len(proposal.unique_new_atoms)) == correct_results[index][example])
+                assert ( (len(proposal.unique_old_atoms), len(proposal.unique_new_atoms)) == correct_results[index][example]), f"the mapping failed"
+                print(f"the mapping worked!!!")
+            print()
 
 # HBM SmallMoleculeAtomMapper is depreciated
 # HBM replace with AtomMapper test
@@ -394,11 +398,32 @@ def test_specify_allowed_mutants():
     """
     chain_id = 'A'
     allowed_mutations = [('5','GLU'),('5','ASN'),('14','PHE')]
-    pm_top_engine, system, topology, pos = create_insulin_topology_engine(chain_id = 'A', allowed_mutations = allowed_mutations)
+    import perses.rjmc.topology_proposal as topology_proposal
+
+    pdbid = "2HIU"
+    topology, positions = load_pdbid_to_openmm(pdbid)
+    modeller = app.Modeller(topology, positions)
+    for chain in modeller.topology.chains():
+        pass
+
+    modeller.delete([chain])
+
+    system_generator = create_simple_protein_system_generator()
+
+    system = system_generator.create_system(modeller.topology)
+    chain_id = 'A'
+
+    for chain in modeller.topology.chains():
+        if chain.id == chain_id:
+            residues = chain._residues
+    mutant_res = np.random.choice(residues[1:-1])
+
+    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, allowed_mutations=allowed_mutations)
+
 
     ntrials = 10
     for trian in range(ntrials):
-        pm_top_proposal = pm_top_engine.propose(system, topology)
+        pm_top_proposal = pm_top_engine.propose(system, modeller.topology)
         # Check to make sure no out-of-bounds atoms are present in new_to_old_atom_map
         natoms_old = pm_top_proposal.n_atoms_old
         natoms_new = pm_top_proposal.n_atoms_new

@@ -46,7 +46,7 @@ OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | 
 # weak requirements for mapping atoms == more atoms mapped, more in core
 # atoms need to match in aromaticity. Same with bonds.
 # maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
-WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic | oechem.OEExprOpts_IntType
+WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic #| oechem.OEExprOpts_IntType
 WEAK_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
 # default atom expression, requires same aromaticitiy and hybridization
@@ -302,17 +302,17 @@ class AtomMapper(object):
     allow_ring_breaking
 
     """
-    def __init__(self, list_of_oemols, atom_expr=DEFAULT_ATOM_EXPRESSION, bond_expr=DEFAULT_BOND_EXPRESSION,
-                 map_strength='default', allow_ring_breaking=False, **kwargs):
-        self.list_of_oemols = list_of_oemols
-        assert len(self.list_of_oemols) >= 2 , 'At least two molecules are required'
-        self.map_strength = map_strength
-        self.atom_expr = atom_expr
-        self.bond_expr = bond_expr
-        self.allow_ring_breaking = allow_ring_breaking
-
-        self.atom_map = AtomMapper._get_mol_atom_map(self.list_of_oemols[0],self.list_of_oemols[1])
-        super(AtomMapper, self).__init__(**kwargs)
+    # def __init__(self, list_of_oemols, atom_expr=DEFAULT_ATOM_EXPRESSION, bond_expr=DEFAULT_BOND_EXPRESSION,
+    #              map_strength='default', allow_ring_breaking=False, **kwargs):
+    #     self.list_of_oemols = list_of_oemols
+    #     assert len(self.list_of_oemols) >= 2 , 'At least two molecules are required'
+    #     self.map_strength = map_strength
+    #     self.atom_expr = atom_expr
+    #     self.bond_expr = bond_expr
+    #     self.allow_ring_breaking = allow_ring_breaking
+    #
+    #     #self.atom_map = AtomMapper._get_mol_atom_map(self.list_of_oemols[0],self.list_of_oemols[1])
+    #     super(AtomMapper, self).__init__(**kwargs)
 
     @staticmethod
     def _get_mol_atom_map(current_oemol,
@@ -356,26 +356,13 @@ class AtomMapper(object):
             list of the matches between the molecules, or None if no matches possible
 
         """
-        if atom_expr is None:
-            if map_strength == 'default':
-                atom_expr = DEFAULT_ATOM_EXPRESSION
-            elif map_strength == 'weak':
-                atom_expr = WEAK_ATOM_EXPRESSION
-            elif map_strength == 'strong':
-                atom_expr = STRONG_ATOM_EXPRESSION
-            else:
-                _logger.warning(f"User defined map_strength: {map_strength} not recognised, setting to default")
-                atom_expr = DEFAULT_ATOM_EXPRESSION
-        if bond_expr is None:
-            if map_strength == 'default':
-                bond_expr = DEFAULT_BOND_EXPRESSION
-            elif map_strength == 'weak':
-                bond_expr = WEAK_BOND_EXPRESSION
-            elif map_strength == 'strong':
-                bond_expr = STRONG_BOND_EXPRESSION
-            else:
-                _logger.warning(f"User defined map_strength: {map_strength} not recognised, setting to default")
-                bond_expr = DEFAULT_BOND_EXPRESSION
+        print(f"internal map strength: {map_strength}")
+        map_strength_dict = {'default': (DEFAULT_ATOM_EXPRESSION, DEFAULT_BOND_EXPRESSION),
+                             'weak': (WEAK_ATOM_EXPRESSION, WEAK_BOND_EXPRESSION),
+                             'strong': (STRONG_ATOM_EXPRESSION, STRONG_BOND_EXPRESSION)}
+        if (atom_expr, bond_expr) == (None, None):
+            #then choose the appropriate mapping criteria
+            atom_expr, bond_expr = map_strength_dict[map_strength]
 
         # this ensures that the hybridization of the oemols is done for correct atom mapping
         oechem.OEAssignHybridization(current_oemol)
@@ -387,6 +374,7 @@ class AtomMapper(object):
             oegraphmol_current = AtomMapper._assign_ring_ids(oegraphmol_current)
             oegraphmol_proposed = AtomMapper._assign_ring_ids(oegraphmol_proposed)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
+        print(f"info: {atom_expr}, {bond_expr}")
         mcs.Init(oegraphmol_current, atom_expr, bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = False
@@ -952,7 +940,7 @@ class ProposalEngine(object):
     def __init__(self, system_generator, proposal_metadata=None, always_change=True, **kwargs):
         self._system_generator = system_generator
         self._always_change = always_change
-        super(ProposalEngine, self).__init__(**kwargs)
+        #super(ProposalEngine, self).__init__(**kwargs)
 
     def propose(self, current_system, current_topology, current_metadata=None):
         """
@@ -2852,7 +2840,7 @@ class DummySystemGenerator(SystemGenerator):
             self._barostat = (pressure, temperature, frequency)
 
 
-class SmallMoleculeSetProposalEngine(AtomMapper, ProposalEngine):
+class SmallMoleculeSetProposalEngine(ProposalEngine):
     """
     This class proposes new small molecules from a prespecified set. It uses
     uniform proposal probabilities, but can be extended. The user is responsible
@@ -2876,7 +2864,8 @@ class SmallMoleculeSetProposalEngine(AtomMapper, ProposalEngine):
     def __init__(self, list_of_oemols, system_generator, residue_name='MOL', storage=None, **kwargs):
         super(SmallMoleculeSetProposalEngine, self).__init__(list_of_oemols=list_of_oemols, system_generator=system_generator, **kwargs)
         # This needs to be exposed, and only set in one place
-
+        self.system_generator = system_generator
+        self.list_of_oemols = list_of_oemols
         self._n_molecules = len(self.list_of_oemols)
 
         self._residue_name = residue_name
@@ -2901,8 +2890,11 @@ class SmallMoleculeSetProposalEngine(AtomMapper, ProposalEngine):
     def propose(self,
                 current_system,
                 current_topology,
+                atom_map = None,
                 current_mol_id = 0,
                 proposed_mol_id = None,
+                atom_expr=None,bond_expr=None,
+                map_strength='default',
                 preserve_chirality = True,
                 current_metadata = None):
         """
@@ -2914,6 +2906,8 @@ class SmallMoleculeSetProposalEngine(AtomMapper, ProposalEngine):
             the system of the current state
         current_topology : app.Topology object
             the topology of the current state
+        atom_map : dict, default None
+            dict of atom indices
         current_mol_id : int, optional, default=0
             Index of starting oemol, default is first in list
         proposed_mol_id : int, optional, default=None
@@ -2984,12 +2978,15 @@ class SmallMoleculeSetProposalEngine(AtomMapper, ProposalEngine):
 
         # Determine atom mapping between old and new molecules
         _logger.info(f"determining atom map between old and new molecules...")
-        if not self.atom_map:
+        print(f"this is ALWAYS called...")
+        if atom_map is None:
             _logger.info(f"the atom map is not specified; proceeding to generate an atom map...")
-            mol_atom_map = AtomMapper._get_mol_atom_map(self.current_molecule, self.proposed_molecule)
+            print(f"before call map_strength: {map_strength} ")
+            mol_atom_map = AtomMapper._get_mol_atom_map(self.current_molecule, self.proposed_molecule, atom_expr=atom_expr, bond_expr=bond_expr, map_strength=map_strength)
         else:
-            _logger.info(f"atom map is pre-determined as {self.atom_map}")
-            mol_atom_map = self.atom_map
+            print(f"before call map_strength: {map_strength} ")
+            _logger.info(f"atom map is pre-determined as {atom_map}")
+            mol_atom_map = atom_map
 
         # Adjust atom mapping indices for the presence of the receptor
         adjusted_atom_map = {}

@@ -921,70 +921,6 @@ def align_molecules(mol1, mol2):
 @attr('advanced')
 @nottest
 @skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
-def test_mutate_quick(): # TODO: fix protein mutations
-    """
-    Abbreviated version of test_mutate_all for GH Actions.
-    """
-    import perses.rjmc.topology_proposal as topology_proposal
-    import perses.rjmc.geometry as geometry
-    from perses.tests.utils import compute_potential_components
-    from openmmtools import testsystems as ts
-    geometry_engine = geometry.FFAllAngleGeometryEngine()
-
-    aminos = ['ALA','VAL','GLY','PHE','PRO','TRP']
-
-    for aa in aminos:
-        topology, positions = _get_capped_amino_acid(amino_acid=aa)
-        modeller = app.Modeller(topology, positions)
-
-        ff_filename = "amber99sbildn.xml"
-        max_point_mutants = 1
-
-        ff = app.ForceField(ff_filename)
-        system = ff.createSystem(modeller.topology)
-        chain_id = '1'
-
-        system_generator = topology_proposal.SystemGenerator([ff_filename])
-
-        pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, max_point_mutants=max_point_mutants)
-
-        current_system = system
-        current_topology = modeller.topology
-        current_positions = modeller.positions
-        minimize_integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
-        platform = openmm.Platform.getPlatformByName("Reference")
-        minimize_context = openmm.Context(current_system, minimize_integrator, platform)
-        minimize_context.setPositions(current_positions)
-        initial_state = minimize_context.getState(getEnergy=True)
-        initial_potential = initial_state.getPotentialEnergy()
-        openmm.LocalEnergyMinimizer.minimize(minimize_context)
-        final_state = minimize_context.getState(getEnergy=True, getPositions=True)
-        final_potential = final_state.getPotentialEnergy()
-        current_positions = final_state.getPositions()
-        #print("Minimized initial structure from %s to %s" % (str(initial_potential), str(final_potential)))
-
-        for k, proposed_amino in enumerate(aminos):
-            pm_top_engine._allowed_mutations = [[('2',proposed_amino)]]
-            pm_top_proposal = pm_top_engine.propose(current_system, current_topology)
-            new_positions, logp = geometry_engine.propose(pm_top_proposal, current_positions, beta)
-            new_system = pm_top_proposal.new_system
-            if np.isnan(logp):
-                raise Exception("NaN in the logp")
-            integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
-            platform = openmm.Platform.getPlatformByName("Reference")
-            context = openmm.Context(new_system, integrator, platform)
-            context.setPositions(new_positions)
-            state = context.getState(getEnergy=True)
-            #print(compute_potential_components(context))
-            potential = state.getPotentialEnergy()
-            potential_without_units = potential / potential.unit
-            #print(str(potential))
-            if np.isnan(potential_without_units):
-                raise Exception("Energy after proposal is NaN")
-
-@attr('advanced')
-@nottest
-@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 def test_mutate_from_all_to_all(): # TODO: fix protein mutations
     """
     Make sure mutations are successful between every possible pair of before-and-after residues
@@ -1934,6 +1870,7 @@ class AnalyticalBeadSystems(object):
 
 
 #@nottest
+@skipIf(running_on_github_actions, "Skip deprecated test on GH Actions")
 def test_AnalyticalBeadSystems(transformation=[[3,4], [4,5], [3,5]], num_iterations=100):
     """
     Function to assert that the forward and reverse works are equal and opposite, and that the variances of each work distribution is much less
