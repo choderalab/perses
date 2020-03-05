@@ -1040,6 +1040,22 @@ class PolymerProposalEngine(ProposalEngine):
 
         self._aggregate = aggregate # ?????????
 
+    @staticmethod
+    def generate_oemol_from_pdb_template(pdbfile):
+        from perses.utils.openeye import createOEMolFromSDF
+        current_oemol = createOEMolFromSDF(pdbfile, add_hydrogens = True)
+        if not len(set([atom.GetName() for atom in current_oemol.GetAtoms()])) == len([atom.GetName() for atom in current_oemol.GetAtoms()]):
+            raise Exception(f"the atoms in the oemol are not uniquely named.")
+
+        #formatting all canonical atom names from pdb
+        for atom in current_oemol.GetAtoms():
+            name_with_spaces = atom.GetName()
+            name_without_spaces = name_with_spaces.replace(" ", "")
+            if name_without_spaces[0].isdigit():
+                name_without_spaces = name_without_spaces[1:] + name_without_spaces[0]
+            atom.SetName(name_without_spaces)
+        return current_oemol
+
     def propose(self,
                 current_system,
                 current_topology,
@@ -1677,40 +1693,11 @@ class PolymerProposalEngine(ProposalEngine):
         else:
             pass
 
-        # TODO dom changing these lines to caching
-        with open(resource_filename('perses', os.path.join('data', 'amino_acid_oemols', f"{self._aminos_3letter_to_1letter_map[old_res_name]}.pkl")), 'rb') as f:
-            current_oemol = pickle.load(f)
+        current_residue_pdb_filename = resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{old_res_name}.pdb"))
+        proposed_residue_pdb_filename = resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{new_res_name}.pdb"))
 
-        with open(resource_filename('perses', os.path.join('data', 'amino_acid_oemols', f"{self._aminos_3letter_to_1letter_map[new_res_name]}.pkl")), 'rb') as f:
-            proposed_oemol = pickle.load(f)
-
-        # current_oemol = createOEMolFromSDF(resource_filename('perses', os.path.join('data', 'amino_acid_oemols', f"{old_res_name}.pdb")), add_hydrogens = True)
-        # proposed_oemol = createOEMolFromSDF(resource_filename('perses', os.path.join('data', 'amino_acid_oemols', f"{new_res_name}.pdb")), add_hydrogens = True)
-
-
-        # #assert the names are unique:
-        # if not len(set([atom.GetName() for atom in current_oemol.GetAtoms()])) == len([atom.GetName() for atom in current_oemol.GetAtoms()]):
-        #     _logger.warning(f"\t\t\tthe sidechain atoms in the old res are not uniquely named")
-        #     return {}
-        # elif not len(set([atom.GetName() for atom in proposed_oemol.GetAtoms()])) == len([atom.GetName() for atom in proposed_oemol.GetAtoms()]):
-        #     _logger.warning(f"\t\t\tthe sidechain atoms in the new res are not uniquely named")
-        #     return {}
-        #
-        # #fix atom names (spaces and numbers before letters correction)
-        # for atom in current_oemol.GetAtoms():
-        #     # TODO dom change
-        #     name_with_spaces = atom.GetName()
-        #     name_without_spaces = name_with_spaces.replace(" ", "")
-        #     if name_without_spaces[0].isdigit():
-        #         name_without_spaces = name_without_spaces[1:] + name_without_spaces[0]
-        #     atom.SetName(name_without_spaces)
-        #
-        # for atom in proposed_oemol.GetAtoms():
-        #     name_with_spaces = atom.GetName()
-        #     name_without_spaces = name_with_spaces.replace(" ", "")
-        #     if name_without_spaces[0].isdigit():
-        #         name_without_spaces = name_without_spaces[1:] + name_without_spaces[0]
-        #     atom.SetName(name_without_spaces)
+        current_oemol = PolymerProposalEngine.generate_oemol_from_pdb_template(current_residue_pdb_filename)
+        proposed_oemol = PolymerProposalEngine.generate_oemol_from_pdb_template(proposed_residue_pdb_filename)
 
         old_oemol_res_copy = copy.deepcopy(current_oemol)
         new_oemol_res_copy = copy.deepcopy(proposed_oemol)
