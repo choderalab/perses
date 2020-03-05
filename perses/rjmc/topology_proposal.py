@@ -1164,7 +1164,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         _logger.debug(f"\tadding indices of the 'C' backbone atom in the next residue and the 'N' atom in the previous")
         _logger.debug(f"\t{list(index_to_new_residues.keys())[0]}")
-        extra_atom_map = self._find_adjacent_special_atoms(old_topology, new_topology, list(index_to_new_residues.keys())[0])
+        extra_atom_map = self._find_adjacent_residue_atoms(old_topology, new_topology, list(index_to_new_residues.keys())[0])
         _logger.debug(f"\tfound extra atom map: {extra_atom_map}")
 
         #now to add all of the other residue atoms to the atom map...
@@ -1268,10 +1268,9 @@ class PolymerProposalEngine(ProposalEngine):
 
         return topology_proposal
 
-    def _find_adjacent_special_atoms(self, old_topology, new_topology, mutated_residue_index):
+    def _find_adjacent_residue_atoms(self, old_topology, new_topology, mutated_residue_index):
         """
-        #return the atom maps of the next residue C and N atoms in the new topology compared to the old topology
-        return the atom maps of the next residue atoms in the new topology compared to the old topology
+        return the maps of the adjacent residue atoms; here, we will ALWAYS consider the atoms of the residues adjacent to the mutation residue to be core
 
         Arguments
         ---------

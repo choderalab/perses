@@ -16,7 +16,7 @@ InteractionGroup = enum.Enum("InteractionGroup", ['unique_old', 'unique_new', 'c
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("relative")
-_logger.setLevel(logging.WARNING)
+_logger.setLevel(logging.INFO)
 ###########################################
 
 class HybridTopologyFactory(object):
@@ -266,16 +266,7 @@ class HybridTopologyFactory(object):
         _logger.info("Generating new system exceptions dict...")
         self._new_system_exceptions = self._generate_dict_from_exceptions(self._new_system_forces['NonbondedForce'])
 
-        #conduct a sanity check to make sure that the hybrid maps of the old and new system exception dict keys do not contain both environment and unique_old/new atoms
-        for old_indices in self._old_system_exceptions.keys():
-            hybrid_indices = (self._old_to_hybrid_map[old_indices[0]], self._old_to_hybrid_map[old_indices[1]])
-            if set(old_indices).intersection(self._atom_classes['environment_atoms']) != set():
-                assert set(old_indices).intersection(self._atom_classes['unique_old_atoms']) == set(), f"old index exceptions {old_indices} include unique old and environment atoms, which is disallowed"
-
-        for new_indices in self._new_system_exceptions.keys():
-            hybrid_indices = (self._new_to_hybrid_map[new_indices[0]], self._new_to_hybrid_map[new_indices[1]])
-            if set(hybrid_indices).intersection(self._atom_classes['environment_atoms']) != set():
-                assert set(hybrid_indices).intersection(self._atom_classes['unique_new_atoms']) == set(), f"new index exceptions {new_indices} include unique new and environment atoms, which is disallowed"
+        self._validate_disjoint_sets()
 
         #copy constraints, checking to make sure they are not changing
         _logger.info("Handling constraints...")
@@ -328,6 +319,20 @@ class HybridTopologyFactory(object):
         #generate the topology representation
         self._hybrid_topology = self._create_topology()
 
+    def _validate_disjoint_sets(self):
+        """
+        conduct a sanity check to make sure that the hybrid maps of the old and new system exception dict keys do not contain both environment and unique_old/new atoms
+        """
+        for old_indices in self._old_system_exceptions.keys():
+            hybrid_indices = (self._old_to_hybrid_map[old_indices[0]], self._old_to_hybrid_map[old_indices[1]])
+            if set(old_indices).intersection(self._atom_classes['environment_atoms']) != set():
+                assert set(old_indices).intersection(self._atom_classes['unique_old_atoms']) == set(), f"old index exceptions {old_indices} include unique old and environment atoms, which is disallowed"
+
+        for new_indices in self._new_system_exceptions.keys():
+            hybrid_indices = (self._new_to_hybrid_map[new_indices[0]], self._new_to_hybrid_map[new_indices[1]])
+            if set(hybrid_indices).intersection(self._atom_classes['environment_atoms']) != set():
+                assert set(hybrid_indices).intersection(self._atom_classes['unique_new_atoms']) == set(), f"new index exceptions {new_indices} include unique new and environment atoms, which is disallowed"
+
     def _handle_virtual_sites(self):
         """
         Ensure that all virtual sites in old and new system are copied over to the hybrid system. Note that we do not
@@ -351,52 +356,6 @@ class HybridTopologyFactory(object):
                         self._hybrid_system.setVirtualSite(hybrid_idx, virtual_site)
         _logger.info(f"\t_handle_virtual_sites: numVirtualSites: {numVirtualSites}")
 
-    def _get_core_atoms(self):
-        """
-        Determine which atoms in the old system are part of the "core" class.
-        All necessary information is contained in the topology proposal passed to the constructor.
-        Returns
-        -------
-        core_atoms : set of int
-            The set of atoms (hybrid topology indexed) that are core atoms.
-        environment_atoms : set of int
-            The set of atoms (hybrid topology indexed) that are environment atoms.
-        .. todo ::
-           Overhaul this method and methods it calls by instead having this class accept
-           an alchemical atom set that denotes atoms not in the environment. The core would
-           then be very easy to figure out.
-        """
-
-        #In order to be either a core or environment atom, the atom must be mapped.
-        mapped_old_atoms_set = set(self._topology_proposal.old_to_new_atom_map.keys())
-        mapped_new_atoms_set = set(self._topology_proposal.old_to_new_atom_map.values())
-        mapped_hybrid_atoms_set = {self._old_to_hybrid_map[atom_idx] for atom_idx in mapped_old_atoms_set}
-
-        #create sets for set arithmetic
-        unique_old_set = set(self._topology_proposal.unique_old_atoms)
-        unique_new_set = set(self._topology_proposal.unique_new_atoms)
-
-        #we derive core atoms from the old topology:
-        name_of_residue = self._topology_proposal.old_residue_name
-        core_atoms_from_old = self._determine_core_atoms_in_topology(self._topology_proposal.old_topology,
-                                                                     unique_old_set, mapped_old_atoms_set,
-                                                                     self._old_to_hybrid_map, name_of_residue)
-
-        #we also derive core atoms from the new topology:
-        name_of_residue = self._topology_proposal.new_residue_name
-        core_atoms_from_new = self._determine_core_atoms_in_topology(self._topology_proposal.new_topology,
-                                                                     unique_new_set, mapped_new_atoms_set,
-                                                                     self._new_to_hybrid_map, name_of_residue)
-
-        #The union of the two will give the core atoms that can result from either new or old topology
-        total_core_atoms = core_atoms_from_old.union(core_atoms_from_new)
-        assert set(core_atoms_from_old) == set(core_atoms_from_new), 'Core atoms must match between old and new systems'
-
-        #as a side effect, we can now compute the environment atom indices too, by subtracting the core indices
-        #from the mapped atom set (since any atom that is mapped but not core is environment)
-        environment_atoms = mapped_hybrid_atoms_set.difference(total_core_atoms)
-
-        return total_core_atoms, environment_atoms
 
     def _determine_core_atoms_in_topology(self, topology, unique_atoms, mapped_atoms, hybrid_map, residue_to_switch):
         """
@@ -470,7 +429,6 @@ class HybridTopologyFactory(object):
             assert new_to_hybrid_idx == old_to_hybrid_index, f"there is a -to_hybrid naming collision in topology proposal core atom map: {self._topology_proposal._core_new_to_old_atom_map}"
             core_atoms.append(new_to_hybrid_idx)
 
-        #core_atoms, environment_atoms = self._get_core_atoms()
 
         new_to_hybrid_environment_atoms = set([self._new_to_hybrid_map[idx] for idx in self._topology_proposal._new_environment_atoms])
         old_to_hybrid_environment_atoms = set([self._old_to_hybrid_map[idx] for idx in self._topology_proposal._old_environment_atoms])
