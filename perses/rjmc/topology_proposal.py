@@ -3095,7 +3095,8 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
     This proposal engine uses the AtomMapper to have all atoms premapped and the proposal distribution pre-formed and checked.
     It is intended to be substantially faster, as well as more robust (having excluded mappings that would not lead to a valid geometry proposal)
     """
-
+    from openmmforcefields.generators import SystemGenerator
+    
     def __init__(self, atom_mapper: AtomMapper, system_generator: SystemGenerator, residue_name: str="MOL", storage: NetCDFStorageView=None):
         self._atom_mapper = atom_mapper
         self._atom_mapper.map_all_molecules()

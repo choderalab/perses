@@ -41,9 +41,11 @@ def test_small_molecule_proposals():
     for smi in list_of_smiles:
         mol = smiles_to_oemol(smi)
         list_of_mols.append(mol)
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
     stats_dict = defaultdict(lambda: 0)
-    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
+    from openforcefields.topology import Molecule
+    molecules = [ Molecule.from_smiles(smiles) for smiles in list_of_smiles ]
+    from openmmforcefields.generators import SystemGenerator
+    system_generator = SystemGenerator(small_molecule_forcefield='gaff-2.11', molecules=molecules)
     proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_mols, system_generator)
     initial_molecule = smiles_to_oemol('CCCC')
     initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(initial_molecule)
@@ -65,7 +67,6 @@ def test_small_molecule_proposals():
 def test_mapping_strength_levels(pairs_of_smiles=[('Cc1ccccc1','c1ccc(cc1)N'),('CC(c1ccccc1)','O=C(c1ccccc1)'),('Oc1ccccc1','Sc1ccccc1')],test=True):
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
     from perses.rjmc import topology_proposal
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
 
     correct_results = {0:{'default': (1,0), 'weak':(1,0), 'strong':(4,3)},
                        1:{'default': (7,3), 'weak':(6,2), 'strong':(7,3)},
@@ -78,7 +79,10 @@ def test_mapping_strength_levels(pairs_of_smiles=[('Cc1ccccc1','c1ccc(cc1)N'),('
             print(f"conducting {example} mapping with ligands {lig_a}, {lig_b}")
             initial_molecule = smiles_to_oemol(lig_a)
             proposed_molecule = smiles_to_oemol(lig_b)
-            system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
+            from openforcefields.topology import Molecule
+            molecules = [ Molecule.from_smiles(smiles) for smiles in (lig_a, lig_b) ]
+            from openmmforcefields.generators import SystemGenerator
+            system_generator = SystemGenerator(small_molecule_forcefield='gaff-2.11', molecules=molecules)
             proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine([initial_molecule, proposed_molecule], system_generator)
             initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(initial_molecule)
             print(f"running now!!")
@@ -138,8 +142,10 @@ def test_two_molecule_proposal_engine():
     old_mol = smiles_to_oemol('CCCC')
     new_mol = smiles_to_oemol('CCCCC')
     from perses.rjmc import topology_proposal
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
-    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
+    from openforcefields.topology import Molecule
+    molecules = [ Molecule.from_smiles(smiles) for smiles in (old_mol, new_mol) ]
+    from openmmforcefields.generators import SystemGenerator
+    system_generator = SystemGenerator(small_molecule_forcefield='gaff-2.11', molecules=molecules)
     from perses.rjmc.topology_proposal import TwoMoleculeSetProposalEngine
     proposal_engine = TwoMoleculeSetProposalEngine([old_mol, new_mol], system_generator)
     initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(old_mol)
@@ -571,7 +577,8 @@ def test_mutate_from_every_amino_to_every_other():
 
     metadata = dict()
 
-    system_generator = topology_proposal.SystemGenerator([ff_filename])
+    from openmmforcefields.generators import SystemGenerator
+    system_generator = SystemGenerator(forcefields=[ff_filename])
 
     pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, proposal_metadata=metadata, max_point_mutants=max_point_mutants, always_change=True)
 
@@ -696,7 +703,8 @@ def test_limiting_allowed_residues():
     ff = app.ForceField(ff_filename)
     system = ff.createSystem(modeller.topology)
 
-    system_generator = topology_proposal.SystemGenerator([ff_filename])
+    from openmmforcefields.generators import SystemGenerator
+    system_generator = SystemGenerator(forcefields=[ff_filename])
 
     max_point_mutants = 1
     residues_allowed_to_mutate = ['903','904','905']
@@ -730,7 +738,8 @@ def test_always_change():
     ff = app.ForceField(ff_filename)
     system = ff.createSystem(modeller.topology)
 
-    system_generator = topology_proposal.SystemGenerator([ff_filename])
+    from openmmforcefields.generators import SystemGenerator
+    system_generator = SystemGenerator(forcefields=[ff_filename])
 
     max_point_mutants = 1
     residues_allowed_to_mutate = ['903']
@@ -780,7 +789,8 @@ def test_run_peptide_library_engine():
     modeller.addSolvent(ff)
     system = ff.createSystem(modeller.topology)
 
-    system_generator = topology_proposal.SystemGenerator([ff_filename])
+    from openmmforcefields.generators import SystemGenerator
+    system_generator = SystemGenerator(forcefields=[ff_filename])
     library = ['AVILMFYQP','RHKDESTNQ','STNQCFGPL']
 
     pl_top_library = topology_proposal.PeptideLibraryEngine(system_generator, library, chain_id)

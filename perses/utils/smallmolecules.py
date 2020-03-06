@@ -48,50 +48,46 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
     >>> len(sanitized_smiles_list)
     4
     """
-    from openeye import oechem
-    from openeye.oechem import OEGraphMol, OESmilesToMol, OECreateIsoSmiString
-    from perses.tests.utils import has_undefined_stereocenters, enumerate_undefined_stereocenters
+    from openforcefield.topology import Molecule
+    from openforcefield.utils.toolkits import UndefinedStereochemistryError
+
     sanitized_smiles_set = set()
-    OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens  ## IVY
+
     for smiles in smiles_list:
-        molecule = OEGraphMol()
-        OESmilesToMol(molecule, smiles)
-
-        oechem.OEAddExplicitHydrogens(molecule)
-
         if verbose:
-            molecule.SetTitle(smiles)
-            oechem.OETriposAtomNames(molecule)
+            print(smiles)
 
-        if has_undefined_stereocenters(molecule, verbose=verbose):
+        try:
+            molecule = Molecule.from_smiles(smiles)
+            sanitized_smiles_set.add(smiles)
+        except UndefinedStereochemistryError as e:
             if mode == 'drop':
-                if verbose:
-                    print("Dropping '%s' due to undefined stereocenters." % smiles)
                 continue
             elif mode == 'exception':
-                raise Exception("Molecule '%s' has undefined stereocenters" % smiles)
+                raise e
             elif mode == 'expand':
+                from openeye import oechem
+                oemol = oechem.OEGraphMol()
+                oechem.OESmilesToMol(oemol, smiles)
+                oechem.OEAddExplicitHydrogens(molecule)
+                molecule.SetTitle(smiles)
+                oechem.OETriposAtomNames(molecule)
                 if verbose:
                     print('Expanding stereochemistry:')
                     print('original: %s', smiles)
-                molecules = enumerate_undefined_stereocenters(molecule, verbose=verbose)
-                for molecule in molecules:
-                    smiles_string = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS)  ## IVY
-                    sanitized_smiles_set.add(smiles_string)  ## IVY
-                    if verbose: print('expanded: %s', smiles_string)
-        else:
-            # Convert to OpenEye's canonical isomeric SMILES.
-            smiles_string = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS) ## IVY
-            sanitized_smiles_set.add(smiles_string) ## IVY
+                oemols = enumerate_undefined_stereocenters(oemol, verbose=verbose)
+                for oemol in oemols:
+                    smiles = Molecule.from_openeye(oemol).to_smiles()
+                    sanitized_smiles_set.add(smiles)
 
     sanitized_smiles_list = list(sanitized_smiles_set)
-
     return sanitized_smiles_list
 
 def canonicalize_SMILES(smiles_list):
-    """Ensure all SMILES strings end up in canonical form.
+    """
+    Ensure all SMILES strings end up in canonical form.
     Stereochemistry must already have been expanded.
-    SMILES strings are converted to a OpenEye Topology and back again.
+
     Parameters
     ----------
     smiles_list : list of str
@@ -101,19 +97,8 @@ def canonicalize_SMILES(smiles_list):
     canonical_smiles_list : list of str
         List of SMILES strings, after canonicalization.
     """
-
-    # Round-trip each molecule to a Topology to end up in canonical form
-    from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue, generateTopologyFromOEMol
-    from perses.utils.openeye import smiles_to_oemol
-    from openeye import oechem
-    canonical_smiles_list = list()
-    for smiles in smiles_list:
-        molecule = smiles_to_oemol(smiles)
-        topology = generateTopologyFromOEMol(molecule)
-        residues = [ residue for residue in topology.residues() ]
-        new_molecule = generateOEMolFromTopologyResidue(residues[0])
-        new_smiles = oechem.OECreateIsoSmiString(new_molecule)
-        canonical_smiles_list.append(new_smiles)
+    from openforcefield.topology import Molecule
+    canonical_smiles_list = [ Molecule.from_smiles(smiles).to_smiles() for smiles in smiles_list ]
     return canonical_smiles_list
 
 def show_topology(topology):
@@ -260,7 +245,7 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     oechem.OEGenerate2DCoordinates(rmol)
     rdisp = oedepict.OE2DMolDisplay(rmol, opts)
 
-    
+
     if core1.NumAtoms() != 0:
         oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEPink),oedepict.OEHighlightStyle_Stick, core1)
     if core2.NumAtoms() != 0:

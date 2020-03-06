@@ -17,7 +17,7 @@ import numpy as np
 from functools import partial
 from pkg_resources import resource_filename
 from perses.rjmc import geometry
-from perses.rjmc.topology_proposal import SystemGenerator, TopologyProposal, SmallMoleculeSetProposalEngine
+from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine
 from openeye import oechem
 if sys.version_info >= (3, 0):
     from io import StringIO
@@ -300,7 +300,7 @@ def compute_potential_components(context, beta=beta, platform=None):
     context : simtk.openmm.Context
         The context from which to extract, System, parameters, and positions.
     beta : simtk.unit.Quantity with units compatible with energy, optional, default=1/kT
-        inverse thermal energy        
+        inverse thermal energy
     platform : simtk.openmm.Platform, optional, default=None
         If specified, this platform will be used.
     """
@@ -446,7 +446,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
     from openmoltools import forcefield_generators
     import perses.utils.openeye as openeye
     from perses.utils.data import get_data_filename
-    from perses.rjmc.topology_proposal import TopologyProposal, SystemGenerator, SmallMoleculeSetProposalEngine
+    from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine
     import simtk.unit as unit
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     from perses.utils.openeye import generate_expression
@@ -495,9 +495,13 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         nonbonded_method = app.NoCutoff
         barostat = None
 
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
-    system_generator = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],barostat = barostat, forcefield_kwargs={'removeCMMotion': False,'nonbondedMethod': nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : 4.0*unit.amu})
-    system_generator._forcefield.loadFile(StringIO(ffxml))
+    from openforcefield.topology import Molecule
+    molecules = [ Molecule.from_openeye(oemol) for oemol in [old_oemol, new_oemol] ]
+    from openmmforcefields.generators import SystemGenerator
+    system_generator = SystemGenerator(forcefields=['amber99sbildn.xml', 'tip3p.xml'],
+        small_molecule_forcefield='gaff-1.81', molecules=molecules,
+        barostat=barostat,
+        forcefield_kwargs={'removeCMMotion': False,'nonbondedMethod': nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : 4.0*unit.amu})
 
     proposal_engine = SmallMoleculeSetProposalEngine([old_oemol, new_oemol], system_generator, residue_name = 'MOL',atom_expr=atom_expr, bond_expr=bond_expr,allow_ring_breaking=True)
     geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
@@ -578,8 +582,12 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
 
     solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
 
-    gaff_filename = get_data_filename('data/gaff.xml')
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
+    from openforcefield.topology import Molecule
+    molecules = [ Molecule.from_smiles(smiles) for smiles in (initial_smiles, final_smiles) ]
+    from openmmforcefields.generators import SystemGenerator
+    system_generator = SystemGenerator(forcefields=['amber99sbildn.xml', 'tip3p.xml'],
+        small_molecule_forcefield='gaff-1.81', molecules=molecules,
+        forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
     geometry_engine = geometry.FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
         [current_mol, proposed_mol], system_generator, residue_name=current_mol_name,atom_expr=atom_expr,bond_expr=bond_expr)

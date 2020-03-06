@@ -39,6 +39,7 @@ def smiles_to_oemol(smiles, title='MOL', max_confs=1):
 
     # Create molecule
     molecule = oechem.OEMol()
+    print(smiles)
     oechem.OESmilesToMol(molecule, smiles)
 
     # create unique atom names
