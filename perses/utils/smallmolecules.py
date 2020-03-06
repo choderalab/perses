@@ -172,6 +172,7 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
         old_to_new_atoms = dict()
         for old_atom in mol.GetAtoms():
             new_atom = rmol.NewAtom(old_atom.GetAtomicNum())
+            new_atom.SetFormalCharge(old_atom.GetFormalCharge())
             new_atoms.append(new_atom)
             old_to_new_atoms[old_atom] = new_atom
         # Add bonds
@@ -187,7 +188,7 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
         atom.SetRxnRole(oechem.OERxnRole_Reactant)
     for atom in new_atoms_2:
         atom.SetRxnRole(oechem.OERxnRole_Product)
-    
+
     core1 = oechem.OEAtomBondSet()
     core2 = oechem.OEAtomBondSet()
     # add all atoms to the set
@@ -203,9 +204,9 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
         core1.RemoveAtom(new_atoms_1[index1])
         core2.RemoveAtom(new_atoms_2[index2])
         if new_atoms_1[index1].GetAtomicNum() != new_atoms_2[index2].GetAtomicNum():
-            # this means the element type is changing   
+            # this means the element type is changing
             core_change.AddAtom(new_atoms_1[index1])
-            core_change.AddAtom(new_atoms_2[index2])            
+            core_change.AddAtom(new_atoms_2[index2])
         index += 1
     # Set up image options
     itf = oechem.OEInterface()
@@ -228,7 +229,7 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     # Depict reaction with component highlights
     oechem.OEGenerate2DCoordinates(rmol)
     rdisp = oedepict.OE2DMolDisplay(rmol, opts)
-    
+
     if core1.NumAtoms() != 0:
         oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEPink),oedepict.OEHighlightStyle_Stick, core1)
     if core2.NumAtoms() != 0:
