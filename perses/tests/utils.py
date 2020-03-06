@@ -37,7 +37,6 @@ temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 ENERGY_THRESHOLD = 1e-1
-DEFAULT_PLATFORM = utils.get_fastest_platform()
 
 ################################################################################
 # UTILITIES
@@ -275,7 +274,7 @@ def compute_potential(system, positions, platform=None):
         The system object to check.
     positions : simtk.unit.Quantity of size (natoms,3) with units compatible with nanometers
         The positions to check.
-    platform : simtk.openmm.Platform, optional, default=none
+    platform : simtk.openmm.Platform, optional, default=None
         If specified, this platform will be used.
 
     """
@@ -292,7 +291,7 @@ def compute_potential(system, positions, platform=None):
         raise NaNException("Potential energy is NaN")
     return potential
 
-def compute_potential_components(context, beta = beta, platform = DEFAULT_PLATFORM):
+def compute_potential_components(context, beta=beta, platform=None):
     """
     Compute potential energy, raising an exception if it is not finite.
 
@@ -300,7 +299,8 @@ def compute_potential_components(context, beta = beta, platform = DEFAULT_PLATFO
     ----------
     context : simtk.openmm.Context
         The context from which to extract, System, parameters, and positions.
-
+    platform : simtk.openmm.Platform, optional, default=None
+        If specified, this platform will be used.
     """
     # Make a deep copy of the system.
     import copy
@@ -316,7 +316,10 @@ def compute_potential_components(context, beta = beta, platform = DEFAULT_PLATFO
         force.setForceGroup(index)
     # Create new Context.
     integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-    context = openmm.Context(system, integrator, platform)
+    if platform:
+        context = openmm.Context(system, integrator, platform)
+    else:
+        context = openmm.Context(system, integrator)
     context.setPositions(positions)
     for (parameter, value) in parameters.items():
         context.setParameter(parameter, value)
@@ -705,7 +708,7 @@ def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_it
 
     return conformers, rj_works
 
-def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_energy, beta = 1.0/kT, ENERGY_THRESHOLD = 1e-6, platform = DEFAULT_PLATFORM):
+def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_energy, beta=1.0/kT, ENERGY_THRESHOLD=1e-6, platform=None):
     """
     Function to validate that the difference between the nonalchemical versus alchemical state at lambda = 0,1 is
     equal to the difference in valence energy (forward and reverse).
