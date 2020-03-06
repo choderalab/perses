@@ -299,6 +299,8 @@ def compute_potential_components(context, beta=beta, platform=None):
     ----------
     context : simtk.openmm.Context
         The context from which to extract, System, parameters, and positions.
+    beta : simtk.unit.Quantity with units compatible with energy, optional, default=1/kT
+        inverse thermal energy        
     platform : simtk.openmm.Platform, optional, default=None
         If specified, this platform will be used.
     """
@@ -723,6 +725,12 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
         reduced added valence energy
     subtracted_energy: float
         reduced subtracted valence energy
+    beta : simtk.unit.Quantity with units compatible with energy, optional, default=1/kT
+        inverse thermal energy
+    ENERGY_THRESHOLD : float, optional, default=1e-6
+        Threshold for energy comparison
+    platform : simtk.openmm.Platform, optional, default=None
+        If specified, this platform will be used.
 
     Returns
     -------
