@@ -27,7 +27,6 @@ temperature = 300 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 ENERGY_THRESHOLD = 1e-6
-trajectory_directory = 'test_smc'
 trajectory_prefix = 'out'
 atom_selection = 'not water'
 timestep = 1 * unit.femtoseconds
@@ -39,12 +38,11 @@ measure_shadow_work = False
 neq_integrator = 'langevin'
 external_parallelism = None
 internal_parallelism = {'library': ('dask', 'LSF'), 'num_processes': 2}
-os.system(f"mkdir {trajectory_directory}")
 #######################
 
 @nottest
 @skipIf(running_on_github_actions, "Skip helper function on GH Actions")
-def sMC_setup():
+def sMC_setup(trajectory_directory):
     """
     function to setup local sMC
     """
@@ -116,55 +114,52 @@ def test_local_AIS():
     """
     test local annealed importance sampling method in it's entirety
     """
-    ne_fep = sMC_setup()
+    import tempfile
+    with tempfile.TemporaryDirectory() as trajectory_directory:
+        ne_fep = sMC_setup(trajectory_directory)
 
 
 
-    #separate the tests...
-    #1. _activate_annealing_workers(self) and _deactivate_annealing_workers(self)
-    ne_fep._activate_annealing_workers()
-    #above function should create a sublcass of the local ne_fep called 'annealing_class'
-    #which should hold the variables that were initialized with AIS and an extra attribute called 'succeed'
-    assert ne_fep.annealing_class.succeed, f"initialization of annealing class failed"
-    ne_fep._deactivate_annealing_workers()
-    assert not hasattr(ne_fep, 'annealing_class') #the annealing class should be deleted
+        #separate the tests...
+        #1. _activate_annealing_workers(self) and _deactivate_annealing_workers(self)
+        ne_fep._activate_annealing_workers()
+        #above function should create a sublcass of the local ne_fep called 'annealing_class'
+        #which should hold the variables that were initialized with AIS and an extra attribute called 'succeed'
+        assert ne_fep.annealing_class.succeed, f"initialization of annealing class failed"
+        ne_fep._deactivate_annealing_workers()
+        assert not hasattr(ne_fep, 'annealing_class') #the annealing class should be deleted
 
-    #2. call _activate_annealing_workers() again and call_anneal_method()
-    ne_fep._activate_annealing_workers()
-    #forego the self.parallelism.deploy() and just make sure that
-    #call_anneal_method() properly calls self.annealing_class.anneal
-    #where annealing_class is LocallyOptimalAnnealing
-    incremental_work, sampler_state, timer, _pass, endstates = call_anneal_method(remote_worker = ne_fep,
-                                                                       sampler_state = copy.deepcopy(ne_fep.sampler_states[0]),
-                                                                       lambdas = np.array([0.0, 1e-6]),
-                                                                       noneq_trajectory_filename = None,
-                                                                       num_integration_steps = 1,
-                                                                       return_timer = True,
-                                                                       return_sampler_state = True,
-                                                                       rethermalize = False,
-                                                                       compute_incremental_work = True)
-    if _pass: #the function is nan-safe
-        assert  incremental_work is not None and sampler_state is not None and timer is not None, f"no returns can be None if the method passes"
-    ne_fep._deactivate_annealing_workers()
+        #2. call _activate_annealing_workers() again and call_anneal_method()
+        ne_fep._activate_annealing_workers()
+        #forego the self.parallelism.deploy() and just make sure that
+        #call_anneal_method() properly calls self.annealing_class.anneal
+        #where annealing_class is LocallyOptimalAnnealing
+        incremental_work, sampler_state, timer, _pass, endstates = call_anneal_method(remote_worker = ne_fep,
+                                                                           sampler_state = copy.deepcopy(ne_fep.sampler_states[0]),
+                                                                           lambdas = np.array([0.0, 1e-6]),
+                                                                           noneq_trajectory_filename = None,
+                                                                           num_integration_steps = 1,
+                                                                           return_timer = True,
+                                                                           return_sampler_state = True,
+                                                                           rethermalize = False,
+                                                                           compute_incremental_work = True)
+        if _pass: #the function is nan-safe
+            assert  incremental_work is not None and sampler_state is not None and timer is not None, f"no returns can be None if the method passes"
+        ne_fep._deactivate_annealing_workers()
 
-    #3. call a dummy compute_sMC_free_energy with artificial values
-    cumulative_work_dict = {'forward': np.array([[0., 0.5, 1.]]*3),
-                            'reverse': np.array([[0., -0.5, -1.]]*3)}
-    ne_fep.compute_sMC_free_energy(cumulative_work_dict)
+        #3. call a dummy compute_sMC_free_energy with artificial values
+        cumulative_work_dict = {'forward': np.array([[0., 0.5, 1.]]*3),
+                                'reverse': np.array([[0., -0.5, -1.]]*3)}
+        ne_fep.compute_sMC_free_energy(cumulative_work_dict)
 
 
-    #test vanilla AIS
-    print('run AIS with protocol')
-    ne_fep.AIS(num_particles = 10,
-               protocols = {'forward': np.linspace(0,1,9), 'reverse': np.linspace(1,0,9)},
-               num_integration_steps = 1,
-               return_timer = True,
-               rethermalize = False)
-
-    try:
-        os.system(f"rm -r {trajectory_directory}")
-    except Exception as e:
-        print(e)
+        #test vanilla AIS
+        print('run AIS with protocol')
+        ne_fep.AIS(num_particles = 10,
+                   protocols = {'forward': np.linspace(0,1,9), 'reverse': np.linspace(1,0,9)},
+                   num_integration_steps = 1,
+                   return_timer = True,
+                   rethermalize = False)
 
 def test_configure_platform():
     """
@@ -233,7 +228,7 @@ def test_create_endstates():
     """
     test the creation of unsampled endstates
     """
-    from pkg_resources import resource_filename        
+    from pkg_resources import resource_filename
     smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
     fe_setup = RelativeFEPSetup(ligand_input = smiles_filename,
                                 old_ligand_index = 0,
