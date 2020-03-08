@@ -393,7 +393,7 @@ class AtomMapper(object):
             if not matches:
                 return None
 
-        _logger.debug(f"matches before degeneracy ranking: {matches}")
+        #_logger.debug(f"matches before degeneracy ranking: {matches}") # JDC: This is too verbose; can we write this somewhere else, or access it programmatically?
         _logger.debug(f"ranking match degeneracy w.r.t. current oemol ({current_oemol}) and proposed oemol({proposed_oemol})")
         try:
             top_matches = AtomMapper.rank_degenerate_maps(matches, current_oemol, proposed_oemol) #remove the matches with the lower rank score (filter out bad degeneracies)
@@ -406,7 +406,7 @@ class AtomMapper(object):
         _logger.debug(f"\tthe max number of atom matches is: {max_num_atoms}; there are {len([m for m in top_matches if m.NumAtoms() == max_num_atoms])} matches herein")
         new_top_matches = [m for m in top_matches if m.NumAtoms() == max_num_atoms]
         new_to_old_atom_maps = [AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion) for match in new_top_matches]
-        _logger.debug(f"\tnew to old atom maps with most atom hits: {new_to_old_atom_maps}")
+        #_logger.debug(f"\tnew to old atom maps with most atom hits: {new_to_old_atom_maps}") # JDC: This is too verbose; can we write this somewhere else, or access it programmatically?
 
         #now all else is equal; we will choose the map with the highest overlap of atom indices
         index_overlap_numbers = []
@@ -3096,7 +3096,7 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
     It is intended to be substantially faster, as well as more robust (having excluded mappings that would not lead to a valid geometry proposal)
     """
     from openmmforcefields.generators import SystemGenerator
-    
+
     def __init__(self, atom_mapper: AtomMapper, system_generator: SystemGenerator, residue_name: str="MOL", storage: NetCDFStorageView=None):
         self._atom_mapper = atom_mapper
         self._atom_mapper.map_all_molecules()

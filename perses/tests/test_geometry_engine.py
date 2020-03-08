@@ -867,14 +867,35 @@ def generate_molecule_from_smiles(smiles, idx=0):
     omega(mol)
     return mol
 
-def oemol_to_openmm_system(oemol, molecule_name=None, forcefield=['data/gaff.xml']):
+def oemol_to_openmm_system(oemol, molecule_name=None, small_molecule_forcefield='gaff-2.11'):
+    """
+    Create an OpenM System object from an oemol
+
+    Parameters
+    ----------
+    oemol : openeye.oechem.OEMol
+        The molecule to create an unconstrained vacuum System from
+    molecule_name : str, optional, default=None
+        This is always ignored
+    small_molecule_forcefield : str, optional, deafult='gaff-2.11'
+        Small molecule force field to feed to SystemGenerator
+
+    Returns
+    -------
+    system : simtk.openmm.System
+        The System object for the unconstrained vacuum small molecule
+    positions : simtk.unit.Quantity with shape [natoms,3] with units compatible with nanometers
+        The positions
+    topology : simtk.unit.app.Topology
+        The Topology corresponding to the small molecule
+
+    """
     from perses.rjmc import topology_proposal
-    from openmoltools import forcefield_generators
     from perses.utils.openeye import extractPositionsFromOEMol
-    xml_filenames = [get_data_filename(fname) for fname in forcefield]
-    system_generator = topology_proposal.SystemGenerator(xml_filenames, forcefield_kwargs={'constraints' : None})
+    from openmmforcefields.generators import SystemGenerator
+    system_generator = SystemGenerator(small_molecule_forcefield=small_molecule_forcefield, forcefield_kwargs={'constraints' : None})
     topology = forcefield_generators.generateTopologyFromOEMol(oemol)
-    system = system_generator.build_system(topology)
+    system = system_generator.create_system(topology)
     positions = extractPositionsFromOEMol(oemol)
     return system, positions, topology
 
@@ -1048,7 +1069,7 @@ def run_proposals(proposal_list):
         del context, integrator
         # TODO: Can we quantify how good the proposals are?
 
-def make_geometry_proposal_array(smiles_list, forcefield=['data/gaff.xml']):
+def make_geometry_proposal_array(smiles_list, small_molecule_forcefield='gaff-2.11'):
     """
     Make an array of topology_proposals for each molecule to each other
     in the smiles_list. Includes self-proposals so as to test that.
@@ -1057,6 +1078,8 @@ def make_geometry_proposal_array(smiles_list, forcefield=['data/gaff.xml']):
     ----------
     smiles_list : list of str
         list of smiles
+    small_molecule_forcefield : str, optional, default='gaff-2.11'
+        Small molecule force field for SystemGenerator
 
     Returns
     -------
@@ -1071,7 +1094,7 @@ def make_geometry_proposal_array(smiles_list, forcefield=['data/gaff.xml']):
         oemols[smiles] = generate_molecule_from_smiles(smiles)
     for smiles in oemols.keys():
         print("Generating %s" % smiles)
-        syspostop[smiles] = oemol_to_openmm_system(oemols[smiles], forcefield=forcefield)
+        syspostop[smiles] = oemol_to_openmm_system(oemols[smiles], small_molecule_forcefield=small_molecule_forcefield)
 
     #get a list of all the smiles in the appropriate order
     smiles_pairs = list()

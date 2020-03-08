@@ -49,6 +49,17 @@ from perses.dispersed.utils import minimize #updated minimizer
 from openmmtools.states import ThermodynamicState, SamplerState
 
 ################################################################################
+# TODO: Look into this for later
+# https://stackoverflow.com/questions/37091673/silence-tqdms-output-while-running-tests-or-running-the-code-via-cron
+################################################################################
+# Suppress matplotlib logging
+################################################################################
+
+import logging
+mpl_logger = logging.getLogger('matplotlib')
+mpl_logger.setLevel(logging.WARNING)
+
+################################################################################
 # TEST SYSTEMS
 ################################################################################
 
@@ -149,7 +160,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import AlanineDipeptideTestSystem
     >>> testsystem = AlanineDipeptideTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
+    >>> system = testsystem.system_generators['vacuum'].create_system(testsystem.topologies['vacuum'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['implicit']
 
@@ -215,7 +226,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         # Generate systems
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
 
@@ -301,7 +312,7 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import AlanineDipeptideValenceTestSystem
     >>> testsystem = AlanineDipeptideValenceTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
+    >>> system = testsystem.system_generators['vacuum'].create_system(testsystem.topologies['vacuum'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['vacuum']
 
@@ -350,7 +361,7 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
         # Generate systems
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
 
@@ -446,7 +457,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import T4LysozymeTestSystem
     >>> testsystem = T4LysozymeTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
+    >>> system = testsystem.system_generators['vacuum'].create_system(testsystem.topologies['vacuum'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['implicit']
 
@@ -525,7 +536,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
         new_residue = forcefield_generators.generateTopologyFromOEMol(mol)
         for res in new_residue.residues():
             res.name = 'BNZ'
-        bnz_new_sys = system_generators['vacuum'].build_system(new_residue)
+        bnz_new_sys = system_generators['vacuum'].create_system(new_residue)
         kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
         temperature = 300.0 * unit.kelvin
         kT = kB * temperature
@@ -576,7 +587,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
         systems = dict()
         for environment in environments:
             print(environment)
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
 
@@ -661,7 +672,7 @@ class MybTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import MybTestSystem
     >>> testsystem = MybTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['vacuum-peptide'].build_system(testsystem.topologies['vacuum-peptide'])
+    >>> system = testsystem.system_generators['vacuum-peptide'].create_system(testsystem.topologies['vacuum-peptide'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['implicit-peptide']
 
@@ -747,7 +758,7 @@ class MybTestSystem(PersesTestSystem):
         # Generate systems
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
 
@@ -832,7 +843,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import AblImatinibResistanceTestSystem
     >>> testsystem = AblImatinibResistanceTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['vacuum-inhibitor'].build_system(testsystem.topologies['vacuum-inhibitor'])
+    >>> system = testsystem.system_generators['vacuum-inhibitor'].create_system(testsystem.topologies['vacuum-inhibitor'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['vacuum-inhibitor']
 
@@ -923,7 +934,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
         # Generate systems ror all environments
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Create SAMS samplers
 
@@ -1017,7 +1028,7 @@ class AblAffinityTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import AblAffinityTestSystem
     >>> testsystem = AblAffinityestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['vacuum-inhibitor'].build_system(testsystem.topologies['vacuum-inhibitor'])
+    >>> system = testsystem.system_generators['vacuum-inhibitor'].create_system(testsystem.topologies['vacuum-inhibitor'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['vacuum-inhibitor']
 
@@ -1128,7 +1139,7 @@ class AblAffinityTestSystem(PersesTestSystem):
         # Generate systems
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
 
@@ -1228,7 +1239,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import AblImatinibProtonationStateTestSystem
     >>> testsystem = AblImatinibProtonationStateTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['explicit-inhibitor'].build_system(testsystem.topologies['explicit-inhibitor'])
+    >>> system = testsystem.system_generators['explicit-inhibitor'].create_system(testsystem.topologies['explicit-inhibitor'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['explicit-inhibitor']
 
@@ -1349,7 +1360,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         print('Building systems...')
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
         print('Defining thermodynamic states...')
@@ -1450,7 +1461,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import AblImatinibProtonationStateTestSystem
     >>> testsystem = AblImatinibProtonationStateTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['explicit-inhibitor'].build_system(testsystem.topologies['explicit-inhibitor'])
+    >>> system = testsystem.system_generators['explicit-inhibitor'].create_system(testsystem.topologies['explicit-inhibitor'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['explicit-inhibitor']
 
@@ -1576,7 +1587,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
         print('Building systems...')
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
         print('Defining thermodynamic states...')
@@ -1696,7 +1707,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import AlkanesTestSystem
     >>> testsystem = AlkanesTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
+    >>> system = testsystem.system_generators['vacuum'].create_system(testsystem.topologies['vacuum'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['explicit']
 
@@ -1759,7 +1770,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # Generate systems
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
 
@@ -1923,7 +1934,7 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import ValenceSmallMoleculeLibraryTestSystem
     >>> testsystem = ValenceSmallMoleculeLibraryTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
+    >>> system = testsystem.system_generators['vacuum'].create_system(testsystem.topologies['vacuum'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['vacuum']
 
@@ -1935,12 +1946,13 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         environments = ['vacuum']
 
         # Create a system generator for our desired forcefields.
+        from openforcefield.topology import Molecule
+        molecules = [ Molecule.from_smiles(smiles) for smiles in molecules ]
         from openmmforcefields.generators import SystemGenerator
         system_generators = dict()
-        from pkg_resources import resource_filename
-        gaff_xml_filename = resource_filename('perses', 'data/gaff-valence-only.xml')
-        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None })
+        system_generators['vacuum'] = SystemGenerator(
+            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
+            small_molecule_forcefield='gaff-2.11', molecules=molecules)
 
         #
         # Create topologies and positions
@@ -1948,25 +1960,19 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         topologies = dict()
         positions = dict()
 
-        from openmoltools import forcefield_generators
-        forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-        forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
-
         # Create molecule in vacuum.
-        from perses.utils.openeye import smiles_to_oemol, extractPositionsFromOEMol
-        smiles = molecules[0] # current sampler state
-        molecule = smiles_to_oemol(smiles)
-        topologies['vacuum'] = forcefield_generators.generateTopologyFromOEMol(molecule)
-        positions['vacuum'] = extractPositionsFromOEMol(molecule)
+        molecule = molecules[0]
+        molecule.name = 'MOL' # molecule must be named 'MOL' in topology
+        oemol = molecule.to_openeye()
+        smiles = molecule.to_smiles()
+        topologies['vacuum'] = molecule.to_topology().to_openmm()
+        molecule.generate_conformers()
+        positions['vacuum'] = molecule.conformers[0]
 
         # Set up the proposal engines.
         from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
 
-        from perses.utils.openeye import smiles_to_oemol
-        list_of_oemols = []
-        for smiles in molecules:
-            mol = smiles_to_oemol(smiles)
-            list_of_oemols.append(mol)
+        list_of_oemols = [ molecule.to_openeye() for molecule in molecules ]
         proposal_engines = dict()
         for environment in environments:
             proposal_engines[environment] = SmallMoleculeSetProposalEngine(list_of_oemols, system_generators[environment])
@@ -1974,7 +1980,7 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         # Generate systems
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
 
@@ -2132,7 +2138,7 @@ class NullTestSystem(PersesTestSystem):
                 modeller.addSolvent(system_generators[key].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
                 initial_topology = modeller.getTopology()
                 initial_positions = modeller.getPositions()
-                initial_system = system_generators[key].build_system(initial_topology)
+                initial_system = system_generators[key].create_system(initial_topology)
 
             initial_topology._state_key = proposal_engine._fake_states[0]
 
@@ -2399,7 +2405,7 @@ def check_topologies(testsystem):
     for environment in testsystem.environments:
         topology = testsystem.topologies[environment]
         try:
-            testsystem.system_generators[environment].build_system(topology)
+            testsystem.system_generators[environment].create_system(topology)
         except Exception as e:
             msg = str(e)
             msg += '\n'
