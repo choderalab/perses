@@ -2,55 +2,69 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys
 from openeye import oechem, oegraphsim
+
 import logging
+_logger = logging.getLogger()
+_logger.setLevel(logging.INFO)
+_logger = logging.getLogger("load_simulations")
 
-
-_logger = logging.getLogger("analysis")
-
-
-class Molecule(object):
-    def __init__(self, i, string):
-        from perses.utils.openeye import smiles_to_oemol
-        self.line = string
-        details = string.split(';')
-        self.index = i
-        self.smiles, self.name, self.exp, self.experr, self.calc, self.calcerr = details[1:7]
-        self.mol = smiles_to_oemol(self.smiles)
-        self.exp = kcal_to_kt(float(self.exp))
-        self.experr = kcal_to_kt(float(self.experr))
-        self.calc = kcal_to_kt(float(self.calc))
-        self.calcerr = kcal_to_kt(float(self.calcerr))
-        self.mw = self.calculate_molecular_weight()
-        self.ha = self.heavy_atom_count()
-        self.simtype = None
-
-    def calculate_molecular_weight(self):
-        """ Calculates the molecular weight of an oemol
-
-        Parameters
-        ----------
-
-        Returns
-        -------
-        float, molecular weight of molecule
-
-        """
-        return oechem.OECalculateMolecularWeight(self.mol)
-
-    def heavy_atom_count(self):
-        """ Counts the number of heavy atoms in an oemol
-
-        Parameters
-        ----------
-
-
-        Returns
-        -------
-        int, number of heavy atoms in molecule
-        """
-        return oechem.OECount(self.mol, oechem.OEIsHeavy())
 
 class Simulation(object):
+    """Object that holds the results of a free energy simulation.
+    # TODO make this much more flexible
+    Assumes that the output is in the form lig{A}to{B}/out-{phase}.nc
+
+    Parameters
+    ----------
+    A : int
+        integer of first ligand
+    B : int
+        integer of second ligand
+
+    Attributes
+    ----------
+    ligA : int
+        integer of first ligand
+    ligB : int
+        integer of first ligand
+    directory : string
+        output directory location : lig{A}to{B}
+    vacdg : float
+        relative free energy in vacuum phase (kcal/mol)
+    vacddg : float
+        variance in relative free energy in vacuum phase (kcal/mol)
+    soldg : float
+        relative free energy in solvent phase (kcal/mol)
+    solddg : float
+        variance in relative free energy in solvent phase (kcal/mol)
+    comdg : float
+        relative free energy in complex phase (kcal/mol)
+    comddg : float
+        variance in relative free energy in complex phase (kcal/mol)
+    vacdg_history : list(float)
+        vacuum free energy at equally spaced intervals of simulation (kcal/mol)
+    soldg_history : type
+        solvent free energy at equally spaced intervals of simulation (kcal/mol)
+    comdg_history : type
+        complex free energy at equally spaced intervals of simulation (kcal/mol)
+    vacddg_history : type
+        variance in vacuum free energy at equally spaced intervals of simulation (kcal/mol)
+    solddg_history : type
+        variance in solvent free energy at equally spaced intervals of simulation (kcal/mol)
+    comddg_history : type
+        variance in complex free energy at equally spaced intervals of simulation (kcal/mol)
+    count : int
+        Number of times the 'histories' have been 'sampled' from
+    hydrationdg : float
+        relative hydration free energy (kcal/mol)
+    hydrationddg : float
+        variance in relative hydration free energy (kcal/mol)
+    bindingdg : float
+        relative hydration free energy (kcal/mol)
+    bindingddg : float
+        variance in relative hydration free energy (kcal/mol)
+
+    """
     from simtk import unit
     def __init__(self,A,B):
         self.ligA = A
@@ -86,8 +100,8 @@ class Simulation(object):
 
     @staticmethod
     def _kt_to_kcal(x):
-        q = unit.quantity.Quantity(x, unit = unit.kilojoules_per_mole)
-        return q.in_units_of(unit.kilocalories_per_mole)._value
+        q = unit.quantity.Quantity(x, unit=unit.kilojoules_per_mole)
+        return q / unit.kilocalories_per_mole
 
     def load_data(self):
         """ Calculate relative free energy details from the simulation by performing MBAR on the vacuum and solvent legs of the simualtion.
@@ -138,7 +152,20 @@ class Simulation(object):
         return
 
 
-    def historic_fes(self,stepsize=100):
+    def historic_fes(self, stepsize=100):
+        """ Function that performs mbar at intervals of the simulation
+        by postprocessing. Can be slow if stepsize is small
+
+        Parameters
+        ----------
+        stepsize : int
+            number of iterations at which to run MBAR
+
+        Returns
+        -------
+        None
+
+        """
         from pymbar import timeseries
         from pymbar import MBAR
         from perses.analysis import utils
@@ -178,8 +205,20 @@ class Simulation(object):
                     self.comddg_history.append(_kt_to_kcal(df_ij[0,-1]))
         return
 
-
     def sample_history(self,method='binding'):
+        """Get the free energy from the historic FE's in steps
+
+        Parameters
+        ----------
+        method : string, default='binding'
+            either 'binding' or 'hydration' to get that free energy
+
+        Returns
+        -------
+        float, float
+            the relative free energy and it's associated variance (kcal/mol)
+
+        """
         vac = self.vacdg_history[self.count]
         sol = self.soldg_history[self.count]
         com = self.comdg_history[self.count]
@@ -199,101 +238,91 @@ class Simulation(object):
     def reset_history(self):
         self.count = 0
 
-
-def kcal_to_kt(x):
-    """
-    This should be deleted and just use the simtk units protocol
-    :param x: float, energy in kcal
-    :return: float, energy in kT
-    """
-    # TODO remove this
-    return x*1.688
-
-def get_experimental(molecules, i,j):
-    """ Determine experimental relative free energy from two experimntal absolute results
-
-    Parameters
-    ----------
-    molecules : list
-        list of load_simulation.molecule objects
-    i : int
-        index of first molecule
-    j : int
-        index of second molecule
-
-    Returns
-    -------
-    tuple
-        relative free energy and associated error
-
-    """
-    moli = molecules[i]
-    molj = molecules[j]
-    ddG = moli.exp - molj.exp
-    ddG_err = moli.experr - molj.experr
-    return (ddG, ddG_err)
-
-
-def load_experimental(exp_file):
-    """ Load details from a freesolv database.txt-like file
-
-    Parameters
-    ----------
-    exp_file : str
-        path to text file
-
-    Returns
-    -------
-    list
-        list of load_simulation.molecule objects, contained in the textfile
-
-    """
-    molecules = []
-    with open(exp_file) as f:
-        for i, line in enumerate(f):
-            molecules.append(molecule(i, line))
-    return molecules
-
-def run(molecules,simtype='sams',offline_freq=10):
-    """Load the simulation data for a set of molecules, for both forward and backward simulations
-
-    Parameters
-    ----------
-    molecules : list
-        list of load_simulation.molecule objects, of which to find simulation data for
-    simtype : type
-        Description of parameter `simtype`.
-    offline_freq : type
-        Description of parameter `offline_freq`.
-
-    Returns
-    -------
-    type
-        Description of returned object.
-
-    """
-    import itertools
-    import os
-
-    n_ligands = len(molecules)
-    all_simulations = []
-    for a, b in itertools.combinations(range(0, n_ligands), 2):
-        path = f'lig{a}to{b}'
-        if os.path.isdir(path) == True:
-            sim = simulation(a, b)
-            all_simulations.append(sim)
-        else:
-            print(f'Output directory lig{a}to{b} doesnt exist')
-
-        # now run the opposite direction
-        path = f'lig{b}to{a}'
-        if os.path.isdir(path) == True:
-            sim = simulation(b, a)
-            all_simulations.append(sim)
-        else:
-            print(f'Output directory lig{b}to{a} doesnt exist')
-
-    return all_simulations
-
-if __name__ == '__main__':
-    run(sys.argv[1])
+#def get_experimental(molecules, i,j):
+#    """ Determine experimental relative free energy from two experimntal absolute results
+#
+#    Parameters
+#    ----------
+#    molecules : list
+#        list of load_simulation.molecule objects
+#    i : int
+#        index of first molecule
+#    j : int
+#        index of second molecule
+#
+#    Returns
+#    -------
+#    tuple
+#        relative free energy and associated error
+#
+#    """
+#    moli = molecules[i]
+#    molj = molecules[j]
+#    ddG = moli.exp - molj.exp
+#    ddG_err = moli.experr - molj.experr
+#    return (ddG, ddG_err)
+#
+#
+#def load_experimental(exp_file):
+#    """ Load details from a freesolv database.txt-like file
+#
+#    Parameters
+#    ----------
+#    exp_file : str
+#        path to text file
+#
+#    Returns
+#    -------
+#    list
+#        list of load_simulation.molecule objects, contained in the textfile
+#
+#    """
+#    molecules = []
+#    with open(exp_file) as f:
+#        for i, line in enumerate(f):
+#            molecules.append(molecule(i, line))
+#    return molecules
+#
+#def run(molecules,simtype='sams',offline_freq=10):
+#    """Load the simulation data for a set of molecules, for both forward and backward simulations
+#
+#    Parameters
+#    ----------
+#    molecules : list
+#        list of load_simulation.molecule objects, of which to find simulation data for
+#    simtype : type
+#        Description of parameter `simtype`.
+#    offline_freq : type
+#        Description of parameter `offline_freq`.
+#
+#    Returns
+#    -------
+#    type
+#        Description of returned object.
+#
+#    """
+#    import itertools
+#    import os
+#
+#    n_ligands = len(molecules)
+#    all_simulations = []
+#    for a, b in itertools.combinations(range(0, n_ligands), 2):
+#        path = f'lig{a}to{b}'
+#        if os.path.isdir(path) == True:
+#            sim = simulation(a, b)
+#            all_simulations.append(sim)
+#        else:
+#            print(f'Output directory lig{a}to{b} doesnt exist')
+#
+#        # now run the opposite direction
+#        path = f'lig{b}to{a}'
+#        if os.path.isdir(path) == True:
+#            sim = simulation(b, a)
+#            all_simulations.append(sim)
+#        else:
+#            print(f'Output directory lig{b}to{a} doesnt exist')
+#
+#    return all_simulations
+#
+#if __name__ == '__main__':
+#    run(sys.argv[1])
