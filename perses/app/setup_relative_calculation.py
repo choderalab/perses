@@ -389,53 +389,21 @@ def run_setup(setup_options):
         _logger.info(f"\tsetup is complete.  Writing proposals and positions for each phase to top_prop dict...")
 
         top_prop = dict()
-        if 'complex' in phases:
-            top_prop['complex_topology_proposal'] = fe_setup.complex_topology_proposal
-            top_prop['complex_geometry_engine'] = fe_setup._complex_geometry_engine
-            top_prop['complex_old_positions'] = fe_setup.complex_old_positions
-            top_prop['complex_new_positions'] = fe_setup.complex_new_positions
-            top_prop['complex_added_valence_energy'] = fe_setup._complex_added_valence_energy
-            top_prop['complex_subtracted_valence_energy'] = fe_setup._complex_subtracted_valence_energy
-            top_prop['complex_logp_proposal'] = fe_setup._complex_logp_proposal
-            top_prop['complex_logp_reverse'] = fe_setup._complex_logp_reverse
-            top_prop['complex_forward_neglected_angles'] = fe_setup._complex_forward_neglected_angles
-            top_prop['complex_reverse_neglected_angles'] = fe_setup._complex_reverse_neglected_angles
+        for phase in phases:
+            top_prop[f'{phase}_topology_proposal'] = getattr(fe_setup, f'{phase}_topology_proposal')
+            top_prop[f'{phase}_geometry_engine'] = getattr(fe_setup, f'_{phase}_geometry_engine')
+            top_prop[f'{phase}_old_positions'] = getattr(fe_setup, f'{phase}_old_positions')
+            top_prop[f'{phase}_new_positions'] = getattr(fe_setup, f'{phase}_new_positions')
+            top_prop[f'{phase}_added_valence_energy'] = getattr(fe_setup, f'_{phase}_added_valence_energy')
+            top_prop[f'{phase}_subtracted_valence_energy'] = getattr(fe_setup, f'_{phase}_subtracted_valence_energy')
+            top_prop[f'{phase}_logp_proposal'] = getattr(fe_setup, f'_{phase}_logp_proposal')
+            top_prop[f'{phase}_logp_reverse'] = getattr(fe_setup, f'_{phase}_logp_reverse')
+            top_prop[f'{phase}_forward_neglected_angles'] = getattr(fe_setup, f'_{phase}_forward_neglected_angles')
+            top_prop[f'{phase}_reverse_neglected_angles'] = getattr(fe_setup, f'_{phase}_reverse_neglected_angles')
 
-            _logger.info(f"\twriting complex render_atom_mapping...")
-            atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'render_complex_mapping.png')
-            render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
-
-        if 'solvent' in phases:
-            top_prop['solvent_topology_proposal'] = fe_setup.solvent_topology_proposal
-            top_prop['solvent_geometry_engine'] = fe_setup._solvent_geometry_engine
-            top_prop['solvent_old_positions'] = fe_setup.solvent_old_positions
-            top_prop['solvent_new_positions'] = fe_setup.solvent_new_positions
-            top_prop['solvent_added_valence_energy'] = fe_setup._solvated_added_valence_energy
-            top_prop['solvent_subtracted_valence_energy'] = fe_setup._solvated_subtracted_valence_energy
-            top_prop['solvent_logp_proposal'] = fe_setup._ligand_logp_proposal_solvated
-            top_prop['solvent_logp_reverse'] = fe_setup._ligand_logp_reverse_solvated
-            top_prop['solvent_forward_neglected_angles'] = fe_setup._solvated_forward_neglected_angles
-            top_prop['solvent_reverse_neglected_angles'] = fe_setup._solvated_reverse_neglected_angles
-
-            _logger.info(f"\twriting solvent render_atom_mapping...")
-            atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'render_solvent_mapping.png')
-            render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
-
-        if 'vacuum' in phases:
-            top_prop['vacuum_topology_proposal'] = fe_setup.vacuum_topology_proposal
-            top_prop['vacuum_geometry_engine'] = fe_setup._vacuum_geometry_engine
-            top_prop['vacuum_old_positions'] = fe_setup.vacuum_old_positions
-            top_prop['vacuum_new_positions'] = fe_setup.vacuum_new_positions
-            top_prop['vacuum_added_valence_energy'] = fe_setup._vacuum_added_valence_energy
-            top_prop['vacuum_subtracted_valence_energy'] = fe_setup._vacuum_subtracted_valence_energy
-            top_prop['vacuum_logp_proposal'] = fe_setup._vacuum_logp_proposal
-            top_prop['vacuum_logp_reverse'] = fe_setup._vacuum_logp_reverse
-            top_prop['vacuum_forward_neglected_angles'] = fe_setup._vacuum_forward_neglected_angles
-            top_prop['vacuum_reverse_neglected_angles'] = fe_setup._vacuum_reverse_neglected_angles
-
-            _logger.info(f"\twriting vacuum render_atom_mapping...")
-            atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'render_vacuum_mapping.png')
-            render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
+       _logger.info(f"\twriting atom_mapping.png")
+       atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'atom_mapping.png')
+       render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
 
     else:
         _logger.info(f"\tloading topology proposal from yaml setup options...")
