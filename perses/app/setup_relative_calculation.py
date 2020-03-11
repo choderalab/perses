@@ -401,9 +401,9 @@ def run_setup(setup_options):
             top_prop[f'{phase}_forward_neglected_angles'] = getattr(fe_setup, f'_{phase}_forward_neglected_angles')
             top_prop[f'{phase}_reverse_neglected_angles'] = getattr(fe_setup, f'_{phase}_reverse_neglected_angles')
 
-       _logger.info(f"\twriting atom_mapping.png")
-       atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'atom_mapping.png')
-       render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
+        _logger.info(f"\twriting atom_mapping.png")
+        atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'atom_mapping.png')
+        render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
 
     else:
         _logger.info(f"\tloading topology proposal from yaml setup options...")
