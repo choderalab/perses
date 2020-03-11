@@ -16,7 +16,9 @@ import numpy as np
 import copy
 
 import logging
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger()
+_logger.setLevel(logging.INFO)
+_logger = logging.getLogger("multistate")
 
 
 class HybridCompatibilityMixin(object):
@@ -50,10 +52,10 @@ class HybridCompatibilityMixin(object):
         context_cache = cache.ContextCache()
 
         if n_replicas is None:
-            logger.info(f'n_replicas not defined, setting to match n_states, {n_states}')
+            _logger.info(f'n_replicas not defined, setting to match n_states, {n_states}')
             n_replicas = n_states
         elif n_replicas > n_states:
-            logger.warning(f'More sampler states: {n_replicas} requested greater than number of states: {n_states}. Setting n_replicas to n_states: {n_states}')
+            _logger.warning(f'More sampler states: {n_replicas} requested greater than number of states: {n_states}. Setting n_replicas to n_states: {n_states}')
             n_replicas = n_states
 
         # TODO this feels like it should be somewhere else... just not sure where. Maybe into lambda_protocol
@@ -91,7 +93,7 @@ class HybridCompatibilityMixin(object):
 
         if endstates:
             # generating unsampled endstates
-            logger.info('Generating unsampled endstates.')
+            _logger.info('Generating unsampled endstates.')
             unsampled_dispersion_endstates = create_endstates(copy.deepcopy(thermodynamic_state_list[0]), copy.deepcopy(thermodynamic_state_list[-1]))
             self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state_list,
                     storage=reporter, unsampled_thermodynamic_states=unsampled_dispersion_endstates)

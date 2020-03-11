@@ -14,6 +14,14 @@ class Simulation(object):
     # TODO make this much more flexible
     Assumes that the output is in the form lig{A}to{B}/out-{phase}.nc
 
+    This automatically loads the data and performs the data. Results can be accessed through attributes.
+
+    >>> # Load and analyze the simulation for `lig0to1/out.*`
+    >>> simulation_results = Simulation(0,1)
+    >>> # Report the binding free energy
+    >>> print(f'Relative binding free energy: {simulation_results.bindingdg}')
+
+
     Parameters
     ----------
     A : int
@@ -32,15 +40,15 @@ class Simulation(object):
     vacdg : float
         relative free energy in vacuum phase (kcal/mol)
     vacddg : float
-        variance in relative free energy in vacuum phase (kcal/mol)
+        std error in relative free energy in vacuum phase (kcal/mol)
     soldg : float
         relative free energy in solvent phase (kcal/mol)
     solddg : float
-        variance in relative free energy in solvent phase (kcal/mol)
+        std error in relative free energy in solvent phase (kcal/mol)
     comdg : float
         relative free energy in complex phase (kcal/mol)
     comddg : float
-        variance in relative free energy in complex phase (kcal/mol)
+        std error in relative free energy in complex phase (kcal/mol)
     vacdg_history : list(float)
         vacuum free energy at equally spaced intervals of simulation (kcal/mol)
     soldg_history : type
@@ -48,21 +56,21 @@ class Simulation(object):
     comdg_history : type
         complex free energy at equally spaced intervals of simulation (kcal/mol)
     vacddg_history : type
-        variance in vacuum free energy at equally spaced intervals of simulation (kcal/mol)
+        std error in vacuum free energy at equally spaced intervals of simulation (kcal/mol)
     solddg_history : type
-        variance in solvent free energy at equally spaced intervals of simulation (kcal/mol)
+        std error in solvent free energy at equally spaced intervals of simulation (kcal/mol)
     comddg_history : type
-        variance in complex free energy at equally spaced intervals of simulation (kcal/mol)
+        std error in complex free energy at equally spaced intervals of simulation (kcal/mol)
     count : int
         Number of times the 'histories' have been 'sampled' from
     hydrationdg : float
         relative hydration free energy (kcal/mol)
     hydrationddg : float
-        variance in relative hydration free energy (kcal/mol)
+        std error in relative hydration free energy (kcal/mol)
     bindingdg : float
         relative hydration free energy (kcal/mol)
     bindingddg : float
-        variance in relative hydration free energy (kcal/mol)
+        std error in relative hydration free energy (kcal/mol)
 
     """
     from simtk import unit
@@ -85,7 +93,7 @@ class Simulation(object):
         self.comddg_history = []
 
         self.count = 0
-        self.load_data()
+        self._load_data()
 
         if self.vacdg is not None and self.soldg is not None:
             self.hydrationdg = self.vacdg - self.soldg
@@ -103,7 +111,7 @@ class Simulation(object):
         q = unit.quantity.Quantity(x, unit=unit.kilojoules_per_mole)
         return q / unit.kilocalories_per_mole
 
-    def load_data(self):
+    def _load_data(self):
         """ Calculate relative free energy details from the simulation by performing MBAR on the vacuum and solvent legs of the simualtion.
 
         Parameters
@@ -158,7 +166,7 @@ class Simulation(object):
 
         Parameters
         ----------
-        stepsize : int
+        stepsize : int, optional, default=100
             number of iterations at which to run MBAR
 
         Returns
@@ -216,7 +224,7 @@ class Simulation(object):
         Returns
         -------
         float, float
-            the relative free energy and it's associated variance (kcal/mol)
+            the relative free energy and it's associated std error (kcal/mol)
 
         """
         vac = self.vacdg_history[self.count]
@@ -237,92 +245,3 @@ class Simulation(object):
 
     def reset_history(self):
         self.count = 0
-
-#def get_experimental(molecules, i,j):
-#    """ Determine experimental relative free energy from two experimntal absolute results
-#
-#    Parameters
-#    ----------
-#    molecules : list
-#        list of load_simulation.molecule objects
-#    i : int
-#        index of first molecule
-#    j : int
-#        index of second molecule
-#
-#    Returns
-#    -------
-#    tuple
-#        relative free energy and associated error
-#
-#    """
-#    moli = molecules[i]
-#    molj = molecules[j]
-#    ddG = moli.exp - molj.exp
-#    ddG_err = moli.experr - molj.experr
-#    return (ddG, ddG_err)
-#
-#
-#def load_experimental(exp_file):
-#    """ Load details from a freesolv database.txt-like file
-#
-#    Parameters
-#    ----------
-#    exp_file : str
-#        path to text file
-#
-#    Returns
-#    -------
-#    list
-#        list of load_simulation.molecule objects, contained in the textfile
-#
-#    """
-#    molecules = []
-#    with open(exp_file) as f:
-#        for i, line in enumerate(f):
-#            molecules.append(molecule(i, line))
-#    return molecules
-#
-#def run(molecules,simtype='sams',offline_freq=10):
-#    """Load the simulation data for a set of molecules, for both forward and backward simulations
-#
-#    Parameters
-#    ----------
-#    molecules : list
-#        list of load_simulation.molecule objects, of which to find simulation data for
-#    simtype : type
-#        Description of parameter `simtype`.
-#    offline_freq : type
-#        Description of parameter `offline_freq`.
-#
-#    Returns
-#    -------
-#    type
-#        Description of returned object.
-#
-#    """
-#    import itertools
-#    import os
-#
-#    n_ligands = len(molecules)
-#    all_simulations = []
-#    for a, b in itertools.combinations(range(0, n_ligands), 2):
-#        path = f'lig{a}to{b}'
-#        if os.path.isdir(path) == True:
-#            sim = simulation(a, b)
-#            all_simulations.append(sim)
-#        else:
-#            print(f'Output directory lig{a}to{b} doesnt exist')
-#
-#        # now run the opposite direction
-#        path = f'lig{b}to{a}'
-#        if os.path.isdir(path) == True:
-#            sim = simulation(b, a)
-#            all_simulations.append(sim)
-#        else:
-#            print(f'Output directory lig{b}to{a} doesnt exist')
-#
-#    return all_simulations
-#
-#if __name__ == '__main__':
-#    run(sys.argv[1])

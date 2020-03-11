@@ -39,7 +39,9 @@ from perses.utils.openeye import smiles_to_oemol
 ################################################################################
 
 import logging
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger()
+_logger.setLevel(logging.INFO)
+_logger = logging.getLogger("samplers")
 
 ################################################################################
 # UTILITY FUNCTIONS
@@ -640,7 +642,7 @@ class SAMSSampler(object):
         try:
             self.chemical_states = self.sampler.proposal_engine.chemical_state_list
         except NotImplementedError:
-            logger.warn("The proposal engine has not properly implemented the chemical state property; SAMS will add states on the fly.")
+            _logger.warning("The proposal engine has not properly implemented the chemical state property; SAMS will add states on the fly.")
 
         if self.chemical_states:
             # Select a reference state that will always be subtracted (ensure that dict ordering does not change)
@@ -743,10 +745,10 @@ class SAMSSampler(object):
 
         # Add state key to dictionaries if we haven't visited this state before.
         if state_key not in self.logZ:
-            logger.warn("A new state key is being added to the logZ; note that this makes the resultant algorithm different from SAMS")
+            _logger.warning("A new state key is being added to the logZ; note that this makes the resultant algorithm different from SAMS")
             self.logZ[state_key] = 0.0
         if state_key not in self.log_target_probabilities:
-            logger.warn("A new state key is being added to the target probabilities; note that this makes the resultant algorithm different from SAMS")
+            _logger.warning("A new state key is being added to the target probabilities; note that this makes the resultant algorithm different from SAMS")
             self.log_target_probabilities[state_key] = 0.0
 
         # Update estimates of logZ.
