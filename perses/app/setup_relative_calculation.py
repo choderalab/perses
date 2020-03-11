@@ -574,13 +574,14 @@ def run_setup(setup_options):
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 
 
-def run():
+def run(yaml_filename=None):
     _logger.info("Beginning Setup...")
-    try:
-       yaml_filename = sys.argv[1]
-       _logger.info(f"Detected yaml file: {yaml_filename}")
-    except IndexError as e:
-        _logger.critical(f"You must specify the setup yaml file as an argument to the script.")
+    if yaml_filename is None:
+       try:
+          yaml_filename = sys.argv[1]
+          _logger.info(f"Detected yaml file: {yaml_filename}")
+       except IndexError as e:
+           _logger.critical(f"You must specify the setup yaml file as an argument to the script.")
 
     _logger.info(f"Getting setup options from {yaml_filename}")
     setup_options = getSetupOptions(yaml_filename)
