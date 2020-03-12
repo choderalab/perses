@@ -8,7 +8,6 @@ from openmmtools.multistate import sams, replicaexchange
 from openmmtools import cache, utils
 from perses.dispersed.utils import configure_platform
 from openmmtools import cache
-cache.global_context_cache.platform = configure_platform(utils.get_fastest_platform().getName())
 from openmmtools.states import *
 from perses.dispersed.utils import create_endstates
 
@@ -27,8 +26,11 @@ class HybridCompatibilityMixin(object):
     unsampled endpoints have a different number of degrees of freedom.
     """
 
-    def __init__(self, *args, hybrid_factory=None, **kwargs):
+    def __init__(self, *args, platform=None, hybrid_factory=None, **kwargs):
         self._hybrid_factory = hybrid_factory
+        if platform is None:
+            platform = utils.get_fastest_platform().getName()
+        cache.global_context_cache.platform = configure_platform(platform)
         super(HybridCompatibilityMixin, self).__init__(*args, **kwargs)
 
     def setup(self, n_states, temperature, storage_file, minimisation_steps=100,
