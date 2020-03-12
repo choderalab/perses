@@ -165,7 +165,7 @@ class Simulation(object):
         if self.bindingdg is not None:
             print(f'Relative binding free energy is {self.bindingdg} ({self.bindingddg})')
         if self.hydrationdg is not None:
-            print(f'Relative binding free energy is {self.hydrationdg} ({self.hydrationddg})')
+            print(f'Relative hydration free energy is {self.hydrationdg} ({self.hydrationddg})')
 
     # TODO fix this whole thing to be consistent with above
     def historic_fes(self, stepsize=100):
