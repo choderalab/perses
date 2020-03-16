@@ -251,7 +251,7 @@ def getSetupOptions(filename):
         setup_options['bond_expr'] = generate_expression(setup_options['bond_expression'])
 
     if 'map_strength' not in setup_options:
-        setup_options['map_strength'] = 'default'
+        setup_options['map_strength'] = None 
 
     if 'anneal_1,4s' not in setup_options:
         setup_options['anneal_1,4s'] = False
