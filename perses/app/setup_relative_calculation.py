@@ -69,11 +69,6 @@ def getSetupOptions(filename):
     else:
         _logger.info(f"\t\tphases detected: {setup_options['phases']}")
 
-    if 'platform' not in setup_options:
-        from openmmtools import utils
-        setup_options['platform'] = utils.get_fastest_platform().getName()
-        _logger.info(f'Platform is being set to {setup_options["platform"]}')
-
     if 'protocol-type' not in setup_options:
         setup_options['protocol-type'] = 'default'
 
@@ -531,7 +526,7 @@ def run_setup(setup_options):
                                                                                              constraint_tolerance=1e-06),
                                                hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
-                                               gamma0=setup_options['gamma0'], platform=setup_options['platform'])
+                                               gamma0=setup_options['gamma0'])
                 hss[phase].setup(n_states=n_states, n_replicas=n_replicas, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
             elif setup_options['fe_type'] == 'repex':
                 hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
@@ -541,7 +536,7 @@ def run_setup(setup_options):
                                                                                              n_restart_attempts=20,
                                                                                              splitting="V R O R V",
                                                                                              constraint_tolerance=1e-06),
-                                                                                             hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'], platform=setup_options['platform'])
+                                                                                             hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
                 hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
