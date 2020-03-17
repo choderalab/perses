@@ -12,11 +12,26 @@ except:
     from urllib2 import urlopen
     from cStringIO import StringIO
 from nose.plugins.attrib import attr
+
 from openmmtools.constants import kB
 from perses.utils.data import get_data_filename
 from perses.utils.openeye import OEMol_to_omm_ff, smiles_to_oemol
 from perses.utils.smallmolecules import render_atom_mapping
 from unittest import skipIf
+from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
+from perses.rjmc import topology_proposal
+from collections import defaultdict
+from perses.utils.openeye import smiles_to_oemol, OEMol_to_omm_ff
+import openeye.oechem as oechem
+from openmmforcefields.generators import SystemGenerator
+from openforcefield.topology import Molecule
+from openmoltools.forcefield_generators import generateTopologyFromOEMol, generateOEMolFromTopologyResidue
+
+#default arguments for SystemGenerators
+barostat = None
+forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
+forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+small_molecule_forcefield = 'gaff-2.11'
 
 temperature = 300*unit.kelvin
 # Compute kT and inverse temperature.
@@ -30,24 +45,20 @@ def test_small_molecule_proposals():
     """
     Make sure the small molecule proposal engine generates molecules
     """
-    from perses.rjmc import topology_proposal
-    from openmoltools import forcefield_generators
-    from collections import defaultdict
-    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
-    from perses.utils.openeye import smiles_to_oemol
-    import openeye.oechem as oechem
     list_of_smiles = ['CCCC','CCCCC','CCCCCC']
     list_of_mols = []
     for smi in list_of_smiles:
         mol = smiles_to_oemol(smi)
         list_of_mols.append(mol)
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
+    molecules = [Molecule.from_openeye(mol) for mol in list_of_mols]
     stats_dict = defaultdict(lambda: 0)
-    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
+    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+                                         small_molecule_forcefield = small_molecule_forcefield, molecules=molecules, cache=None)
     proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_mols, system_generator)
-    initial_molecule = smiles_to_oemol('CCCC')
-    initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(initial_molecule)
+    initial_system, initial_positions, initial_topology,  = OEMol_to_omm_ff(list_of_mols[0], system_generator)
+
     proposal = proposal_engine.propose(initial_system, initial_topology)
+
     for i in range(50):
         #positions are ignored here, and we don't want to run the geometry engine
         new_proposal = proposal_engine.propose(proposal.old_system, proposal.old_topology)
@@ -57,19 +68,16 @@ def test_small_molecule_proposals():
         if len(matching_molecules) != 1:
             raise ValueError("More than one residue with the same name!")
         mol_res = matching_molecules[0]
-        oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
+        oemol = generateOEMolFromTopologyResidue(mol_res)
         smiles = SmallMoleculeSetProposalEngine.canonicalize_smiles(oechem.OEMolToSmiles(oemol))
         assert smiles == proposal.new_chemical_state_key
         proposal = new_proposal
 
 def test_mapping_strength_levels(pairs_of_smiles=[('Cc1ccccc1','c1ccc(cc1)N'),('CC(c1ccccc1)','O=C(c1ccccc1)'),('Oc1ccccc1','Sc1ccccc1')],test=True):
-    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
-    from perses.rjmc import topology_proposal
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
 
-    correct_results = {0:{'default': (1,0), 'weak':(1,0), 'strong':(4,3)},
+    correct_results = {0:{'default': (3,2), 'weak':(3,2), 'strong':(4,3)},
                        1:{'default': (7,3), 'weak':(6,2), 'strong':(7,3)},
-                       2:{'default': (0,0), 'weak':(0,0), 'strong':(2,2)}}
+                       2:{'default': (1,1), 'weak':(1,1), 'strong':(2,2)}}
 
     mapping = ['weak','default','strong']
 
@@ -78,80 +86,20 @@ def test_mapping_strength_levels(pairs_of_smiles=[('Cc1ccccc1','c1ccc(cc1)N'),('
             print(f"conducting {example} mapping with ligands {lig_a}, {lig_b}")
             initial_molecule = smiles_to_oemol(lig_a)
             proposed_molecule = smiles_to_oemol(lig_b)
-            system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
-            proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine([initial_molecule, proposed_molecule], system_generator)
-            initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(initial_molecule)
-            print(f"running now!!")
+            molecules = [Molecule.from_openeye(mol) for mol in [initial_molecule, proposed_molecule]]
+            system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+                                                 small_molecule_forcefield = 'gaff-1.81', molecules=molecules, cache=None)
+            proposal_engine = SmallMoleculeSetProposalEngine([initial_molecule, proposed_molecule], system_generator)
+            initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(initial_molecule, system_generator)
+            print(f"running now with map strength {example}")
             proposal = proposal_engine.propose(initial_system, initial_topology, map_strength = example)
             print(lig_a, lig_b,'length OLD and NEW atoms',len(proposal.unique_old_atoms), len(proposal.unique_new_atoms))
             if test:
                 render_atom_mapping(f'{index}-{example}.png', initial_molecule, proposed_molecule, proposal._new_to_old_atom_map)
-                assert ( (len(proposal.unique_old_atoms), len(proposal.unique_new_atoms)) == correct_results[index][example]), f"the mapping failed"
+                assert ( (len(proposal.unique_old_atoms), len(proposal.unique_new_atoms)) == correct_results[index][example]), f"the mapping failed, correct results are {correct_results[index][example]}"
                 print(f"the mapping worked!!!")
             print()
 
-# HBM SmallMoleculeAtomMapper is depreciated
-# HBM replace with AtomMapper test
-#@skipIf(running_on_github_actions, "Skip full test on GH Actions.")
-#def test_no_h_map():
-#   """
-#   Test that the SmallMoleculeAtomMapper can generate maps that exclude hydrogens
-#   """
-#   from perses.tests.testsystems import KinaseInhibitorsTestSystem
-#   from perses.rjmc.topology_proposal import SmallMoleculeAtomMapper
-#   import itertools
-#   from perses.tests import utils
-#   from openeye import oechem
-#   kinase = KinaseInhibitorsTestSystem()
-#   molecules = kinase.molecules
-#
-#   mapper = SmallMoleculeAtomMapper(molecules, prohibit_hydrogen_mapping=True)
-#   mapper.map_all_molecules()
-#
-#   with open('mapperkinase_permissive.json', 'w') as outfile:
-#       json_string = mapper.to_json()
-#       outfile.write(json_string)
-#
-#   molecule_smiles = mapper.smiles_list
-#   for molecule_pair in itertools.combinations(molecule_smiles, 2):
-#       index_1 = molecule_smiles.index(molecule_pair[0])
-#       index_2 = molecule_smiles.index(molecule_pair[1])
-#       mol_a = mapper.get_oemol_from_smiles(molecule_pair[0])
-#       mol_b = mapper.get_oemol_from_smiles(molecule_pair[1])
-#       #fresh_atom_maps, _ = mapper._map_atoms(mol_a, mol_b)
-#       stored_atom_maps = mapper.get_atom_maps(molecule_pair[0], molecule_pair[1])
-#
-#       for i, atom_map in enumerate(stored_atom_maps):
-#           render_atom_mapping("{}_{}_map{}_permissive.png".format(index_1, index_2, i), mol_b, mol_a, atom_map)
-#
-#
-#   mapper.generate_and_check_proposal_matrix()
-
-
-def test_two_molecule_proposal_engine():
-    """
-    Test TwoMoleculeSetProposalEngine
-    """
-    from perses.utils.openeye import smiles_to_oemol
-
-    # Create a proposal engine for butane -> pentane
-    old_mol = smiles_to_oemol('CCCC')
-    new_mol = smiles_to_oemol('CCCCC')
-    from perses.rjmc import topology_proposal
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
-    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
-    from perses.rjmc.topology_proposal import TwoMoleculeSetProposalEngine
-    proposal_engine = TwoMoleculeSetProposalEngine([old_mol, new_mol], system_generator)
-    initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(old_mol)
-    # Propose a transformation
-    proposal = proposal_engine.propose(initial_system, initial_topology, proposed_mol_id=1)
-    # Check proposal
-    assert (proposal.new_system.getNumParticles() == 17), "new_system (pentane) should have 17 atoms (actual: %d)" % proposal.new_system.getNumParticles()
-    assert (proposal.old_system.getNumParticles() == 14), "old_system (butane) should have 14 atoms (actual: %d)" % proposal.old_system.getNumParticles()
-    assert len(proposal.new_alchemical_atoms) == 17, "new_alchemical_atoms should be 17 (actual: %d)" % proposal.new_alchemical_atoms
-    assert len(proposal.old_alchemical_atoms) == 14, "old_alchemical_atoms should be 14 (actual: %d)" % proposal.old_alchemical_atoms
-    assert len(proposal.new_environment_atoms) == 0, "new_environment_atoms should be 0 (actual: %d)" % proposal.new_environment_atoms
-    assert len(proposal.old_environment_atoms) == 0, "old_environment_atoms should be 0 (actual: %d)" % proposal.old_environment_atoms
 
 def load_pdbid_to_openmm(pdbid):
     """
@@ -384,15 +332,9 @@ def test_mutate_from_alanine():
 
     for amino in aminos:
         if amino in attempt_full_pipeline_aminos:
-            try:
-                _ = generate_dipeptide_top_pos_sys(ala.topology, amino, ala.system, ala.positions, system_generator, conduct_htf_prop = True)
-            except Exception as e:
-                raise Exception(f"ALA to {amino}: {e}")
+            _ = generate_dipeptide_top_pos_sys(ala.topology, amino, ala.system, ala.positions, system_generator, conduct_htf_prop = True)
         else:
-            try:
-                _ = generate_dipeptide_top_pos_sys(ala.topology, amino, ala.system, ala.positions, system_generator, conduct_geometry_prop = False)
-            except Exception as e:
-                raise Exception(f"ALA to {amino}: {e}")
+            _ = generate_dipeptide_top_pos_sys(ala.topology, amino, ala.system, ala.positions, system_generator, conduct_geometry_prop = False)
 
 #@attr('advanced')
 def test_specify_allowed_mutants():
@@ -885,7 +827,7 @@ def test_simple_heterocycle_mapping(iupac_pairs = [('benzene', 'pyridine')]):
 
 
 
-if __name__ == "__main__":
+#if __name__ == "__main__":
 
 #    test_run_point_mutation_propose()
 #    test_mutate_from_every_amino_to_every_other()
@@ -897,4 +839,4 @@ if __name__ == "__main__":
 #    test_alanine_dipeptide_map()
 #    test_always_change()
 #    test_molecular_atom_mapping()
-    test_no_h_map()
+# test_no_h_map()

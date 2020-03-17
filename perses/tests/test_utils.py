@@ -113,10 +113,22 @@ def test_OEMol_to_omm_ff(molecule=smiles_to_oemol('CC')):
     topology : app.topology.Topology
         openmm compatible topology object
     """
+    import simtk.openmm.app as app
+    import simtk.unit as unit
     from perses.utils.openeye import OEMol_to_omm_ff
     from simtk import openmm
+    from openmmforcefields.generators import SystemGenerator
+    from openforcefield.topology import Molecule
 
-    system, positions, topology = OEMol_to_omm_ff(molecule)
+    #default arguments for SystemGenerators
+    barostat = None
+    forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
+    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+    small_molecule_forcefield = 'gaff-2.11'
+    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+                                         small_molecule_forcefield = small_molecule_forcefield, molecules=[Molecule.from_openeye(molecule)], cache=None)
+
+    system, positions, topology = OEMol_to_omm_ff(molecule, system_generator)
 
     assert (type(system) == type(openmm.System())), "An openmm.System has not been generated from OEMol_to_omm_ff()"
 

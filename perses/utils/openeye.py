@@ -9,6 +9,8 @@ __author__ = 'John D. Chodera'
 
 from openeye import oechem, oegraphsim
 from openmoltools.openeye import generate_conformers
+from simtk import openmm, unit
+from simtk.openmm import app
 import simtk.unit as unit
 import numpy as np
 import logging
@@ -17,6 +19,38 @@ logging.basicConfig(level=logging.NOTSET)
 _logger = logging.getLogger("utils.openeye")
 _logger.setLevel(logging.INFO)
 
+def system_generator_wrapper(oemols,
+                            barostat = None,
+                            forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
+                            forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus},
+                            small_molecule_forcefield = 'gaff-2.11',
+                            **kwargs
+                            ):
+    """
+    make a system generator (vacuum) for a small molecule
+
+    Arguments
+    ---------
+    oemols : list of openeye.oechem.OEMol
+        oemols
+    barostat : openmm.MonteCarloBarostat, default None
+        barostat
+    forcefield_files : list of str
+        pointers to protein forcefields and solvent
+    forcefield_kwargs : dict
+        dict of forcefield_kwargs
+    small_molecule_forcefield : str
+        pointer to small molecule forcefield to use
+
+    Returns
+    -------
+    system_generator : openmmforcefields.generators.SystemGenerator
+    """
+    from openforcefield.topology import Molecule
+    from openmmforcefields.generators import SystemGenerator
+    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+                                         small_molecule_forcefield = small_molecule_forcefield, molecules=[Molecule.from_openeye(oemol) for oemol in oemols], cache=None)
+    return system_generator
 
 def smiles_to_oemol(smiles, title='MOL', max_confs=1):
     """
@@ -162,7 +196,7 @@ def giveOpenmmPositionsToOEMol(positions, molecule):
     return molecule
 
 
-def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
+def OEMol_to_omm_ff(molecule, system_generator):
     """
     Convert an openeye.oechem.OEMol to a openmm system, positions and topology
 
@@ -170,8 +204,7 @@ def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
     ----------
     oemol : openeye.oechem.OEMol object
         input molecule to convert
-    data_filename : str, default 'data/gaff2.xml'
-        path to .xml forcefield file, default is gaff2.xml in perses package
+    system_generator : openmmforcefields.generators.SystemGenerator
 
     Return
     ------
@@ -180,19 +213,14 @@ def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
     topology : openmm.topology
 
     """
-    from perses.rjmc import topology_proposal
-    from openmoltools import forcefield_generators
-    from perses.utils.data import get_data_filename
-
-    gaff_xml_filename = get_data_filename(data_filename)
-    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
-    topology = forcefield_generators.generateTopologyFromOEMol(molecule)
-    system = system_generator.build_system(topology)
+    from openmoltools.forcefield_generators import generateTopologyFromOEMol
+    topology = generateTopologyFromOEMol(molecule)
+    system = system_generator.create_system(topology)
     positions = extractPositionsFromOEMol(molecule)
 
     return system, positions, topology
 
-def createSystemFromIUPAC(iupac_name, title="MOL"):
+def createSystemFromIUPAC(iupac_name, title="MOL", **system_generator_kwargs):
     """
     Create an openmm system out of an oemol
 
@@ -220,13 +248,15 @@ def createSystemFromIUPAC(iupac_name, title="MOL"):
 
     molecule = generate_conformers(molecule, max_confs=1)
 
+    system_generator = system_generator_wrapper([molecule], **system_generator_kwargs)
+
     # generate openmm system, positions and topology
-    system, positions, topology = OEMol_to_omm_ff(molecule)
+    system, positions, topology = OEMol_to_omm_ff(molecule, system_generator)
 
     return (molecule, system, positions, topology)
 
 
-def createSystemFromSMILES(smiles,title='MOL'):
+def createSystemFromSMILES(smiles,title='MOL', **system_generator_kwargs):
     """
     Create an openmm system from a smiles string
 
@@ -253,9 +283,10 @@ def createSystemFromSMILES(smiles,title='MOL'):
 
     # Create OEMol
     molecule = smiles_to_oemol(smiles, title=title)
+    system_generator = system_generator_wrapper([molecule], **system_generator_kwargs)
 
     # generate openmm system, positions and topology
-    system, positions, topology = OEMol_to_omm_ff(molecule)
+    system, positions, topology = OEMol_to_omm_ff(molecule, system_generator)
 
     return (molecule, system, positions, topology)
 
