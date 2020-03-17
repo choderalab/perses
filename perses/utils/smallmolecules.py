@@ -203,6 +203,7 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
         old_to_new_atoms = dict()
         for old_atom in mol.GetAtoms():
             new_atom = rmol.NewAtom(old_atom.GetAtomicNum())
+            new_atom.SetFormalCharge(old_atom.GetFormalCharge())
             new_atoms.append(new_atom)
             old_to_new_atoms[old_atom] = new_atom
         # Add bonds
@@ -260,7 +261,6 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     oechem.OEGenerate2DCoordinates(rmol)
     rdisp = oedepict.OE2DMolDisplay(rmol, opts)
 
-    
     if core1.NumAtoms() != 0:
         oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEPink),oedepict.OEHighlightStyle_Stick, core1)
     if core2.NumAtoms() != 0:
