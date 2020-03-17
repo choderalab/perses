@@ -508,7 +508,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         modeller = app.Modeller(old_topology, old_positions)
         hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
         modeller.delete(hs)
-        modeller.addHydrogens(forcefield=system_generator._forcefield)
+        modeller.addHydrogens(forcefield=system_generator.forcefield)
         modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9.0*unit.angstroms)
         solvated_topology = modeller.getTopology()
         solvated_positions = modeller.getPositions()
