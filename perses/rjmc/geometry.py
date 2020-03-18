@@ -7,15 +7,19 @@ from simtk import unit
 import numpy as np
 import collections
 import functools
+import networkx as nx
+from simtk import unit
+import operator
 
 from perses.storage import NetCDFStorage, NetCDFStorageView
+from openeye import oechem, oeomega
 
 ################################################################################
 # Initialize logging
 ################################################################################
 
 import logging
-logging.basicConfig(level = logging.NOTSET)
+logging.basicConfig(level=logging.NOTSET)
 _logger = logging.getLogger("geometry")
 _logger.setLevel(logging.INFO)
 
@@ -153,6 +157,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         whether to consider 1,4 exception interactions in the geometry proposal
         NOTE: if this is set to true, then in the HybridTopologyFactory, the argument 'interpolate_old_and_new_14s' must be set to False; visa versa
 
+    TODO : remove Context objects and checks since they are clunky and no longer used for troubleshooting
+
     """
     def __init__(self,
                  metadata=None,
@@ -189,7 +195,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             self._storage = None
         self.neglect_angles = neglect_angles
 
-    def propose(self, top_proposal, current_positions, beta):
+    def propose(self, top_proposal, current_positions, beta, validate_energy_bookkeeping = True):
         """
         Make a geometry proposal for the appropriate atoms.
 
@@ -201,6 +207,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             The current positions
         beta : simtk.unit.Quantity with units compatible with 1/(kilojoules_per_mole)
             The inverse thermal energy
+        validate_energy_bookkeeping : bool
+            whether to validate the energy mismatch ratio; this is no longer strictly necessary, and will certainly fail if ring closure or non-conservative perturbations are conducted
+            (non-conservative transformations are defined as transformations wherein not _all_ of the valence energies are used to make topology proposals...)
 
         Returns
         -------
@@ -227,7 +236,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             self.forward_final_growth_system = None
         else:
             _logger.info("propose: unique new atoms detected; proceeding to _logp_propose...")
-            logp_proposal, new_positions, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms = self._logp_propose(top_proposal, current_positions, beta, direction='forward')
+            logp_proposal, new_positions, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms, omitted_terms = self._logp_propose(top_proposal, current_positions, beta, direction='forward', validate_energy_bookkeeping = validate_energy_bookkeeping)
             self.nproposed += 1
 
         check_dimensionality(new_positions, unit.nanometers)
@@ -241,7 +250,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return new_positions, logp_proposal
 
 
-    def logp_reverse(self, top_proposal, new_coordinates, old_coordinates, beta):
+    def logp_reverse(self, top_proposal, new_coordinates, old_coordinates, beta, validate_energy_bookkeeping = True):
         """
         Calculate the logp for the given geometry proposal
 
@@ -255,6 +264,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             The coordinates of the system before the proposal
         beta : simtk.unit.Quantity with units compatible with 1/(kilojoules_per_mole)
             The inverse thermal energy
+        validate_energy_bookkeeping : bool
+            whether to validate the energy mismatch ratio; this is no longer strictly necessary, and will certainly fail if ring closure or non-conservative perturbations are conducted
+            (non-conservative transformations are defined as transformations wherein not _all_ of the valence energies are used to make topology proposals...)
 
         Returns
         -------
@@ -276,7 +288,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         # Compute log proposal probability for reverse direction
         _logger.info("logp_reverse: unique new atoms detected; proceeding to _logp_propose...")
-        logp_proposal, new_positions, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms = self._logp_propose(top_proposal, old_coordinates, beta, new_positions=new_coordinates, direction='reverse')
+        logp_proposal, new_positions, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms, omitted_terms = self._logp_propose(top_proposal, old_coordinates, beta, new_positions=new_coordinates, direction='reverse', validate_energy_bookkeeping = validate_energy_bookkeeping)
         self.reverse_new_positions, self.reverse_rjmc_info = new_positions, rjmc_info
         self.reverse_atoms_with_positions_reduced_potential, self.reverse_final_context_reduced_potential = atoms_with_positions_reduced_potential, final_context_reduced_potential
         self.reverse_neglected_angle_terms = neglected_angle_terms
@@ -315,7 +327,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         pdbfile.flush()
         pdbfile.write('ENDMDL\n')
 
-    def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward'):
+    def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward', validate_energy_bookkeeping = True):
         """
         This is an INTERNAL function that handles both the proposal and the logp calculation,
         to reduce code duplication. Whether it proposes or just calculates a logp is based on
@@ -335,6 +347,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             The coordinates of the system after the proposal, or None for forward proposals
         direction : str
             Whether to make a proposal ('forward') or just calculate logp ('reverse')
+        validate_energy_bookkeeping : bool
+            whether to validate the energy mismatch ratio; this is no longer strictly necessary, and will certainly fail if ring closure or non-conservative perturbations are conducted
+            (non-conservative transformations are defined as transformations wherein not _all_ of the valence energies are used to make topology proposals...)
 
         Returns
         -------
@@ -351,6 +366,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         neglected_angle_terms : list of ints
             list of indices corresponding to the angle terms in the corresponding system that are neglected (i.e. which are to be
             placed into the lambda perturbation scheme)
+        omitted_growth_terms : dict
+            dictionary of terms that have been omitted in the proposal
+            the dictionary carries indices corresponding to the new or old topology, depending on whether the proposal is forward, or reverse (respectively)
         """
         _logger.info("Conducting forward proposal...")
         import copy
@@ -363,10 +381,13 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         # Determine order in which atoms (and the torsions they are involved in) will be proposed
         _logger.info("Computing proposal order with NetworkX...")
         proposal_order_tool = NetworkXProposalOrder(top_proposal, direction=direction)
-        torsion_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order()
+        torsion_proposal_order, logp_choice, omitted_bonds = proposal_order_tool.determine_proposal_order()
         atom_proposal_order = [ torsion[0] for torsion in torsion_proposal_order ]
+
+        # some logs for clarity
         _logger.info(f"number of atoms to be placed: {len(atom_proposal_order)}")
         _logger.info(f"Atom index proposal order is {atom_proposal_order}")
+        _logger.info(f"omitted_bonds: {omitted_bonds}")
 
         growth_parameter_name = 'growth_stage'
         if direction=="forward":
@@ -380,7 +401,15 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             # Create modified System object
             _logger.info("creating growth system...")
-            growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, torsion_proposal_order, global_parameter_name=growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics, neglect_angles = self.neglect_angles, use_14_nonbondeds = self._use_14_nonbondeds)
+            growth_system_generator = GeometrySystemGenerator(top_proposal.new_system,
+                                                              torsion_proposal_order,
+                                                              omitted_bonds = omitted_bonds,
+                                                              reference_topology = top_proposal._new_topology,
+                                                              global_parameter_name=growth_parameter_name,
+                                                              use_sterics=self.use_sterics,
+                                                              neglect_angles = self.neglect_angles,
+                                                              use_14_nonbondeds = self._use_14_nonbondeds)
+
             growth_system = growth_system_generator.get_modified_system()
 
         elif direction=='reverse':
@@ -395,7 +424,15 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             # Create modified System object
             _logger.info("creating growth system...")
-            growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, torsion_proposal_order, global_parameter_name=growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics, neglect_angles = self.neglect_angles, use_14_nonbondeds = self._use_14_nonbondeds)
+            growth_system_generator = GeometrySystemGenerator(top_proposal.old_system,
+                                                              torsion_proposal_order,
+                                                              omitted_bonds = omitted_bonds,
+                                                              reference_topology = top_proposal._old_topology,
+                                                              global_parameter_name=growth_parameter_name,
+                                                              use_sterics=self.use_sterics,
+                                                              neglect_angles = self.neglect_angles,
+                                                              use_14_nonbondeds = self._use_14_nonbondeds)
+
             growth_system = growth_system_generator.get_modified_system()
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
@@ -452,7 +489,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         #Print the energy of the system before unique_new/old atoms are placed...
         state = atoms_with_positions_context.getState(getEnergy=True)
         atoms_with_positions_reduced_potential = beta*state.getPotentialEnergy()
-        atoms_with_positions_reduced_potential_components = [(force, energy*beta) for force, energy in compute_potential_components(atoms_with_positions_context)]
+        atoms_with_positions_reduced_potential_components = [(force, energy) for force, energy in compute_potential_components(atoms_with_positions_context)]
         atoms_with_positions_methods_differences = abs(atoms_with_positions_reduced_potential - sum([i[1] for i in atoms_with_positions_reduced_potential_components]))
         assert atoms_with_positions_methods_differences < ENERGY_THRESHOLD, f"the difference between the atoms_with_positions_reduced_potential and the sum of atoms_with_positions_reduced_potential_components is {abs(atoms_with_positions_reduced_potential - sum([i[1] for i in atoms_with_positions_reduced_potential_components]))}"
 
@@ -618,6 +655,15 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         added_energy_components = [(force, energy*beta) for force, energy in compute_potential_components(context)]
         for item in added_energy_components:
             _logger.debug(f"\t\t{item[0]}: {item[1]}")
+
+        #now for the corrected reduced_potential_energy
+        if direction == 'forward':
+            positions = new_positions
+        else:
+            positions = old_positions
+
+        reduced_potential_energy = self._corrected_reduced_potential(growth_system_generator, positions, platform_name, atom_proposal_order, beta)
+
         _logger.info(f"total reduced energy added from growth system: {reduced_potential_energy}")
 
         _logger.debug(f"reduced potential of final system:")
@@ -629,7 +675,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         _logger.info(f"magnitude of difference in the energies: {abs(final_context_reduced_potential - atoms_with_positions_reduced_potential - reduced_potential_energy)}")
 
         energy_mismatch_ratio = (atoms_with_positions_reduced_potential + reduced_potential_energy) / (final_context_reduced_potential)
-        assert (energy_mismatch_ratio < ENERGY_MISMATCH_RATIO_THRESHOLD + 1) and (energy_mismatch_ratio > 1 - ENERGY_MISMATCH_RATIO_THRESHOLD)  , f"The ratio of the calculated final energy to the true final energy is {energy_mismatch_ratio}"
+
+        if validate_energy_bookkeeping:
+            assert (energy_mismatch_ratio < ENERGY_MISMATCH_RATIO_THRESHOLD + 1) and (energy_mismatch_ratio > 1 - ENERGY_MISMATCH_RATIO_THRESHOLD)  , f"The ratio of the calculated final energy to the true final energy is {energy_mismatch_ratio}"
+
 
         # Final log proposal:
         _logger.info("Final logp_proposal: {}".format(logp_proposal))
@@ -640,81 +689,52 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         check_dimensionality(logp_proposal, float)
         check_dimensionality(new_positions, unit.nanometers)
 
+        omitted_growth_terms = growth_system_generator.omitted_growth_terms
+
         if self.use_sterics:
-            return logp_proposal, new_positions, rjmc_info, 0.0, reduced_potential_energy, []
+            return logp_proposal, new_positions, rjmc_info, 0.0, reduced_potential_energy, [], omitted_growth_terms
 
-        return logp_proposal, new_positions, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms
 
-    @staticmethod
-    def _oemol_from_residue(res, verbose=True):
+        return logp_proposal, new_positions, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms, omitted_growth_terms
+
+    def _corrected_reduced_potential(self, growth_system_generator, positions, platform_name, atom_proposal_order, beta):
         """
-        Get an OEMol from a residue, even if that residue
-        is polymeric. In the latter case, external bonds
-        are replaced by hydrogens.
-
-        Parameters
-        ----------
-        res : app.Residue
-            The residue in question
-        verbose : bool, optional, default=False
-            If True, will print verbose output.
-
-        Returns
-        -------
-        oemol : openeye.oechem.OEMol
-            an oemol representation of the residue with topology indices
+        in order to compute the properly-bookkept energy mismatch, we must define a growth system without the biasing torsions
         """
-        # TODO: Deprecate this
-        from openeye import oechem
-        from simtk.openmm import app
+        import copy
+        from simtk import openmm
+        from perses.tests.utils import compute_potential_components
+        _integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
+        growth_system = copy.deepcopy(growth_system_generator.get_modified_system())
+        #the last thing to do for bookkeeping is to delete the torsion force associated with the extra ring-closing and chirality restraints
 
-        # TODO: This seems to be broken. Can we fix it?
-        from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
-        external_bonds = list(res.external_bonds())
-        for bond in external_bonds:
-            if verbose: print(bond)
-        new_atoms = {}
-        highest_index = 0
-        if external_bonds:
-            new_topology = app.Topology()
-            new_chain = new_topology.addChain(0)
-            new_res = new_topology.addResidue("new_res", new_chain)
-            for atom in res.atoms():
-                new_atom = new_topology.addAtom(atom.name, atom.element, new_res, atom.id)
-                new_atom.index = atom.index
-                new_atoms[atom] = new_atom
-                highest_index = max(highest_index, atom.index)
-            for bond in res.internal_bonds():
-                new_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
-            for bond in res.external_bonds():
-                internal_atom = [atom for atom in bond if atom.residue==res][0]
-                if verbose:
-                    print('internal atom')
-                    print(internal_atom)
-                highest_index += 1
-                if internal_atom.name=='N':
-                    if verbose: print('Adding H to N')
-                    new_atom = new_topology.addAtom("H2", app.Element.getByAtomicNumber(1), new_res, -1)
-                    new_atom.index = -1
-                    new_topology.addBond(new_atoms[internal_atom], new_atom)
-                if internal_atom.name=='C':
-                    if verbose: print('Adding OH to C')
-                    new_atom = new_topology.addAtom("O2", app.Element.getByAtomicNumber(8), new_res, -1)
-                    new_atom.index = -1
-                    new_topology.addBond(new_atoms[internal_atom], new_atom)
-                    highest_index += 1
-                    new_hydrogen = new_topology.addAtom("HO", app.Element.getByAtomicNumber(1), new_res, -1)
-                    new_hydrogen.index = -1
-                    new_topology.addBond(new_hydrogen, new_atom)
-            res_to_use = new_res
-            external_bonds = list(res_to_use.external_bonds())
-        else:
-            res_to_use = res
-        oemol = generateOEMolFromTopologyResidue(res_to_use, geometry=False)
-        oechem.OEAddExplicitHydrogens(oemol)
-        return oemol
+        #first, we see if there are two CustomTorsionForce objects...
+        custom_torsion_forces = [force_index for force_index in range(growth_system.getNumForces()) if growth_system.getForce(force_index).__class__.__name__ == 'CustomTorsionForce']
+        if len(custom_torsion_forces) == 2:
+            _logger.debug(f"\tfound 2 custom torsion forces")
+            #then the first one is the normal growth torsion force object and the second is the added torsion force object used to handle chirality and ring-closing constraints
+            growth_system.removeForce(max(custom_torsion_forces))
 
-    def _define_no_nb_system(self, system, neglected_angle_terms, atom_proposal_order):
+        mod_context = openmm.Context(growth_system, _integrator, openmm.Platform.getPlatformByName(platform_name))
+        growth_system_generator.set_growth_parameter_index(len(atom_proposal_order)+1, mod_context)
+        mod_context.setPositions(positions)
+        mod_state = mod_context.getState(getEnergy=True)
+        modified_reduced_potential_energy = beta * mod_state.getPotentialEnergy()
+
+        added_energy_components = [(force, energy) for force, energy in compute_potential_components(mod_context)]
+        print(f"added energy components: {added_energy_components}")
+
+        return modified_reduced_potential_energy
+
+
+
+
+
+
+    def _define_no_nb_system(self,
+                             system,
+                             neglected_angle_terms,
+                             atom_proposal_order):
         """
         This is a quick internal function to generate a final system for an assertion comparison with the energy added in the geometry proposal to the final
         energy.  Specifically, this function generates a final system (neglecting nonbonded interactions and specified valence terms)
@@ -736,6 +756,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         from simtk import openmm, unit
         no_nb_system = copy.deepcopy(system)
         _logger.info("\tbeginning construction of no_nonbonded final system...")
+        _logger.info(f"\tinitial no-nonbonded final system forces {[force.__class__.__name__ for force in list(no_nb_system.getForces())]}")
 
         num_forces = no_nb_system.getNumForces()
         for index in reversed(range(num_forces)):
@@ -760,19 +781,27 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                     p1, p2, p3, theta0, K = force.getAngleParameters(angle_idx)
                     force.setAngleParameters(angle_idx, p1, p2, p3, theta0, unit.Quantity(value=0.0, unit=unit.kilojoule/(unit.mole*unit.radian**2)))
 
+        # #the last thing to do for bookkeeping is to delete the torsion force associated with the extra ring-closing and chirality restraints
+        #
+        # #first, we see if there are two CustomTorsionForce objects...
+        # custom_torsion_forces = [force_index for force_index in range(no_nb_system.getNumForces()) if no_nb_system.getForce(force_index).__class__.__name__ == 'CustomTorsionForce']
+        # if len(custom_torsion_forces) == 2:
+        #     #then the first one is the normal growth torsion force object and the second is the added torsion force object used to handle chirality and ring-closing constraints
+        #     no_nb_system.removeForce(max(custom_torsion_forces))
+
         forces = { no_nb_system.getForce(index).__class__.__name__ : no_nb_system.getForce(index) for index in range(no_nb_system.getNumForces()) }
         _logger.info(f"\tfinal no-nonbonded final system forces {forces.keys()}")
 
         #bonds
-        bond_forces = forces['HarmonicBondForce'] 
+        bond_forces = forces['HarmonicBondForce']
         _logger.info(f"\tthere are {bond_forces.getNumBonds()} bond forces in the no-nonbonded final system")
 
         #angles
-        angle_forces = forces['HarmonicAngleForce'] 
+        angle_forces = forces['HarmonicAngleForce']
         _logger.info(f"\tthere are {angle_forces.getNumAngles()} angle forces in the no-nonbonded final system")
 
         #torsions
-        torsion_forces = forces['PeriodicTorsionForce'] 
+        torsion_forces = forces['PeriodicTorsionForce']
         _logger.info(f"\tthere are {torsion_forces.getNumTorsions()} torsion forces in the no-nonbonded final system")
 
 
@@ -1725,8 +1754,20 @@ class GeometrySystemGenerator(object):
     Only valence terms involving newly placed atoms will be computed; valence terms between fixed atoms will be omitted.
     """
 
-    def __init__(self, reference_system, torsion_proposal_order, global_parameter_name='growth_index', add_extra_torsions=False, add_extra_angles=False,
-                       reference_topology=None, use_sterics=False, force_names=None, force_parameters=None, verbose=True, neglect_angles = True, use_14_nonbondeds = True):
+    def __init__(self,
+                 reference_system,
+                 torsion_proposal_order,
+                 omitted_bonds,
+                 reference_topology,
+                 global_parameter_name='growth_index',
+                 add_extra_torsions = True,
+                 add_extra_angles = False,
+                 use_sterics=False,
+                 force_names=None,
+                 force_parameters=None,
+                 verbose=True,
+                 neglect_angles = True,
+                 use_14_nonbondeds = True):
         """
         Parameters
         ----------
@@ -1734,6 +1775,10 @@ class GeometrySystemGenerator(object):
             The system containing the relevant forces and particles
         torsion_proposal_order : list of list of 4-int
             The order in which the torsion indices will be proposed
+        omitted_bonds : list of tuple of int
+            list of atom index tuples (corresponding to reference_topology atoms) which have been omitted in the atom proposal
+        reference_topology : simtk.openmm.topology.Topology (augmented)
+            used to probe the topology for rotamers, chiral centers, etc.
         global_parameter_name : str, optional, default='growth_index'
             The name of the global context parameter
         add_extra_torsions : bool, optional
@@ -1765,6 +1810,14 @@ class GeometrySystemGenerator(object):
         """
         import copy
         # TODO: Rename `growth_indices` (which is really a list of Atom objects) to `atom_growth_order` or `atom_addition_order`
+
+        #create an 'omitted_terms'
+        self.omitted_growth_terms = {'bonds': [], 'angles': [], 'torsions': [], '1,4s': []}
+        self.omitted_bonds = omitted_bonds
+        self.extra_torsion_terms = {}
+        self.extra_angle_terms = {}
+
+        self.reference_topology = reference_topology
 
         # Check that we're not using the reserved name
         if global_parameter_name == 'growth_idx':
@@ -1843,8 +1896,12 @@ class GeometrySystemGenerator(object):
             growth_idx = self._calculate_growth_idx([p1, p2], growth_indices)
             _logger.debug(f"\t\tfor bond {bond_index} (i.e. partices {p1} and {p2}), the growth_index is {growth_idx}")
             if growth_idx > 0:
-                modified_bond_force.addBond(p1, p2, [r0, K, growth_idx])
-                _logger.debug(f"\t\t\tadding to the growth system")
+                if (p1, p2) not in omitted_bonds and (p2, p1) not in omitted_bonds:
+                    modified_bond_force.addBond(p1, p2, [r0, K, growth_idx])
+                    _logger.debug(f"\t\t\tadding to the growth system")
+                else:
+                    _logger.debug(f"\t\t\tomitted bond")
+                    self.omitted_growth_terms['bonds'].append((p1,p2))
                 atoms_with_positions_system.getForce(reference_forces_indices['HarmonicBondForce']).setBondParameters(bond_index,p1, p2, r0, K*0.0)
             else:
                 _logger.debug(f"\t\t\tadding to the the atoms with positions system.")
@@ -1867,7 +1924,7 @@ class GeometrySystemGenerator(object):
 
             if growth_idx > 0:
                 if neglect_angles and (not use_sterics):
-                    if any( [p1, p2, p3] == torsion[:3] or [p3,p2,p1] == torsion[:3] for torsion in torsion_proposal_order):
+                    if any( [p1, p2, p3] == torsion[:3] or [p3, p2, p1] == torsion[:3] for torsion in torsion_proposal_order):
                         #then there is a new atom in the angle term and the angle is part of a torsion and is necessary
                         _logger.debug(f"\t\t\tadding to the growth system since it is part of a torsion")
                         modified_angle_force.addAngle(p1, p2, p3, [theta0, K, growth_idx])
@@ -1876,8 +1933,13 @@ class GeometrySystemGenerator(object):
                         _logger.debug(f"\t\t\ttallying to neglected term indices")
                         neglected_angle_term_indices.append(angle)
                 else:
-                    _logger.debug(f"\t\t\tadding to the growth system")
-                    modified_angle_force.addAngle(p1, p2, p3, [theta0, K, growth_idx])
+                    possible_omissions = [(p1,p2), (p2, p3), (p2,p1), (p3,p2)]
+                    if any(angle_pair in omitted_bonds for angle_pair in possible_omissions):
+                        _logger.debug(f"\t\t\tomitted angle")
+                        self.omitted_growth_terms['angles'].append((p1,p2,p3))
+                    else:
+                        _logger.debug(f"\t\t\tadding to the growth system")
+                        modified_angle_force.addAngle(p1, p2, p3, [theta0, K, growth_idx])
 
                 atoms_with_positions_system.getForce(reference_forces_indices['HarmonicAngleForce']).setAngleParameters(angle, p1, p2, p3, theta0, K*0.0)
             else:
@@ -1890,7 +1952,12 @@ class GeometrySystemGenerator(object):
         modified_torsion_force.addGlobalParameter(global_parameter_name, default_growth_index)
         for parameter_name in ['periodicity', 'phase', 'k', 'growth_idx']:
             modified_torsion_force.addPerTorsionParameter(parameter_name)
-        growth_system.addForce(modified_torsion_force)
+
+        _logger.info(f"\tcreating extra torsions force...")
+        extra_modified_torsion_force = copy.deepcopy(modified_torsion_force) #we will add this if we _do_ call the extra modified torsions force
+
+        growth_system.addForce(modified_torsion_force) #but we add this, regardlesss
+
         reference_torsion_force = reference_forces['PeriodicTorsionForce']
         _logger.info(f"\tthere are {reference_torsion_force.getNumTorsions()} torsions in reference force.")
         for torsion in range(reference_torsion_force.getNumTorsions()):
@@ -1898,8 +1965,13 @@ class GeometrySystemGenerator(object):
             growth_idx = self._calculate_growth_idx([p1, p2, p3, p4], growth_indices)
             _logger.debug(f"\t\tfor torsion {torsion} (i.e. partices {p1}, {p2}, {p3}, and {p4}), the growth_index is {growth_idx}")
             if growth_idx > 0:
-                modified_torsion_force.addTorsion(p1, p2, p3, p4, [periodicity, phase, k, growth_idx])
-                _logger.debug(f"\t\t\tadding to the growth system")
+                possible_omissions = [(p1,p2), (p2,p3), (p3,p4), (p2,p1), (p3,p2), (p4,p3)]
+                if any(torsion_pair in omitted_bonds for torsion_pair in possible_omissions):
+                    _logger.debug(f"\t\t\tomitted torsion")
+                    self.omitted_growth_terms['torsions'].append((p1,p2,p3,p4))
+                else:
+                    modified_torsion_force.addTorsion(p1, p2, p3, p4, [periodicity, phase, k, growth_idx])
+                    _logger.debug(f"\t\t\tadding to the growth system")
                 atoms_with_positions_system.getForce(reference_forces_indices['PeriodicTorsionForce']).setTorsionParameters(torsion, p1, p2, p3, p4, periodicity, phase, k*0.0)
             else:
                 _logger.debug(f"\t\t\tadding to the the atoms with positions system.")
@@ -1934,13 +2006,22 @@ class GeometrySystemGenerator(object):
                 #Now we iterate through the exceptions and add custom bond forces if the growth intex for that bond > 0
                 _logger.info("\t\tlooping through exceptions calculating growth indices, and adding appropriate interactions to custom bond force.")
                 _logger.info(f"\t\tthere are {reference_nonbonded_force.getNumExceptions()} in the reference Nonbonded force")
+                possible_omissions = [[(p1,p2), (p2,p3), (p3,p4), (p2,p1), (p3,p2), (p4,p3)]]
                 for exception_index in range(reference_nonbonded_force.getNumExceptions()):
                     p1, p2, chargeprod, sigma, epsilon = reference_nonbonded_force.getExceptionParameters(exception_index)
                     growth_idx = self._calculate_growth_idx([p1, p2], growth_indices)
                     _logger.debug(f"\t\t\t{p1} and {p2} with charge {chargeprod} and epsilon {epsilon} have a growth index of {growth_idx}")
                     # Only need to add terms that are nonzero and involve newly added atoms.
                     if (growth_idx > 0) and ((chargeprod.value_in_unit_system(unit.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(unit.md_unit_system) != 0.0)):
-                        custom_bond_force.addBond(p1, p2, [chargeprod, sigma, epsilon, growth_idx])
+                        fails = 0
+                        for tor in self.omitted_growth_terms['torsions']:
+                            tor_set = set(tor)
+                            if set((p1,p2)).issubset(tor_set):
+                                fails += 1
+                        if fails > 0:
+                            self.omitted_growth_terms['1,4s'].append((p1,p2))
+                        else:
+                            custom_bond_force.addBond(p1, p2, [chargeprod, sigma, epsilon, growth_idx])
 
             else:
                 _logger.info("\t\tthere are no Exceptions in the reference system.")
@@ -2019,13 +2100,18 @@ class GeometrySystemGenerator(object):
 
         # Add extra ring-closing torsions, if requested.
         if add_extra_torsions:
-            if reference_topology==None:
+            _logger.debug(f"\t\tattempting to add extra torsions...")
+            if reference_topology == None:
                 raise ValueError("Need to specify topology in order to add extra torsions.")
-            self._determine_extra_torsions(modified_torsion_force, reference_topology, growth_indices)
-        if add_extra_angles:
-            if reference_topology==None:
-                raise ValueError("Need to specify topology in order to add extra angles")
-            self._determine_extra_angles(modified_angle_force, reference_topology, growth_indices)
+            self._determine_extra_torsions(extra_modified_torsion_force, reference_topology, growth_indices)
+            if extra_modified_torsion_force.getNumTorsions() > 0:
+                #then we should add it to the growth system...
+                growth_system.addForce(extra_modified_torsion_force)
+
+        # if add_extra_angles:
+        #     if reference_topology==None:
+        #         raise ValueError("Need to specify topology in order to add extra angles")
+        #     self._determine_extra_angles(modified_angle_force, reference_topology, growth_indices)
 
         # Store growth system
         self._growth_parameter_name = global_parameter_name
@@ -2033,6 +2119,8 @@ class GeometrySystemGenerator(object):
         self._atoms_with_positions_system = atoms_with_positions_system #note this is only bond, angle, and torsion forces
         self.neglected_angle_terms = neglected_angle_term_indices #these are angle terms that are neglected because of coupling to lnZ_phi
         _logger.info("Neglected angle terms : {}".format(neglected_angle_term_indices))
+        _logger.info(f"omitted_growth_terms: {self.omitted_growth_terms}")
+        _logger.info(f"extra torsions: {self.extra_torsion_terms}")
 
     def set_growth_parameter_index(self, growth_parameter_index, context=None):
         """
@@ -2055,7 +2143,10 @@ class GeometrySystemGenerator(object):
         """
         return self._growth_system
 
-    def _determine_extra_torsions(self, torsion_force, reference_topology, growth_indices):
+    def _determine_extra_torsions(self,
+                                  torsion_force,
+                                  reference_topology,
+                                  growth_indices):
         """
         In order to facilitate ring closure and ensure proper bond stereochemistry,
         we add additional biasing torsions to rings and stereobonds that are then corrected
@@ -2076,7 +2167,7 @@ class GeometrySystemGenerator(object):
         ----------
         torsion_force : openmm.CustomTorsionForce object
             the new/old torsion force if forward/backward
-        reference_topology : openmm.app.Topology object
+        reference_topology : openmm.app.Topology object (augmented)
             the new/old topology if forward/backward
         oemol : openeye.oechem.OEMol
             An OEMol representing the new (old) system if forward (backward)
@@ -2089,46 +2180,188 @@ class GeometrySystemGenerator(object):
             The torsion force with extra torsions added appropriately.
 
         """
+        from perses.rjmc import coordinate_numba
         # Do nothing if there are no atoms to grow.
         if len(growth_indices) == 0:
             return torsion_force
+
+        #set ring restraints
+        _logger.debug(f"\t\t\tattempting to add ring restraints")
 
         #get the list of torsions in the molecule that are not about a rotatable bond
         # Note that only torsions involving heavy atoms are enumerated here.
         rotor = oechem.OEIsRotor()
         torsion_predicate = oechem.OENotBond(rotor)
-        non_rotor_torsions = list(oechem.OEGetTorsions(oemol, torsion_predicate))
+        non_rotor_torsions = list(oechem.OEGetTorsions(reference_topology.residue_oemol, torsion_predicate))
         relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
 
         #now, for each torsion, extract the set of indices and the angle
         periodicity = 1
-        k = 120.0*units.kilocalories_per_mole # stddev of 12 degrees
+        k = 120.0*unit.kilocalories_per_mole # stddev of 12 degrees
         #print([atom.name for atom in growth_indices])
+        _logger.debug(f"\t\t\trelevant torsions for ring restraints being added...")
         for torsion in relevant_torsion_list:
             #make sure to get the atom index that corresponds to the topology
-            atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
+            #atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
+            oe_atom_indices = [torsion.a.GetIdx(),
+                               torsion.b.GetIdx(),
+                               torsion.c.GetIdx(),
+                               torsion.d.GetIdx()]
+            if all(_idx in list(reference_topology.reverse_residue_to_oemol_map.keys()) for _idx in oe_atom_indices):
+                #then every atom in the oemol lives in the openmm topology/residue, so we can consider it
+                topology_index_map = [reference_topology.reverse_residue_to_oemol_map[q] for q in oe_atom_indices]
+            else:
+                topology_index_map = None
+
             # Determine phase in [-pi,+pi) interval
             #phase = (np.pi)*units.radians+angle
-            phase = torsion.radians + np.pi # TODO: Check that this is the correct convention?
-            while (phase >= np.pi):
-                phase -= 2*np.pi
-            while (phase < -np.pi):
-                phase += 2*np.pi
-            phase *= units.radian
+
+            adjusted_phase = self.adjust_phase(phase = torsion.radians)
             #print('PHASE>>>> ' + str(phase)) # DEBUG
-            growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
-            atom_names = [torsion.a.GetName(), torsion.b.GetName(), torsion.c.GetName(), torsion.d.GetName()]
+            if topology_index_map is not None:
+                growth_idx = self._calculate_growth_idx(topology_index_map, growth_indices)
+                atom_names = [torsion.a.GetName(), torsion.b.GetName(), torsion.c.GetName(), torsion.d.GetName()]
+
             #print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
             #If this is a CustomTorsionForce, we need to pass the parameters as a list, and it will have the growth_idx parameter.
             #If it's a regular PeriodicTorsionForce, there is no growth_index and the parameters are passed separately.
-            if isinstance(torsion_force, openmm.CustomTorsionForce):
-                torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], [periodicity, phase, k, growth_idx])
-            elif isinstance(torsion_force, openmm.PeriodicTorsionForce):
-                torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], periodicity, phase, k)
+
+            p1, p2, p3, p4 = topology_index_map
+            possible_omissions = [(p1,p2), (p2,p3), (p3,p4), (p2,p1), (p3,p2), (p4,p3)]
+            if growth_idx > 0:
+                if any(torsion_pair in self.omitted_bonds for torsion_pair in possible_omissions):
+                    pass
+                else:
+                    _torsion_index = torsion_force.addTorsion(topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, adjusted_phase, k, growth_idx])
+                    self.extra_torsion_terms[_torsion_index] = (topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, adjusted_phase, k, growth_idx])
+                    _logger.debug(f"\t\t\t\t{(topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3])}")
             else:
-                raise ValueError("The force supplied to this method must be either a CustomTorsionForce or a PeriodicTorsionForce")
+                pass
+                #we omit terms wherein the growth index only pertains to the
+
+        _logger.debug(f"\t\t\trelevant torsions for chirality restraints being added...")
+        #set chirality restraints (adapted from https://github.com/choderalab/perses/blob/protein_mutations_ivy/perses/rjmc/geometry.py)
+
+        #set stereochemistry
+        #the chirality of the atoms is supposed to be pre-specified by NetworkXMolecule
+
+        #render a 3d structure: note that this fucks up the rjmc proposal (since we cannot enumerate the number of possible conformers)
+
+        #add the improper torsions associated with the chiral center
+        coords = reference_topology.residue_oemol.GetCoords()
+        networkx_graph = reference_topology._get_networkx_molecule()
+        #CIP_perceptions = {0: 'R', 1: 'S'}
+        #iterate over all of the atoms with chiral centers
+        _logger.debug(f"\t\t\t\tnodes: {networkx_graph.nodes()}")
+        for _node in networkx_graph.nodes(data = True):
+            _logger.debug(f"\t\t\t\tquerying node {_node[0]}")
+            _logger.debug(f"\t\t\t\tnode attributes: {_node[1]}")
+            if _node[1]['oechem_atom'].IsChiral():
+                _logger.debug(f"\t\t\t\tnode is chiral...")
+                assert(_node[1]['oechem_atom']).HasStereoSpecified(), f"atom {_node[1]['oechem_atom']} is chiral, but the chirality is not specified."
+                _stereo = stereo = oechem.OEPerceiveCIPStereo(reference_topology.residue_oemol, _node[1]['oechem_atom'])
+                #_logger.debug(f"\t\t\t\t\tis chiral with CIP: {CIP_perceptions[_stereo]}")
+                #get the neighbors
+                #nbrs_top : list(int) of topology indices
+                #nbrs_oemol : list(int) of oemol indices of neighbor
+                #nbrs : list(OEAtomBase) of the oemol atoms of neighbors
+
+                #get the neighbors of the chiral atom of interest
+                nbrs_top, nbrs_oemol, nbrs = [], [], []
+                for nbr in networkx_graph[_node[0]]:
+                    nbrs_top.append(nbr)
+                    nbrs_oemol.append(reference_topology.residue_to_oemol_map[nbr])
+                    nbrs.append(networkx_graph.nodes[nbr]['oechem_atom'])
+                _logger.debug(f"\t\t\t\t\tquerying neighbors: {nbrs_top} with data: {[networkx_graph.nodes[lst_nbr]['openmm_atom'] for lst_nbr in nbrs_top]}")
+                growth_idx = self._calculate_growth_idx(nbrs_top, growth_indices)
+                _logger.debug(f"\t\t\t\t\tthe growth index of the neighbors is {growth_idx}")
+                if growth_idx > 0:
+
+                    if len(list(networkx_graph[_node[0]])) == 4:
+                        _logger.debug(f"\t\t\t\t\tthe number of neighbors is 4; proceeding")
+                        # TODO: handle chiral centers where the valency of the chiral center > 4
+
+                        #specify the atom order for calculating the angle
+
+                        #the order of the improper torsion will be as follows (p1, p2, p3, p4):
+                        #p1: the neighbor of the chiral atom whose growth index is minimally greater than the growth index of the chiral center
+                        #p2: the chiral center
+                        #p3: the neighbor of the chiral center whose growth index is maximally less than (or equal to) the growth index of the chiral center
+                        #p4: the neighbor of the chiral atom whose growth index is minimally greater than the growth index of p1
+
+                        _node_growth_index = self._calculate_growth_idx([_node[0]], growth_indices)
+                        nbr_growth_indices = [self._calculate_growth_idx([q], growth_indices) for q in nbrs_top]
+                        _nbr_to_growth_index_tuple = [(_nbr, _idx) for _nbr, _idx in zip(nbrs_top, nbr_growth_indices)]
+                        _logger.debug(f"\t\t\t\t\tgrowth index of node: {_node_growth_index}")
+                        _logger.debug(f"\t\t\t\t\tgrowth indices of neighbors: {_nbr_to_growth_index_tuple}")
+
+                        if [tup[1] for tup in _nbr_to_growth_index_tuple].count(0) == 3:
+                            _logger.warning(f"\t\t\t\t\tchiral atom {_node[1]['openmm_atom']} with neighbors {[networkx_graph.nodes[lst_nbr]['openmm_atom'] for lst_nbr in nbrs_top]} is surrounded by 3 core neighbors.  omitting chirality bias torsion")
+                        else:
+
+                            #find p1:
+                            p1_target_growth_index = min(tup[1] for tup in _nbr_to_growth_index_tuple if tup[1] > _node_growth_index)
+                            p1 = [q[0] for q in _nbr_to_growth_index_tuple if q[1] == p1_target_growth_index][0] #take the first hit
+
+                            #find p2:
+                            p2 = _node[0]
+
+                            #find p3:
+                            p3_target_growth_index = max(tup[1] for tup in _nbr_to_growth_index_tuple if tup[1] <= _node_growth_index)
+                            p3 = [q[0] for q in _nbr_to_growth_index_tuple if q[1] == p3_target_growth_index][0] #take the first hit
+
+                            #find p4:
+                            p4_target_growth_index = min(tup[1] for tup in _nbr_to_growth_index_tuple if tup[1] > p1_target_growth_index)
+                            p4 = [q[0] for q in _nbr_to_growth_index_tuple if q[1] == p4_target_growth_index][0] #take the first hit
+                            _logger.debug(f"\t\t\t\t\tgrowth index carrying this improper: {p4_target_growth_index}")
+
+                            #now convert p1-p4 to oemol indices
+                            oemol_indices = [reference_topology.residue_to_oemol_map[q] for q in [p1, p2, p3, p4]]
+
+                            #calculate the improper torsion
+                            # coords is dict of {idx: (x_0, y_0, z_0)}
+                            phase = coordinate_numba.cartesian_to_internal(np.array(coords[oemol_indices[0]], dtype = 'float64'),
+                                                                           np.array(coords[oemol_indices[1]], dtype = 'float64'),
+                                                                           np.array(coords[oemol_indices[2]], dtype = 'float64'),
+                                                                           np.array(coords[oemol_indices[3]], dtype = 'float64'))[2]
+                            adjusted_phase = self.adjust_phase(phase = phase)
+                            growth_idx = self._calculate_growth_idx(nbrs_top, growth_indices)
+
+
+                            _torsion_index = torsion_force.addTorsion(p1, p2, p3, p4, [periodicity, adjusted_phase, k, p4_target_growth_index])
+                            self.extra_torsion_terms[_torsion_index] = (p1, p2, p3, p4, [periodicity, adjusted_phase, k, p4_target_growth_index])
+                            _logger.debug(f"\t\t\t\t\t{(p1, p2, p3, p4)}, phase : {adjusted_phase}")
+                    else:
+                        #the atom of interest must have 4 substitutents to be chiral; TODO: chirality can also be maintained with >4 atoms.
+                        pass
 
         return torsion_force
+
+    def adjust_phase(self, phase):
+        """
+        Utility function to adjust the phase properly
+
+        Arguments
+        ---------
+        phase : float
+            phase angle
+
+        Return
+        ------
+        adjusted_phase : float * unit.radians
+            adjusted phase with convention
+        """
+        phase = phase + np.pi # TODO: Check that this is the correct convention?
+        while (phase >= np.pi):
+            phase -= 2*np.pi
+        while (phase < -np.pi):
+            phase += 2*np.pi
+        phase *= unit.radian
+
+        adjusted_phase = phase
+        return adjusted_phase
+
+
 
     def _select_torsions_without_h(self, torsion_list):
         """
@@ -2144,9 +2377,13 @@ class GeometrySystemGenerator(object):
         """
         heavy_torsions = []
         for torsion in torsion_list:
-            is_h_present = torsion.a.IsHydrogen() + torsion.b.IsHydrogen() + torsion.c.IsHydrogen() + torsion.d.IsHydrogen()
-            if not is_h_present:
+            is_h_present = [torsion.a.IsHydrogen(), torsion.b.IsHydrogen(), torsion.c.IsHydrogen(), torsion.d.IsHydrogen()]
+            if all(entry == False for entry in is_h_present):
                 heavy_torsions.append(torsion)
+            else:
+                #there is a hydrogen in this torsion, so it is omitted
+                pass
+
         return heavy_torsions
 
     def _determine_extra_angles(self, angle_force, reference_topology, growth_indices):
@@ -2169,7 +2406,6 @@ class GeometrySystemGenerator(object):
         angle_force : simtk.openmm.CustomAngleForce
             The modified angle force
         """
-        from openeye import oechem, oeomega
         from simtk import openmm
         import itertools
         if len(growth_indices)==0:
@@ -2258,6 +2494,8 @@ class NetworkXProposalOrder(object):
             Container class for the transformation
         direction: str, default forward
             Whether to go forward or in reverse for the proposal.
+
+        TODO : reorganize this
         """
         from simtk.openmm import app
 
@@ -2271,11 +2509,13 @@ class NetworkXProposalOrder(object):
             self._new_atoms = self._topology_proposal.unique_new_atoms
             self._destination_topology = self._topology_proposal.new_topology
             self._atoms_with_positions = self._topology_proposal.new_to_old_atom_map.keys()
+            _nx_graph = self._topology_proposal._new_topology._get_networkx_molecule()
         elif direction == "reverse":
             self._destination_system = self._topology_proposal.old_system
             self._new_atoms = self._topology_proposal.unique_old_atoms
             self._destination_topology = self._topology_proposal.old_topology
             self._atoms_with_positions = self._topology_proposal.old_to_new_atom_map.keys()
+            _nx_graph = self._topology_proposal._old_topology._get_networkx_molecule()
         else:
             raise ValueError("Direction must be either forward or reverse.")
 
@@ -2301,9 +2541,27 @@ class NetworkXProposalOrder(object):
             raise Exception(msg)
 
         # Choose the first of the new atoms to find the corresponding residue:
-        transforming_residue = self._new_atom_objects[self._new_atoms[0]].residue
+        #transforming_residue = self._new_atom_objects[self._new_atoms[0]].residue
 
-        self._residue_graph = self._residue_to_graph(transforming_residue)
+        self._residue_graph = _nx_graph
+        self._reference_connectivity_graph = self._create_reference_connectivity_graph()
+
+    def _create_reference_connectivity_graph(self):
+        """
+        utility method to create a reference connectivity graph to check for omitted valence terms (the primary use of this graph is to check for ring closures)
+        """
+        #take the self._residue_graph and create a replicate (without the misc attributes) with the atoms_with_positions
+        _reference_connectivity_graph = nx.Graph()
+        atoms_with_positions = set(self._atoms_with_positions)
+
+        #iterate over all the bonds
+        for bond in self._residue_graph.edges():
+            if set(bond).issubset(atoms_with_positions):
+                #if both of the atoms in the bond are in atoms_with_positions, we can add the atoms/bonds to the reference
+                _reference_connectivity_graph.add_edge(*bond)
+
+        return _reference_connectivity_graph
+
 
     def determine_proposal_order(self):
         """
@@ -2321,6 +2579,10 @@ class NetworkXProposalOrder(object):
             A list of torsions, where the first atom in the torsion is the one being proposed
         logp_torsion_choice : list
             log probability of the chosen torsions as a list of sequential atom placements
+
+        omitted_bonds : list of tuples
+            list of tuples of atom_indices
+            #this is used when creating the growth system generator and the atoms_with_positions_system to account for unconnected atoms
         """
         heavy_atoms_torsions, heavy_logp = self._propose_atoms_in_order(self._heavy)
         hydrogen_atoms_torsions, hydrogen_logp = self._propose_atoms_in_order(self._hydrogens)
@@ -2342,7 +2604,18 @@ class NetworkXProposalOrder(object):
         assert heavy_logp + hydrogen_logp != [], "logp list of log_probabilities from torsion choices is an empty list"
         assert len(heavy_logp + hydrogen_logp) == len(proposal_order), "There is a mismatch in the size of the atom torsion proposals and the associated logps"
 
-        return proposal_order, heavy_logp + hydrogen_logp
+        #create a list of omitted_bonds tuples
+        omitted_bonds = []
+        omitted_bonds_forward_pass = [edge for edge in self._residue_graph.edges() if edge not in list(self._reference_connectivity_graph.edges())]
+        for omitted_bond in omitted_bonds_forward_pass:
+            if omitted_bond[::-1] not in list(self._reference_connectivity_graph.edges()):
+                omitted_bonds.append(omitted_bond)
+
+        #delete the residue graph and reference connectivity graph since they cannot be pickled...
+        del self._residue_graph
+        del self._reference_connectivity_graph
+
+        return proposal_order, heavy_logp + hydrogen_logp, omitted_bonds
 
     def _propose_atoms_in_order(self, atom_group):
         """
@@ -2360,7 +2633,6 @@ class NetworkXProposalOrder(object):
             The contribution to the overall proposal log probability as a list of sequential logps
 
         """
-        import networkx as nx
         from scipy import special
         atom_torsions= []
         logp = []
@@ -2395,11 +2667,15 @@ class NetworkXProposalOrder(object):
 
                 #append random torsion to the atom_torsions and remove source atom from the atom_group
                 chosen_atom_index = random_torsion[0]
+                first_old_atom_index = random_torsion[1]
                 atom_torsions.append(random_torsion)
                 atom_group.remove(chosen_atom_index)
 
                 #add atom to atoms with positions and corresponding set
                 self._atoms_with_positions_set.add(chosen_atom_index)
+
+                #add a bond from the new to the previous torsion atom in the _reference_connectivity_graph
+                self._reference_connectivity_graph.add_edge(chosen_atom_index, first_old_atom_index)
 
                 #add the log probability of the choice to logp
                 logp.append(np.log(1./ntorsions))
@@ -2409,29 +2685,6 @@ class NetworkXProposalOrder(object):
 
         return atom_torsions, logp
 
-
-    def _residue_to_graph(self, residue):
-        """
-        Create a NetworkX graph representing the connectivity of a residue
-        Parameters
-        ----------
-        residue : simtk.openmm.app.Residue
-            The residue to use to create the graph
-        Returns
-        -------
-        residue_graph : nx.Graph
-            A graph representation of the residue
-        """
-        import networkx as nx
-        g = nx.Graph()
-
-        for atom in residue.atoms():
-            g.add_node(atom)
-
-        for bond in residue.bonds():
-            g.add_edge(bond[0].index, bond[1].index)
-
-        return g
 
 class NoTorsionError(Exception):
     def __init__(self, message):

@@ -70,6 +70,7 @@ def sMC_setup():
                                                                    added_energy = fe_setup._vacuum_added_valence_energy,
                                                                    subtracted_energy = fe_setup._vacuum_subtracted_valence_energy,
                                                                    beta = beta,
+                                                                   platform = openmm.Platform.getPlatformByName('Reference'),
                                                                    ENERGY_THRESHOLD = ENERGY_THRESHOLD)
     ne_fep = SequentialMonteCarlo(factory = hybrid_factory,
                                       lambda_protocol = lambda_protocol,
@@ -254,6 +255,7 @@ def test_create_endstates():
                                                                    added_energy = fe_setup._vacuum_added_valence_energy,
                                                                    subtracted_energy = fe_setup._vacuum_subtracted_valence_energy,
                                                                    beta = beta,
+                                                                   platform = openmm.Platform.getPlatformByName('Reference'),
                                                                    ENERGY_THRESHOLD = ENERGY_THRESHOLD)
 
     lambda_alchemical_state = RelativeAlchemicalState.from_system(hybrid_factory.hybrid_system)

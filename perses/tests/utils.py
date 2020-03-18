@@ -17,7 +17,8 @@ import numpy as np
 from functools import partial
 from pkg_resources import resource_filename
 from perses.rjmc import geometry
-from perses.rjmc.topology_proposal import SystemGenerator, TopologyProposal, SmallMoleculeSetProposalEngine
+from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine
+from openforcefield.topology import Molecule
 from openeye import oechem
 if sys.version_info >= (3, 0):
     from io import StringIO
@@ -28,7 +29,7 @@ else:
 from openmmtools.constants import kB
 from openmmtools import alchemy, states
 import contextlib
-
+from openmmtools import utils
 ################################################################################
 # CONSTANTS
 ################################################################################
@@ -37,6 +38,7 @@ temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 ENERGY_THRESHOLD = 1e-1
+DEFAULT_PLATFORM = utils.get_fastest_platform()
 
 ################################################################################
 # UTILITIES
@@ -291,7 +293,7 @@ def compute_potential(system, positions, platform=None):
         raise NaNException("Potential energy is NaN")
     return potential
 
-def compute_potential_components(context):
+def compute_potential_components(context, beta = beta, platform = DEFAULT_PLATFORM):
     """
     Compute potential energy, raising an exception if it is not finite.
 
@@ -315,7 +317,6 @@ def compute_potential_components(context):
         force.setForceGroup(index)
     # Create new Context.
     integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-    platform = openmm.Platform.getPlatformByName('Reference')
     context = openmm.Context(system, integrator, platform)
     context.setPositions(positions)
     for (parameter, value) in parameters.items():
@@ -325,7 +326,7 @@ def compute_potential_components(context):
         force = system.getForce(index)
         forcename = force.__class__.__name__
         groups = 1<<index
-        potential = context.getState(getEnergy=True, groups=groups).getPotentialEnergy()
+        potential = beta * context.getState(getEnergy=True, groups=groups).getPotentialEnergy()
         energy_components.append((forcename, potential))
     del context, integrator
     return energy_components
@@ -441,10 +442,12 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
     from openmoltools import forcefield_generators
     import perses.utils.openeye as openeye
     from perses.utils.data import get_data_filename
-    from perses.rjmc.topology_proposal import TopologyProposal, SystemGenerator, SmallMoleculeSetProposalEngine
+    from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine
     import simtk.unit as unit
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
-    from perses.utils.openeye import generate_expression 
+    from perses.utils.openeye import generate_expression
+    from openmmforcefields.generators import SystemGenerator
+    from openforcefield.topology import Molecule
 
     atom_expr = generate_expression(atom_expression)
     bond_expr = generate_expression(bond_expression)
@@ -490,9 +493,12 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         nonbonded_method = app.NoCutoff
         barostat = None
 
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
-    system_generator = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],barostat = barostat, forcefield_kwargs={'removeCMMotion': False,'nonbondedMethod': nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : 4.0*unit.amu})
-    system_generator._forcefield.loadFile(StringIO(ffxml))
+    forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
+    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': nonbonded_method, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+    small_molecule_forcefield = 'gaff-2.11'
+
+    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+                                         small_molecule_forcefield = small_molecule_forcefield, molecules=[Molecule.from_openeye(mol) for mol in [old_oemol, new_oemol]], cache=None)
 
     proposal_engine = SmallMoleculeSetProposalEngine([old_oemol, new_oemol], system_generator, residue_name = 'MOL',atom_expr=atom_expr, bond_expr=bond_expr,allow_ring_breaking=True)
     geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
@@ -502,12 +508,12 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         modeller = app.Modeller(old_topology, old_positions)
         hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
         modeller.delete(hs)
-        modeller.addHydrogens(forcefield=system_generator._forcefield)
-        modeller.addSolvent(system_generator._forcefield, model='tip3p', padding=9.0*unit.angstroms)
+        modeller.addHydrogens(forcefield=system_generator.forcefield)
+        modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9.0*unit.angstroms)
         solvated_topology = modeller.getTopology()
         solvated_positions = modeller.getPositions()
         solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
-        solvated_system = system_generator.build_system(solvated_topology)
+        solvated_system = system_generator.create_system(solvated_topology)
 
         #now to create proposal
         top_proposal = proposal_engine.propose(current_system = solvated_system, current_topology = solvated_topology, current_mol_id=0, proposed_mol_id=1)
@@ -521,7 +527,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         return top_proposal, solvated_positions, new_positions
 
     else:
-        vacuum_system = system_generator.build_system(old_topology)
+        vacuum_system = system_generator.create_system(old_topology)
         top_proposal = proposal_engine.propose(current_system=vacuum_system, current_topology=old_topology, current_mol_id=0, proposed_mol_id=1)
         new_positions, _ = geometry_engine.propose(top_proposal, old_positions, beta)
         if render_atom_mapping:
@@ -705,7 +711,7 @@ def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_it
 
     return conformers, rj_works
 
-def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_energy, beta = 1.0/kT, ENERGY_THRESHOLD = 1e-6):
+def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_energy, beta = 1.0/kT, ENERGY_THRESHOLD = 1e-6, platform = DEFAULT_PLATFORM):
     """
     Function to validate that the difference between the nonalchemical versus alchemical state at lambda = 0,1 is
     equal to the difference in valence energy (forward and reverse).
@@ -735,11 +741,9 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
     #create copies of old/new systems and set the dispersion correction
     top_proposal = copy.deepcopy(topology_proposal)
     forces = { top_proposal._old_system.getForce(index).__class__.__name__ : top_proposal._old_system.getForce(index) for index in range(top_proposal._old_system.getNumForces()) }
-    force = forces['NonbondedForce']
-    force.setUseDispersionCorrection(False)
+    forces['NonbondedForce'].setUseDispersionCorrection(False)
     forces = { top_proposal._new_system.getForce(index).__class__.__name__ : top_proposal._new_system.getForce(index) for index in range(top_proposal._new_system.getNumForces()) }
-    force = forces['NonbondedForce']
-    force.setUseDispersionCorrection(False)
+    forces['NonbondedForce'].setUseDispersionCorrection(False)
 
     #create copy of hybrid system, define old and new positions, and turn off dispersion correction
     hybrid_system = copy.deepcopy(htf.hybrid_system)
@@ -762,7 +766,6 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
                     (nonalch_one, new_positions, top_proposal._new_system.getDefaultPeriodicBoxVectors())]
 
     rp_list = []
-    platform = openmm.Platform.getPlatformByName('Reference')
     for (state, pos, box_vectors) in attrib_list:
         #print("\t\t\t{}".format(state))
         integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
@@ -774,7 +777,7 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
         energy_comps = compute_potential_components(context)
         for name, force in energy_comps:
            print("\t\t\t{}: {}".format(name, force))
-        print(f'added forces:{sum([energy*beta for name, energy in energy_comps])}')
+        print(f'added forces:{sum([energy for name, energy in energy_comps])}')
         print(f'rp: {rp}')
         del context, integrator
 

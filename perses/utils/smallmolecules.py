@@ -135,6 +135,25 @@ def show_topology(topology):
         output += '\n'
     print(output)
 
+def render_single_molecule(filename, molecule, width=1200, height=600):
+    """
+    simple function to create an oemol image
+
+    Arguments
+    ---------
+    filename : str
+        The PDF filename to write to.
+    molecule : openeye.oechem.OEMol
+        molecule
+    width : int, optional, default=1200
+        Width in pixels
+    height : int, optional, default=1200
+        Height in pixels
+    """
+    from openeye import oechem, oedepict
+    oedepict.OEPrepareDepiction(molecule)
+    oedepict.OERenderMolecule(filename, molecule)
+
 def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, width=1200, height=600):
     """
     Render the atom mapping to a PDF file.
@@ -158,7 +177,19 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     from openeye import oechem, oedepict
 
     # Make copies of the input molecules
+    # making a copy resets the atom indices, so the new_to_old_atom_map has to be remapped with the new, zero-indexed indices
+    molecule1_indices = [atom.GetIdx() for atom in molecule1.GetAtoms()]
+    molecule2_indices = [atom.GetIdx() for atom in molecule2.GetAtoms()]
+
     molecule1, molecule2 = oechem.OEGraphMol(molecule1), oechem.OEGraphMol(molecule2)
+
+    molecule1_indices_new = [atom.GetIdx() for atom in molecule1.GetAtoms()]
+    molecule2_indices_new = [atom.GetIdx() for atom in molecule2.GetAtoms()]
+
+    modified_map_1 = {old: new for new, old in zip(molecule1_indices_new, molecule1_indices)}
+    modified_map_2 = {old: new for new, old in zip(molecule2_indices_new, molecule2_indices)}
+    new_to_old_atom_map = {modified_map_2[key]: modified_map_1[val] for key, val in new_to_old_atom_map.items()}
+
 
     oechem.OEGenerate2DCoordinates(molecule1)
     oechem.OEGenerate2DCoordinates(molecule2)

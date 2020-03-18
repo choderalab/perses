@@ -31,6 +31,19 @@ from perses.rjmc import coordinate_numba
 
 from perses.rjmc.geometry import check_dimensionality
 from perses.utils.data import get_data_filename
+from perses.utils.openeye import smiles_to_oemol, OEMol_to_omm_ff
+from openmmforcefields.generators import SystemGenerator
+from openforcefield.topology import Molecule
+from simtk.openmm import app
+
+#global variables
+forcefield_files = ['amber14/protein.ff14SB.xml', 'amber/tip3p_standard.xml']
+small_molecule_forcefield = 'gaff-2.11'
+# NOTE implicit solvent not supported by SystemGenerator yet
+system_generator = SystemGenerator(forcefields = forcefield_files,
+                                                barostat = None,
+                                                forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
+                                                small_molecule_forcefield = small_molecule_forcefield)
 
 
 from nose.tools import nottest #protein mutations will be omitted (for the time being)
@@ -848,34 +861,9 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
 
     return r, theta, phi
 
-def generate_molecule_from_smiles(smiles, idx=0):
-    """
-    Generate oemol with geometry from smiles
-    """
-    print("Molecule %d is %s" % (idx, smiles))
-    mol = oechem.OEMol()
-    mol.SetTitle("MOL%d" % idx)
-    oechem.OESmilesToMol(mol, smiles)
-    oechem.OEAddExplicitHydrogens(mol)
-    oechem.OETriposAtomNames(mol)
-    oechem.OETriposBondTypeNames(mol)
-    oechem.OEAssignFormalCharges(mol)
-    omega = oeomega.OEOmega()
-    omega.SetMaxConfs(1)
-    omega.SetStrictStereo(False)
-    mol.SetTitle("MOL_%d" % idx)
-    omega(mol)
-    return mol
-
-def oemol_to_openmm_system(oemol, molecule_name=None, forcefield=['data/gaff.xml']):
-    from perses.rjmc import topology_proposal
-    from openmoltools import forcefield_generators
-    from perses.utils.openeye import extractPositionsFromOEMol
-    xml_filenames = [get_data_filename(fname) for fname in forcefield]
-    system_generator = topology_proposal.SystemGenerator(xml_filenames, forcefield_kwargs={'constraints' : None})
-    topology = forcefield_generators.generateTopologyFromOEMol(oemol)
-    system = system_generator.build_system(topology)
-    positions = extractPositionsFromOEMol(oemol)
+def oemol_to_openmm_system(oemol):
+    system_generator.add_molecules([Molecule.from_openeye(oemol)])
+    system, positions, topology = OEMol_to_omm_ff(oemol, system_generator)
     return system, positions, topology
 
 def oemol_to_openmm_system_amber(oemol, molecule_name):
@@ -894,6 +882,7 @@ def oemol_to_openmm_system_amber(oemol, molecule_name):
     prmtop_file, inpcrd_file = openmoltools.amber.run_tleap(molecule_name, gaff_mol2, frcmod)
     from parmed.amber import AmberParm
     prmtop = AmberParm(prmtop_file)
+    # NOTE implicit solvent not supported by SystemGenerator yet
     system = prmtop.createSystem(implicitSolvent=None, removeCMMotion=False)
     crd = app.AmberInpcrdFile(inpcrd_file)
     return system, crd.getPositions(asNumpy=True), prmtop.topology
@@ -921,70 +910,6 @@ def align_molecules(mol1, mol2):
 @attr('advanced')
 @nottest
 @skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
-def test_mutate_quick(): # TODO: fix protein mutations
-    """
-    Abbreviated version of test_mutate_all for GH Actions.
-    """
-    import perses.rjmc.topology_proposal as topology_proposal
-    import perses.rjmc.geometry as geometry
-    from perses.tests.utils import compute_potential_components
-    from openmmtools import testsystems as ts
-    geometry_engine = geometry.FFAllAngleGeometryEngine()
-
-    aminos = ['ALA','VAL','GLY','PHE','PRO','TRP']
-
-    for aa in aminos:
-        topology, positions = _get_capped_amino_acid(amino_acid=aa)
-        modeller = app.Modeller(topology, positions)
-
-        ff_filename = "amber99sbildn.xml"
-        max_point_mutants = 1
-
-        ff = app.ForceField(ff_filename)
-        system = ff.createSystem(modeller.topology)
-        chain_id = '1'
-
-        system_generator = topology_proposal.SystemGenerator([ff_filename])
-
-        pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, max_point_mutants=max_point_mutants)
-
-        current_system = system
-        current_topology = modeller.topology
-        current_positions = modeller.positions
-        minimize_integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
-        platform = openmm.Platform.getPlatformByName("Reference")
-        minimize_context = openmm.Context(current_system, minimize_integrator, platform)
-        minimize_context.setPositions(current_positions)
-        initial_state = minimize_context.getState(getEnergy=True)
-        initial_potential = initial_state.getPotentialEnergy()
-        openmm.LocalEnergyMinimizer.minimize(minimize_context)
-        final_state = minimize_context.getState(getEnergy=True, getPositions=True)
-        final_potential = final_state.getPotentialEnergy()
-        current_positions = final_state.getPositions()
-        #print("Minimized initial structure from %s to %s" % (str(initial_potential), str(final_potential)))
-
-        for k, proposed_amino in enumerate(aminos):
-            pm_top_engine._allowed_mutations = [[('2',proposed_amino)]]
-            pm_top_proposal = pm_top_engine.propose(current_system, current_topology)
-            new_positions, logp = geometry_engine.propose(pm_top_proposal, current_positions, beta)
-            new_system = pm_top_proposal.new_system
-            if np.isnan(logp):
-                raise Exception("NaN in the logp")
-            integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
-            platform = openmm.Platform.getPlatformByName("Reference")
-            context = openmm.Context(new_system, integrator, platform)
-            context.setPositions(new_positions)
-            state = context.getState(getEnergy=True)
-            #print(compute_potential_components(context))
-            potential = state.getPotentialEnergy()
-            potential_without_units = potential / potential.unit
-            #print(str(potential))
-            if np.isnan(potential_without_units):
-                raise Exception("Energy after proposal is NaN")
-
-@attr('advanced')
-@nottest
-@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 def test_mutate_from_all_to_all(): # TODO: fix protein mutations
     """
     Make sure mutations are successful between every possible pair of before-and-after residues
@@ -1003,14 +928,10 @@ def test_mutate_from_all_to_all(): # TODO: fix protein mutations
         topology, positions = _get_capped_amino_acid(amino_acid=aa)
         modeller = app.Modeller(topology, positions)
 
-        ff_filename = "amber99sbildn.xml"
         max_point_mutants = 1
 
-        ff = app.ForceField(ff_filename)
-        system = ff.createSystem(modeller.topology)
+        system = system_generator.create_system(modeller.topology)
         chain_id = '1'
-
-        system_generator = topology_proposal.SystemGenerator([ff_filename])
 
         pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, max_point_mutants=max_point_mutants)
 
@@ -1132,10 +1053,10 @@ def make_geometry_proposal_array(smiles_list, forcefield=['data/gaff.xml']):
     syspostop = OrderedDict()
 
     for smiles in smiles_list:
-        oemols[smiles] = generate_molecule_from_smiles(smiles)
+        oemols[smiles] = smiles_to_oemol(smiles)
     for smiles in oemols.keys():
         print("Generating %s" % smiles)
-        syspostop[smiles] = oemol_to_openmm_system(oemols[smiles], forcefield=forcefield)
+        syspostop[smiles] = oemol_to_openmm_system(oemols[smiles])
 
     #get a list of all the smiles in the appropriate order
     smiles_pairs = list()
@@ -1220,8 +1141,8 @@ def run_geometry_engine(index=0):
     molecule2 = iupac_to_oemol(molecule_name_2)
     new_to_old_atom_mapping = align_molecules(molecule1, molecule2)
 
-    sys1, pos1, top1 = oemol_to_openmm_system(molecule1, molecule_name_1)
-    sys2, pos2, top2 = oemol_to_openmm_system(molecule2, molecule_name_2)
+    sys1, pos1, top1 = oemol_to_openmm_system(molecule1)
+    sys2, pos2, top2 = oemol_to_openmm_system(molecule2)
 
     import perses.rjmc.geometry as geometry
     import perses.rjmc.topology_proposal as topology_proposal
@@ -1288,7 +1209,7 @@ def test_existing_coordinates():
     ATOM_POSITION_TOLERANCE = 1e-6
     molecule_name_2 = 'butane'
     molecule2 = iupac_to_oemol(molecule_name_2)
-    sys, pos, top = oemol_to_openmm_system(molecule2, molecule_name_2)
+    sys, pos, top = oemol_to_openmm_system(molecule2)
     import perses.rjmc.geometry as geometry
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
     structure = parmed.openmm.load_topology(top, sys)
@@ -1315,8 +1236,8 @@ def run_logp_reverse():
     molecule2 = iupac_to_oemol(molecule_name_2)
     new_to_old_atom_mapping = align_molecules(molecule1, molecule2)
 
-    sys1, pos1, top1 = oemol_to_openmm_system(molecule1, molecule_name_1)
-    sys2, pos2, top2 = oemol_to_openmm_system(molecule2, molecule_name_2)
+    sys1, pos1, top1 = oemol_to_openmm_system(molecule1)
+    sys2, pos2, top2 = oemol_to_openmm_system(molecule2)
     test_pdb_file = open("reverse_test1.pdb", 'w')
     app.PDBFile.writeFile(top1, pos1, file=test_pdb_file)
     test_pdb_file.close()
@@ -1416,7 +1337,7 @@ def _generate_ffxmls():
     from openmoltools import forcefield_generators
     testsystem_t4 = T4LysozymeInhibitorsTestSystem()
     smiles_list_t4 = testsystem_t4.molecules
-    oemols_t4 = [generate_molecule_from_smiles(smiles, idx=i) for i, smiles in enumerate(smiles_list_t4)]
+    oemols_t4 = [smiles_to_oemol(smiles, title = f'MOL_{i}') for i, smiles in enumerate(smiles_list_t4)]
     ffxml_str_t4, failed_list = forcefield_generators.generateForceFieldFromMolecules(oemols_t4, ignoreFailures=True)
     ffxml_out_t4 = open('/Users/grinawap/T4-inhibitors.xml','w')
     ffxml_out_t4.write(ffxml_str_t4)
@@ -1428,7 +1349,7 @@ def _generate_ffxmls():
     from perses.tests.testsystems import KinaseInhibitorsTestSystem
     testsystem_kinase = KinaseInhibitorsTestSystem()
     smiles_list_kinase = testsystem_kinase.molecules
-    oemols_kinase = [generate_molecule_from_smiles(smiles, idx=i) for i, smiles in enumerate(smiles_list_kinase)]
+    oemols_kinase = [smiles_to_oemol(smiles, title = f'MOL_{i}') for i, smiles in enumerate(smiles_list_kinase)]
     ffxml_str_kinase, failed_kinase_list = forcefield_generators.generateForceFieldFromMolecules(oemols_kinase, ignoreFailures=True)
     ffxml_out_kinase = open("/Users/grinawap/kinase-inhibitors.xml",'w')
     ffxml_out_kinase.write(ffxml_str_kinase)
@@ -1934,6 +1855,7 @@ class AnalyticalBeadSystems(object):
 
 
 #@nottest
+@skipIf(running_on_github_actions, "Skip deprecated test on GH Actions")
 def test_AnalyticalBeadSystems(transformation=[[3,4], [4,5], [3,5]], num_iterations=100):
     """
     Function to assert that the forward and reverse works are equal and opposite, and that the variances of each work distribution is much less
@@ -1995,29 +1917,26 @@ def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'pro
         The positions of the new system
     """
     from openmoltools import forcefield_generators
-    from perses.rjmc.topology_proposal import SystemGenerator, TopologyProposal, SmallMoleculeSetProposalEngine
+    from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine
     from perses.utils.openeye import createSystemFromIUPAC, iupac_to_oemol
     from openmoltools.openeye import generate_conformers
     from perses.utils.data import get_data_filename
     from perses.rjmc import geometry
     from perses.utils.smallmolecules import render_atom_mapping
     import tqdm
+    from openmmforcefields.generators import SystemGenerator
+    from openforcefield.topology import Molecule
 
     current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name,title=current_mol_name[0:4])
     proposed_mol = iupac_to_oemol(proposed_mol_name)
     proposed_mol = generate_conformers(proposed_mol,max_confs=1)
+    system_generator.add_molecules([Molecule.from_openeye(mol) for mol in [current_mol, proposed_mol]])
 
     initial_smiles = oechem.OEMolToSmiles(current_mol)
     final_smiles = oechem.OEMolToSmiles(proposed_mol)
 
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
-    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+    solvated_system = system_generator.create_system(top_old)
 
-    solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
-
-    gaff_filename = get_data_filename('data/gaff.xml')
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
     geometry_engine = geometry.FFAllAngleGeometryEngine(n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, neglect_angles = neglect_angles)
     proposal_engine = SmallMoleculeSetProposalEngine(
         [current_mol, proposed_mol], system_generator, residue_name=current_mol_name[0:4])

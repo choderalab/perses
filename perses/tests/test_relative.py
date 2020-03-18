@@ -14,7 +14,7 @@ except ImportError:
 
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
-from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, SystemGenerator, TopologyProposal
+from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
 from perses.tests import utils
 import openeye.oechem as oechem
 from openmmtools import alchemy
@@ -412,63 +412,75 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene",atom_express
     """
     Make an atom map where the molecule at either lambda endpoint is identical, and check that the energies are also the same.
     """
+    from openmmtools.constants import kB
     from openmmtools import alchemy, states
-    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal, AtomMapper
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
     from perses.annihilation.relative import HybridTopologyFactory
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
     import simtk.openmm as openmm
+    from perses.utils.openeye import iupac_to_oemol, extractPositionsFromOEMol, generate_conformers
+    from perses.utils.openeye import generate_expression
+    from openmmforcefields.generators import SystemGenerator
+    from openmoltools.forcefield_generators import generateTopologyFromOEMol
+    from perses.tests.utils import validate_endstate_energies
+    temperature = 300*unit.kelvin
+    # Compute kT and inverse temperature.
+    kT = kB * temperature
+    beta = 1.0 / kT
+    ENERGY_THRESHOLD = 1e-6
 
-    from perses.utils.openeye import createSystemFromIUPAC
-    from openmoltools.openeye import iupac_to_oemol,generate_conformers
-
-    from perses.utils.openeye import generate_expression 
-
-    atom_expr = generate_expression(atom_expression)
-    bond_expr = generate_expression(bond_expression)
+    atom_expr, bond_expr = generate_expression(atom_expression), generate_expression(bond_expression)
 
     mol = iupac_to_oemol(mol_name)
     mol = generate_conformers(mol, max_confs=1)
-    m, system, positions, topology = createSystemFromIUPAC(mol_name)
 
     refmol = iupac_to_oemol(ref_mol_name)
     refmol = generate_conformers(refmol,max_confs=1)
 
-    #map one of the rings
-    atom_map = AtomMapper([mol, refmol], atom_expr=atom_expr, bond_expr=bond_expr,allow_ring_breaking=True).atom_map 
+    from openforcefield.topology import Molecule
+    molecules = [Molecule.from_openeye(oemol) for oemol in [refmol, mol]]
+    barostat = None
+    forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
+    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
 
-    #now use the mapped atoms to generate a new and old system with identical atoms mapped. This will result in the
-    #same molecule with the same positions for lambda=0 and 1, and ensures a contiguous atom map
-    effective_atom_map = {value : value for value in atom_map.values()}
+    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+                                         small_molecule_forcefield = 'gaff-2.11', molecules=molecules, cache=None)
 
+    topology = generateTopologyFromOEMol(refmol)
+    system = system_generator.create_system(topology)
+    positions = extractPositionsFromOEMol(refmol)
+
+
+    proposal_engine = SmallMoleculeSetProposalEngine([refmol, mol], system_generator)
+    proposal = proposal_engine.propose(system, topology, atom_expr = atom_expr, bond_expr = bond_expr)
+    geometry_engine = FFAllAngleGeometryEngine()
+    new_positions, _ = geometry_engine.propose(proposal, positions, beta = beta, validate_energy_bookkeeping = False)
+    _ = geometry_engine.logp_reverse(proposal, new_positions, positions, beta)
     #make a topology proposal with the appropriate data:
-    top_proposal = TopologyProposal(new_topology=topology, new_system=system, old_topology=topology, old_system=system, new_to_old_atom_map=effective_atom_map, new_chemical_state_key="n1", old_chemical_state_key='n2')
 
-    factory = HybridTopologyFactory(top_proposal, positions, positions)
+    factory = HybridTopologyFactory(proposal, positions, new_positions)
+    if not proposal.unique_new_atoms:
+        assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
+        assert geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
+        vacuum_added_valence_energy = 0.0
+    else:
+        added_valence_energy = geometry_engine.forward_final_context_reduced_potential - geometry_engine.forward_atoms_with_positions_reduced_potential
 
-    alchemical_system = factory.hybrid_system
-    alchemical_positions = factory.hybrid_positions
+    if not proposal.unique_old_atoms:
+        assert geometry_engine.reverse_final_context_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.reverse_final_context_reduced_potential})"
+        assert geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
+        subtracted_valence_energy = 0.0
+    else:
+        subtracted_valence_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
 
-    platform = openmm.Platform.getPlatformByName("Reference")
-
-    _,_,alch_zero_state, alch_one_state = utils.generate_endpoint_thermodynamic_states(alchemical_system, top_proposal)
-
-    rp_list = []
-    for state in [alch_zero_state, alch_one_state]:
-        integrator = openmm.VerletIntegrator(1)
-        context = state.create_context(integrator, platform)
-        samplerstate = states.SamplerState(positions = alchemical_positions, box_vectors = alchemical_system.getDefaultPeriodicBoxVectors())
-        samplerstate.apply_to_context(context)
-        rp = state.reduced_potential(context)
-        rp_list.append(rp)
-        del context, integrator
-
-    assert abs(rp_list[0] - rp_list[1]) < 1e-6
-
+    zero_state_error, one_state_error = validate_endstate_energies(factory._topology_proposal, factory, added_valence_energy, subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, platform = openmm.Platform.getPlatformByName('Reference'))
+    return factory
 
 def test_compare_energies():
     mols_and_refs = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene']]
 
     for mol_ref_pair in mols_and_refs:
-        compare_energies(mol_name=mol_ref_pair[0], ref_mol_name=mol_ref_pair[1])
+        _ = compare_energies(mol_name=mol_ref_pair[0], ref_mol_name=mol_ref_pair[1])
 
 def test_position_output():
     """
@@ -506,7 +518,7 @@ def test_generate_endpoint_thermodynamic_states():
             raise Exception('Interaction {} not set to 1. at lambda = 1. {} set to {}'.format(value,value, getattr(lambda_one_thermodynamic_state, value)))
 
 
-def HybridTopologyFactory_energies(current_mol = 'toluene', proposed_mol = '1,2-bis(trifluoromethyl) benzene'):
+def HybridTopologyFactory_energies(current_mol = 'toluene', proposed_mol = '1,2-bis(trifluoromethyl) benzene', validate_geometry_energy_bookkeeping = True):
     """
     Test whether the difference in the nonalchemical zero and alchemical zero states is the forward valence energy.  Also test for the one states.
     """
@@ -523,12 +535,13 @@ def HybridTopologyFactory_energies(current_mol = 'toluene', proposed_mol = '1,2-
 
     # run geometry engine to generate old and new positions
     _geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
-    _new_positions, _lp = _geometry_engine.propose(top_proposal, old_positions, beta)
-    _lp_rev = _geometry_engine.logp_reverse(top_proposal, _new_positions, old_positions, beta)
+    _new_positions, _lp = _geometry_engine.propose(top_proposal, old_positions, beta, validate_geometry_energy_bookkeeping)
+    _lp_rev = _geometry_engine.logp_reverse(top_proposal, _new_positions, old_positions, beta, validate_geometry_energy_bookkeeping)
 
     # make the hybrid system, reset the CustomNonbondedForce cutoff
     HTF = HybridTopologyFactory(top_proposal, old_positions, _new_positions)
     hybrid_system = HTF.hybrid_system
+
     nonalch_zero, nonalch_one, alch_zero, alch_one = generate_endpoint_thermodynamic_states(hybrid_system, top_proposal)
 
     # compute reduced energies
@@ -560,10 +573,10 @@ def HybridTopologyFactory_energies(current_mol = 'toluene', proposed_mol = '1,2-
     print(f"Abs difference in zero alchemical vs nonalchemical systems: {abs(nonalch_zero_rp - alch_zero_rp + forward_added_valence_energy)}")
     print(f"Abs difference in one alchemical vs nonalchemical systems: {abs(nonalch_one_rp - alch_one_rp + reverse_subtracted_valence_energy)}")
 
-def test_HybridTopologyFactory_energies(molecule_perturbation_list = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene']]):
+def test_HybridTopologyFactory_energies(molecule_perturbation_list = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene']], validations = [False, True, False]):
     """
     Test whether the difference in the nonalchemical zero and alchemical zero states is the forward valence energy.  Also test for the one states.
     """
-    for molecule_pair in molecule_perturbation_list:
+    for molecule_pair, validate in zip(molecule_perturbation_list, validations):
         print(f"\tconduct energy comparison for {molecule_pair[0]} --> {molecule_pair[1]}")
-        HybridTopologyFactory_energies(current_mol = molecule_pair[0], proposed_mol = molecule_pair[1])
+        HybridTopologyFactory_energies(current_mol = molecule_pair[0], proposed_mol = molecule_pair[1], validate_geometry_energy_bookkeeping = validate)

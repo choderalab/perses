@@ -9,17 +9,53 @@ __author__ = 'John D. Chodera'
 
 from openeye import oechem, oegraphsim
 from openmoltools.openeye import generate_conformers
+from simtk import openmm, unit
+from simtk.openmm import app
 import simtk.unit as unit
 import numpy as np
 import logging
 
-logging.basicConfig(level = logging.NOTSET)
+logging.basicConfig(level=logging.NOTSET)
 _logger = logging.getLogger("utils.openeye")
 _logger.setLevel(logging.INFO)
 
-def smiles_to_oemol(smiles, title='MOL',max_confs=1):
+def system_generator_wrapper(oemols,
+                            barostat = None,
+                            forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
+                            forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus},
+                            small_molecule_forcefield = 'gaff-2.11',
+                            **kwargs
+                            ):
+    """
+    make a system generator (vacuum) for a small molecule
+
+    Arguments
+    ---------
+    oemols : list of openeye.oechem.OEMol
+        oemols
+    barostat : openmm.MonteCarloBarostat, default None
+        barostat
+    forcefield_files : list of str
+        pointers to protein forcefields and solvent
+    forcefield_kwargs : dict
+        dict of forcefield_kwargs
+    small_molecule_forcefield : str
+        pointer to small molecule forcefield to use
+
+    Returns
+    -------
+    system_generator : openmmforcefields.generators.SystemGenerator
+    """
+    from openforcefield.topology import Molecule
+    from openmmforcefields.generators import SystemGenerator
+    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+                                         small_molecule_forcefield = small_molecule_forcefield, molecules=[Molecule.from_openeye(oemol) for oemol in oemols], cache=None)
+    return system_generator
+
+def smiles_to_oemol(smiles, title='MOL', max_confs=1):
     """
     Generate an oemol from a SMILES string
+
     Parameters
     ----------
     smiles : str
@@ -39,6 +75,13 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     molecule = oechem.OEMol()
     oechem.OESmilesToMol(molecule, smiles)
 
+    # create unique atom names
+    if len([atom.GetName() for atom in molecule.GetAtoms()]) > len(set([atom.GetName() for atom in molecule.GetAtoms()])):
+        # the atom names are not unique
+        molecule = generate_unique_atom_names(molecule)
+    else:
+        pass
+
     # Set title.
     molecule.SetTitle(title)
 
@@ -52,11 +95,15 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     oechem.OETriposAtomNames(molecule)
     oechem.OETriposBondTypeNames(molecule)
 
+    # perceive chirality before attempting omega geometry proposal
+    assert oechem.OEPerceiveChiral(molecule), f"chirality perception failed"
+
     # Assign geometry
     omega = oeomega.OEOmega()
     omega.SetMaxConfs(max_confs)
     omega.SetIncludeInput(False)
     omega.SetStrictStereo(True)
+
     omega(molecule)
     return molecule
 
@@ -104,6 +151,7 @@ def iupac_to_oemol(iupac, title='MOL', max_confs=1):
     omega(molecule)
     return molecule
 
+
 def extractPositionsFromOEMol(molecule,units=unit.angstrom):
     """
     Get a molecules coordinates from an openeye.oemol
@@ -148,7 +196,7 @@ def giveOpenmmPositionsToOEMol(positions, molecule):
     return molecule
 
 
-def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
+def OEMol_to_omm_ff(molecule, system_generator):
     """
     Convert an openeye.oechem.OEMol to a openmm system, positions and topology
 
@@ -156,8 +204,7 @@ def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
     ----------
     oemol : openeye.oechem.OEMol object
         input molecule to convert
-    data_filename : str, default 'data/gaff2.xml'
-        path to .xml forcefield file, default is gaff2.xml in perses package
+    system_generator : openmmforcefields.generators.SystemGenerator
 
     Return
     ------
@@ -166,19 +213,14 @@ def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
     topology : openmm.topology
 
     """
-    from perses.rjmc import topology_proposal
-    from openmoltools import forcefield_generators
-    from perses.utils.data import get_data_filename
-
-    gaff_xml_filename = get_data_filename(data_filename)
-    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
-    topology = forcefield_generators.generateTopologyFromOEMol(molecule)
-    system = system_generator.build_system(topology)
+    from openmoltools.forcefield_generators import generateTopologyFromOEMol
+    topology = generateTopologyFromOEMol(molecule)
+    system = system_generator.create_system(topology)
     positions = extractPositionsFromOEMol(molecule)
 
     return system, positions, topology
 
-def createSystemFromIUPAC(iupac_name, title="MOL"):
+def createSystemFromIUPAC(iupac_name, title="MOL", **system_generator_kwargs):
     """
     Create an openmm system out of an oemol
 
@@ -200,17 +242,21 @@ def createSystemFromIUPAC(iupac_name, title="MOL"):
     """
 
     # Create OEMol
-    # TODO write our own of this function so we can be sure of the oe flags that are being used
+    # TODO write our own of this function so we can be
+    # sure of the oe flags that are being used
     molecule = iupac_to_oemol(iupac_name, title=title)
 
     molecule = generate_conformers(molecule, max_confs=1)
 
+    system_generator = system_generator_wrapper([molecule], **system_generator_kwargs)
+
     # generate openmm system, positions and topology
-    system, positions, topology = OEMol_to_omm_ff(molecule)
+    system, positions, topology = OEMol_to_omm_ff(molecule, system_generator)
 
     return (molecule, system, positions, topology)
 
-def createSystemFromSMILES(smiles,title='MOL'):
+
+def createSystemFromSMILES(smiles,title='MOL', **system_generator_kwargs):
     """
     Create an openmm system from a smiles string
 
@@ -236,12 +282,14 @@ def createSystemFromSMILES(smiles,title='MOL'):
     smiles = smiles[0]
 
     # Create OEMol
-    molecule = smiles_to_oemol(smiles,title=title)
+    molecule = smiles_to_oemol(smiles, title=title)
+    system_generator = system_generator_wrapper([molecule], **system_generator_kwargs)
 
     # generate openmm system, positions and topology
-    system, positions, topology = OEMol_to_omm_ff(molecule)
+    system, positions, topology = OEMol_to_omm_ff(molecule, system_generator)
 
     return (molecule, system, positions, topology)
+
 
 def describe_oemol(mol):
     """
@@ -267,10 +315,12 @@ def describe_oemol(mol):
         description += "%8d %8d\n" % (bond.GetBgnIdx(), bond.GetEndIdx())
     return description
 
-def createOEMolFromSDF(sdf_filename, index=0):
+
+def createOEMolFromSDF(sdf_filename, index=0, add_hydrogens=True):
     """
     # TODO change this to return a list of all the mols if required
-    Load an SDF file into an OEMol. Since SDF files can contain multiple molecules, an index can be provided as well.
+    Load an SDF file into an OEMol. Since SDF files can contain multiple
+    molecules, an index can be provided as well.
 
     Parameters
     ----------
@@ -284,22 +334,41 @@ def createOEMolFromSDF(sdf_filename, index=0):
     mol : openeye.oechem.OEMol object
         The loaded oemol object
     """
-    #TODO this needs a test
+    # TODO this needs a test
     ifs = oechem.oemolistream()
     ifs.open(sdf_filename)
     # get the list of molecules
     mol_list = [oechem.OEMol(mol) for mol in ifs.GetOEMols()]
     # we'll always take the first for now
 
+    # check molecule unique names
+    renamed_mol_list = []
+    for mol_index, molecule in enumerate(mol_list):
+        # create unique atom names
+        if len([atom.GetName() for atom in molecule.GetAtoms()]) > len(set([atom.GetName() for atom in molecule.GetAtoms()])):
+            # the atom names are not unique
+            molecule_fixed = generate_unique_atom_names(molecule)
+        else:
+            molecule_fixed = molecule
+
+        renamed_mol_list.append(molecule_fixed)
+
     # Assign aromaticity and hydrogens.
-    for molecule in mol_list:
+    for molecule in renamed_mol_list:
         oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
         oechem.OEAssignHybridization(molecule)
+        if add_hydrogens:
+            oechem.OEAddExplicitHydrogens(molecule)
         oechem.OEAddExplicitHydrogens(molecule)
         oechem.OEPerceiveChiral(molecule)
 
-    mol_to_return = mol_list[index]
+        # perceive chirality
+        assert oechem.OE3DToInternalStereo(molecule), f"the stereochemistry perception from 3D coordinates failed"
+        assert not has_undefined_stereocenters(molecule), f"there is an atom with an undefined stereochemistry"
+
+    mol_to_return = renamed_mol_list[index]
     return mol_to_return
+
 
 def calculate_mol_similarity(molA, molB):
     """
@@ -316,9 +385,11 @@ def calculate_mol_similarity(molA, molB):
 
     return oegraphsim.OETanimoto(fpA, fpB)
 
+
 def createSMILESfromOEMol(molecule):
     smiles = oechem.OECreateSmiString(molecule,
-                             oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+                                      oechem.OESMILESFlag_DEFAULT |
+                                      oechem.OESMILESFlag_Hydrogens)
     return smiles
 
 
@@ -330,11 +401,11 @@ def generate_unique_atom_names(molecule):
     ----------
     molecule : openeye.oechem.OEMol object
         oemol object to check
-
     Returns
     -------
     molecule : openeye.oechem.OEMol object
-        oemol, either unchanged if atom names are already unique, or newly generated atom names
+        oemol, either unchanged if atom names are
+        already unique, or newly generated atom names
     """
     atom_names = []
 
@@ -345,13 +416,15 @@ def generate_unique_atom_names(molecule):
 
     if len(set(atom_names)) == atom_count:
         # one name per atom therefore unique
-        _logger.info(f'molecule {molecule.GetTitle()} has unique atom names already')
+        _logger.info(f'molecule {molecule.GetTitle()} \
+                     has unique atom names already')
         return molecule
     else:
         # generating new atom names
         from collections import defaultdict
         from simtk.openmm.app.element import Element
-        _logger.info(f'molecule {molecule.GetTitle()} does not have unique atom names. Generating now...')
+        _logger.info(f'molecule {molecule.GetTitle()} \
+                     does not have unique atom names. Generating now...')
         element_counts = defaultdict(int)
         for atom in molecule.GetAtoms():
             element = Element.getByAtomicNumber(atom.GetAtomicNum())
@@ -363,7 +436,8 @@ def generate_unique_atom_names(molecule):
 
 def has_undefined_stereocenters(mol):
     """
-    Check that _if_ a molecule has a stereocenter, the stereochemistry is defined
+    Check that _if_ a molecule has a stereocenter,
+    the stereochemistry is defined
     if no stereocenter then will return False too
 
     Parameters
@@ -376,16 +450,18 @@ def has_undefined_stereocenters(mol):
     bool : True if undefined Stereochemistry
            False if no stereochemistry or all stereocenter's are labelled
     """
-    oechem.OEPerceiveChiral(mol)
+
+    assert oechem.OEPerceiveChiral(mol), f"chirality perception failed"
+
     for atom in mol.GetAtoms():
         if atom.IsChiral():
             if not atom.HasStereoSpecified():
-                return True # we have a stereocenter with no stereochemistry!
+                return True  # we have a stereocenter with no stereochemistry!
     for bond in mol.GetBonds():
         if bond.IsChiral():
             if not bond.HasStereoSpecified():
-                return True #we have a geometric isomer that isn't specified!
-    return False # nothing bad found
+                return True  # we have a geometric isomer that isn't specified!
+    return False  # nothing bad found
 
 
 def generate_expression(list):

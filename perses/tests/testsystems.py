@@ -44,10 +44,16 @@ from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import tempfile
 import copy
 from openmmtools.constants import kB
-from perses.rjmc.topology_proposal import SystemGenerator
 from unittest import skipIf
 from perses.dispersed.utils import minimize #updated minimizer
 from openmmtools.states import ThermodynamicState, SamplerState
+from openmmforcefields.generators import SystemGenerator
+from openforcefield.topology import Molecule
+from perses.utils.openeye import smiles_to_oemol
+
+#global variables
+forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
+small_molecule_forcefield = 'gaff-2.11'
 
 # TODO: Use dummy system generator to work around SystemGenerator issues
 #from perses.rjmc.topology_proposal import DummySystemGenerator
@@ -128,7 +134,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
     Properties
     ----------
     environments : list of str
-        Available environments: ['vacuum', 'explicit', 'implicit']
+        Available environments: ['vacuum', 'explicit']
     topologies : dict of simtk.openmm.app.Topology
         Initial system Topology objects; topologies[environment] is the topology for `environment`
     positions : dict of simtk.unit.Quantity of [nparticles,3] with units compatible with nanometers
@@ -154,14 +160,15 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import AlanineDipeptideTestSystem
     >>> testsystem = AlanineDipeptideTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
+    >>> system = testsystem.system_generators['vacuum'].create_system(testsystem.topologies['vacuum'])
     # Retrieve a SAMSSampler
-    >>> sams_sampler = testsystem.sams_samplers['implicit']
+    >>> sams_sampler = testsystem.sams_samplers['vacuum']
 
     """
     def __init__(self, constraints=app.HBonds, **kwargs):
         super(AlanineDipeptideTestSystem, self).__init__(**kwargs)
-        environments = ['explicit', 'implicit', 'vacuum']
+        #environments = ['explicit', 'implicit', 'vacuum']
+        environments = ['explicit', 'vacuum']
         temperature = 300*unit.kelvin
         pressure = 1.0*unit.atmospheres
 
@@ -175,16 +182,19 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         # Create a system generator for our desired forcefields.
 
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
+        #forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+        #small_molecule_forcefield = 'gaff-2.11'
+
         system_generators = dict()
-        system_generators['explicit'] = SystemGenerator(['amber99sbildn.xml', 'tip3p.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints },
-            use_antechamber=False, barostat=barostat)
-        system_generators['implicit'] = SystemGenerator(['amber99sbildn.xml', 'amber99_obc.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : constraints },
-            use_antechamber=False)
-        system_generators['vacuum'] = SystemGenerator(['amber99sbildn.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : constraints },
-            use_antechamber=False)
+
+        system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
+                                                        forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints })
+# NOTE implicit solvent not supported by this SystemGenerator
+#        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
+#                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : constraints })
+        system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
+                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : constraints })
+
 
         # Create peptide in solvent.
         from openmmtools.testsystems import AlanineDipeptideExplicit, AlanineDipeptideImplicit, AlanineDipeptideVacuum
@@ -196,12 +206,12 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         pdbfile = PDBFile(pdb_filename)
         topologies['vacuum'] = pdbfile.getTopology()
         positions['vacuum'] = pdbfile.getPositions(asNumpy=True)
-        topologies['implicit'] = pdbfile.getTopology()
-        positions['implicit'] = pdbfile.getPositions(asNumpy=True)
+        #topologies['implicit'] = pdbfile.getTopology()
+        #positions['implicit'] = pdbfile.getPositions(asNumpy=True)
 
         # Create molecule in explicit solvent.
         modeller = app.Modeller(topologies['vacuum'], positions['vacuum'])
-        modeller.addSolvent(system_generators['explicit'].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
+        modeller.addSolvent(system_generators['explicit'].forcefield, model='tip3p', padding=9.0*unit.angstrom)
         topologies['explicit'] = modeller.getTopology()
         positions['explicit'] = modeller.getPositions()
 
@@ -220,13 +230,13 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         # Generate systems
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
 
         thermodynamic_states = dict()
         thermodynamic_states['explicit'] = states.ThermodynamicState(system=systems['explicit'], temperature=temperature, pressure=pressure)
-        thermodynamic_states['implicit'] = states.ThermodynamicState(system=systems['implicit'], temperature=temperature)
+        #thermodynamic_states['implicit'] = states.ThermodynamicState(system=systems['implicit'], temperature=temperature)
         thermodynamic_states['vacuum']   = states.ThermodynamicState(system=systems['vacuum'], temperature=temperature)
 
         # Create SAMS samplers
@@ -255,7 +265,8 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
 
         # Create test MultiTargetDesign sampler.
         from perses.samplers.samplers import MultiTargetDesign
-        target_samplers = { sams_samplers['implicit'] : 1.0, sams_samplers['vacuum'] : -1.0 }
+        #target_samplers = { sams_samplers['implicit'] : 1.0, sams_samplers['vacuum'] : -1.0 }
+        target_samplers = { sams_samplers['vacuum'] : 1.0, sams_samplers['vacuum'] : -1.0 }
         designer = MultiTargetDesign(target_samplers, storage=self.storage)
         designer.verbose = True
 
@@ -306,7 +317,7 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import AlanineDipeptideValenceTestSystem
     >>> testsystem = AlanineDipeptideValenceTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
+    >>> system = testsystem.system_generators['vacuum'].create_system(testsystem.topologies['vacuum'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['vacuum']
 
@@ -323,9 +334,8 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
         system_generators = dict()
         from pkg_resources import resource_filename
         valence_xml_filename = resource_filename('perses', 'data/amber99sbildn-valence-only.xml')
-        system_generators['vacuum'] = SystemGenerator([valence_xml_filename],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=False)
+        system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
+                                                                forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : constraints })
 
         # Create peptide in solvent.
         from openmmtools.testsystems import AlanineDipeptideExplicit, AlanineDipeptideImplicit, AlanineDipeptideVacuum
@@ -346,7 +356,7 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
             }
         proposal_engines = dict()
         chain_id = ' '
-        allowed_mutations = [[('2','PHE')]]
+        allowed_mutations = [('2','PHE')]
         proposal_metadata = {"always_change":True}
         for environment in environments:
             proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations, always_change=True)
@@ -354,7 +364,7 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
         # Generate systems
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
 
@@ -450,7 +460,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import T4LysozymeTestSystem
     >>> testsystem = T4LysozymeTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
+    >>> system = testsystem.system_generators['vacuum'].create_system(testsystem.topologies['vacuum'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['implicit']
 
@@ -464,22 +474,21 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
 
         # Create a system generator for our desired forcefields.
         from pkg_resources import resource_filename
-        gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
-        system_generators['explicit'] = SystemGenerator([gaff_xml_filename,'amber99sbildn.xml', 'tip3p.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True, barostat=barostat)
+
+        system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
+                                                        forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None})
+# NOTE implicit solvent not supported by this SystemGenerator
+#        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
+#                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2})
+        system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
+                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None})
+
         system_generators['explicit-complex'] = system_generators['explicit']
         system_generators['explicit-receptor'] = system_generators['explicit']
-        system_generators['implicit'] = SystemGenerator([gaff_xml_filename,'amber99sbildn.xml', 'amber99_obc.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
-            use_antechamber=True)
-        system_generators['implicit-complex'] = system_generators['implicit']
-        system_generators['implicit-receptor'] = system_generators['implicit']
-        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+        #system_generators['implicit-complex'] = system_generators['implicit']
+        #system_generators['implicit-receptor'] = system_generators['implicit']
         system_generators['vacuum-complex'] = system_generators['vacuum']
         system_generators['vacuum-receptor'] = system_generators['vacuum']
 
@@ -514,22 +523,16 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
             if residue.name == 'BNZ':
                 break
 
-        from openmoltools import forcefield_generators
         from perses.utils.openeye import extractPositionsFromOEMol, giveOpenmmPositionsToOEMol
         import perses.rjmc.geometry as geometry
         from perses.rjmc.topology_proposal import TopologyProposal
         # create OEMol version of benzene
-        mol = oechem.OEMol()
-        #mol.SetTitle('BNZ') # should be set to residue.name in generateTopologyFromOEMol, not working
-        oechem.OESmilesToMol(mol,'C1=CC=CC=C1')
-        oechem.OEAddExplicitHydrogens(mol)
-        oechem.OETriposAtomNames(mol)
-        oechem.OETriposBondTypeNames(mol)
+        mol = smiles_to_oemol('c1ccccc1')
 
         new_residue = forcefield_generators.generateTopologyFromOEMol(mol)
         for res in new_residue.residues():
             res.name = 'BNZ'
-        bnz_new_sys = system_generators['vacuum'].build_system(new_residue)
+        bnz_new_sys = system_generators['vacuum'].create_system(new_residue)
         kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
         temperature = 300.0 * unit.kelvin
         kT = kB * temperature
@@ -552,7 +555,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
         # Set up in explicit solvent.
         for component in ['receptor', 'complex']:
             modeller = app.Modeller(topologies[component], positions[component])
-            modeller.addSolvent(system_generators['explicit'].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
+            modeller.addSolvent(system_generators['explicit'].forcefield, model='tip3p', padding=9.0*unit.angstrom)
             atoms = list(modeller.topology.atoms())
             print('Solvated %s has %s atoms' % (component, len(atoms)))
             topologies['explicit' + '-' + component] = modeller.getTopology()
@@ -560,15 +563,15 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
 
         # Set up the proposal engines.
         allowed_mutations = [
-            [('99','GLY')],
-            [('102','GLN')],
-            [('102','HIS')],
-            [('102','GLU')],
-            [('102','LEU')],
-            [('153','ALA')],
-            [('108','VAL')],
-            [('99','GLY'),('108','VAL')]
-        ]
+            ('99','GLY'),
+            ('102','GLN'),
+            ('102','HIS'),
+            ('102','GLU'),
+            ('102','LEU'),
+            ('153','ALA'),
+            ('108','VAL'),
+            ('99','GLY'),
+            ('108','VAL')]
         from perses.rjmc.topology_proposal import PointMutationEngine
         proposal_metadata = { 'ffxmls' : ['amber99sbildn.xml'] }
         proposal_engines = dict()
@@ -580,7 +583,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
         systems = dict()
         for environment in environments:
             print(environment)
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
 
@@ -665,7 +668,7 @@ class MybTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import MybTestSystem
     >>> testsystem = MybTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['vacuum-peptide'].build_system(testsystem.topologies['vacuum-peptide'])
+    >>> system = testsystem.system_generators['vacuum-peptide'].create_system(testsystem.topologies['vacuum-peptide'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['implicit-peptide']
 
@@ -684,22 +687,23 @@ class MybTestSystem(PersesTestSystem):
         self.geometry_engine.pdb_filename_prefix = 'geometry'
 
         # Create a system generator for our desired forcefields.
-
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
-        system_generators['explicit'] = SystemGenerator(['amber99sbildn.xml', 'tip3p.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=False)
+
+        system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
+                                                        forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None})
+# NOTE implicit solvent not supported by this SystemGenerator
+#        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
+#                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2})
+        system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
+                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None})
+
         system_generators['explicit-complex'] = system_generators['explicit']
         system_generators['explicit-peptide'] = system_generators['explicit']
-        system_generators['implicit'] = SystemGenerator(['amber99sbildn.xml', 'amber99_obc.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
-            use_antechamber=False)
-        system_generators['implicit-complex'] = system_generators['implicit']
-        system_generators['implicit-peptide'] = system_generators['implicit']
-        system_generators['vacuum'] = SystemGenerator(['amber99sbildn.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=False)
+
+#        system_generators['implicit-complex'] = system_generators['implicit']
+#        system_generators['implicit-peptide'] = system_generators['implicit']
+
         system_generators['vacuum-complex'] = system_generators['vacuum']
         system_generators['vacuum-peptide'] = system_generators['vacuum']
 
@@ -721,7 +725,7 @@ class MybTestSystem(PersesTestSystem):
         positions['peptide'] = modeller.getPositions()
 
         # Create all environments.
-        for environment in ['implicit', 'vacuum']:
+        for environment in ['vacuum']:
             for component in ['peptide', 'complex']:
                 topologies[environment + '-' + component] = topologies[component]
                 positions[environment + '-' + component] = positions[component]
@@ -729,7 +733,7 @@ class MybTestSystem(PersesTestSystem):
         # Set up in explicit solvent.
         for component in ['peptide', 'complex']:
             modeller = app.Modeller(topologies[component], positions[component])
-            modeller.addSolvent(system_generators['explicit'].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
+            modeller.addSolvent(system_generators['explicit'].forcefield, model='tip3p', padding=9.0*unit.angstrom)
             topologies['explicit' + '-' + component] = modeller.getTopology()
             positions['explicit' + '-' + component] = modeller.getPositions()
 
@@ -737,7 +741,7 @@ class MybTestSystem(PersesTestSystem):
         allowed_mutations = list()
         for resid in ['91', '99', '103', '105']:
             for resname in ['ALA', 'LEU', 'VAL', 'PHE', 'CYS', 'THR', 'TRP', 'TYR', 'GLU', 'ASP', 'LYS', 'ARG', 'ASN']:
-                allowed_mutations.append([(resid, resname)])
+                allowed_mutations.append((resid, resname))
         from perses.rjmc.topology_proposal import PointMutationEngine
         proposal_metadata = {
             'ffxmls' : ['amber99sbildn.xml'], # take sidechain definitions from this ffxml file
@@ -751,14 +755,14 @@ class MybTestSystem(PersesTestSystem):
         # Generate systems
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
 
         thermodynamic_states = dict()
         for component in ['peptide', 'complex']:
             thermodynamic_states['explicit' + '-' + component] = states.ThermodynamicState(system=systems['explicit' + '-' + component], temperature=temperature, pressure=pressure)
-            thermodynamic_states['implicit' + '-' + component] = states.ThermodynamicState(system=systems['implicit' + '-' + component], temperature=temperature)
+            #thermodynamic_states['implicit' + '-' + component] = states.ThermodynamicState(system=systems['implicit' + '-' + component], temperature=temperature)
             thermodynamic_states['vacuum' + '-' + component]   = states.ThermodynamicState(system=systems['vacuum' + '-' + component], temperature=temperature)
 
         # Create SAMS samplers
@@ -810,7 +814,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
     Properties
     ----------
     environments : list of str
-        Available environments: ['vacuum', 'explicit', 'implicit']
+        Available environments: ['vacuum', 'explicit']
     topologies : dict of simtk.openmm.app.Topology
         Initial system Topology objects; topologies[environment] is the topology for `environment`
     positions : dict of simtk.unit.Quantity of [nparticles,3] with units compatible with nanometers
@@ -836,7 +840,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import AblImatinibResistanceTestSystem
     >>> testsystem = AblImatinibResistanceTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['vacuum-inhibitor'].build_system(testsystem.topologies['vacuum-inhibitor'])
+    >>> system = testsystem.system_generators['vacuum-inhibitor'].create_system(testsystem.topologies['vacuum-inhibitor'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['vacuum-inhibitor']
 
@@ -866,15 +870,14 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
-        system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True, barostat=barostat)
-        system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
-            use_antechamber=True)
-        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+
+        system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
+                                                        forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None})
+# NOTE implicit solvent not supported by this SystemGenerator
+#        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
+#                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2})
+        system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
+                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None})
         # Copy system generators for all environments
         for solvent in solvents:
             for component in components:
@@ -898,7 +901,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
                 if solvent == 'explicit':
                     # Create MODELLER object.
                     modeller = app.Modeller(topologies[component], positions[component])
-                    modeller.addSolvent(system_generators[solvent].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
+                    modeller.addSolvent(system_generators[solvent].forcefield, model='tip3p', padding=9.0*unit.angstrom)
                     topologies[environment] = modeller.getTopology()
                     positions[environment] = modeller.getPositions()
                 else:
@@ -911,7 +914,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
         # TODO: Expand this beyond the ATP binding site
         for resid in ['22', '37', '52', '55', '65', '81', '125', '128', '147', '148']:
             for resname in ['ALA', 'CYS', 'ASP', 'GLU', 'PHE', 'HIS', 'ILE', 'LYS', 'LEU', 'MET', 'ASN', 'PRO', 'GLN', 'ARG', 'SER', 'THR', 'VAL', 'TRP', 'TYR']:
-                allowed_mutations.append([(resid, resname)])
+                allowed_mutations.append((resid, resname))
         from perses.rjmc.topology_proposal import PointMutationEngine
         proposal_metadata = { 'ffxmls' : ['amber99sbildn.xml'] }
         proposal_engines = dict()
@@ -924,7 +927,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
         # Generate systems ror all environments
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Create SAMS samplers
 
@@ -992,7 +995,7 @@ class AblAffinityTestSystem(PersesTestSystem):
     Properties
     ----------
     environments : list of str
-        Available environments: ['vacuum', 'explicit', 'implicit']
+        Available environments: ['vacuum', 'explicit']
     topologies : dict of simtk.openmm.app.Topology
         Initial system Topology objects; topologies[environment] is the topology for `environment`
     positions : dict of simtk.unit.Quantity of [nparticles,3] with units compatible with nanometers
@@ -1018,7 +1021,7 @@ class AblAffinityTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import AblAffinityTestSystem
     >>> testsystem = AblAffinityestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['vacuum-inhibitor'].build_system(testsystem.topologies['vacuum-inhibitor'])
+    >>> system = testsystem.system_generators['vacuum-inhibitor'].create_system(testsystem.topologies['vacuum-inhibitor'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['vacuum-inhibitor']
 
@@ -1064,18 +1067,20 @@ class AblAffinityTestSystem(PersesTestSystem):
         # Create a system generator for desired forcefields
 
         from pkg_resources import resource_filename
-        gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
-        system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True, barostat=barostat)
-        system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
-            use_antechamber=True)
-        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+        system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
+                                                        forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None},
+                                                        molecules = [Molecule.from_openeye(molecule) for molecule in molecules], small_molecule_forcefield = small_molecule_forcefield)
+# NOTE implicit solvent not supported by this SystemGenerator
+#        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
+#                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2},
+#                                                        molecules = [Molecule.from_openeye(molecule) for molecule in molecules],
+#                                                        small_molecule_forcefield = small_molecule_forcefield)
+        system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
+                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None},
+                                                        molecules = [Molecule.from_openeye(molecule) for molecule in molecules],
+                                                        small_molecule_forcefield = small_molecule_forcefield)
         # Copy system generators for all environments
         for solvent in solvents:
             for component in components:
@@ -1100,7 +1105,7 @@ class AblAffinityTestSystem(PersesTestSystem):
                 if solvent == 'explicit':
                     # Create MODELLER object.
                     modeller = app.Modeller(topologies[component], positions[component])
-                    modeller.addSolvent(system_generators[solvent].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
+                    modeller.addSolvent(system_generators[solvent].forcefield, model='tip3p', padding=9.0*unit.angstrom)
                     topologies[environment] = modeller.getTopology()
                     positions[environment] = modeller.getPositions()
                 else:
@@ -1128,7 +1133,7 @@ class AblAffinityTestSystem(PersesTestSystem):
         # Generate systems
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
 
@@ -1202,7 +1207,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
     Properties
     ----------
     environments : list of str
-        Available environments: ['vacuum', 'explicit', 'implicit']
+        Available environments: ['vacuum', 'explicit']
     topologies : dict of simtk.openmm.app.Topology
         Initial system Topology objects; topologies[environment] is the topology for `environment`
     positions : dict of simtk.unit.Quantity of [nparticles,3] with units compatible with nanometers
@@ -1228,7 +1233,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import AblImatinibProtonationStateTestSystem
     >>> testsystem = AblImatinibProtonationStateTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['explicit-inhibitor'].build_system(testsystem.topologies['explicit-inhibitor'])
+    >>> system = testsystem.system_generators['explicit-inhibitor'].create_system(testsystem.topologies['explicit-inhibitor'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['explicit-inhibitor']
 
@@ -1283,18 +1288,20 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
 
         print('Creating system generators...')
 
-        gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
-        system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True, barostat=barostat)
-        system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
-            use_antechamber=True)
-        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+        system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
+                                                        forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None},
+                                                        molecules = [Molecule.from_openeye(molecule) for molecule in molecules], small_molecule_forcefield = small_molecule_forcefield)
+# NOTE implicit solvent not supported by this SystemGenerator
+#        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
+#                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2},
+#                                                        molecules = [Molecule.from_openeye(molecule) for molecule in molecules],
+#                                                        small_molecule_forcefield = small_molecule_forcefield)
+        system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
+                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None},
+                                                        molecules = [Molecule.from_openeye(molecule) for molecule in molecules],
+                                                        small_molecule_forcefield = small_molecule_forcefield)
         # Copy system generators for all environments
         for solvent in solvents:
             for component in components:
@@ -1320,7 +1327,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
                 if solvent == 'explicit':
                     # Create MODELLER object.
                     modeller = app.Modeller(topologies[component], positions[component])
-                    modeller.addSolvent(system_generators[solvent].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
+                    modeller.addSolvent(system_generators[solvent].forcefield, model='tip3p', padding=9.0*unit.angstrom)
                     topologies[environment] = modeller.getTopology()
                     positions[environment] = modeller.getPositions()
                 else:
@@ -1348,7 +1355,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         print('Building systems...')
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
         print('Defining thermodynamic states...')
@@ -1423,7 +1430,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
     Properties
     ----------
     environments : list of str
-        Available environments: ['vacuum', 'explicit', 'implicit']
+        Available environments: ['vacuum', 'explicit']
     topologies : dict of simtk.openmm.app.Topology
         Initial system Topology objects; topologies[environment] is the topology for `environment`
     positions : dict of simtk.unit.Quantity of [nparticles,3] with units compatible with nanometers
@@ -1449,7 +1456,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import AblImatinibProtonationStateTestSystem
     >>> testsystem = AblImatinibProtonationStateTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['explicit-inhibitor'].build_system(testsystem.topologies['explicit-inhibitor'])
+    >>> system = testsystem.system_generators['explicit-inhibitor'].create_system(testsystem.topologies['explicit-inhibitor'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['explicit-inhibitor']
 
@@ -1502,15 +1509,18 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
-        system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True, barostat=barostat)
-        system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
-            use_antechamber=True)
-        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+        system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
+                                                        forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None},
+                                                        molecules = [Molecule.from_openeye(molecule) for molecule in molecules], small_molecule_forcefield = small_molecule_forcefield)
+# NOTE implicit solvent not supported by this SystemGenerator
+#        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
+#                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2},
+#                                                        molecules = [Molecule.from_openeye(molecule) for molecule in molecules],
+#                                                        small_molecule_forcefield = small_molecule_forcefield)
+        system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
+                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None},
+                                                        molecules = [Molecule.from_openeye(molecule) for molecule in molecules],
+                                                        small_molecule_forcefield = small_molecule_forcefield)
         # Copy system generators for all environments
         for solvent in solvents:
             for component in components:
@@ -1536,7 +1546,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
                 if solvent == 'explicit':
                     # Create MODELLER object.
                     modeller = app.Modeller(topologies[component], positions[component])
-                    modeller.addSolvent(system_generators[solvent].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
+                    modeller.addSolvent(system_generators[solvent].forcefield, model='tip3p', padding=9.0*unit.angstrom)
                     topologies[environment] = modeller.getTopology()
                     positions[environment] = modeller.getPositions()
                 else:
@@ -1573,7 +1583,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
         print('Building systems...')
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
         print('Defining thermodynamic states...')
@@ -1693,7 +1703,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import AlkanesTestSystem
     >>> testsystem = AlkanesTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
+    >>> system = testsystem.system_generators['vacuum'].create_system(testsystem.topologies['vacuum'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['explicit']
 
@@ -1713,10 +1723,12 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         system_generators = dict()
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
-        system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'tip3p.xml'], use_antechamber=True,
-            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints }, barostat=barostat)
-        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename], use_antechamber=True,
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : constraints })
+        system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
+                                                        forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints': constraints},
+                                                        small_molecule_forcefield = small_molecule_forcefield)
+        system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
+                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None},
+                                                        small_molecule_forcefield = small_molecule_forcefield)
 
         # Create topologies and positions
         topologies = dict()
@@ -1726,11 +1738,6 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         from openmoltools.forcefield_generators import generateForceFieldFromMolecules, generateTopologyFromOEMol, gaffTemplateGenerator
         from io import StringIO
         from perses.utils.openeye import smiles_to_oemol, extractPositionsFromOEMol, has_undefined_stereocenters
-        forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-        # clinical_kinase_inhibitors_filename = resource_filename('perses', 'data/clinical-kinase-inhibitors.xml')
-        # forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml', clinical-kinase-inhibitors_filename)
-        from openmoltools import forcefield_generators ## IVY
-        forcefield.registerTemplateGenerator(gaffTemplateGenerator) ## IVY
 
         # skipping molecules with undefined stereocenters
         d_smiles_to_oemol = {}
@@ -1744,15 +1751,8 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
                 d_smiles_to_oemol[smiles] = mol
                 good_molecules.append(smiles)
 
-        # ffxml, failed_molecule_list = generateForceFieldFromMolecules(list(d_smiles_to_oemol.values()), ignoreFailures=True)
-        #
-        # f = open('clinical-kinase-inhibitors.xml', 'w')
-        # f.write(ffxml)
-        # f.close()
-        #
-        # if failed_molecule_list:
-        #     raise Exception("Failed to generate forcefield for the following molecules: ", failed_molecule_list)
-        # forcefield.loadFile(StringIO(ffxml))
+        for environment in ['vacuum', 'explicit']:
+            system_generators[environment].add_molecules([Molecule.from_openeye(q) for q in d_smiles_to_oemol.values()])
 
         # Create molecule in vacuum.
         smiles = good_molecules[0] # getting the first smiles that works
@@ -1764,12 +1764,12 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
 
         # Create molecule in solvent.
         modeller = app.Modeller(topologies['vacuum'], positions['vacuum'])
-        modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
+        modeller.addSolvent(system_generators['explicit'].forcefield, model='tip3p', padding=9.0*unit.angstrom)
         topologies['explicit'] = modeller.getTopology()
         positions['explicit'] = modeller.getPositions()
 
         # Set up the proposal engines.
-        from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, PremappedSmallMoleculeSetProposalEngine
+        from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
         proposal_metadata = { }
         proposal_engines = dict()
 
@@ -1784,7 +1784,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # Generate systems
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
 
@@ -1948,7 +1948,7 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import ValenceSmallMoleculeLibraryTestSystem
     >>> testsystem = ValenceSmallMoleculeLibraryTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
+    >>> system = testsystem.system_generators['vacuum'].create_system(testsystem.topologies['vacuum'])
     # Retrieve a SAMSSampler
     >>> sams_sampler = testsystem.sams_samplers['vacuum']
 
@@ -1963,9 +1963,11 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
 
         system_generators = dict()
         from pkg_resources import resource_filename
-        gaff_xml_filename = resource_filename('perses', 'data/gaff-valence-only.xml')
-        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None })
+        from perses.utils.openeye import smiles_to_oemol,extractPositionsFromOEMol
+        system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
+                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None},
+                                                        molecules = [Molecule.from_openeye(smiles_to_oemol(q)) for q in molecules],
+                                                        small_molecule_forcefield = small_molecule_forcefield)
 
         #
         # Create topologies and positions
@@ -1973,15 +1975,11 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         topologies = dict()
         positions = dict()
 
-        from openmoltools import forcefield_generators
-        forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-        forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
-
         # Create molecule in vacuum.
-        from perses.utils.openeye import smiles_to_oemol,extractPositionsFromOEMol
+        from openmoltools.forcefield_generators import generateTopologyFromOEMol
         smiles = molecules[0] # current sampler state
         molecule = smiles_to_oemol(smiles)
-        topologies['vacuum'] = forcefield_generators.generateTopologyFromOEMol(molecule)
+        topologies['vacuum'] = generateTopologyFromOEMol(molecule)
         positions['vacuum'] = extractPositionsFromOEMol(molecule)
 
         # Set up the proposal engines.
@@ -1999,7 +1997,7 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         # Generate systems
         systems = dict()
         for environment in environments:
-            systems[environment] = system_generators[environment].build_system(topologies[environment])
+            systems[environment] = system_generators[environment].create_system(topologies[environment])
 
         # Define thermodynamic state of interest.
 
@@ -2077,344 +2075,6 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
 
         return list_of_canonicalized_smiles
 
-class NullTestSystem(PersesTestSystem):
-    """
-    Test turning a small molecule into itself in vacuum
-    Currently only trying to test ExpandedEnsemble sampler, therefore
-    SAMS sampler and MultiTargetDesign are not implemented at this time
-
-    Uses a custom ProposalEngine to only match subset of atoms, requiring
-    geometry to build in the rest
-
-    geometry_engine.write_proposal_pdb set to False
-
-    Constructor:
-    NullTestSystem(storage_filename="null.nc", exen_pdb_filename=None)
-
-    Arguments:
-        storage_filename, OPTIONAL, string
-            Default is "null.nc"
-            Storage must be provided in order to analyze testsystem acceptance rates
-        exen_pdb_filename, OPTIONAL, string
-            Default is None
-            If value is not None, will write pdbfile after every ExpandedEnsemble
-            iteration
-        scheme, OPTIONAL, string
-            Default is 'ncmc-geometry-ncmc'
-            Scheme to be used by ExpandedEnsembleSampler
-            Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
-            Default will run NCMC on old and new system separately
-
-    Only one environment ('vacuum') is currently implemented; however all
-    samplers are saved in dictionaries for consistency with other testsystems
-
-    """
-    def __init__(self, storage_filename="null.nc", exen_pdb_filename=None, scheme='ncmc-geometry-ncmc', options=None):
-
-        super(NullTestSystem, self).__init__(storage_filename=storage_filename)
-
-        if options is None:
-            options = {'nsteps':0}
-        if 'nsteps' not in options.keys():
-            options['nsteps'] = 0
-
-        environments = ['vacuum', 'explicit']
-
-#        self.geometry_engine.write_proposal_pdb = True
-
-        system_generators = dict()
-        topologies = dict()
-        positions = dict()
-        proposal_engines = dict()
-        thermodynamic_states = dict()
-        mcmc_samplers = dict()
-        exen_samplers = dict()
-
-
-        from perses.tests.utils import oemol_to_omm_ff, get_data_filename
-        from openmoltools.openeye import iupac_to_oemol,generate_conformers
-        from perses.samplers.samplers import ExpandedEnsembleSampler
-
-        for key in environments:
-            gaff_xml_filename = get_data_filename('data/gaff.xml')
-            if key == "vacuum":
-                forcefield_kwargs = {'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None}
-                ff_list = [gaff_xml_filename]
-            if key == "explicit":
-                ff_list = [gaff_xml_filename, 'tip3p.xml']
-                forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : app.HBonds }
-            system_generator = SystemGenerator(ff_list, forcefield_kwargs=forcefield_kwargs)
-            system_generators[key] = system_generator
-
-            proposal_engine = self.NullProposal(system_generator, residue_name=self.mol_name)
-            initial_molecule = iupac_to_oemol(iupac_name=self.mol_name)
-            initial_molecule = generate_conformers(initial_molecule,max_confs=1)
-            initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, self.mol_name)
-
-            if key == "explicit":
-                modeller = app.Modeller(initial_topology, initial_positions)
-                modeller.addSolvent(system_generators[key].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
-                initial_topology = modeller.getTopology()
-                initial_positions = modeller.getPositions()
-                initial_system = system_generators[key].build_system(initial_topology)
-
-            initial_topology._state_key = proposal_engine._fake_states[0]
-
-            temperature = 300*unit.kelvin
-            thermodynamic_state = states.ThermodynamicState(system=initial_system, temperature=temperature)
-
-            chemical_state_key = proposal_engine.compute_state_key(initial_topology)
-            sampler_state = states.SamplerState(positions=initial_positions)
-
-            mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state, copy.deepcopy(self._move))
-            mcmc_sampler.nsteps = 500
-            mcmc_sampler.timestep = 1.0*unit.femtosecond
-            mcmc_sampler.verbose = True
-
-            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, options=options, storage=self.storage)
-            exen_sampler.verbose = True
-            if exen_pdb_filename is not None:
-                exen_sampler.pdbfile = open(exen_pdb_filename,'w')
-
-            topologies[key] = initial_topology
-            positions[key] = initial_positions
-            proposal_engines[key] = proposal_engine
-            thermodynamic_states[key] = thermodynamic_state
-            mcmc_samplers[key] = mcmc_sampler
-            exen_samplers[key] = exen_sampler
-
-        # save
-        self.environments = environments
-        self.storage_filename = storage_filename
-        self.system_generators = system_generators
-        self.topologies = topologies
-        self.positions = positions
-        self.proposal_engines = proposal_engines
-        self.thermodynamic_states = thermodynamic_states
-        self.mcmc_samplers = mcmc_samplers
-        self.exen_samplers = exen_samplers
-
-
-class NaphthaleneTestSystem(NullTestSystem):
-    """
-    Test turning Naphthalene into Naphthalene in vacuum
-    Currently only trying to test ExpandedEnsemble sampler, therefore
-    SAMS sampler and MultiTargetDesign are not implemented at this time
-
-    Uses a custom ProposalEngine to only match one ring, requiring
-    geometry to build in the other
-
-    geometry_engine.write_proposal_pdb set to True
-
-    Constructor:
-    NaphthaleneTestSystem(storage_filename="naphthalene.nc", exen_pdb_filename=None)
-
-    Arguments:
-        storage_filename, OPTIONAL, string
-            Default is "naphthalene.nc"
-            Storage must be provided in order to analyze testsystem acceptance rates
-        exen_pdb_filename, OPTIONAL, string
-            Default is None
-            If value is not None, will write pdbfile after every ExpandedEnsemble
-            iteration
-        scheme, OPTIONAL, string
-            Default is 'geometry-ncmc-geometry'
-            Scheme to be used by ExpandedEnsembleSampler
-            Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
-            Default will use a hybrid NCMC method
-
-    Only one environment ('vacuum') is currently implemented; however all
-    samplers are saved in dictionaries for consistency with other testsystems
-    """
-
-    def __init__(self, storage_filename="naphthalene.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry', options=None):
-        """
-        __init__(self, storage_filename="naphthalene.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry'):
-        """
-        from perses.rjmc.topology_proposal import NaphthaleneProposalEngine
-        self.NullProposal = NaphthaleneProposalEngine
-        self.mol_name = 'naphthalene'
-        super(NaphthaleneTestSystem, self).__init__(storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename, scheme=scheme, options=options)
-
-class ButaneTestSystem(NullTestSystem):
-    """
-    Test turning Butane into Butane in vacuum
-    Currently only trying to test ExpandedEnsemble sampler, therefore
-    SAMS sampler and MultiTargetDesign are not implemented at this time
-
-    Uses a custom ProposalEngine to only match two carbons, have geometry
-    engine choose positions for others
-
-    geometry_engine.write_proposal_pdb set to True
-
-    Constructor:
-    ButaneTestSystem(storage_filename="butane.nc", exen_pdb_filename=None)
-
-    Arguments:
-        storage_filename, OPTIONAL, string
-            Default is "butane.nc"
-            Storage must be provided in order to analyze testsystem acceptance rates
-        exen_pdb_filename, OPTIONAL, string
-            Default is None
-            If value is not None, will write pdbfile after every ExpandedEnsemble
-            iteration
-        scheme, OPTIONAL, string
-            Default is 'geometry-ncmc-geometry'
-            Scheme to be used by ExpandedEnsembleSampler
-            Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
-            Default will use a hybrid NCMC method
-
-    Only one environment ('vacuum') is currently implemented; however all
-    samplers are saved in dictionaries for consistency with other testsystems
-    """
-
-    def __init__(self, storage_filename="butane.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry', options=None):
-        """
-        __init__(self, storage_filename="butane.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry'):
-        """
-        from perses.rjmc.topology_proposal import ButaneProposalEngine
-        self.NullProposal = ButaneProposalEngine
-        self.mol_name = 'butane'
-        super(ButaneTestSystem, self).__init__(storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename, scheme=scheme, options=options)
-
-class PropaneTestSystem(NullTestSystem):
-    """
-    Test turning Propane into Propane in vacuum
-    Currently only trying to test ExpandedEnsemble sampler, therefore
-    SAMS sampler and MultiTargetDesign are not implemented at this time
-
-    Uses a custom ProposalEngine to map CH3-CH2, have geometry build in the
-    other CH3
-
-    geometry_engine.write_proposal_pdb set to True
-
-    Constructor:
-    ButaneTestSystem(storage_filename="propane.nc", exen_pdb_filename=None)
-
-    Arguments:
-        storage_filename, OPTIONAL, string
-            Default is "propane.nc"
-            Storage must be provided in order to analyze testsystem acceptance rates
-        exen_pdb_filename, OPTIONAL, string
-            Default is None
-            If value is not None, will write pdbfile after every ExpandedEnsemble
-            iteration
-        scheme, OPTIONAL, string
-            Default is 'geometry-ncmc-geometry'
-            Scheme to be used by ExpandedEnsembleSampler
-            Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
-            Default will use a hybrid NCMC method
-
-    Only one environment ('vacuum') is currently implemented; however all
-    samplers are saved in dictionaries for consistency with other testsystems
-    """
-
-    def __init__(self, storage_filename="propane.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry', options=None):
-        """
-        __init__(self, storage_filename="propane.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry'):
-        """
-        from perses.rjmc.topology_proposal import PropaneProposalEngine
-        self.NullProposal = PropaneProposalEngine
-        self.mol_name = 'propane'
-        super(PropaneTestSystem, self).__init__(storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename, scheme=scheme, options=options)
-
-
-def run_null_system(testsystem):
-    """
-    Intended for use with NullTestSystem subclasses ONLY
-
-    Runs TestSystem ExpandedEnsemble sampler ONLY
-    Uses BAR to check whether the free energies of the two states
-    (both naphthalene) are within 6 sigma of 0
-    Imports netCDF4 to read in storage file and access data
-
-    Arguments:
-    ----------
-    testsystem : NaphthaleneTestSystem, ButantTestSystem, or PropaneTestSystem
-        Only these three test systems have the proposal_engine._fake_states
-        attribute, which differentiates between 2 states of a null proposal
-
-    CURRENTLY:
-    The expanded ensemble acceptance rate of naphthalene-A to naphthalene-B
-    is very low.  This test will run 10 iterations of the ExpandedEnsemble
-    sampler until a switch is accepted, and then run approximately that
-    number of steps again, to ensure w_f and w_r have nonzero length. This
-    should not be necessary if the acceptance rate is higher, and the
-    number of exen_sampler iterations can be fixed.
-
-    TODO:
-        move netcdf import to analysis for general use
-        move BAR import to analysis, define use of BAR to be generalized
-    """
-    if not issubclass(type(testsystem), NullTestSystem):
-        raise(NotImplementedError("run_null_system is only compatible with NaphthaleneTestSystem, ButantTestSystem or PropaneTestSystem; given {0}".format(type(testsystem))))
-
-    import netCDF4 as netcdf
-    import pickle
-    import codecs
-    for key in testsystem.environments: # only one key: vacuum
-        # run a single iteration to generate item in number_of_state_visits dict
-        testsystem.exen_samplers[key].run(niterations=100)
-        # until a switch is accepted, only the initial state will have an item
-        # in the number_of_state_visits dict
-        while len(testsystem.exen_samplers[key].number_of_state_visits.keys()) == 1:
-            testsystem.exen_samplers[key].run(niterations=10)
-        # after a switch has been accepted, run approximately the same number of
-        # steps again, to end up with roughly equal number of proposals starting
-        # from each state
-        testsystem.exen_samplers[key].run(niterations=testsystem.exen_samplers[key].nrejected)
-        print(testsystem.exen_samplers[key].number_of_state_visits)
-        print("Acceptances in {0} iterations: {1}".format(testsystem.exen_samplers[key].iteration, testsystem.exen_samplers[key].naccepted))
-
-        from perses.analysis import Analysis
-        analysis = Analysis(testsystem.storage_filename)
-        analysis.plot_exen_logp_components()
-
-        ncfile = netcdf.Dataset(testsystem.storage_filename, 'r')
-        ee_sam = ncfile.groups['ExpandedEnsembleSampler']
-        niterations = ee_sam.variables['logp_accept'].shape[0]
-        logps = np.zeros(niterations, np.float64)
-        state_keys = list()
-        for n in range(niterations):
-            logps[n] = ee_sam.variables['logp_accept'][n]
-            s_key = str(ee_sam.variables['proposed_state_key'][n])
-            state_keys.append(pickle.loads(codecs.decode(s_key, "base64")))
-
-        len_w_r = state_keys.count(testsystem.proposal_engines[key]._fake_states[0])
-        len_w_f = state_keys.count(testsystem.proposal_engines[key]._fake_states[1])
-        try:
-            assert niterations == len_w_f + len_w_r
-        except:
-            print("{0} iterations, but {1} started from A and {2} started from B?".format(niterations, len_w_f, len_w_r))
-        if len_w_f == 0 or len_w_r == 0:
-            # test failure, but what to do?
-            raise(Exception("Cannot run BAR because no transitions were made"))
-
-        # after importing all logps, use proposed_state_key to split them into
-        # separate arrays depending on the direction of the proposed switch
-        w_f = np.zeros(len_w_f, np.float64)
-        w_r = np.zeros(len_w_r, np.float64)
-        w_f_count = 0
-        w_r_count = 0
-        for n in range(niterations):
-            if state_keys[n] == testsystem.proposal_engines[key]._fake_states[1]:
-                w_f[w_f_count] = logps[n]
-                w_f_count += 1
-            else:
-                w_r[w_r_count] = logps[n]
-                w_r_count += 1
-
-        from pymbar import BAR
-        [df, ddf] = BAR(w_f, w_r, method='self-consistent-iteration')
-        print('%8.3f +- %.3f kT' % (df, ddf))
-        NSIGMA_MAX = 6.0
-        if (abs(df) > NSIGMA_MAX * ddf):
-            msg = 'Delta F (%d proposals) = %f +- %f kT; should be within %f sigma of 0' % (niterations, df, ddf, NSIGMA_MAX)
-            msg += '\n'
-            msg += 'w_f = %s\n' % str(w_f)
-            msg += 'w_r = %s\n' % str(w_r)
-            raise Exception(msg)
-
 
 def check_topologies(testsystem):
     """
@@ -2423,7 +2083,7 @@ def check_topologies(testsystem):
     for environment in testsystem.environments:
         topology = testsystem.topologies[environment]
         try:
-            testsystem.system_generators[environment].build_system(topology)
+            testsystem.system_generators[environment].create_system(topology)
         except Exception as e:
             msg = str(e)
             msg += '\n'
@@ -2509,7 +2169,7 @@ def run_myb():
     Run myb test system.
     """
     testsystem = MybTestSystem(ncmc_nsteps=0, mcmc_nsteps=100)
-    solvent = 'implicit'
+    solvent = 'explicit'
 
     testsystem.exen_samplers[solvent + '-peptide'].pdbfile = open('myb-vacuum.pdb', 'w')
     testsystem.exen_samplers[solvent + '-complex'].pdbfile = open('myb-complex.pdb', 'w')
