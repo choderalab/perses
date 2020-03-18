@@ -134,7 +134,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
     Properties
     ----------
     environments : list of str
-        Available environments: ['vacuum', 'explicit', 'implicit']
+        Available environments: ['vacuum', 'explicit']
     topologies : dict of simtk.openmm.app.Topology
         Initial system Topology objects; topologies[environment] is the topology for `environment`
     positions : dict of simtk.unit.Quantity of [nparticles,3] with units compatible with nanometers
@@ -162,7 +162,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
     # Build a system
     >>> system = testsystem.system_generators['vacuum'].create_system(testsystem.topologies['vacuum'])
     # Retrieve a SAMSSampler
-    >>> sams_sampler = testsystem.sams_samplers['implicit']
+    >>> sams_sampler = testsystem.sams_samplers['vacuum']
 
     """
     def __init__(self, constraints=app.HBonds, **kwargs):
@@ -265,7 +265,8 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
 
         # Create test MultiTargetDesign sampler.
         from perses.samplers.samplers import MultiTargetDesign
-        target_samplers = { sams_samplers['implicit'] : 1.0, sams_samplers['vacuum'] : -1.0 }
+        #target_samplers = { sams_samplers['implicit'] : 1.0, sams_samplers['vacuum'] : -1.0 }
+        target_samplers = { sams_samplers['vacuum'] : 1.0, sams_samplers['vacuum'] : -1.0 }
         designer = MultiTargetDesign(target_samplers, storage=self.storage)
         designer.verbose = True
 
@@ -724,7 +725,7 @@ class MybTestSystem(PersesTestSystem):
         positions['peptide'] = modeller.getPositions()
 
         # Create all environments.
-        for environment in ['implicit', 'vacuum']:
+        for environment in ['vacuum']:
             for component in ['peptide', 'complex']:
                 topologies[environment + '-' + component] = topologies[component]
                 positions[environment + '-' + component] = positions[component]
@@ -761,7 +762,7 @@ class MybTestSystem(PersesTestSystem):
         thermodynamic_states = dict()
         for component in ['peptide', 'complex']:
             thermodynamic_states['explicit' + '-' + component] = states.ThermodynamicState(system=systems['explicit' + '-' + component], temperature=temperature, pressure=pressure)
-            thermodynamic_states['implicit' + '-' + component] = states.ThermodynamicState(system=systems['implicit' + '-' + component], temperature=temperature)
+            #thermodynamic_states['implicit' + '-' + component] = states.ThermodynamicState(system=systems['implicit' + '-' + component], temperature=temperature)
             thermodynamic_states['vacuum' + '-' + component]   = states.ThermodynamicState(system=systems['vacuum' + '-' + component], temperature=temperature)
 
         # Create SAMS samplers
@@ -813,7 +814,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
     Properties
     ----------
     environments : list of str
-        Available environments: ['vacuum', 'explicit', 'implicit']
+        Available environments: ['vacuum', 'explicit']
     topologies : dict of simtk.openmm.app.Topology
         Initial system Topology objects; topologies[environment] is the topology for `environment`
     positions : dict of simtk.unit.Quantity of [nparticles,3] with units compatible with nanometers
@@ -994,7 +995,7 @@ class AblAffinityTestSystem(PersesTestSystem):
     Properties
     ----------
     environments : list of str
-        Available environments: ['vacuum', 'explicit', 'implicit']
+        Available environments: ['vacuum', 'explicit']
     topologies : dict of simtk.openmm.app.Topology
         Initial system Topology objects; topologies[environment] is the topology for `environment`
     positions : dict of simtk.unit.Quantity of [nparticles,3] with units compatible with nanometers
@@ -1206,7 +1207,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
     Properties
     ----------
     environments : list of str
-        Available environments: ['vacuum', 'explicit', 'implicit']
+        Available environments: ['vacuum', 'explicit']
     topologies : dict of simtk.openmm.app.Topology
         Initial system Topology objects; topologies[environment] is the topology for `environment`
     positions : dict of simtk.unit.Quantity of [nparticles,3] with units compatible with nanometers
@@ -1429,7 +1430,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
     Properties
     ----------
     environments : list of str
-        Available environments: ['vacuum', 'explicit', 'implicit']
+        Available environments: ['vacuum', 'explicit']
     topologies : dict of simtk.openmm.app.Topology
         Initial system Topology objects; topologies[environment] is the topology for `environment`
     positions : dict of simtk.unit.Quantity of [nparticles,3] with units compatible with nanometers
@@ -2168,7 +2169,7 @@ def run_myb():
     Run myb test system.
     """
     testsystem = MybTestSystem(ncmc_nsteps=0, mcmc_nsteps=100)
-    solvent = 'implicit'
+    solvent = 'explicit'
 
     testsystem.exen_samplers[solvent + '-peptide'].pdbfile = open('myb-vacuum.pdb', 'w')
     testsystem.exen_samplers[solvent + '-complex'].pdbfile = open('myb-complex.pdb', 'w')
