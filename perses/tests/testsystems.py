@@ -188,21 +188,12 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
 
         system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
                                                         forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints })
-        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : constraints })
+# NOTE implicit solvent not supported by this SystemGenerator
+#        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
+#                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : constraints })
         system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
                                                         forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : constraints })
 
-
-        # system_generators['explicit'] = SystemGenerator(['amber99sbildn.xml', 'tip3p.xml'],
-        #     forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints },
-        #     use_antechamber=False, barostat=barostat)
-        # system_generators['implicit'] = SystemGenerator(['amber99sbildn.xml', 'amber99_obc.xml'],
-        #     forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : constraints },
-        #     use_antechamber=False)
-        # system_generators['vacuum'] = SystemGenerator(['amber99sbildn.xml'],
-        #     forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : constraints },
-        #     use_antechamber=False)
 
         # Create peptide in solvent.
         from openmmtools.testsystems import AlanineDipeptideExplicit, AlanineDipeptideImplicit, AlanineDipeptideVacuum
@@ -486,15 +477,16 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
 
         system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
                                                         forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None})
-        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2})
+# NOTE implicit solvent not supported by this SystemGenerator
+#        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
+#                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2})
         system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
                                                         forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None})
 
         system_generators['explicit-complex'] = system_generators['explicit']
         system_generators['explicit-receptor'] = system_generators['explicit']
-        system_generators['implicit-complex'] = system_generators['implicit']
-        system_generators['implicit-receptor'] = system_generators['implicit']
+        #system_generators['implicit-complex'] = system_generators['implicit']
+        #system_generators['implicit-receptor'] = system_generators['implicit']
         system_generators['vacuum-complex'] = system_generators['vacuum']
         system_generators['vacuum-receptor'] = system_generators['vacuum']
 
@@ -698,16 +690,17 @@ class MybTestSystem(PersesTestSystem):
 
         system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
                                                         forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None})
-        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2})
+# NOTE implicit solvent not supported by this SystemGenerator
+#        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
+#                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2})
         system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
                                                         forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None})
 
         system_generators['explicit-complex'] = system_generators['explicit']
         system_generators['explicit-peptide'] = system_generators['explicit']
 
-        system_generators['implicit-complex'] = system_generators['implicit']
-        system_generators['implicit-peptide'] = system_generators['implicit']
+#        system_generators['implicit-complex'] = system_generators['implicit']
+#        system_generators['implicit-peptide'] = system_generators['implicit']
 
         system_generators['vacuum-complex'] = system_generators['vacuum']
         system_generators['vacuum-peptide'] = system_generators['vacuum']
@@ -878,8 +871,9 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
 
         system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
                                                         forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None})
-        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2})
+# NOTE implicit solvent not supported by this SystemGenerator
+#        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
+#                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2})
         system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
                                                         forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None})
         # Copy system generators for all environments
@@ -1076,8 +1070,9 @@ class AblAffinityTestSystem(PersesTestSystem):
         system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
                                                         forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None},
                                                         molecules = [Molecule.from_openeye(molecule) for molecule in molecules], small_molecule_forcefield = small_molecule_forcefield)
-        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2},
+# NOTE implicit solvent not supported by this SystemGenerator
+#        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
+#                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2},
                                                         molecules = [Molecule.from_openeye(molecule) for molecule in molecules],
                                                         small_molecule_forcefield = small_molecule_forcefield)
         system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
@@ -1296,10 +1291,11 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
                                                         forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None},
                                                         molecules = [Molecule.from_openeye(molecule) for molecule in molecules], small_molecule_forcefield = small_molecule_forcefield)
-        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2},
-                                                        molecules = [Molecule.from_openeye(molecule) for molecule in molecules],
-                                                        small_molecule_forcefield = small_molecule_forcefield)
+# NOTE implicit solvent not supported by this SystemGenerator
+#        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
+#                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2},
+#                                                        molecules = [Molecule.from_openeye(molecule) for molecule in molecules],
+#                                                        small_molecule_forcefield = small_molecule_forcefield)
         system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
                                                         forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None},
                                                         molecules = [Molecule.from_openeye(molecule) for molecule in molecules],
@@ -1514,10 +1510,11 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
         system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
                                                         forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None},
                                                         molecules = [Molecule.from_openeye(molecule) for molecule in molecules], small_molecule_forcefield = small_molecule_forcefield)
-        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2},
-                                                        molecules = [Molecule.from_openeye(molecule) for molecule in molecules],
-                                                        small_molecule_forcefield = small_molecule_forcefield)
+# NOTE implicit solvent not supported by this SystemGenerator
+#        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
+#                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2},
+#                                                        molecules = [Molecule.from_openeye(molecule) for molecule in molecules],
+#                                                        small_molecule_forcefield = small_molecule_forcefield)
         system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
                                                         forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None},
                                                         molecules = [Molecule.from_openeye(molecule) for molecule in molecules],

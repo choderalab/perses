@@ -37,8 +37,9 @@ from openforcefield.topology import Molecule
 from simtk.openmm import app
 
 #global variables
-forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
+forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p_standard.xml']
 small_molecule_forcefield = 'gaff-2.11'
+# NOTE implicit solvent not supported by SystemGenerator yet
 system_generator = SystemGenerator(forcefields = forcefield_files,
                                                 barostat = None,
                                                 forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
@@ -881,6 +882,7 @@ def oemol_to_openmm_system_amber(oemol, molecule_name):
     prmtop_file, inpcrd_file = openmoltools.amber.run_tleap(molecule_name, gaff_mol2, frcmod)
     from parmed.amber import AmberParm
     prmtop = AmberParm(prmtop_file)
+    # NOTE implicit solvent not supported by SystemGenerator yet
     system = prmtop.createSystem(implicitSolvent=None, removeCMMotion=False)
     crd = app.AmberInpcrdFile(inpcrd_file)
     return system, crd.getPositions(asNumpy=True), prmtop.topology

@@ -10,6 +10,10 @@ import simtk.openmm as openmm
 import simtk.openmm.app as app
 import simtk.unit as units
 
+import logging
+_logger = logging.getLogger()
+_logger.setLevel(logging.INFO)
+
 class BiasEngine(object):
     """
     Generates the bias for expanded ensemble simulations
@@ -54,11 +58,15 @@ class MinimizedPotentialBias(BiasEngine):
         Constraints to use.
     """
 
-    def __init__(self, smiles_list, implicit_solvent=app.OBC2, constraints=app.HBonds):
+    def __init__(self, smiles_list, implicit_solvent=None, constraints=app.HBonds):
         self._smiles_list = smiles_list
         self._mol_dict = self._create_molecule_list(smiles_list)
         self._gk = dict()
-        self.implicit_solvent = implicit_solvent
+        # NOTE implicit solvent not supported by this SystemGenerator
+        if implicit_solvent is not None:
+            _logger.warning(f'IMPLICIT SOLVENT NOT SUPPORTED')
+            _logger.warning(f'setting implicitSolvent to None')
+        self.implicit_solvent = None
         self.constraints = constraints
 
     def _create_molecule_list(self, smiles_list):
