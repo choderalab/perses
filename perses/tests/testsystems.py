@@ -167,7 +167,8 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
     """
     def __init__(self, constraints=app.HBonds, **kwargs):
         super(AlanineDipeptideTestSystem, self).__init__(**kwargs)
-        environments = ['explicit', 'implicit', 'vacuum']
+        #environments = ['explicit', 'implicit', 'vacuum']
+        environments = ['explicit', 'vacuum']
         temperature = 300*unit.kelvin
         pressure = 1.0*unit.atmospheres
 
@@ -205,8 +206,8 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         pdbfile = PDBFile(pdb_filename)
         topologies['vacuum'] = pdbfile.getTopology()
         positions['vacuum'] = pdbfile.getPositions(asNumpy=True)
-        topologies['implicit'] = pdbfile.getTopology()
-        positions['implicit'] = pdbfile.getPositions(asNumpy=True)
+        #topologies['implicit'] = pdbfile.getTopology()
+        #positions['implicit'] = pdbfile.getPositions(asNumpy=True)
 
         # Create molecule in explicit solvent.
         modeller = app.Modeller(topologies['vacuum'], positions['vacuum'])
@@ -235,7 +236,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
 
         thermodynamic_states = dict()
         thermodynamic_states['explicit'] = states.ThermodynamicState(system=systems['explicit'], temperature=temperature, pressure=pressure)
-        thermodynamic_states['implicit'] = states.ThermodynamicState(system=systems['implicit'], temperature=temperature)
+        #thermodynamic_states['implicit'] = states.ThermodynamicState(system=systems['implicit'], temperature=temperature)
         thermodynamic_states['vacuum']   = states.ThermodynamicState(system=systems['vacuum'], temperature=temperature)
 
         # Create SAMS samplers
