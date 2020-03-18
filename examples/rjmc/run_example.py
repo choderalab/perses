@@ -148,6 +148,8 @@ def run():
 #
 
 if __name__=="__main__":
-    logger = logging.getLogger('antechamber')
-    logger.setLevel(logging.INFO)
+    import logging
+    _logger = logging.getLogger()
+    _logger.setLevel(logging.INFO)
+    _logger = logging.getLogger("example")
     run()
