@@ -37,7 +37,7 @@ from openforcefield.topology import Molecule
 from simtk.openmm import app
 
 #global variables
-forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p_standard.xml']
+forcefield_files = ['amber14/protein.ff14SB.xml', 'amber/tip3p_standard.xml']
 small_molecule_forcefield = 'gaff-2.11'
 # NOTE implicit solvent not supported by SystemGenerator yet
 system_generator = SystemGenerator(forcefields = forcefield_files,

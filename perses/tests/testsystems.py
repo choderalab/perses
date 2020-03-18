@@ -1073,8 +1073,8 @@ class AblAffinityTestSystem(PersesTestSystem):
 # NOTE implicit solvent not supported by this SystemGenerator
 #        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
 #                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2},
-                                                        molecules = [Molecule.from_openeye(molecule) for molecule in molecules],
-                                                        small_molecule_forcefield = small_molecule_forcefield)
+#                                                        molecules = [Molecule.from_openeye(molecule) for molecule in molecules],
+#                                                        small_molecule_forcefield = small_molecule_forcefield)
         system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
                                                         forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None},
                                                         molecules = [Molecule.from_openeye(molecule) for molecule in molecules],
