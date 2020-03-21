@@ -408,8 +408,6 @@ class AtomMapper(object):
         _logger.debug(f"\tthe max number of atom matches is: {max_num_atoms}; there are {len([m for m in top_matches if m.NumAtoms() == max_num_atoms])} matches herein")
         new_top_matches = [m for m in top_matches if m.NumAtoms() == max_num_atoms]
         new_to_old_atom_maps = [AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion) for match in new_top_matches]
-        _logger.debug(f"\tthe hydrogen ")
-        #_logger.debug(f"\tnew to old atom maps with most atom hits: {new_to_old_atom_maps}")
 
         #now all else is equal; we will choose the map with the highest overlap of atom indices
         index_overlap_numbers = []
@@ -2669,7 +2667,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         _logger.info(f"small molecule has {len_old_mol} atoms.")
 
         # Determine atom indices of the small molecule in the current topology
-        old_alchemical_atoms = range(old_mol_start_index, len_old_mol)
+        old_alchemical_atoms = range(old_mol_start_index, old_mol_start_index+len_old_mol)
         _logger.info(f"old alchemical atom indices: {old_alchemical_atoms}")
 
         # Select the next molecule SMILES given proposal probabilities
