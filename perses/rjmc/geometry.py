@@ -489,9 +489,13 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         #Print the energy of the system before unique_new/old atoms are placed...
         state = atoms_with_positions_context.getState(getEnergy=True)
         atoms_with_positions_reduced_potential = beta*state.getPotentialEnergy()
-        atoms_with_positions_reduced_potential_components = [(force, energy) for force, energy in compute_potential_components(atoms_with_positions_context)]
+        atoms_with_positions_reduced_potential_components = [(force, energy) for force, energy in compute_potential_components(atoms_with_positions_context, platform=openmm.Platform.getPlatformByName("Reference"))]
+        _logger.debug(f'atoms_with_positions_reduced_potential_components:')
+        for f, e in atoms_with_positions_reduced_potential_components:
+            _logger.debug(f'\t{f} : {e}')
         atoms_with_positions_methods_differences = abs(atoms_with_positions_reduced_potential - sum([i[1] for i in atoms_with_positions_reduced_potential_components]))
-        assert atoms_with_positions_methods_differences < ENERGY_THRESHOLD, f"the difference between the atoms_with_positions_reduced_potential and the sum of atoms_with_positions_reduced_potential_components is {abs(atoms_with_positions_reduced_potential - sum([i[1] for i in atoms_with_positions_reduced_potential_components]))}"
+        _logger.debug(f'Diffence in energy on adding unique atoms: {atoms_with_positions_methods_differences}')
+        assert atoms_with_positions_methods_differences < ENERGY_THRESHOLD, f"the difference between the atoms_with_positions_reduced_potential and the sum of atoms_with_positions_reduced_potential_components is {atoms_with_positions_methods_differences}"
 
         # Place each atom in predetermined order
         _logger.info("There are {} new atoms".format(len(atom_proposal_order)))
