@@ -648,15 +648,15 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         state = final_context.getState(getEnergy=True)
         final_context_reduced_potential = beta*state.getPotentialEnergy()
-        final_context_components = [(force, energy*beta) for force, energy in compute_potential_components(final_context)]
-        atoms_with_positions_reduced_potential_components = [(force, energy*beta) for force, energy in compute_potential_components(atoms_with_positions_context)]
+        final_context_components = [(force, energy*beta) for force, energy in compute_potential_components(final_context, platform=openmm.Platform.getPlatformByName("Reference"))]
+        atoms_with_positions_reduced_potential_components = [(force, energy*beta) for force, energy in compute_potential_components(atoms_with_positions_context, platform=openmm.Platform.getPlatformByName("Reference"))]
         _logger.debug(f"reduced potential components before atom placement:")
         for item in atoms_with_positions_reduced_potential_components:
             _logger.debug(f"\t\t{item[0]}: {item[1]}")
         _logger.info(f"total reduced potential before atom placement: {atoms_with_positions_reduced_potential}")
 
         _logger.debug(f"potential components added from growth system:")
-        added_energy_components = [(force, energy*beta) for force, energy in compute_potential_components(context)]
+        added_energy_components = [(force, energy*beta) for force, energy in compute_potential_components(context, platform=openmm.Platform.getPlatformByName("Reference"))]
         for item in added_energy_components:
             _logger.debug(f"\t\t{item[0]}: {item[1]}")
 
@@ -725,7 +725,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         mod_state = mod_context.getState(getEnergy=True)
         modified_reduced_potential_energy = beta * mod_state.getPotentialEnergy()
 
-        added_energy_components = [(force, energy) for force, energy in compute_potential_components(mod_context)]
+        added_energy_components = [(force, energy) for force, energy in compute_potential_components(mod_context, platform=openmm.Platform.getPlatformByName("Reference"))]
         print(f"added energy components: {added_energy_components}")
 
         return modified_reduced_potential_energy
