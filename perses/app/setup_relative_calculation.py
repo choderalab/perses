@@ -59,7 +59,7 @@ def getSetupOptions(filename):
         phases to simulate, can be 'complex', 'solvent' or 'vacuum'
     """
     yaml_file = open(filename, 'r')
-    setup_options = yaml.load(yaml_file)
+    setup_options = yaml.load(yaml_file, Loader=yaml.FullLoader)
     yaml_file.close()
 
     _logger.info("\tDetecting phases...")
@@ -238,17 +238,19 @@ def getSetupOptions(filename):
     else:
         _logger.info(f"\t'neglect_angles' detected: {setup_options['neglect_angles']}.")
 
-    setup_options['atom_expr'] = None
     if 'atom_expression' in setup_options:
         # need to convert the list to Integer
         from perses.utils.openeye import generate_expression
         setup_options['atom_expr'] = generate_expression(setup_options['atom_expression'])
+    else:
+        setup_options['atom_expr'] = None
 
-    setup_options['bond_expr'] = None
     if 'bond_expression' in setup_options:
         # need to convert the list to Integer
         from perses.utils.openeye import generate_expression
         setup_options['bond_expr'] = generate_expression(setup_options['bond_expression'])
+    else:
+        setup_options['bond_expr'] = None
 
     if 'map_strength' not in setup_options:
         setup_options['map_strength'] = None 
