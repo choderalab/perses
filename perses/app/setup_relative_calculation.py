@@ -520,7 +520,7 @@ def run_setup(setup_options):
             #TODO expose more of these options in input
             if setup_options['fe_type'] == 'sams':
                 hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=timestep,
-                                                                                    collision_rate=5.0 / unit.picosecond,
+                                                                                    collision_rate=1.0 / unit.picosecond,
                                                                                     n_steps=n_steps_per_move_application,
                                                                                     reassign_velocities=False,
                                                                                     n_restart_attempts=20),
@@ -530,7 +530,7 @@ def run_setup(setup_options):
                 hss[phase].setup(n_states=n_states, n_replicas=n_replicas, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
             elif setup_options['fe_type'] == 'repex':
                 hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=timestep,
-                                                                                     collision_rate=5.0 / unit.picosecond,
+                                                                                     collision_rate=1.0 / unit.picosecond,
                                                                                      n_steps=n_steps_per_move_application,
                                                                                      reassign_velocities=False,
                                                                                      n_restart_attempts=20),
