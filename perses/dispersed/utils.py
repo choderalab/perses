@@ -56,7 +56,7 @@ def check_platform(platform):
         raise Exception(e)
 
 
-def configure_platform(platform_name='Reference', fallback_platform_name='CPU'):
+def configure_platform(platform_name='Reference', fallback_platform_name='CPU', precision='mixed'):
     """
     Retrieve the requested platform with platform-appropriate precision settings.
     platform_name : str, optional, default='Reference'
@@ -79,10 +79,10 @@ def configure_platform(platform_name='Reference', fallback_platform_name='CPU'):
             platform = openmm.Platform.getPlatformByName("CPU")
         elif platform_name.upper() == 'OpenCL'.upper():
             platform = openmm.Platform.getPlatformByName('OpenCL')
-            platform.setPropertyDefaultValue('OpenCLPrecision', 'mixed')
+            platform.setPropertyDefaultValue('OpenCLPrecision', precision)
         elif platform_name.upper() == 'CUDA'.upper():
             platform = openmm.Platform.getPlatformByName('CUDA')
-            platform.setPropertyDefaultValue('CudaPrecision', 'mixed')
+            platform.setPropertyDefaultValue('CudaPrecision', precision)
             platform.setPropertyDefaultValue('DeterministicForces', 'true')
         else:
             raise (ValueError("Invalid platform name"))
