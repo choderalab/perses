@@ -74,7 +74,7 @@ PROTEIN_BOND_EXPRESSION = DEFAULT_BOND_EXPRESSION
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("proposal_generator")
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.INFO)
 
 ################################################################################
 # UTILITIES
