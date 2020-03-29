@@ -341,33 +341,26 @@ def createOEMolFromSDF(sdf_filename, index=0, add_hydrogens=True):
     mol_list = [oechem.OEMol(mol) for mol in ifs.GetOEMols()]
     # we'll always take the first for now
 
-    # check molecule unique names
-    renamed_mol_list = []
-    for mol_index, molecule in enumerate(mol_list):
-        # create unique atom names
-        if len([atom.GetName() for atom in molecule.GetAtoms()]) > len(set([atom.GetName() for atom in molecule.GetAtoms()])):
-            # the atom names are not unique
-            molecule_fixed = generate_unique_atom_names(molecule)
-        else:
-            molecule_fixed = molecule
+    # pick out molecule of interest
+    molecule = mol_list[index]
 
-        renamed_mol_list.append(molecule_fixed)
+    # Generate unique atom names
+    if len([atom.GetName() for atom in molecule.GetAtoms()]) > len(set([atom.GetName() for atom in molecule.GetAtoms()])):
+        molecule = generate_unique_atom_names(molecule)
 
     # Assign aromaticity and hydrogens.
-    for molecule in renamed_mol_list:
-        oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
-        oechem.OEAssignHybridization(molecule)
-        if add_hydrogens:
-            oechem.OEAddExplicitHydrogens(molecule)
+    oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
+    oechem.OEAssignHybridization(molecule)
+    if add_hydrogens:
         oechem.OEAddExplicitHydrogens(molecule)
-        oechem.OEPerceiveChiral(molecule)
+    oechem.OEAddExplicitHydrogens(molecule)
+    oechem.OEPerceiveChiral(molecule)
 
-        # perceive chirality
-        assert oechem.OE3DToInternalStereo(molecule), f"the stereochemistry perception from 3D coordinates failed"
-        assert not has_undefined_stereocenters(molecule), f"there is an atom with an undefined stereochemistry"
+    # perceive chirality
+    assert oechem.OE3DToInternalStereo(molecule), f"the stereochemistry perception from 3D coordinates failed"
+    assert not has_undefined_stereocenters(molecule), f"there is an atom with an undefined stereochemistry"
 
-    mol_to_return = renamed_mol_list[index]
-    return mol_to_return
+    return molecule
 
 
 def calculate_mol_similarity(molA, molB):

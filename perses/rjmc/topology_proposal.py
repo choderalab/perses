@@ -74,7 +74,7 @@ PROTEIN_BOND_EXPRESSION = DEFAULT_BOND_EXPRESSION
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("proposal_generator")
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.INFO)
 
 ################################################################################
 # UTILITIES
@@ -302,17 +302,6 @@ class AtomMapper(object):
     allow_ring_breaking
 
     """
-    # def __init__(self, list_of_oemols, atom_expr=DEFAULT_ATOM_EXPRESSION, bond_expr=DEFAULT_BOND_EXPRESSION,
-    #              map_strength='default', allow_ring_breaking=False, **kwargs):
-    #     self.list_of_oemols = list_of_oemols
-    #     assert len(self.list_of_oemols) >= 2 , 'At least two molecules are required'
-    #     self.map_strength = map_strength
-    #     self.atom_expr = atom_expr
-    #     self.bond_expr = bond_expr
-    #     self.allow_ring_breaking = allow_ring_breaking
-    #
-    #     #self.atom_map = AtomMapper._get_mol_atom_map(self.list_of_oemols[0],self.list_of_oemols[1])
-    #     super(AtomMapper, self).__init__(**kwargs)
 
     @staticmethod
     def _get_mol_atom_map(current_oemol,
@@ -356,23 +345,28 @@ class AtomMapper(object):
             list of the matches between the molecules, or None if no matches possible
 
         """
-        map_strength_dict = {'default': (DEFAULT_ATOM_EXPRESSION, DEFAULT_BOND_EXPRESSION),
-                             'weak': (WEAK_ATOM_EXPRESSION, WEAK_BOND_EXPRESSION),
-                             'strong': (STRONG_ATOM_EXPRESSION, STRONG_BOND_EXPRESSION)}
-        if (atom_expr, bond_expr) == (None, None):
-            #then choose the appropriate mapping criteria
-            _logger.debug(f"\t\t\tfound map strength: {map_strength}")
-            atom_expr, bond_expr = map_strength_dict[map_strength]
+        map_strength_dict = {'default': [DEFAULT_ATOM_EXPRESSION, DEFAULT_BOND_EXPRESSION],
+                             'weak': [WEAK_ATOM_EXPRESSION, WEAK_BOND_EXPRESSION],
+                             'strong': [STRONG_ATOM_EXPRESSION, STRONG_BOND_EXPRESSION]}
+        if map_strength is None:
+            map_strength = 'default'
+    
+        if atom_expr is None:
+            _logger.debug(f'No atom expression defined, using map strength : {map_strength}')
+            atom_expr = map_strength_dict[map_strength][0]
+        if bond_expr is None:
+            _logger.debug(f'No bond expression defined, using map strength : {map_strength}')
+            bond_expr = map_strength_dict[map_strength][1]
 
         # this ensures that the hybridization of the oemols is done for correct atom mapping
         oechem.OEAssignHybridization(current_oemol)
         oechem.OEAssignHybridization(proposed_oemol)
         oegraphmol_current = oechem.OEGraphMol(current_oemol)  # pattern molecule
         oegraphmol_proposed = oechem.OEGraphMol(proposed_oemol)  # target molecule
-        if not allow_ring_breaking:
-            # assigning ring membership to prevent ring breaking
-            oegraphmol_current = AtomMapper._assign_ring_ids(oegraphmol_current)
-            oegraphmol_proposed = AtomMapper._assign_ring_ids(oegraphmol_proposed)
+
+        # assigning ring membership to prevent ring breaking
+        oegraphmol_current = AtomMapper._assign_ring_ids(oegraphmol_current)
+        oegraphmol_proposed = AtomMapper._assign_ring_ids(oegraphmol_proposed)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
         mcs.Init(oegraphmol_current, atom_expr, bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
@@ -408,8 +402,6 @@ class AtomMapper(object):
         _logger.debug(f"\tthe max number of atom matches is: {max_num_atoms}; there are {len([m for m in top_matches if m.NumAtoms() == max_num_atoms])} matches herein")
         new_top_matches = [m for m in top_matches if m.NumAtoms() == max_num_atoms]
         new_to_old_atom_maps = [AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion) for match in new_top_matches]
-        _logger.debug(f"\tthe hydrogen ")
-        #_logger.debug(f"\tnew to old atom maps with most atom hits: {new_to_old_atom_maps}")
 
         #now all else is equal; we will choose the map with the highest overlap of atom indices
         index_overlap_numbers = []
@@ -2606,9 +2598,11 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         self._storage = storage
         if self._storage is not None:
             self._storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
-
-        _logger.info(f"creating probability matrix...")
-        self._probability_matrix = self._calculate_probability_matrix()
+   
+        # no point in doing this if there are only two molecules
+        if self._n_molecules != 2:
+            _logger.info(f"creating probability matrix...")
+            self._probability_matrix = self._calculate_probability_matrix()
 
 
     def propose(self,
@@ -2669,7 +2663,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         _logger.info(f"small molecule has {len_old_mol} atoms.")
 
         # Determine atom indices of the small molecule in the current topology
-        old_alchemical_atoms = range(old_mol_start_index, len_old_mol)
+        old_alchemical_atoms = range(old_mol_start_index, old_mol_start_index+len_old_mol)
         _logger.info(f"old alchemical atom indices: {old_alchemical_atoms}")
 
         # Select the next molecule SMILES given proposal probabilities
@@ -2982,8 +2976,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """
         # Compute contribution from the chemical proposal to the log probability of acceptance (Eq. 36 for hybrid; Eq. 53 for two-stage)
         # log [P(Mold | Mnew) / P(Mnew | Mold)]
-
-        # Retrieve the current molecule index
 
         # Propose a new molecule
         molecule_probabilities = self._probability_matrix[current_mol_id, :]

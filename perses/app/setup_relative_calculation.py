@@ -59,7 +59,7 @@ def getSetupOptions(filename):
         phases to simulate, can be 'complex', 'solvent' or 'vacuum'
     """
     yaml_file = open(filename, 'r')
-    setup_options = yaml.load(yaml_file)
+    setup_options = yaml.load(yaml_file, Loader=yaml.FullLoader)
     yaml_file.close()
 
     _logger.info("\tDetecting phases...")
@@ -238,17 +238,19 @@ def getSetupOptions(filename):
     else:
         _logger.info(f"\t'neglect_angles' detected: {setup_options['neglect_angles']}.")
 
-    setup_options['atom_expr'] = None
     if 'atom_expression' in setup_options:
         # need to convert the list to Integer
         from perses.utils.openeye import generate_expression
         setup_options['atom_expr'] = generate_expression(setup_options['atom_expression'])
+    else:
+        setup_options['atom_expr'] = None
 
-    setup_options['bond_expr'] = None
     if 'bond_expression' in setup_options:
         # need to convert the list to Integer
         from perses.utils.openeye import generate_expression
         setup_options['bond_expr'] = generate_expression(setup_options['bond_expression'])
+    else:
+        setup_options['bond_expr'] = None
 
     if 'map_strength' not in setup_options:
         setup_options['map_strength'] = None 
@@ -491,7 +493,7 @@ def run_setup(setup_options):
             _forward_added_valence_energy = top_prop['%s_added_valence_energy' % phase]
             _reverse_subtracted_valence_energy = top_prop['%s_subtracted_valence_energy' % phase]
 
-            zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD)
+            zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, platform=openmm.Platform.getPlatformByName("Reference"))
             _logger.info(f"\t\terror in zero state: {zero_state_error}")
             _logger.info(f"\t\terror in one state: {one_state_error}")
 
@@ -517,26 +519,22 @@ def run_setup(setup_options):
                 endstates = True
             #TODO expose more of these options in input
             if setup_options['fe_type'] == 'sams':
-                hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
-                                                                                             collision_rate=5.0 / unit.picosecond,
-                                                                                             n_steps=n_steps_per_move_application,
-                                                                                             reassign_velocities=False,
-                                                                                             n_restart_attempts=20,
-                                                                                             splitting="V R O R V",
-                                                                                             constraint_tolerance=1e-06),
+                hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=timestep,
+                                                                                    collision_rate=1.0 / unit.picosecond,
+                                                                                    n_steps=n_steps_per_move_application,
+                                                                                    reassign_velocities=False,
+                                                                                    n_restart_attempts=20),
                                                hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
                                                gamma0=setup_options['gamma0'])
                 hss[phase].setup(n_states=n_states, n_replicas=n_replicas, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
             elif setup_options['fe_type'] == 'repex':
-                hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
-                                                                                             collision_rate=5.0 / unit.picosecond,
-                                                                                             n_steps=n_steps_per_move_application,
-                                                                                             reassign_velocities=False,
-                                                                                             n_restart_attempts=20,
-                                                                                             splitting="V R O R V",
-                                                                                             constraint_tolerance=1e-06),
-                                                                                             hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
+                hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=timestep,
+                                                                                     collision_rate=1.0 / unit.picosecond,
+                                                                                     n_steps=n_steps_per_move_application,
+                                                                                     reassign_velocities=False,
+                                                                                     n_restart_attempts=20),
+                                                                                     hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
                 hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}

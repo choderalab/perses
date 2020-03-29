@@ -185,6 +185,7 @@ class Simulation(object):
         from pymbar import timeseries
         from pymbar import MBAR
         from perses.analysis import utils
+        from simtk import unit
         import os
         from openmmtools.multistate import MultiStateReporter, MultiStateSamplerAnalyzer
 
@@ -199,8 +200,10 @@ class Simulation(object):
                 for step in range(stepsize, n_iterations, stepsize):
                     vacuum_analyzer = MultiStateSamplerAnalyzer(vacuum_reporter,max_n_iterations=step)
                     f_ij, df_ij = vacuum_analyzer.get_free_energy()
-                    self._vacdg_history.append(_kt_to_kcal(f_ij[0, -1]))
-                    self._vacddg_history.append(_kt_to_kcal(df_ij[0,-1]))
+                    f = f_ij[0,-1] * vacuum_analyzer.kT
+                    self._vacdg_history.append(f.in_units_of(unit.kilocalories_per_mole))
+                    df = df_ij[0, -1] * vacuum_analyzer.kT
+                    self._vacddg_history.append(df.in_units_of(unit.kilocalories_per_mole))
             if 'solvent' in out:
                 solvent_reporter = MultiStateReporter(f'{self.directory}/{out}')
                 ncfile = utils.open_netcdf(f'{self.directory}/{out}')
@@ -208,8 +211,10 @@ class Simulation(object):
                 for step in range(stepsize, n_iterations, stepsize):
                     solvent_analyzer = MultiStateSamplerAnalyzer(solvent_reporter,max_n_iterations=step)
                     f_ij, df_ij = solvent_analyzer.get_free_energy()
-                    self._soldg_history.append(_kt_to_kcal(f_ij[0, -1]))
-                    self._solddg_history.append(_kt_to_kcal(df_ij[0,-1]))
+                    f = f_ij[0,-1] * solvent_analyzer.kT
+                    self._soldg_history.append(f.in_units_of(unit.kilocalories_per_mole))
+                    df = df_ij[0, -1] * solvent_analyzer.kT
+                    self._solddg_history.append(df.in_units_of(unit.kilocalories_per_mole))
             if 'complex' in out:
                 complex_reporter = MultiStateReporter(f'{self.directory}/{out}')
                 ncfile = utils.open_netcdf(f'{self.directory}/{out}')
@@ -217,8 +222,10 @@ class Simulation(object):
                 for step in range(stepsize, n_iterations, stepsize):
                     complex_analyzer = MultiStateSamplerAnalyzer(complex_reporter,max_n_iterations=step)
                     f_ij, df_ij = complex_analyzer.get_free_energy()
-                    self._comdg_history.append(_kt_to_kcal(f_ij[0, -1]))
-                    self._comddg_history.append(_kt_to_kcal(df_ij[0,-1]))
+                    f = f_ij[0,-1] * complex_analyzer.kT
+                    self._comdg_history.append(f.in_units_of(unit.kilocalories_per_mole))
+                    df = df_ij[0, -1] * complex_analyzer.kT
+                    self._comddg_history.append(df.in_units_of(unit.kilocalories_per_mole))
         return
 
     def sample_history(self, method='binding'):

@@ -114,6 +114,7 @@ class RelativeFEPSetup(object):
 
         try:
             self._nonbonded_method = getattr(app,nonbonded_method)
+            _logger.info(f'Setting non bonded method to {nonbonded_method}')
         except AttributeError:
             _logger.warning(f'Nonbonded method {nonbonded_method} not recognised')
             if 'complex' in phases or 'solvent' in phases:
@@ -268,7 +269,7 @@ class RelativeFEPSetup(object):
         _logger.info("successfully created SystemGenerator to create ligand systems")
 
         _logger.info(f"executing SmallMoleculeSetProposalEngine...")
-        self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_oemol_old, self._ligand_oemol_new], self._system_generator, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr, residue_name='MOL')
+        self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_oemol_old, self._ligand_oemol_new], self._system_generator, residue_name='MOL')
 
         _logger.info(f"instantiating FFAllAngleGeometryEngine...")
         # NOTE: we are conducting the geometry proposal without any neglected angles
@@ -289,7 +290,7 @@ class RelativeFEPSetup(object):
             _logger.info(f"creating TopologyProposal...")
             self._complex_topology_proposal = self._proposal_engine.propose(self._complex_system_old_solvated,
                                           self._complex_topology_old_solvated,
-                                          current_mol_id=0, proposed_mol_id=1)
+                                          current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr)
 
             self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
 
@@ -298,8 +299,8 @@ class RelativeFEPSetup(object):
             _logger.info(f"conducting geometry proposal...")
             self._complex_positions_new_solvated, self._complex_logp_proposal = self._geometry_engine.propose(self._complex_topology_proposal,
                                                                                 self._complex_positions_old_solvated,
-                                                                                beta)
-            self._complex_logp_reverse = self._geometry_engine.logp_reverse(self._complex_topology_proposal, self._complex_positions_new_solvated, self._complex_positions_old_solvated, beta)
+                                                                                beta, validate_energy_bookkeeping=False)
+            self._complex_logp_reverse = self._geometry_engine.logp_reverse(self._complex_topology_proposal, self._complex_positions_new_solvated, self._complex_positions_old_solvated, beta, validate_energy_bookkeeping=False)
             if not self._complex_topology_proposal.unique_new_atoms:
                 assert self._geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
                 assert self._geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
@@ -323,7 +324,6 @@ class RelativeFEPSetup(object):
             _logger.info(f"Detected solvent...")
             if self._proposal_phase is None:
                 _logger.info(f"no complex detected in phases...generating unique topology/geometry proposals...")
-                self._nonbonded_method = app.PME
                 _logger.info(f"solvating ligand...")
                 self._ligand_topology_old_solvated, self._ligand_positions_old_solvated, self._ligand_system_old_solvated = self._solvate_system(
                 self._ligand_topology_old, self._ligand_positions_old,phase='solvent')
@@ -332,7 +332,7 @@ class RelativeFEPSetup(object):
                 _logger.info(f"creating TopologyProposal")
                 self._solvent_topology_proposal = self._proposal_engine.propose(self._ligand_system_old_solvated,
                                                                                 self._ligand_topology_old_solvated,
-                                                                                current_mol_id=0, proposed_mol_id=1)
+                                          current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr)
 
                 self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'solvent'
@@ -343,8 +343,8 @@ class RelativeFEPSetup(object):
 
             _logger.info(f"conducting geometry proposal...")
             self._ligand_positions_new_solvated, self._solvent_logp_proposal = self._geometry_engine.propose(self._solvent_topology_proposal,
-                                                                                    self._ligand_positions_old_solvated, beta)
-            self._solvent_logp_reverse = self._geometry_engine.logp_reverse(self._solvent_topology_proposal, self._ligand_positions_new_solvated, self._ligand_positions_old_solvated, beta)
+                                                                                    self._ligand_positions_old_solvated, beta, validate_energy_bookkeeping=False)
+            self._solvent_logp_reverse = self._geometry_engine.logp_reverse(self._solvent_topology_proposal, self._ligand_positions_new_solvated, self._ligand_positions_old_solvated, beta, validate_energy_bookkeeping=False)
             if not self._solvent_topology_proposal.unique_new_atoms:
                 assert self._geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
                 assert self._geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
@@ -382,7 +382,7 @@ class RelativeFEPSetup(object):
                                                                                                          self._ligand_positions_old,phase='vacuum')
                 self._vacuum_topology_proposal = self._proposal_engine.propose(self._vacuum_system_old,
                                                                                self._vacuum_topology_old,
-                                                                               current_mol_id=0, proposed_mol_id=1)
+                                          current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr)
 
                 self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'vacuum'
@@ -398,8 +398,8 @@ class RelativeFEPSetup(object):
             _logger.info(f"conducting geometry proposal...")
             self._vacuum_positions_new, self._vacuum_logp_proposal = self._geometry_engine.propose(self._vacuum_topology_proposal,
                                                                           self._vacuum_positions_old,
-                                                                          beta)
-            self._vacuum_logp_reverse = self._geometry_engine.logp_reverse(self._vacuum_topology_proposal, self._vacuum_positions_new, self._vacuum_positions_old, beta)
+                                                                          beta, validate_energy_bookkeeping=False)
+            self._vacuum_logp_reverse = self._geometry_engine.logp_reverse(self._vacuum_topology_proposal, self._vacuum_positions_new, self._vacuum_positions_old, beta, validate_energy_bookkeeping=False)
             if not self._vacuum_topology_proposal.unique_new_atoms:
                 assert self._geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
                 assert self._geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
@@ -546,6 +546,19 @@ class RelativeFEPSetup(object):
                                                     new_to_old_atom_map=new_to_old_atom_map, old_chemical_state_key='A',
                                                     new_chemical_state_key='B')
 
+        _logger.info(f'Adding networkx function to solvent phase')
+        from perses.rjmc.topology_proposal import augment_openmm_topology
+        # old molecule
+        augment_openmm_topology(ligand_topology_proposal.old_topology,
+                                self._ligand_oemol_old,
+                                [res for res in ligand_topology_proposal.old_topology.residues() if res.name == 'MOL'][0],
+                                {i: i for i in range(old_mol_len)})
+            # new molecule
+        augment_openmm_topology(ligand_topology_proposal.new_topology,
+                                self._ligand_oemol_new,
+                                [res for res in ligand_topology_proposal.new_topology.residues() if res.name == 'MOL'][0],
+                                {i: i for i in range(new_mol_len)})
+
         return ligand_topology_proposal, old_solvated_positions
 
     def _generate_vacuum_topologies(self, topology_proposal, old_positions):
@@ -600,6 +613,19 @@ class RelativeFEPSetup(object):
                                                     old_topology=old_ligand_topology, old_system=old_ligand_system,
                                                     new_to_old_atom_map=new_to_old_atom_map, old_chemical_state_key='A',
                                                     new_chemical_state_key='B')
+
+        _logger.info(f'Adding networkx function to solvent phase')
+        from perses.rjmc.topology_proposal import augment_openmm_topology
+        # old molecule
+        augment_openmm_topology(ligand_topology_proposal.old_topology,
+                                self._ligand_oemol_old,
+                                [res for res in ligand_topology_proposal.old_topology.residues() if res.name == 'MOL'][0],
+                                {i: i for i in range(old_mol_len)})
+            # new molecule
+        augment_openmm_topology(ligand_topology_proposal.new_topology,
+                                self._ligand_oemol_new,
+                                [res for res in ligand_topology_proposal.new_topology.residues() if res.name == 'MOL'][0],
+                                {i: i for i in range(new_mol_len)})
 
         return ligand_topology_proposal, old_ligand_positions
 
