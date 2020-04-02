@@ -44,6 +44,10 @@ DEFAULT_PLATFORM = utils.get_fastest_platform()
 # UTILITIES
 ################################################################################]
 
+import logging
+_logger = logging.getLogger("tests-utils")
+_logger.setLevel(logging.INFO)
+
 @contextlib.contextmanager
 def enter_temp_directory():
     """Create and enter a temporary directory; used as context manager."""
@@ -305,6 +309,10 @@ def compute_potential_components(context, beta = beta, platform = DEFAULT_PLATFO
     """
     # Make a deep copy of the system.
     import copy
+    
+    from perses.dispersed.utils import configure_platform
+    platform = configure_platform(platform.getName(), fallback_platform_name='Reference', precision='double')
+    
     system = context.getSystem()
     system = copy.deepcopy(system)
     # Get positions.
@@ -737,6 +745,8 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
     import copy
     #import openmmtools.cache as cache
     #context_cache = cache.global_context_cache
+    from perses.dispersed.utils import configure_platform
+    platform = configure_platform(platform.getName(), fallback_platform_name='Reference', precision='double')
 
     #create copies of old/new systems and set the dispersion correction
     top_proposal = copy.deepcopy(topology_proposal)
@@ -777,14 +787,16 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
         energy_comps = compute_potential_components(context)
         for name, force in energy_comps:
            print("\t\t\t{}: {}".format(name, force))
-        print(f'added forces:{sum([energy for name, energy in energy_comps])}')
-        print(f'rp: {rp}')
+        _logger.debug(f'added forces:{sum([energy for name, energy in energy_comps])}')
+        _logger.debug(f'rp: {rp}')
         del context, integrator
 
-    #print(f"added_energy: {added_energy}; subtracted_energy: {subtracted_energy}")
     nonalch_zero_rp, alch_zero_rp, alch_one_rp, nonalch_one_rp = rp_list[0], rp_list[1], rp_list[2], rp_list[3]
-    assert abs(nonalch_zero_rp - alch_zero_rp + added_energy) < ENERGY_THRESHOLD, f"The zero state alchemical and nonalchemical energy absolute difference {abs(nonalch_zero_rp - alch_zero_rp + added_energy)} is greater than the threshold of {ENERGY_THRESHOLD}."
-    assert abs(nonalch_one_rp - alch_one_rp + subtracted_energy) < ENERGY_THRESHOLD, f"The one state alchemical and nonalchemical energy absolute difference {abs(nonalch_one_rp - alch_one_rp + subtracted_energy)} is greater than the threshold of {ENERGY_THRESHOLD}."
+
+    ratio = (nonalch_zero_rp - alch_zero_rp + added_energy) / (0.5*(nonalch_zero_rp + alch_zero_rp + added_energy))
+    assert abs(ratio) < ENERGY_THRESHOLD, f"The ratio in energy difference for the ZERO state is {ratio}.\n This is greater than the threshold of {ENERGY_THRESHOLD}.\n real-zero: {nonalch_zero_rp} \n alc-zero: {alch_zero_rp} \nadded-valence: {added_energy}"
+    ratio = (nonalch_one_rp - alch_one_rp + subtracted_energy) / (0.5*(nonalch_one_rp + alch_one_rp + subtracted_energy))
+    assert abs(ratio) < ENERGY_THRESHOLD, f"The ratio in energy difference for the ONE state is {ratio}.\n This is greater than the threshold of {ENERGY_THRESHOLD}.\n real-one: {nonalch_one_rp} \n alc-one: {alch_one_rp} \nsubtracted-valence: {subtracted_energy}"
 
 
     return abs(nonalch_zero_rp - alch_zero_rp + added_energy), abs(nonalch_one_rp - alch_one_rp + subtracted_energy)

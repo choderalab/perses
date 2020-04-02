@@ -455,13 +455,14 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         if self.use_sterics:
             platform_name = 'CPU' # faster when sterics are in use
         else:
-            platform_name = 'Reference' # faster when only valence terms are in use
+            platform_name = 'CUDA' # faster when only valence terms are in use
 
 
         # Create an OpenMM context
         from simtk import openmm
+        from perses.dispersed.utils import configure_platform
         _logger.info("creating platform, integrators, and contexts; setting growth parameter")
-        platform = openmm.Platform.getPlatformByName(platform_name)
+        platform = configure_platform(platform_name, fallback_platform_name='Reference', precision='double')
         integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
         atoms_with_positions_system_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
         final_system_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
@@ -489,7 +490,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         #Print the energy of the system before unique_new/old atoms are placed...
         state = atoms_with_positions_context.getState(getEnergy=True)
         atoms_with_positions_reduced_potential = beta*state.getPotentialEnergy()
-        atoms_with_positions_reduced_potential_components = [(force, energy) for force, energy in compute_potential_components(atoms_with_positions_context, platform=openmm.Platform.getPlatformByName("Reference"))]
+        atoms_with_positions_reduced_potential_components = [(force, energy) for force, energy in compute_potential_components(atoms_with_positions_context)]
         _logger.debug(f'atoms_with_positions_reduced_potential_components:')
         for f, e in atoms_with_positions_reduced_potential_components:
             _logger.debug(f'\t{f} : {e}')
@@ -648,15 +649,15 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         state = final_context.getState(getEnergy=True)
         final_context_reduced_potential = beta*state.getPotentialEnergy()
-        final_context_components = [(force, energy*beta) for force, energy in compute_potential_components(final_context, platform=openmm.Platform.getPlatformByName("Reference"))]
-        atoms_with_positions_reduced_potential_components = [(force, energy*beta) for force, energy in compute_potential_components(atoms_with_positions_context, platform=openmm.Platform.getPlatformByName("Reference"))]
+        final_context_components = [(force, energy*beta) for force, energy in compute_potential_components(final_context)]
+        atoms_with_positions_reduced_potential_components = [(force, energy*beta) for force, energy in compute_potential_components(atoms_with_positions_context)]
         _logger.debug(f"reduced potential components before atom placement:")
         for item in atoms_with_positions_reduced_potential_components:
             _logger.debug(f"\t\t{item[0]}: {item[1]}")
         _logger.info(f"total reduced potential before atom placement: {atoms_with_positions_reduced_potential}")
 
         _logger.debug(f"potential components added from growth system:")
-        added_energy_components = [(force, energy*beta) for force, energy in compute_potential_components(context, platform=openmm.Platform.getPlatformByName("Reference"))]
+        added_energy_components = [(force, energy*beta) for force, energy in compute_potential_components(context)]
         for item in added_energy_components:
             _logger.debug(f"\t\t{item[0]}: {item[1]}")
 
@@ -725,7 +726,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         mod_state = mod_context.getState(getEnergy=True)
         modified_reduced_potential_energy = beta * mod_state.getPotentialEnergy()
 
-        added_energy_components = [(force, energy) for force, energy in compute_potential_components(mod_context, platform=openmm.Platform.getPlatformByName("Reference"))]
+        added_energy_components = [(force, energy) for force, energy in compute_potential_components(mod_context)]
         print(f"added energy components: {added_energy_components}")
 
         return modified_reduced_potential_energy
