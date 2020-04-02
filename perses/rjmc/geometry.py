@@ -720,7 +720,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             #then the first one is the normal growth torsion force object and the second is the added torsion force object used to handle chirality and ring-closing constraints
             growth_system.removeForce(max(custom_torsion_forces))
 
-        mod_context = openmm.Context(growth_system, _integrator, openmm.Platform.getPlatformByName(platform_name))
+        platform = configure_platform(platform_name, fallback_platform_name='Reference', precision='double')
+        mod_context = openmm.Context(growth_system, _integrator, platform)
         growth_system_generator.set_growth_parameter_index(len(atom_proposal_order)+1, mod_context)
         mod_context.setPositions(positions)
         mod_state = mod_context.getState(getEnergy=True)
