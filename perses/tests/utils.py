@@ -793,10 +793,10 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
 
     nonalch_zero_rp, alch_zero_rp, alch_one_rp, nonalch_one_rp = rp_list[0], rp_list[1], rp_list[2], rp_list[3]
 
-    ratio = (nonalch_zero_rp - alch_zero_rp + added_energy) / (0.5*(nonalch_zero_rp + alch_zero_rp + added_energy))
-    assert abs(ratio) < ENERGY_THRESHOLD, f"The ratio in energy difference for the ZERO state is {ratio}.\n This is greater than the threshold of {ENERGY_THRESHOLD}.\n real-zero: {nonalch_zero_rp} \n alc-zero: {alch_zero_rp} \nadded-valence: {added_energy}"
-    ratio = (nonalch_one_rp - alch_one_rp + subtracted_energy) / (0.5*(nonalch_one_rp + alch_one_rp + subtracted_energy))
-    assert abs(ratio) < ENERGY_THRESHOLD, f"The ratio in energy difference for the ONE state is {ratio}.\n This is greater than the threshold of {ENERGY_THRESHOLD}.\n real-one: {nonalch_one_rp} \n alc-one: {alch_one_rp} \nsubtracted-valence: {subtracted_energy}"
+    ratio = abs((nonalch_zero_rp - alch_zero_rp + added_energy) / (nonalch_zero_rp + alch_zero_rp + added_energy))
+    assert ratio < ENERGY_THRESHOLD, f"The ratio in energy difference for the ZERO state is {ratio}.\n This is greater than the threshold of {ENERGY_THRESHOLD}.\n real-zero: {nonalch_zero_rp} \n alc-zero: {alch_zero_rp} \nadded-valence: {added_energy}"
+    ratio = abs((nonalch_one_rp - alch_one_rp + subtracted_energy) / (nonalch_one_rp + alch_one_rp + subtracted_energy))
+    assert ratio < ENERGY_THRESHOLD, f"The ratio in energy difference for the ONE state is {ratio}.\n This is greater than the threshold of {ENERGY_THRESHOLD}.\n real-one: {nonalch_one_rp} \n alc-one: {alch_one_rp} \nsubtracted-valence: {subtracted_energy}"
 
 
     return abs(nonalch_zero_rp - alch_zero_rp + added_energy), abs(nonalch_one_rp - alch_one_rp + subtracted_energy)
