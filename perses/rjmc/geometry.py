@@ -451,12 +451,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         if self._storage:
             self._storage.write_object("{}_proposal_order".format(direction), proposal_order_tool, iteration=self.nproposed)
-
-        if self.use_sterics:
-            platform_name = 'CPU' # faster when sterics are in use
-        else:
-            platform_name = 'CUDA' # faster when only valence terms are in use
-
+        
+        from openmmtool.utils import get_fastest_platform
+        platform_name = get_fastest_platform(double=True).getName() 
 
         # Create an OpenMM context
         from simtk import openmm

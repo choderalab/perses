@@ -38,7 +38,7 @@ temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 ENERGY_THRESHOLD = 1e-1
-DEFAULT_PLATFORM = utils.get_fastest_platform()
+DEFAULT_PLATFORM = utils.get_fastest_platform(double=True)
 
 ################################################################################
 # UTILITIES
