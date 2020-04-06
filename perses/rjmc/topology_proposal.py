@@ -372,6 +372,7 @@ class AtomMapper(object):
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = False
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
+        _logger.info([m.NumAtoms() for m in matches])
 
         if not allow_ring_breaking:
             # Filter the matches to remove any that allow ring breaking
@@ -397,11 +398,22 @@ class AtomMapper(object):
             _logger.warning(f"\trank_degenerate_maps: {e}")
             top_matches = matches
 
-        _logger.debug(f"\tthere are {len(top_matches)} top matches")
         max_num_atoms = max([match.NumAtoms() for match in top_matches])
+        _logger.debug(f"\tthere are {len(top_matches)} top matches with at most {max_num_atoms} before hydrogen exceptions")
         _logger.debug(f"\tthe max number of atom matches is: {max_num_atoms}; there are {len([m for m in top_matches if m.NumAtoms() == max_num_atoms])} matches herein")
-        new_top_matches = [m for m in top_matches if m.NumAtoms() == max_num_atoms]
-        new_to_old_atom_maps = [AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion) for match in new_top_matches]
+        
+        # check the most mapped is the same once hydrogen exceptions are handled
+        all_new_to_old_atom_maps = []
+        count_after_hydrogen_mapping = []
+        for match in top_matches:
+            map_dict = AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion) 
+            count_after_hydrogen_mapping.append(len(map_dict))
+            all_new_to_old_atom_maps.append(map_dict)
+
+        max_num_atoms = max(count_after_hydrogen_mapping)
+        _logger.info(f'Maximum atom matched after hydrogen exceptions: {max_num_atoms}')
+        new_to_old_atom_maps = [map for count, map in zip(count_after_hydrogen_mapping,all_new_to_old_atom_maps) if count == max_num_atoms]
+        
 
         #now all else is equal; we will choose the map with the highest overlap of atom indices
         index_overlap_numbers = []
