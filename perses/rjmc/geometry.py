@@ -452,7 +452,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         if self._storage:
             self._storage.write_object("{}_proposal_order".format(direction), proposal_order_tool, iteration=self.nproposed)
         
-        from openmmtool.utils import get_fastest_platform
         platform_name = 'CUDA'
 
         # Create an OpenMM context
