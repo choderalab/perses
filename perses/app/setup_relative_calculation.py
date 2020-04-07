@@ -469,7 +469,7 @@ def run_setup(setup_options):
         n_states = setup_options['n_states']
         _logger.info(f"\tn_states: {n_states}")
         if 'n_replicas' not in setup_options:
-            n_replicas == n_states
+            n_replicas = n_states
         else:
             n_replicas = setup_options['n_replicas']
         _logger.info(f"\tn_replicas: {n_replicas}")
