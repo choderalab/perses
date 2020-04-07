@@ -468,7 +468,10 @@ def run_setup(setup_options):
         _logger.info(f"\tno nonequilibrium detected.")
         n_states = setup_options['n_states']
         _logger.info(f"\tn_states: {n_states}")
-        n_replicas = setup_options['n_replicas']
+        if 'n_replicas' not in setup_options:
+            n_replicas == n_states
+        else:
+            n_replicas = setup_options['n_replicas']
         _logger.info(f"\tn_replicas: {n_replicas}")
         checkpoint_interval = setup_options['checkpoint_interval']
         _logger.info(f"\tcheckpoint_interval: {checkpoint_interval}")
@@ -501,6 +504,7 @@ def run_setup(setup_options):
 
             # generating lambda protocol
             lambda_protocol = LambdaProtocol(functions=setup_options['protocol-type'])
+            _logger.info(f'Using lambda protocol : {setup_options["protocol-type"]}')
 
 
             if atom_selection:

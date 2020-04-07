@@ -102,6 +102,12 @@ class LambdaProtocol(object):
                                   lambda x: x,
                                   'lambda_torsions':
                                   lambda x: x}
+            elif self.type == 'ele-scaled':
+                self.functions = {'lambda_electrostatics_insert': 
+                                   lambda x: 0.0 if x < 0.5 else ((2*(x-0.5))**0.5),
+                                  'lambda_electrostatics_delete': 
+                                   lambda x: (2*x)**2 if x < 0.5 else 1.0
+                                 }
             else:
                 _logger.warning(f"""LambdaProtocol type : {self.type} not
                                   recognised. Allowed values are 'default',
@@ -173,7 +179,7 @@ class LambdaProtocol(object):
     def get_functions(self):
         return self.functions
 
-    def plot_fucntions(self,n=50):
+    def plot_functions(self,n=50):
         import matplotlib.pyplot as plt
         fig = plt.figure(figsize=(10,5))
 
