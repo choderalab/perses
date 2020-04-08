@@ -539,7 +539,7 @@ def run_setup(setup_options):
                                                                                      collision_rate=1.0 / unit.picosecond,
                                                                                      n_steps=n_steps_per_move_application,
                                                                                      reassign_velocities=False,
-                                                                                     n_restart_attempts=20,constraint_tolerance=1e-06)),
+                                                                                     n_restart_attempts=20,constraint_tolerance=1e-06),
                                                                                      hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
                 hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
 
