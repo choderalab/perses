@@ -498,7 +498,7 @@ def run_setup(setup_options):
             _forward_added_valence_energy = top_prop['%s_added_valence_energy' % phase]
             _reverse_subtracted_valence_energy = top_prop['%s_subtracted_valence_energy' % phase]
 
-            zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD)
+            zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, trajectory_directory=f'{setup_options["trajectory_directory"]}/{phase}')
             _logger.info(f"\t\terror in zero state: {zero_state_error}")
             _logger.info(f"\t\terror in one state: {one_state_error}")
 
@@ -542,6 +542,30 @@ def run_setup(setup_options):
                                                                                      n_restart_attempts=20,constraint_tolerance=1e-06),
                                                                                      hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
                 hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
+
+            # save the systems and the states
+            from simtk.openmm import XmlSerializer
+            from perses.tests.utils import generate_endpoint_thermodynamic_states
+
+            _logger.info('WRITING OUT XML FILES')
+            #old_thermodynamic_state, new_thermodynamic_state, hybrid_thermodynamic_state, _ = generate_endpoint_thermodynamic_states(htf[phase].hybrid_system, _top_prop)
+            # hybrid
+            with open(f'{setup_options["trajectory_directory"]}/hybrid-{phase}-system.xml', 'w') as f:
+                f.write(XmlSerializer.serialize(htf[phase].hybrid_system))
+            #with open(f'{setup_options["trajectory_directory"]}/hybrid-{phase}-state.xml', 'w') as f:
+            #    f.write(XmlSerializer.serialize(hybrid_thermodynamic_state))
+            
+            # old
+            with open(f'{setup_options["trajectory_directory"]}/old-{phase}-system.xml', 'w') as f:
+                f.write(XmlSerializer.serialize(htf[phase]._old_system))
+            #with open(f'old-{phase}-state.xml', 'w') as f:
+            #    f.write(XmlSerializer.serialize(old_thermodynamic_state))
+
+            #new
+            with open(f'{setup_options["trajectory_directory"]}/new-{phase}-system.xml', 'w') as f:
+                f.write(XmlSerializer.serialize(htf[phase]._new_system))
+            #with open(f'new-{phase}-state.xml', 'w') as f:
+            #    f.write(XmlSerializer.serialize(new_thermodynamic_state))
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 
@@ -633,7 +657,7 @@ def run(yaml_filename=None):
                 _forward_added_valence_energy = setup_dict['topology_proposals'][f"{phase}_added_valence_energy"]
                 _reverse_subtracted_valence_energy = setup_dict['topology_proposals'][f"{phase}_subtracted_valence_energy"]
 
-                zero_state_error, one_state_error = validate_endstate_energies(hybrid_factory._topology_proposal, hybrid_factory, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD)
+                zero_state_error, one_state_error = validate_endstate_energies(hybrid_factory._topology_proposal, hybrid_factory, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, trajectory_directory=f'{setup_options["trajectory_directory"]}/{phase}')
                 _logger.info(f"\t\terror in zero state: {zero_state_error}")
                 _logger.info(f"\t\terror in one state: {one_state_error}")
 

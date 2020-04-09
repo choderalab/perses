@@ -719,7 +719,7 @@ def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_it
 
     return conformers, rj_works
 
-def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_energy, beta = 1.0/kT, ENERGY_THRESHOLD = 1e-6, platform = DEFAULT_PLATFORM):
+def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_energy, beta = 1.0/kT, ENERGY_THRESHOLD = 1e-6, platform = DEFAULT_PLATFORM, trajectory_directory=None):
     """
     Function to validate that the difference between the nonalchemical versus alchemical state at lambda = 0,1 is
     equal to the difference in valence energy (forward and reverse).
@@ -746,6 +746,7 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
     #import openmmtools.cache as cache
     #context_cache = cache.global_context_cache
     from perses.dispersed.utils import configure_platform
+    from simtk.openmm import XmlSerializer
     platform = configure_platform(platform.getName(), fallback_platform_name='Reference', precision='double')
 
     #create copies of old/new systems and set the dispersion correction
@@ -770,14 +771,13 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
 
     # compute reduced energies
     #for the nonalchemical systems...
-    attrib_list = [(nonalch_zero, old_positions, top_proposal._old_system.getDefaultPeriodicBoxVectors()),
-                    (alch_zero, htf._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
-                    (alch_one, htf._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
-                    (nonalch_one, new_positions, top_proposal._new_system.getDefaultPeriodicBoxVectors())]
+    attrib_list = [('real-old',nonalch_zero, old_positions, top_proposal._old_system.getDefaultPeriodicBoxVectors()),
+                    ('hybrid-old',alch_zero, htf._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
+                    ('hybrid-new',alch_one, htf._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
+                    ('real-new',nonalch_one, new_positions, top_proposal._new_system.getDefaultPeriodicBoxVectors())]
 
     rp_list = []
-    for (state, pos, box_vectors) in attrib_list:
-        #print("\t\t\t{}".format(state))
+    for (state_name, state, pos, box_vectors) in attrib_list:
         integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
         context = state.create_context(integrator, platform)
         samplerstate = states.SamplerState(positions = pos, box_vectors = box_vectors)
@@ -789,6 +789,11 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
            print("\t\t\t{}: {}".format(name, force))
         _logger.debug(f'added forces:{sum([energy for name, energy in energy_comps])}')
         _logger.debug(f'rp: {rp}')
+        if trajectory_directory is not None:
+            _logger.info(f'Saving {state_name} state xml to {trajectory_directory}/{state_name}-state.xml')
+            state = context.getState(getPositions=True, getParameters=True)
+            with open(f'{trajectory_directory}-{state_name}-state.xml', 'w') as f:
+                f.write(XmlSerializer.serialize(state))
         del context, integrator
 
     nonalch_zero_rp, alch_zero_rp, alch_one_rp, nonalch_one_rp = rp_list[0], rp_list[1], rp_list[2], rp_list[3]
