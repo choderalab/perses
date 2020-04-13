@@ -791,7 +791,7 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
         _logger.debug(f'rp: {rp}')
         if trajectory_directory is not None:
             _logger.info(f'Saving {state_name} state xml to {trajectory_directory}/{state_name}-state.gz')
-            state = context.getState(getPositions=True, getVelocities, getForces=True, getEnergy=True, getParameters=True)
+            state = context.getState(getPositions=True, getVelocities=True, getForces=True, getEnergy=True, getParameters=True)
             data.serialize(state,f'{trajectory_directory}-{state_name}-state.gz')
         del context, integrator
 
