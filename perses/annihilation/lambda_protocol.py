@@ -45,6 +45,23 @@ class LambdaProtocol(object):
         All protocols must begin and end at 0 and 1 respectively. Any energy term not defined
         in `functions` dict will be set to the function in `default_functions`
 
+        Pre-coded options:
+        default : ele and LJ terms of the old system are turned off between 0.0 -> 0.5
+        ele and LJ terms of the new system are turned on between 0.5 -> 1.0
+        core terms treated linearly
+        
+        quarters : 0.25 of the protocol is used in turn to individually change the
+        (a) off old ele, (b) off old sterics, (c) on new sterics (d) on new ele
+        core terms treated linearly
+        
+        namd : follows the protocol outlined here: https://pubs.acs.org/doi/full/10.1021/acs.jcim.9b00362#
+        Jiang, Wei, Christophe Chipot, and Benoît Roux. "Computing Relative Binding Affinity of Ligands 
+        to Receptor: An Effective Hybrid Single-Dual-Topology Free-Energy Perturbation Approach in NAMD." 
+        Journal of chemical information and modeling 59.9 (2019): 3794-3802.
+        
+        ele-scaled : all terms are treated as in default, except for the old and new ele
+        these are scaled with lambda^0.5, so as to be linear in energy, rather than lambda
+
         Parameters
         ----------
         type : str or dict, default='default'
