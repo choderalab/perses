@@ -498,7 +498,11 @@ def run_setup(setup_options):
             _forward_added_valence_energy = top_prop['%s_added_valence_energy' % phase]
             _reverse_subtracted_valence_energy = top_prop['%s_subtracted_valence_energy' % phase]
 
-            zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, trajectory_directory=f'{setup_options["trajectory_directory"]}/{phase}')
+            xml_directory = f'{setup_options["trajectory_directory"]}/xml/'
+            if not os.path.exists(xml_directory):
+                os.makedirs(xml_directory)
+
+            zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, trajectory_directory=f'{xml_directory}{phase}')
             _logger.info(f"\t\terror in zero state: {zero_state_error}")
             _logger.info(f"\t\terror in one state: {one_state_error}")
 
@@ -549,23 +553,13 @@ def run_setup(setup_options):
 
             _logger.info('WRITING OUT XML FILES')
             #old_thermodynamic_state, new_thermodynamic_state, hybrid_thermodynamic_state, _ = generate_endpoint_thermodynamic_states(htf[phase].hybrid_system, _top_prop)
-            # hybrid
-            with open(f'{setup_options["trajectory_directory"]}/hybrid-{phase}-system.xml', 'w') as f:
-                f.write(XmlSerializer.serialize(htf[phase].hybrid_system))
-            #with open(f'{setup_options["trajectory_directory"]}/hybrid-{phase}-state.xml', 'w') as f:
-            #    f.write(XmlSerializer.serialize(hybrid_thermodynamic_state))
-            
-            # old
-            with open(f'{setup_options["trajectory_directory"]}/old-{phase}-system.xml', 'w') as f:
-                f.write(XmlSerializer.serialize(htf[phase]._old_system))
-            #with open(f'old-{phase}-state.xml', 'w') as f:
-            #    f.write(XmlSerializer.serialize(old_thermodynamic_state))
 
-            #new
-            with open(f'{setup_options["trajectory_directory"]}/new-{phase}-system.xml', 'w') as f:
-                f.write(XmlSerializer.serialize(htf[phase]._new_system))
-            #with open(f'new-{phase}-state.xml', 'w') as f:
-            #    f.write(XmlSerializer.serialize(new_thermodynamic_state))
+
+            from perses.utils import data
+            _logger.info(f'Saving the hybrid, old and new system to disk')
+            data.serialize(htf[phase].hybrid_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-hybrid-system.gz')
+            data.serialize(htf[phase]._old_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-old-system.gz')
+            data.serialize(htf[phase]._new_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-new-system.gz')
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 
@@ -657,7 +651,7 @@ def run(yaml_filename=None):
                 _forward_added_valence_energy = setup_dict['topology_proposals'][f"{phase}_added_valence_energy"]
                 _reverse_subtracted_valence_energy = setup_dict['topology_proposals'][f"{phase}_subtracted_valence_energy"]
 
-                zero_state_error, one_state_error = validate_endstate_energies(hybrid_factory._topology_proposal, hybrid_factory, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, trajectory_directory=f'{setup_options["trajectory_directory"]}/{phase}')
+                zero_state_error, one_state_error = validate_endstate_energies(hybrid_factory._topology_proposal, hybrid_factory, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, trajectory_directory=f'{setup_options["trajectory_directory"]}/xml/{phase}')
                 _logger.info(f"\t\terror in zero state: {zero_state_error}")
                 _logger.info(f"\t\terror in one state: {one_state_error}")
 
