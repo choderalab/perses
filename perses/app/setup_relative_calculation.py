@@ -468,7 +468,10 @@ def run_setup(setup_options):
         _logger.info(f"\tno nonequilibrium detected.")
         n_states = setup_options['n_states']
         _logger.info(f"\tn_states: {n_states}")
-        n_replicas = setup_options['n_replicas']
+        if 'n_replicas' not in setup_options:
+            n_replicas = n_states
+        else:
+            n_replicas = setup_options['n_replicas']
         _logger.info(f"\tn_replicas: {n_replicas}")
         checkpoint_interval = setup_options['checkpoint_interval']
         _logger.info(f"\tcheckpoint_interval: {checkpoint_interval}")
@@ -495,12 +498,17 @@ def run_setup(setup_options):
             _forward_added_valence_energy = top_prop['%s_added_valence_energy' % phase]
             _reverse_subtracted_valence_energy = top_prop['%s_subtracted_valence_energy' % phase]
 
-            zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD)
+            xml_directory = f'{setup_options["trajectory_directory"]}/xml/'
+            if not os.path.exists(xml_directory):
+                os.makedirs(xml_directory)
+
+            zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, trajectory_directory=f'{xml_directory}{phase}')
             _logger.info(f"\t\terror in zero state: {zero_state_error}")
             _logger.info(f"\t\terror in one state: {one_state_error}")
 
             # generating lambda protocol
             lambda_protocol = LambdaProtocol(functions=setup_options['protocol-type'])
+            _logger.info(f'Using lambda protocol : {setup_options["protocol-type"]}')
 
 
             if atom_selection:
@@ -521,23 +529,37 @@ def run_setup(setup_options):
                 endstates = True
             #TODO expose more of these options in input
             if setup_options['fe_type'] == 'sams':
-                hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=timestep,
+                hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
                                                                                     collision_rate=1.0 / unit.picosecond,
                                                                                     n_steps=n_steps_per_move_application,
                                                                                     reassign_velocities=False,
-                                                                                    n_restart_attempts=20),
+                                                                                    n_restart_attempts=20,constraint_tolerance=1e-06),
                                                hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
                                                gamma0=setup_options['gamma0'])
                 hss[phase].setup(n_states=n_states, n_replicas=n_replicas, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
             elif setup_options['fe_type'] == 'repex':
-                hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=timestep,
+                hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
                                                                                      collision_rate=1.0 / unit.picosecond,
                                                                                      n_steps=n_steps_per_move_application,
                                                                                      reassign_velocities=False,
-                                                                                     n_restart_attempts=20),
+                                                                                     n_restart_attempts=20,constraint_tolerance=1e-06),
                                                                                      hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
                 hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
+
+            # save the systems and the states
+            from simtk.openmm import XmlSerializer
+            from perses.tests.utils import generate_endpoint_thermodynamic_states
+
+            _logger.info('WRITING OUT XML FILES')
+            #old_thermodynamic_state, new_thermodynamic_state, hybrid_thermodynamic_state, _ = generate_endpoint_thermodynamic_states(htf[phase].hybrid_system, _top_prop)
+
+
+            from perses.utils import data
+            _logger.info(f'Saving the hybrid, old and new system to disk')
+            data.serialize(htf[phase].hybrid_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-hybrid-system.gz')
+            data.serialize(htf[phase]._old_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-old-system.gz')
+            data.serialize(htf[phase]._new_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-new-system.gz')
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 
@@ -629,7 +651,7 @@ def run(yaml_filename=None):
                 _forward_added_valence_energy = setup_dict['topology_proposals'][f"{phase}_added_valence_energy"]
                 _reverse_subtracted_valence_energy = setup_dict['topology_proposals'][f"{phase}_subtracted_valence_energy"]
 
-                zero_state_error, one_state_error = validate_endstate_energies(hybrid_factory._topology_proposal, hybrid_factory, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD)
+                zero_state_error, one_state_error = validate_endstate_energies(hybrid_factory._topology_proposal, hybrid_factory, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, trajectory_directory=f'{setup_options["trajectory_directory"]}/xml/{phase}')
                 _logger.info(f"\t\terror in zero state: {zero_state_error}")
                 _logger.info(f"\t\terror in one state: {one_state_error}")
 

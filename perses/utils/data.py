@@ -96,3 +96,25 @@ def load_smi(smi_file,index=None):
     else:
         smiles = smiless[index]
         return smiles
+
+
+def serialize(item, filename):
+    """
+    Serialize an OpenMM System, State, or Integrator.
+    Parameters
+    ----------
+    item : System, State, or Integrator
+        The thing to be serialized
+    filename : str
+        The filename to serialize to    
+    """
+    from simtk.openmm import XmlSerializer
+    if filename[-2:] == 'gz':
+        import gzip
+        with gzip.open(filename, 'wb') as outfile:
+            serialized_thing = XmlSerializer.serialize(item)
+            outfile.write(serialized_thing.encode())
+    else:
+        with open(filename, 'w') as outfile:
+            serialized_thing = XmlSerializer.serialize(item)
+            outfile.write(serialized_thing)

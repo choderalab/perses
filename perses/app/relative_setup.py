@@ -231,7 +231,6 @@ class RelativeFEPSetup(object):
             else:
                 barostat = None
                 _logger.info(f"omitted MonteCarloBarostat because pressure was specified but system was not periodic")
-        else:
             barostat = None
             _logger.info(f"omitted MonteCarloBarostat because pressure was not specified")
 
@@ -263,9 +262,9 @@ class RelativeFEPSetup(object):
 
         # Create SystemGenerator
         from openmmforcefields.generators import SystemGenerator
-        forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : self._hmass}
+        forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'constraints' : app.HBonds, 'hydrogenMass' : self._hmass}
         self._system_generator = SystemGenerator(forcefields=forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
-                                                 small_molecule_forcefield=small_molecule_forcefield, molecules=molecules, cache=small_molecule_parameters_cache)
+                                                 small_molecule_forcefield=small_molecule_forcefield, molecules=molecules, cache=small_molecule_parameters_cache, periodic_forcefield_kwargs = {'nonbondedMethod': self._nonbonded_method})
         _logger.info("successfully created SystemGenerator to create ligand systems")
 
         _logger.info(f"executing SmallMoleculeSetProposalEngine...")
