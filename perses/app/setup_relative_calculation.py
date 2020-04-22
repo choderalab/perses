@@ -253,7 +253,7 @@ def getSetupOptions(filename):
         setup_options['bond_expr'] = None
 
     if 'map_strength' not in setup_options:
-        setup_options['map_strength'] = None 
+        setup_options['map_strength'] = None
 
     if 'anneal_1,4s' not in setup_options:
         setup_options['anneal_1,4s'] = False
@@ -270,7 +270,7 @@ def getSetupOptions(filename):
 
     return setup_options
 
-def run_setup(setup_options):
+def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     """
     Run the setup pipeline and return the relevant setup objects based on a yaml input file.
     Parameters
@@ -447,18 +447,19 @@ def run_setup(setup_options):
                                                softcore_LJ_v2 = setup_options['softcore_v2'],
                                                interpolate_old_and_new_14s = setup_options['anneal_1,4s'])
 
-            ne_fep[phase] = SequentialMonteCarlo(factory = hybrid_factory,
-                                                 lambda_protocol = setup_options['lambda_protocol'],
-                                                 temperature = temperature,
-                                                 trajectory_directory = trajectory_directory,
-                                                 trajectory_prefix = f"{trajectory_prefix}_{phase}",
-                                                 atom_selection = atom_selection,
-                                                 timestep = timestep,
-                                                 eq_splitting_string = eq_splitting,
-                                                 neq_splitting_string = neq_splitting,
-                                                 collision_rate = setup_options['ncmc_collision_rate_ps'],
-                                                 ncmc_save_interval = ncmc_save_interval,
-                                                 internal_parallelism = _internal_parallelism)
+            if build_samplers:
+                ne_fep[phase] = SequentialMonteCarlo(factory = hybrid_factory,
+                                                     lambda_protocol = setup_options['lambda_protocol'],
+                                                     temperature = temperature,
+                                                     trajectory_directory = trajectory_directory,
+                                                     trajectory_prefix = f"{trajectory_prefix}_{phase}",
+                                                     atom_selection = atom_selection,
+                                                     timestep = timestep,
+                                                     eq_splitting_string = eq_splitting,
+                                                     neq_splitting_string = neq_splitting,
+                                                     collision_rate = setup_options['ncmc_collision_rate_ps'],
+                                                     ncmc_save_interval = ncmc_save_interval,
+                                                     internal_parallelism = _internal_parallelism)
 
         print("Nonequilibrium switching driver class constructed")
 
@@ -528,7 +529,7 @@ def run_setup(setup_options):
             else:
                 endstates = True
             #TODO expose more of these options in input
-            if setup_options['fe_type'] == 'sams':
+            if setup_options['fe_type'] == 'sams' and build_samplers:
                 hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
                                                                                     collision_rate=1.0 / unit.picosecond,
                                                                                     n_steps=n_steps_per_move_application,
@@ -554,12 +555,13 @@ def run_setup(setup_options):
             _logger.info('WRITING OUT XML FILES')
             #old_thermodynamic_state, new_thermodynamic_state, hybrid_thermodynamic_state, _ = generate_endpoint_thermodynamic_states(htf[phase].hybrid_system, _top_prop)
 
-
-            from perses.utils import data
-            _logger.info(f'Saving the hybrid, old and new system to disk')
-            data.serialize(htf[phase].hybrid_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-hybrid-system.gz')
-            data.serialize(htf[phase]._old_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-old-system.gz')
-            data.serialize(htf[phase]._new_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-new-system.gz')
+            if serialize_systems:
+                from perses.utils import data
+                _logger.info('WRITING OUT XML FILES')
+                _logger.info(f'Saving the hybrid, old and new system to disk')
+                data.serialize(htf[phase].hybrid_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-hybrid-system.gz')
+                data.serialize(htf[phase]._old_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-old-system.gz')
+                data.serialize(htf[phase]._new_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-new-system.gz')
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 
