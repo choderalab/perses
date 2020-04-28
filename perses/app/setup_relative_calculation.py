@@ -293,10 +293,12 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         # We'll need the protein PDB file (without missing atoms)
         try:
             protein_pdb_filename = setup_options['protein_pdb']
+            assert protein_filename is not None
             receptor_mol2 = None
         except KeyError:
             try:
                 receptor_mol2 = setup_options['receptor_mol2']
+                assert receptor_mol2 is not None
                 protein_pdb_filename = None
             except KeyError as e:
                 print("Either protein_pdb or receptor_mol2 must be specified if running a complex simulation")
@@ -354,7 +356,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     _logger.info(f"\tsetting temperature: {temperature}.")
     _logger.info(f"\tsetting solvent padding: {solvent_padding_angstroms}A.")
 
-    setup_pickle_file = setup_options['save_setup_pickle_as']
+    setup_pickle_file = setup_options['save_setup_pickle_as'] if 'save_setup_pickle_as' in list(setup_options) else None
     _logger.info(f"\tsetup pickle file: {setup_pickle_file}")
     trajectory_directory = setup_options['trajectory_directory']
     _logger.info(f"\ttrajectory directory: {trajectory_directory}")
@@ -367,8 +369,13 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         atom_map=None
         _logger.info(f"\tno atom map specified: default to None.")
 
-    if 'topology_proposal' not in setup_options:
+    if 'topology_proposal' not in list(setup_options.keys()) or setup_options['topology_proposal'] is None:
         _logger.info(f"\tno topology_proposal specified; proceeding to RelativeFEPSetup...\n\n\n")
+        if 'set_solvent_box_dims_to_complex' in list(setup_options.keys()) and setup_options['set_solvent_box_dims_to_complex']:
+            set_solvent_box_dims_to_complex=True
+        else:
+            set_solvent_box_dims_to_complex=False
+
         fe_setup = RelativeFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files,phases=phases,
                                           protein_pdb_filename=protein_pdb_filename,
                                           receptor_mol2_filename=receptor_mol2, pressure=pressure,
@@ -377,18 +384,22 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                           atom_expr=setup_options['atom_expr'], bond_expr=setup_options['bond_expr'],
                                           atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
-                                          trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'])
+                                          trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'],
+                                          set_solvent_box_dims_to_complex=set_solvent_box_dims_to_complex)
 
         _logger.info(f"\twriting pickle output...")
-        with open(os.path.join(os.getcwd(), trajectory_directory, setup_pickle_file), 'wb') as f:
-            try:
-                pickle.dump(fe_setup, f)
-                _logger.info(f"\tsuccessfully dumped pickle.")
-            except Exception as e:
-                print(e)
-                print("\tUnable to save setup object as a pickle")
+        if setup_pickle_file is not None:
+            with open(os.path.join(os.getcwd(), trajectory_directory, setup_pickle_file), 'wb') as f:
+                try:
+                    pickle.dump(fe_setup, f)
+                    _logger.info(f"\tsuccessfully dumped pickle.")
+                except Exception as e:
+                    print(e)
+                    print("\tUnable to save setup object as a pickle")
 
-        _logger.info(f"\tsetup is complete.  Writing proposals and positions for each phase to top_prop dict...")
+            _logger.info(f"\tsetup is complete.  Writing proposals and positions for each phase to top_prop dict...")
+        else:
+            _logger.info(f"\tsetup is complete.  Omitted writing proposals and positions for each phase to top_prop dict...")
 
         top_prop = dict()
         for phase in phases:
@@ -405,7 +416,9 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
 
         _logger.info(f"\twriting atom_mapping.png")
         atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'atom_mapping.png')
-        render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
+
+        if 'render_atom_map' in list(setup_options.keys()) and setup_options['render_atom_map']:
+            render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
 
     else:
         _logger.info(f"\tloading topology proposal from yaml setup options...")
@@ -467,15 +480,6 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
 
     else:
         _logger.info(f"\tno nonequilibrium detected.")
-        n_states = setup_options['n_states']
-        _logger.info(f"\tn_states: {n_states}")
-        if 'n_replicas' not in setup_options:
-            n_replicas = n_states
-        else:
-            n_replicas = setup_options['n_replicas']
-        _logger.info(f"\tn_replicas: {n_replicas}")
-        checkpoint_interval = setup_options['checkpoint_interval']
-        _logger.info(f"\tcheckpoint_interval: {checkpoint_interval}")
         htf = dict()
         hss = dict()
         _logger.info(f"\tcataloging HybridTopologyFactories...")
@@ -499,63 +503,76 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
             _forward_added_valence_energy = top_prop['%s_added_valence_energy' % phase]
             _reverse_subtracted_valence_energy = top_prop['%s_subtracted_valence_energy' % phase]
 
-            xml_directory = f'{setup_options["trajectory_directory"]}/xml/'
-            if not os.path.exists(xml_directory):
-                os.makedirs(xml_directory)
-
             zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, trajectory_directory=f'{xml_directory}{phase}')
             _logger.info(f"\t\terror in zero state: {zero_state_error}")
             _logger.info(f"\t\terror in one state: {one_state_error}")
 
-            # generating lambda protocol
-            lambda_protocol = LambdaProtocol(functions=setup_options['protocol-type'])
-            _logger.info(f'Using lambda protocol : {setup_options["protocol-type"]}')
-
-
-            if atom_selection:
-                selection_indices = htf[phase].hybrid_topology.select(atom_selection)
-            else:
-                selection_indices = None
-
-            storage_name = str(trajectory_directory)+'/'+str(trajectory_prefix)+'-'+str(phase)+'.nc'
-            _logger.info(f'\tstorage_name: {storage_name}')
-            _logger.info(f'\tselection_indices {selection_indices}')
-            _logger.info(f'\tcheckpoint interval {checkpoint_interval}')
-            reporter = MultiStateReporter(storage_name, analysis_particle_indices=selection_indices,
-                                          checkpoint_interval=checkpoint_interval)
-
-            if phase == 'vacuum':
-                endstates = False
-            else:
-                endstates = True
             #TODO expose more of these options in input
-            if setup_options['fe_type'] == 'sams' and build_samplers:
-                hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
-                                                                                    collision_rate=1.0 / unit.picosecond,
-                                                                                    n_steps=n_steps_per_move_application,
-                                                                                    reassign_velocities=False,
-                                                                                    n_restart_attempts=20,constraint_tolerance=1e-06),
-                                               hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
-                                               online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
-                                               gamma0=setup_options['gamma0'])
-                hss[phase].setup(n_states=n_states, n_replicas=n_replicas, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
-            elif setup_options['fe_type'] == 'repex':
-                hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
-                                                                                     collision_rate=1.0 / unit.picosecond,
-                                                                                     n_steps=n_steps_per_move_application,
-                                                                                     reassign_velocities=False,
-                                                                                     n_restart_attempts=20,constraint_tolerance=1e-06),
-                                                                                     hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
-                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
+            if build_samplers:
 
-            # save the systems and the states
-            from simtk.openmm import XmlSerializer
-            from perses.tests.utils import generate_endpoint_thermodynamic_states
+                n_states = setup_options['n_states']
+                _logger.info(f"\tn_states: {n_states}")
+                if 'n_replicas' not in setup_options:
+                    n_replicas = n_states
+                else:
+                    n_replicas = setup_options['n_replicas']
 
-            _logger.info('WRITING OUT XML FILES')
-            #old_thermodynamic_state, new_thermodynamic_state, hybrid_thermodynamic_state, _ = generate_endpoint_thermodynamic_states(htf[phase].hybrid_system, _top_prop)
+                checkpoint_interval = setup_options['checkpoint_interval']
+
+                # generating lambda protocol
+                lambda_protocol = LambdaProtocol(functions=setup_options['protocol-type'])
+                _logger.info(f'Using lambda protocol : {setup_options["protocol-type"]}')
+
+
+                if atom_selection:
+                    selection_indices = htf[phase].hybrid_topology.select(atom_selection)
+                else:
+                    selection_indices = None
+
+                storage_name = str(trajectory_directory)+'/'+str(trajectory_prefix)+'-'+str(phase)+'.nc'
+                _logger.info(f'\tstorage_name: {storage_name}')
+                _logger.info(f'\tselection_indices {selection_indices}')
+                _logger.info(f'\tcheckpoint interval {checkpoint_interval}')
+                reporter = MultiStateReporter(storage_name, analysis_particle_indices=selection_indices,
+                                              checkpoint_interval=checkpoint_interval)
+
+                if phase == 'vacuum':
+                    endstates = False
+                else:
+                    endstates = True
+
+                if setup_options['fe_type'] == 'sams':
+                    hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
+                                                                                        collision_rate=1.0 / unit.picosecond,
+                                                                                        n_steps=n_steps_per_move_application,
+                                                                                        reassign_velocities=False,
+                                                                                        n_restart_attempts=20,constraint_tolerance=1e-06),
+                                                   hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
+                                                   online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
+                                                   gamma0=setup_options['gamma0'])
+                    hss[phase].setup(n_states=n_states, n_replicas=n_replicas, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
+                elif setup_options['fe_type'] == 'repex':
+                    hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
+                                                                                         collision_rate=1.0 / unit.picosecond,
+                                                                                         n_steps=n_steps_per_move_application,
+                                                                                         reassign_velocities=False,
+                                                                                         n_restart_attempts=20,constraint_tolerance=1e-06),
+                                                                                         hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
+                    hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
+            else:
+                _logger.info(f"omitting sampler construction")
 
             if serialize_systems:
+                # save the systems and the states
+                from simtk.openmm import XmlSerializer
+                from perses.tests.utils import generate_endpoint_thermodynamic_states
+
+                _logger.info('WRITING OUT XML FILES')
+                #old_thermodynamic_state, new_thermodynamic_state, hybrid_thermodynamic_state, _ = generate_endpoint_thermodynamic_states(htf[phase].hybrid_system, _top_prop)
+
+                xml_directory = f'{setup_options["trajectory_directory"]}/xml/'
+                if not os.path.exists(xml_directory):
+                    os.makedirs(xml_directory)
                 from perses.utils import data
                 _logger.info('WRITING OUT XML FILES')
                 _logger.info(f'Saving the hybrid, old and new system to disk')

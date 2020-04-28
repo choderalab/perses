@@ -46,14 +46,32 @@ class RelativeFEPSetup(object):
     legs of a relative FEP calculation. For each leg, that is a TopologyProposal, old_positions, and new_positions.
     Importantly, it ensures that the atom maps in the solvent and complex phases match correctly.
     """
-    def __init__(self, ligand_input, old_ligand_index, new_ligand_index, forcefield_files, phases,
-                 protein_pdb_filename=None, receptor_mol2_filename=None, pressure=1.0 * unit.atmosphere,
-                 temperature=300.0 * unit.kelvin, solvent_padding=9.0 * unit.angstroms, atom_map=None,
-                 hmass=4*unit.amus, neglect_angles=False, map_strength='default', atom_expr=None,
-                 bond_expr=None, anneal_14s=False,
-                 small_molecule_forcefield='gaff-2.11', small_molecule_parameters_cache=None,
-                 trajectory_directory=None, trajectory_prefix=None,
-                 spectator_filenames=None, nonbonded_method = 'PME'):
+    def __init__(self,
+                 ligand_input,
+                 old_ligand_index,
+                 new_ligand_index,
+                 forcefield_files,
+                 phases,
+                 protein_pdb_filename=None,
+                 receptor_mol2_filename=None,
+                 pressure=1.0 * unit.atmosphere,
+                 temperature=300.0 * unit.kelvin,
+                 solvent_padding=9.0 * unit.angstroms,
+                 atom_map=None,
+                 hmass=4*unit.amus,
+                 neglect_angles=False,
+                 map_strength='default',
+                 atom_expr=None,
+                 bond_expr=None,
+                 anneal_14s=False,
+                 small_molecule_forcefield='gaff-2.11',
+                 small_molecule_parameters_cache=None,
+                 trajectory_directory=None,
+                 trajectory_prefix=None,
+                 spectator_filenames=None,
+                 nonbonded_method = 'PME',
+                 set_solvent_box_dims_to_complex=False
+                 ):
         """
         Initialize a NonequilibriumFEPSetup object
 
@@ -97,6 +115,9 @@ class RelativeFEPSetup(object):
             These will be treated with the same small molecule forcefield as the alchemical ligands, and will only be present in the complex phase
         nonbonded_method : str, default = 'PME'
             nonbonded method, chose one of ['PME','CutoffNonPeriodic','CutoffPeriodic','NoCutoff']
+        set_solvent_box_dims_to_complex : bool, default False
+            if phases include 'solvent' and 'complex', create a solvent phase such that the box dimensions
+            match that of the complex phase (we use this for F@H)
         """
         self._pressure = pressure
         self._temperature = temperature
@@ -111,6 +132,7 @@ class RelativeFEPSetup(object):
         self._bond_expr = bond_expr
         self._anneal_14s = anneal_14s
         self._spectator_filenames = spectator_filenames
+        self._set_solvent_box_dims_to_complex = set_solvent_box_dims_to_complex
 
         try:
             self._nonbonded_method = getattr(app,nonbonded_method)
@@ -495,6 +517,11 @@ class RelativeFEPSetup(object):
         old_complex = md.Topology.from_openmm(topology_proposal.old_topology)
         new_complex = md.Topology.from_openmm(topology_proposal.new_topology)
 
+        if self._set_solvent_box_dims_to_complex:
+            box_dims = old_complex.getUnitCellDimensions()
+        else:
+            box_dims=None
+
         atom_map = topology_proposal.old_to_new_atom_map
 
         old_mol_start_index, old_mol_len = self._proposal_engine._find_mol_start_index(old_complex.to_openmm())
@@ -510,7 +537,7 @@ class RelativeFEPSetup(object):
 
         # solvate the old ligand topology:
         old_solvated_topology, old_solvated_positions, old_solvated_system = self._solvate_system(
-            old_ligand_topology.to_openmm(), old_ligand_positions,phase='solvent')
+            old_ligand_topology.to_openmm(), old_ligand_positions,phase='solvent', box_dimensions=box_dims)
 
         old_solvated_md_topology = md.Topology.from_openmm(old_solvated_topology)
 
@@ -628,7 +655,7 @@ class RelativeFEPSetup(object):
 
         return ligand_topology_proposal, old_ligand_positions
 
-    def _solvate_system(self, topology, positions, model='tip3p',phase='complex'):
+    def _solvate_system(self, topology, positions, model='tip3p',phase='complex', box_dimensions=None):
         """
         Generate a solvated topology, positions, and system for a given input topology and positions.
         For generating the system, the forcefield files provided in the constructor will be used.
@@ -643,6 +670,8 @@ class RelativeFEPSetup(object):
             forcefield file of solvent to add
         model : str, default 'tip3p'
             solvent model to use for solvation
+        box_dimensions : tuple of Vec3, default None
+            if not None, padding distance will be omitted in favor of a pre-specified set of box dimensions
 
         Returns
         -------
@@ -663,7 +692,10 @@ class RelativeFEPSetup(object):
         #modeller.addHydrogens(forcefield=self._system_generator.forcefield)
         if phase != 'vacuum':
             _logger.info(f"\tpreparing to add solvent")
-            modeller.addSolvent(self._system_generator.forcefield, model=model, padding=self._padding, ionicStrength=0.15*unit.molar)
+            if box_dimensions is not None:
+                modeller.addSolvent(self._system_generator.forcefield, model=model, padding=self._padding, ionicStrength=0.15*unit.molar)
+            else:
+                modeller.addSolvent(self._system_generator.forcefield, model=model, ionicStrength=0.15*unit.molar, boxVectors=box_dimensions)
         else:
             _logger.info(f"\tSkipping solvation of vacuum perturbation")
         solvated_topology = modeller.getTopology()
