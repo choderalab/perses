@@ -70,7 +70,7 @@ class RelativeFEPSetup(object):
                  trajectory_prefix=None,
                  spectator_filenames=None,
                  nonbonded_method = 'PME',
-                 set_solvent_box_dims_to_complex=False
+                 box_dimensions=None
                  ):
         """
         Initialize a NonequilibriumFEPSetup object
@@ -115,9 +115,6 @@ class RelativeFEPSetup(object):
             These will be treated with the same small molecule forcefield as the alchemical ligands, and will only be present in the complex phase
         nonbonded_method : str, default = 'PME'
             nonbonded method, chose one of ['PME','CutoffNonPeriodic','CutoffPeriodic','NoCutoff']
-        set_solvent_box_dims_to_complex : bool, default False
-            if phases include 'solvent' and 'complex', create a solvent phase such that the box dimensions
-            match that of the complex phase (we use this for F@H)
         """
         self._pressure = pressure
         self._temperature = temperature
@@ -132,7 +129,7 @@ class RelativeFEPSetup(object):
         self._bond_expr = bond_expr
         self._anneal_14s = anneal_14s
         self._spectator_filenames = spectator_filenames
-        self._set_solvent_box_dims_to_complex = set_solvent_box_dims_to_complex
+        self._box_dimensions = box_dimensions
 
         try:
             self._nonbonded_method = getattr(app,nonbonded_method)
@@ -303,7 +300,7 @@ class RelativeFEPSetup(object):
             _logger.info(f"setting up complex phase...")
             self._setup_complex_phase(protein_pdb_filename,receptor_mol2_filename,mol_list)
             self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(
-            self._complex_topology_old, self._complex_positions_old,phase='complex')
+            self._complex_topology_old, self._complex_positions_old,phase='complex',box_dimensions=self._box_dimensions)
             _logger.info(f"successfully generated complex topology, positions, system")
 
             self._complex_md_topology_old_solvated = md.Topology.from_openmm(self._complex_topology_old_solvated)
@@ -347,7 +344,7 @@ class RelativeFEPSetup(object):
                 _logger.info(f"no complex detected in phases...generating unique topology/geometry proposals...")
                 _logger.info(f"solvating ligand...")
                 self._ligand_topology_old_solvated, self._ligand_positions_old_solvated, self._ligand_system_old_solvated = self._solvate_system(
-                self._ligand_topology_old, self._ligand_positions_old,phase='solvent')
+                self._ligand_topology_old, self._ligand_positions_old,phase='solvent',box_dimensions=self._box_dimensions)
                 self._ligand_md_topology_old_solvated = md.Topology.from_openmm(self._ligand_topology_old_solvated)
 
                 _logger.info(f"creating TopologyProposal")
@@ -517,11 +514,6 @@ class RelativeFEPSetup(object):
         old_complex = md.Topology.from_openmm(topology_proposal.old_topology)
         new_complex = md.Topology.from_openmm(topology_proposal.new_topology)
 
-        if self._set_solvent_box_dims_to_complex:
-            box_dims = old_complex.getUnitCellDimensions()
-        else:
-            box_dims=None
-
         atom_map = topology_proposal.old_to_new_atom_map
 
         old_mol_start_index, old_mol_len = self._proposal_engine._find_mol_start_index(old_complex.to_openmm())
@@ -537,7 +529,7 @@ class RelativeFEPSetup(object):
 
         # solvate the old ligand topology:
         old_solvated_topology, old_solvated_positions, old_solvated_system = self._solvate_system(
-            old_ligand_topology.to_openmm(), old_ligand_positions,phase='solvent', box_dimensions=box_dims)
+            old_ligand_topology.to_openmm(), old_ligand_positions,phase='solvent', box_dimensions=self._box_dimensions)
 
         old_solvated_md_topology = md.Topology.from_openmm(old_solvated_topology)
 
@@ -690,12 +682,13 @@ class RelativeFEPSetup(object):
         #hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
         #modeller.delete(hs)
         #modeller.addHydrogens(forcefield=self._system_generator.forcefield)
+        _logger.info(f'box_dimensions: {box_dimensions}')
         if phase != 'vacuum':
             _logger.info(f"\tpreparing to add solvent")
-            if box_dimensions is not None:
+            if box_dimensions is None:
                 modeller.addSolvent(self._system_generator.forcefield, model=model, padding=self._padding, ionicStrength=0.15*unit.molar)
             else:
-                modeller.addSolvent(self._system_generator.forcefield, model=model, ionicStrength=0.15*unit.molar, boxVectors=box_dimensions)
+                modeller.addSolvent(self._system_generator.forcefield, model=model, ionicStrength=0.15*unit.molar, boxSize=box_dimensions)
         else:
             _logger.info(f"\tSkipping solvation of vacuum perturbation")
         solvated_topology = modeller.getTopology()
