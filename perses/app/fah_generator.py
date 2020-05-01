@@ -21,6 +21,9 @@ import os
 import sys
 import simtk.unit as unit
 from simtk import openmm
+import logging
+_logger = logging.getLogger()
+_logger.setLevel(logging.INFO)
 
 
 #let's make a default lambda protocol
@@ -90,21 +93,17 @@ def relax_structure(temperature, system, positions, nminimize=100, nequil = 4, n
     context = openmm.Context(system, integrator)
     context.setPeriodicBoxVectors(*state.getDefaultPeriodicBoxVectors())
     context.setPositions(positions)
-​
     # Minimize
     for iteration in tqdm(range(nminimize)):
         openmm.LocalEnergyMinimizer.minimize(context, 0.0, 1)
-​
     # Equilibrate
     context.setVelocitiesToTemperature(temperature)
     for iteration in tqdm(range(nequil)):
         integrator.step(nsteps_per_iteration)
     context.setVelocitiesToTemperature(temperature)
-​
     state = context.getState(getEnergy=True, getForces=True, getPositions=True, getVelocities=True, getParameters=True)
 
     del context, integrator
-​
     return state
 
 
@@ -113,25 +112,27 @@ def run_neq_fah_setup(ligand_file,
                       new_ligand_index,
                       forcefield_files,
                       trajectory_directory,
+                      index=0,
+                      box_dimensions=(8.5,8.5,8.5),
                       timestep=1.0 * unit.femtosecond,
                       eq_splitting = 'V R O R V',
                       neq_splitting='V R H O R V',
                       measure_shadow_work=False,
                       pressure=1.0*unit.atmosphere,
-                      temperature=300*unit.kelvin,
+                      temperature=300,
                       solvent_padding=9*unit.angstroms,
                       set_solvent_box_dims_to_complex=True,
                       phases=['complex', 'solvent'],
                       protein_pdb=None,
                       receptor_mol2=None,
-                      small_molecule_forcefield = 'gaff-2.11',
-                      small_molecule_parameters_cache = 'None',
+                      small_molecule_forcefield = 'openff-1.0.0',
+                      small_molecule_parameters_cache = None,
                       spectators=None,
                       neglect_angles=True,
                       anneal_14s=False,
                       nonbonded_method='PME',
-                      atom_expression=None,
-                      bond_expression=None,
+                      atom_expr=None,
+                      bond_expr=None,
                       map_strength=None,
                       softcore_v2=False,
                       save_setup_pickle_as=None,
@@ -142,9 +143,11 @@ def run_neq_fah_setup(ligand_file,
                       num_equilibration_steps_per_iterations=250,
                       nsteps_eq=1000,
                       nsteps_neq=100,
+                      fe_type='fah',
+                      n_steps_per_move_application=1,
+                      n_equilibrium_steps_per_iteration=1,
                       collision_rate=1.0/unit.picoseconds,
                       constraint_tolerance=1e-6,
-                      measure_shadow_work=False,
                       measure_heat=False,
                       **kwargs):
     """
@@ -187,6 +190,7 @@ def run_neq_fah_setup(ligand_file,
 
     #some modification for fah-specific functionality:
     setup_options['trajectory_prefix']=None
+    setup_options['anneal_1,4s'] = setup_options['anneal_14s']
 
     #run the run_setup to generate topology proposals and htfs
     setup_dict = run_setup(setup_options, serialize_systems=False, build_samplers=False)
@@ -195,8 +199,13 @@ def run_neq_fah_setup(ligand_file,
 
     #create solvent and complex directories
     for phase in htfs.keys():
-        dir = os.path.join(os.getcwd(), f"{trajectory_directory}_{phase}", f"RUN_{format(old_ligand_index, '03')}_to_{format(new_ligand_index, '03')}")
-        os.mkdir(dir)
+        if phase == 'solvent':
+            phase_dir = '13401'
+        if phase == 'complex':
+            phase_dir = '13400'
+        dir = os.path.join(os.getcwd(), phase_dir, f'RUN{index}')
+        if not os.path.exists(dir):
+            os.mkdir(dir)
 
         #serialize the hybrid_system
         data.serialize(htfs[phase].hybrid_system, f"{dir}/system.xml")
@@ -228,12 +237,56 @@ def run_neq_fah_setup(ligand_file,
         #create a logger for reference
         references = {'start_ligand': setup_dict['old_ligand_index'],
                       'end_ligand': setup_dict['new_ligand_index'],
-                      'protein_filename': setup_dict['protein_pdb'],
+                      'protein_pdb': setup_dict['protein_pdb'],
                       'passed_strucutre_relax': passed}
 
         with open(f"{dir}/reference.pkl", 'wb') as f:
             pickle.dump(references, f)
 
+
+
+def run(yaml_filename=None,index=None):
+    import sys
+    if yaml_filename is None:
+       try:
+          yaml_filename = sys.argv[1]
+          _logger.info(f"Detected yaml file: {yaml_filename}")
+       except IndexError as e:
+           _logger.critical(f"You must specify the setup yaml file as an argument to the script.")
+    if index is None:
+       try:
+          index = sys.argv[2]
+          _logger.info(f"Detected index: {index}")
+       except IndexError as e:
+           _logger.critical(f"FAH generator needs an index to know which run this job is for")
+    from perses.app.setup_relative_calculation import getSetupOptions
+    import yaml
+    yaml_file = open(yaml_filename, 'r')
+    setup_options = yaml.load(yaml_file, Loader=yaml.FullLoader)
+    yaml_file.close()
+
+
+    import os
+    # make master directories
+    if not os.path.exists('13400'):
+        os.makedirs('13400')
+    if not os.path.exists('13401'):
+        os.makedirs('13401')
+
+    # make run directories
+    if not os.path.exists(f'13400/RUN{index}'):
+        os.makedirs(f'13400/RUN{index}')
+    if not os.path.exists(f'13401/RUN{index}'):
+        os.makedirs(f'13401/RUN{index}')
+
+    ligand_file = setup_options['ligand_file']
+    old_ligand_index = setup_options['old_ligand_index']
+    new_ligand_index = setup_options['new_ligand_index']
+    forcefield_files = setup_options['forcefield_files']
+    protein_pdb = setup_options['protein_pdb']
+    trajectory_directory = f'RUN{index}'
+
+    run_neq_fah_setup(ligand_file,old_ligand_index,new_ligand_index,forcefield_files,trajectory_directory,index=index, protein_pdb=protein_pdb)
 
 # if __name__ == "__main__":
 #     setup_yaml, neq_setup_yaml, run_number = sys.argv[1], sys.argv[2], sys.argv[3] #define args

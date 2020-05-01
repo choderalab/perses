@@ -293,7 +293,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         # We'll need the protein PDB file (without missing atoms)
         try:
             protein_pdb_filename = setup_options['protein_pdb']
-            assert protein_filename is not None
+            assert protein_pdb_filename is not None
             receptor_mol2 = None
         except KeyError:
             try:
@@ -385,7 +385,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                           atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
                                           trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'],
-                                          set_solvent_box_dims_to_complex=set_solvent_box_dims_to_complex)
+                                          box_dimensions=setup_options['box_dimensions'])
 
         _logger.info(f"\twriting pickle output...")
         if setup_pickle_file is not None:
