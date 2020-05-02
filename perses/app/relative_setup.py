@@ -551,6 +551,7 @@ class RelativeFEPSetup(object):
         new_to_old_atom_map = {atom_map[x] - new_mol_start_index: x - old_mol_start_index for x in
                                old_complex.select("resname == 'MOL' ") if x in atom_map.keys()}
 
+        old_alchemical_atoms = [i for i in range(old_mol_len)] 
         # adjust the atom map to account for the presence of solvent degrees of freedom:
         # By design, all atoms after the ligands are water, and should be mapped.
         n_water_atoms = solvent_only_topology.to_openmm().getNumAtoms()
@@ -559,7 +560,7 @@ class RelativeFEPSetup(object):
 
         # make a TopologyProposal
         ligand_topology_proposal = TopologyProposal(new_topology=new_solvated_ligand_omm_topology,
-                                                    new_system=new_solvated_system,
+                                                    new_system=new_solvated_system,old_alchemical_atoms=old_alchemical_atoms,
                                                     old_topology=old_solvated_topology, old_system=old_solvated_system,
                                                     new_to_old_atom_map=new_to_old_atom_map, old_chemical_state_key='A',
                                                     new_chemical_state_key='B')

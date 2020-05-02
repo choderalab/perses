@@ -23,7 +23,7 @@ import simtk.unit as unit
 from simtk import openmm
 import logging
 _logger = logging.getLogger()
-_logger.setLevel(logging.INFO)
+_logger.setLevel(logging.DEBUG)
 
 
 #let's make a default lambda protocol
@@ -60,8 +60,9 @@ def make_neq_integrator(nsteps_eq, nsteps_neq, neq_splitting, alchemical_functio
 
     """
     from openmmtools.integrators import PeriodicNonequilibriumIntegrator
-    integrator_kwargs = deepcopy(setup_options_dict)
-    integrator = PeriodicNonequilibriumIntegrator(alchemical_functions, nsteps_eq, nsteps_neq, splitting, **kwargs)
+    #from copy import deepcopy
+    #integrator_kwargs = deepcopy(setup_options_dict)
+    integrator = PeriodicNonequilibriumIntegrator(alchemical_functions, nsteps_eq, nsteps_neq, neq_splitting)
     return integrator
 
 def relax_structure(temperature, system, positions, nminimize=100, nequil = 4, n_steps_per_iteration=250):
@@ -88,20 +89,24 @@ def relax_structure(temperature, system, positions, nminimize=100, nequil = 4, n
     from perses.dispersed.feptasks import minimize
     from openmmtools.integrators import LangevinIntegrator
     import tqdm
-
+    _logger.info(f'Starting to relax')
     integrator = LangevinIntegrator(temperature = temperature)
     context = openmm.Context(system, integrator)
-    context.setPeriodicBoxVectors(*state.getDefaultPeriodicBoxVectors())
+    context.setPeriodicBoxVectors(*system.getDefaultPeriodicBoxVectors())
     context.setPositions(positions)
+
+    _logger.info(f'Starting to minimise')
     # Minimize
-    for iteration in tqdm(range(nminimize)):
+    for iteration in tqdm.tqdm(range(nminimize)):
         openmm.LocalEnergyMinimizer.minimize(context, 0.0, 1)
     # Equilibrate
+    _logger.info(f'Starting to equilibrate')
     context.setVelocitiesToTemperature(temperature)
-    for iteration in tqdm(range(nequil)):
-        integrator.step(nsteps_per_iteration)
+    for iteration in tqdm.tqdm(range(nequil)):
+        integrator.step(n_steps_per_iteration)
     context.setVelocitiesToTemperature(temperature)
     state = context.getState(getEnergy=True, getForces=True, getPositions=True, getVelocities=True, getParameters=True)
+    _logger.info(f'Relax done')
 
     del context, integrator
     return state
@@ -122,7 +127,7 @@ def run_neq_fah_setup(ligand_file,
                       temperature=300,
                       solvent_padding=9*unit.angstroms,
                       set_solvent_box_dims_to_complex=True,
-                      phases=['complex', 'solvent'],
+                      phases=['complex','solvent'],
                       protein_pdb=None,
                       receptor_mol2=None,
                       small_molecule_forcefield = 'openff-1.0.0',
@@ -140,7 +145,7 @@ def run_neq_fah_setup(ligand_file,
                       alchemical_functions=DEFAULT_ALCHEMICAL_FUNCTIONS,
                       num_minimize_steps=100,
                       num_equilibration_iterations=4,
-                      num_equilibration_steps_per_iterations=250,
+                      num_equilibration_steps_per_iteration=250,
                       nsteps_eq=1000,
                       nsteps_neq=100,
                       fe_type='fah',
@@ -193,12 +198,15 @@ def run_neq_fah_setup(ligand_file,
     setup_options['anneal_1,4s'] = setup_options['anneal_14s']
 
     #run the run_setup to generate topology proposals and htfs
+    _logger.info('SETUP STARTED') 
     setup_dict = run_setup(setup_options, serialize_systems=False, build_samplers=False)
+    _logger.info('SETUP DONE') 
     topology_proposals = setup_dict['topology_proposals']
     htfs = setup_dict['hybrid_topology_factories']
 
     #create solvent and complex directories
     for phase in htfs.keys():
+        _logger.info(f'Setting up phase {phase}')
         if phase == 'solvent':
             phase_dir = '13401'
         if phase == 'complex':
@@ -235,13 +243,12 @@ def run_neq_fah_setup(ligand_file,
         #TODO: make core.xml; i don't get the format. help
 
         #create a logger for reference
-        references = {'start_ligand': setup_dict['old_ligand_index'],
-                      'end_ligand': setup_dict['new_ligand_index'],
-                      'protein_pdb': setup_dict['protein_pdb'],
+        references = {'start_ligand': old_ligand_index,
+                      'end_ligand': new_ligand_index,
+                      'protein_pdb': protein_pdb,
                       'passed_strucutre_relax': passed}
 
-        with open(f"{dir}/reference.pkl", 'wb') as f:
-            pickle.dump(references, f)
+        np.save(f'{dir}/references',references)
 
 
 

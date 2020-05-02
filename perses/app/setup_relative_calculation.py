@@ -81,6 +81,9 @@ def getSetupOptions(filename):
 
     if 'spectators' not in setup_options:
         setup_options['spectators'] = None
+    
+    if 'box_dimensions' not in setup_options:
+        setup_options['box_dimensions'] = None 
 
     # Not sure why these are needed
     # TODO: Revisit these?
@@ -376,6 +379,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         else:
             set_solvent_box_dims_to_complex=False
 
+        _logger.info(f'Box dimensions: {setup_options["box_dimensions"]}')
         fe_setup = RelativeFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files,phases=phases,
                                           protein_pdb_filename=protein_pdb_filename,
                                           receptor_mol2_filename=receptor_mol2, pressure=pressure,
@@ -503,7 +507,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
             _forward_added_valence_energy = top_prop['%s_added_valence_energy' % phase]
             _reverse_subtracted_valence_energy = top_prop['%s_subtracted_valence_energy' % phase]
 
-            zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, trajectory_directory=f'{xml_directory}{phase}')
+            zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD)#, trajectory_directory=f'{xml_directory}{phase}')
             _logger.info(f"\t\terror in zero state: {zero_state_error}")
             _logger.info(f"\t\terror in one state: {one_state_error}")
 
@@ -540,6 +544,10 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                     endstates = False
                 else:
                     endstates = True
+
+                if setup_options['fe_type'] == 'fah':
+                    _logger.info('SETUP FOR FAH DONE')
+                    return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf}
 
                 if setup_options['fe_type'] == 'sams':
                     hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
