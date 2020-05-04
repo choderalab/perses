@@ -40,18 +40,20 @@ DEFAULT_ALCHEMICAL_FUNCTIONS = {
                              'lambda_torsions': x}
 
 
-def make_neq_integrator(nsteps_eq, nsteps_neq, neq_splitting, alchemical_functions = DEFAULT_ALCHEMICAL_FUNCTIONS, **kwargs):
+def make_neq_integrator(nsteps_eq=1000, nsteps_neq=1000, neq_splitting='V R H O R V', timestep=4.0 * unit.femtosecond, alchemical_functions = DEFAULT_ALCHEMICAL_FUNCTIONS, **kwargs):
     """
     generate an openmmtools.integrators.PeriodicNonequilibriumIntegrator
 
     arguments
-        nsteps_eq : int
+        nsteps_eq : int, default=1000
             Number of equilibration steps to dwell within lambda = 0 or 1 when reached
-        nsteps_neq : int
+        nsteps_neq : int, default=1000
             Number of nonequilibrium switching steps for 0->1 and 1->0 switches
-        neq_splitting : str
+        neq_splitting : str, default='V R H O R V'
             Sequence of "R", "V", "O" (and optionally "{", "}", "V0", "V1", ...) substeps to be executed each timestep.
             "H" increments the global parameter `lambda` by 1/nsteps_neq for each step and accumulates protocol work.
+        timestep : int, default=4.0 * unit.femtosecond
+            integrator timestep
         **kwargs :
             miscellaneous arguments for openmmtools.integrators.LangevinIntegrator
 
@@ -62,7 +64,7 @@ def make_neq_integrator(nsteps_eq, nsteps_neq, neq_splitting, alchemical_functio
     from openmmtools.integrators import PeriodicNonequilibriumIntegrator
     #from copy import deepcopy
     #integrator_kwargs = deepcopy(setup_options_dict)
-    integrator = PeriodicNonequilibriumIntegrator(alchemical_functions, nsteps_eq, nsteps_neq, neq_splitting)
+    integrator = PeriodicNonequilibriumIntegrator(alchemical_functions, nsteps_eq, nsteps_neq, neq_splitting,timestep=timestep)
     return integrator
 
 def relax_structure(temperature, system, positions, nminimize=100, nequil = 4, n_steps_per_iteration=250):
@@ -119,7 +121,7 @@ def run_neq_fah_setup(ligand_file,
                       trajectory_directory,
                       index=0,
                       box_dimensions=(8.5,8.5,8.5),
-                      timestep=1.0 * unit.femtosecond,
+                      timestep=4.0 * unit.femtosecond,
                       eq_splitting = 'V R O R V',
                       neq_splitting='V R H O R V',
                       measure_shadow_work=False,
@@ -181,7 +183,7 @@ def run_neq_fah_setup(ligand_file,
             step size of nonequilibrium integration
         eq_splitting : str
             splitting string of relaxation dynamics
-        neq_splitting : str
+        neq_splitting : str, default = 'V R H O R V'
             splitting string of nonequilibrium dynamics
 
     """
@@ -215,6 +217,8 @@ def run_neq_fah_setup(ligand_file,
         if not os.path.exists(dir):
             os.mkdir(dir)
 
+        np.save(f'{dir}/htf',htfs[phase])
+
         #serialize the hybrid_system
         data.serialize(htfs[phase].hybrid_system, f"{dir}/system.xml")
 
@@ -238,9 +242,36 @@ def run_neq_fah_setup(ligand_file,
         else:
             passed=True
 
+        #pos = state.getPositions(asNumpy=True)
+        #hybrid_topology = htfs[phase].hybrid_topology
+
+        #np.save(f'{dir}/positions',pos)
+        #print(np.shape(pos))
+        #import mdtraj as md
+        #md_top = htfs[phase].hybrid_topology
+        #traj = md.Trajectory(pos[0],md_top)
+        #traj.save_pdb(f'{dir}/hybrid_{phase}.pdb')
 
         #lastly, make a core.xml
-        #TODO: make core.xml; i don't get the format. help
+        nsteps_per_cycle = 2*nsteps_eq + 2*nsteps_neq
+        ncycles = 1    
+        nsteps_per_ps = 250
+        core_parameters = {
+            'numSteps' : ncycles * nsteps_per_cycle,
+            'xtcFreq' : 100*nsteps_per_ps,
+            'xtcAtoms' : 'solute',
+            'precision' : 'mixed',
+            'globalVarFilename' : 'globals.csv',
+            'globalVarFreq' : nsteps_per_ps,
+        }
+        # Serialize core.xml
+        import dicttoxml
+        with open(f'{dir}/core.xml', 'wt') as outfile:
+            #core_parameters = create_core_parameters(phase)
+            xml = dicttoxml.dicttoxml(core_parameters, custom_root='config', attr_type=False)
+            from xml.dom.minidom import parseString
+            dom = parseString(xml)
+            outfile.write(dom.toprettyxml())
 
         #create a logger for reference
         references = {'start_ligand': old_ligand_index,
