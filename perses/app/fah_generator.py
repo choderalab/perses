@@ -40,7 +40,7 @@ DEFAULT_ALCHEMICAL_FUNCTIONS = {
                              'lambda_torsions': x}
 
 
-def make_neq_integrator(nsteps_eq=1000, nsteps_neq=1000, neq_splitting='V R H O R V', timestep=4.0 * unit.femtosecond, alchemical_functions = DEFAULT_ALCHEMICAL_FUNCTIONS, **kwargs):
+def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R H O R V', timestep=4.0 * unit.femtosecond, alchemical_functions = DEFAULT_ALCHEMICAL_FUNCTIONS, **kwargs):
     """
     generate an openmmtools.integrators.PeriodicNonequilibriumIntegrator
 
@@ -148,8 +148,8 @@ def run_neq_fah_setup(ligand_file,
                       num_minimize_steps=100,
                       num_equilibration_iterations=4,
                       num_equilibration_steps_per_iteration=250,
-                      nsteps_eq=1000,
-                      nsteps_neq=100,
+                      nsteps_eq=250000,
+                      nsteps_neq=250000,
                       fe_type='fah',
                       n_steps_per_move_application=1,
                       n_equilibrium_steps_per_iteration=1,
