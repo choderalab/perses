@@ -125,7 +125,7 @@ def run_neq_fah_setup(ligand_file,
                       eq_splitting = 'V R O R V',
                       neq_splitting='V R H O R V',
                       measure_shadow_work=False,
-                      pressure=1.0*unit.atmosphere,
+                      pressure=1.0,
                       temperature=300,
                       solvent_padding=9*unit.angstroms,
                       set_solvent_box_dims_to_complex=True,
@@ -210,9 +210,9 @@ def run_neq_fah_setup(ligand_file,
     for phase in htfs.keys():
         _logger.info(f'Setting up phase {phase}')
         if phase == 'solvent':
-            phase_dir = '13401'
+            phase_dir = '13402'
         if phase == 'complex':
-            phase_dir = '13400'
+            phase_dir = '13403'
         dir = os.path.join(os.getcwd(), phase_dir, f'RUN{index}')
         if not os.path.exists(dir):
             os.mkdir(dir)
@@ -242,15 +242,16 @@ def run_neq_fah_setup(ligand_file,
         else:
             passed=True
 
-        #pos = state.getPositions(asNumpy=True)
-        #hybrid_topology = htfs[phase].hybrid_topology
+        pos = state.getPositions(asNumpy=True)
+        pos = np.asarray(pos)
 
         #np.save(f'{dir}/positions',pos)
-        #print(np.shape(pos))
-        #import mdtraj as md
-        #md_top = htfs[phase].hybrid_topology
-        #traj = md.Trajectory(pos[0],md_top)
-        #traj.save_pdb(f'{dir}/hybrid_{phase}.pdb')
+        import mdtraj as md
+        top = htfs[phase].hybrid_topology
+        #np.save(f'{dir}/hybrid_topology',top)
+        traj = md.Trajectory(pos, top)
+        traj.remove_solvent(inplace=True)
+        traj.save(f'{dir}/hybrid_{phase}.pdb')
 
         #lastly, make a core.xml
         nsteps_per_cycle = 2*nsteps_eq + 2*nsteps_neq
@@ -306,16 +307,16 @@ def run(yaml_filename=None,index=None):
 
     import os
     # make master directories
-    if not os.path.exists('13400'):
-        os.makedirs('13400')
-    if not os.path.exists('13401'):
-        os.makedirs('13401')
+    if not os.path.exists('13402'):
+        os.makedirs('13402')
+    if not os.path.exists('13403'):
+        os.makedirs('13403')
 
     # make run directories
-    if not os.path.exists(f'13400/RUN{index}'):
-        os.makedirs(f'13400/RUN{index}')
-    if not os.path.exists(f'13401/RUN{index}'):
-        os.makedirs(f'13401/RUN{index}')
+    if not os.path.exists(f'13402/RUN{index}'):
+        os.makedirs(f'13402/RUN{index}')
+    if not os.path.exists(f'13403/RUN{index}'):
+        os.makedirs(f'13403/RUN{index}')
 
     ligand_file = setup_options['ligand_file']
     old_ligand_index = setup_options['old_ligand_index']

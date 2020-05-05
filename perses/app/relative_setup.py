@@ -250,6 +250,7 @@ class RelativeFEPSetup(object):
             else:
                 barostat = None
                 _logger.info(f"omitted MonteCarloBarostat because pressure was specified but system was not periodic")
+        else:
             barostat = None
             _logger.info(f"omitted MonteCarloBarostat because pressure was not specified")
 
