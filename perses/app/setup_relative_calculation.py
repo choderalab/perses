@@ -643,7 +643,7 @@ def run(yaml_filename=None):
             except Exception as e:
                 print(e)
                 print("Unable to save run object as a pickle; saving as npy")
-                np.save(os.path.join(trajectory_directory, "%s_%s_fep.neq.npy" % (out_trajectory_prefix, phase)), ne_fep_run)
+                np.savez(os.path.join(trajectory_directory, "%s_%s_fep.neq.npy" % (out_trajectory_prefix, phase)), ne_fep_run)
 
     else:
         _logger.info(f"Running setup...")
@@ -660,7 +660,7 @@ def run(yaml_filename=None):
         except Exception as e:
             print(e)
             _logger.info("Unable to save run object as a pickle; saving as npy")
-            np.save(os.path.join(trajectory_directory, "%s_topology_proposals.npy" % (trajectory_prefix)), setup_dict['topology_proposals'])
+            np.savez(os.path.join(trajectory_directory, "%s_topology_proposals.npy" % (trajectory_prefix)), setup_dict['topology_proposals'])
 
         n_equilibration_iterations = setup_options['n_equilibration_iterations'] #set this to 1 for neq_fep
         _logger.info(f"Equilibration iterations: {n_equilibration_iterations}.")
@@ -741,12 +741,12 @@ def run(yaml_filename=None):
                     except Exception as e:
                         print(e)
                         print("Unable to save run object as a pickle; saving as npy")
-                        np.save(os.path.join(trajectory_directory, "%s_%s_fep.neq.npy" % (trajectory_prefix, phase)), ne_fep_run)
+                        np.savez(os.path.join(trajectory_directory, "%s_%s_fep.neq.npy" % (trajectory_prefix, phase)), ne_fep_run)
 
         elif setup_options['fe_type'] == 'sams':
             _logger.info(f"Detecting sams as fe_type...")
             _logger.info(f"Writing hybrid factory {trajectory_prefix}hybrid_factory.npy to {trajectory_directory}...")
-            np.save(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
+            np.savez(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
                     setup_dict['hybrid_topology_factories'])
 
             hss = setup_dict['hybrid_samplers']
@@ -776,7 +776,7 @@ def run(yaml_filename=None):
         elif setup_options['fe_type'] == 'repex':
             _logger.info(f"Detecting repex as fe_type...")
             _logger.info(f"Writing hybrid factory {trajectory_prefix}hybrid_factory.npy to {trajectory_directory}...")
-            np.save(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
+            np.savez(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
                     setup_dict['hybrid_topology_factories'])
 
             hss = setup_dict['hybrid_samplers']
