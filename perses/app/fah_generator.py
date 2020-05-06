@@ -210,14 +210,14 @@ def run_neq_fah_setup(ligand_file,
     for phase in htfs.keys():
         _logger.info(f'Setting up phase {phase}')
         if phase == 'solvent':
-            phase_dir = '13402'
+            phase_dir = '13405'
         if phase == 'complex':
-            phase_dir = '13403'
+            phase_dir = '13404'
         dir = os.path.join(os.getcwd(), phase_dir, f'RUN{index}')
         if not os.path.exists(dir):
             os.mkdir(dir)
 
-        np.save(f'{dir}/htf',htfs[phase])
+        np.savez(f'{dir}/htf',htfs[phase])
 
         #serialize the hybrid_system
         data.serialize(htfs[phase].hybrid_system, f"{dir}/system.xml")
@@ -250,7 +250,7 @@ def run_neq_fah_setup(ligand_file,
         top = htfs[phase].hybrid_topology
         #np.save(f'{dir}/hybrid_topology',top)
         traj = md.Trajectory(pos, top)
-        traj.remove_solvent(inplace=True)
+        traj.remove_solvent(exclude=['CL','NA'],inplace=True)
         traj.save(f'{dir}/hybrid_{phase}.pdb')
 
         #lastly, make a core.xml
@@ -259,7 +259,7 @@ def run_neq_fah_setup(ligand_file,
         nsteps_per_ps = 250
         core_parameters = {
             'numSteps' : ncycles * nsteps_per_cycle,
-            'xtcFreq' : 100*nsteps_per_ps,
+            'xtcFreq' : 1000*nsteps_per_ps, # once per ns
             'xtcAtoms' : 'solute',
             'precision' : 'mixed',
             'globalVarFilename' : 'globals.csv',
@@ -307,16 +307,16 @@ def run(yaml_filename=None,index=None):
 
     import os
     # make master directories
-    if not os.path.exists('13402'):
-        os.makedirs('13402')
-    if not os.path.exists('13403'):
-        os.makedirs('13403')
+    if not os.path.exists('13404'):
+        os.makedirs('13404')
+    if not os.path.exists('13405'):
+        os.makedirs('13405')
 
     # make run directories
-    if not os.path.exists(f'13402/RUN{index}'):
-        os.makedirs(f'13402/RUN{index}')
-    if not os.path.exists(f'13403/RUN{index}'):
-        os.makedirs(f'13403/RUN{index}')
+    if not os.path.exists(f'13404/RUN{index}'):
+        os.makedirs(f'13404/RUN{index}')
+    if not os.path.exists(f'13405/RUN{index}'):
+        os.makedirs(f'13405/RUN{index}')
 
     ligand_file = setup_options['ligand_file']
     old_ligand_index = setup_options['old_ligand_index']
