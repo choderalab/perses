@@ -210,9 +210,9 @@ def run_neq_fah_setup(ligand_file,
     for phase in htfs.keys():
         _logger.info(f'Setting up phase {phase}')
         if phase == 'solvent':
-            phase_dir = '13405'
+            phase_dir = '13405/RUNS'
         if phase == 'complex':
-            phase_dir = '13404'
+            phase_dir = '13404/RUNS'
         dir = os.path.join(os.getcwd(), phase_dir, f'RUN{index}')
         if not os.path.exists(dir):
             os.mkdir(dir)
@@ -308,15 +308,15 @@ def run(yaml_filename=None,index=None):
     import os
     # make master directories
     if not os.path.exists('13404'):
-        os.makedirs('13404')
+        os.makedirs('13404/RUNS/')
     if not os.path.exists('13405'):
-        os.makedirs('13405')
+        os.makedirs('13405/RUNS/')
 
     # make run directories
     if not os.path.exists(f'13404/RUN{index}'):
-        os.makedirs(f'13404/RUN{index}')
+        os.makedirs(f'13404/RUNS/RUN{index}')
     if not os.path.exists(f'13405/RUN{index}'):
-        os.makedirs(f'13405/RUN{index}')
+        os.makedirs(f'13405/RUNS/RUN{index}')
 
     ligand_file = setup_options['ligand_file']
     old_ligand_index = setup_options['old_ligand_index']
