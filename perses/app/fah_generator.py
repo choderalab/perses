@@ -67,7 +67,7 @@ def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R 
     integrator = PeriodicNonequilibriumIntegrator(alchemical_functions, nsteps_eq, nsteps_neq, neq_splitting,timestep=timestep)
     return integrator
 
-def relax_structure(temperature, system, positions, nminimize=100, nequil = 4, n_steps_per_iteration=250):
+def relax_structure(temperature, system, positions, nequil = 4, n_steps_per_iteration=250):
     """
     arguments
         temperature : simtk.unit.Quantity with units compatible with kelvin
@@ -76,8 +76,6 @@ def relax_structure(temperature, system, positions, nminimize=100, nequil = 4, n
             system object for simulation
         positions : simtk.unit.Quantity of shape (natoms,3) with units compatible with nanometers
             Positions of the atoms in the system
-        nminimize : int
-            number of minimization steps
         nequil : int
             number of equilibration applications
         n_steps_per_iteration : int
@@ -98,9 +96,7 @@ def relax_structure(temperature, system, positions, nminimize=100, nequil = 4, n
     context.setPositions(positions)
 
     _logger.info(f'Starting to minimise')
-    # Minimize
-    for iteration in tqdm.tqdm(range(nminimize)):
-        openmm.LocalEnergyMinimizer.minimize(context, 0.0, 1)
+    openmm.LocalEnergyMinimizer.minimize(context)
     # Equilibrate
     _logger.info(f'Starting to equilibrate')
     context.setVelocitiesToTemperature(temperature)
@@ -129,7 +125,7 @@ def run_neq_fah_setup(ligand_file,
                       temperature=300,
                       solvent_padding=9*unit.angstroms,
                       set_solvent_box_dims_to_complex=True,
-                      phases=['complex','solvent'],
+                      phases=['complex','solvent','vacuum'],
                       protein_pdb=None,
                       receptor_mol2=None,
                       small_molecule_forcefield = 'openff-1.0.0',
@@ -166,7 +162,7 @@ def run_neq_fah_setup(ligand_file,
         - create/serialize an openmmtools.integrators.PeriodicNonequilibriumIntegrator for all phases
         - relax generated structures with a minimizer and LangevinIntegrator for all phases
         - create/serialize a state associated with the relaxed structures
-        - TODO : create/serialize a `core.xml` object for all phases
+        - create/serialize a `core.xml` object for all phases
 
     arguments
         ligand_file : str
@@ -213,6 +209,8 @@ def run_neq_fah_setup(ligand_file,
             phase_dir = '13405/RUNS'
         if phase == 'complex':
             phase_dir = '13404/RUNS'
+        if phase == 'vacuum':
+            phase_dir = 'VACUUM/RUNS'
         dir = os.path.join(os.getcwd(), phase_dir, f'RUN{index}')
         if not os.path.exists(dir):
             os.mkdir(dir)
@@ -231,7 +229,6 @@ def run_neq_fah_setup(ligand_file,
             state = relax_structure(temperature=temperature,
                             system = htfs[phase].hybrid_system,
                             positions = htfs[phase].hybrid_positions,
-                            nminimize=num_minimize_steps,
                             nequil = num_equilibration_iterations,
                             n_steps_per_iteration=num_equilibration_steps_per_iteration)
 
@@ -245,10 +242,10 @@ def run_neq_fah_setup(ligand_file,
         pos = state.getPositions(asNumpy=True)
         pos = np.asarray(pos)
 
-        #np.save(f'{dir}/positions',pos)
+        np.save(f'{dir}/positions',pos)
         import mdtraj as md
         top = htfs[phase].hybrid_topology
-        #np.save(f'{dir}/hybrid_topology',top)
+        np.save(f'{dir}/hybrid_topology',top)
         traj = md.Trajectory(pos, top)
         traj.remove_solvent(exclude=['CL','NA'],inplace=True)
         traj.save(f'{dir}/hybrid_{phase}.pdb')
@@ -311,12 +308,16 @@ def run(yaml_filename=None,index=None):
         os.makedirs('13404/RUNS/')
     if not os.path.exists('13405'):
         os.makedirs('13405/RUNS/')
+    if not os.path.exists('VACUUM'):
+        os.makedirs('VACUUM/RUNS/')
 
     # make run directories
-    if not os.path.exists(f'13404/RUN{index}'):
-        os.makedirs(f'13404/RUNS/RUN{index}')
-    if not os.path.exists(f'13405/RUN{index}'):
-        os.makedirs(f'13405/RUNS/RUN{index}')
+    #if not os.path.exists(f'13404/RUN{index}'):
+    os.makedirs(f'13404/RUNS/RUN{index}')
+    #if not os.path.exists(f'13405/RUN{index}'):
+    os.makedirs(f'13405/RUNS/RUN{index}')
+    #if not os.path.exists(f'VACUUM/RUN{index}'):
+    os.makedirs(f'VACUUM/RUNS/RUN{index}')
 
     ligand_file = setup_options['ligand_file']
     old_ligand_index = setup_options['old_ligand_index']
