@@ -67,7 +67,7 @@ def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R 
     integrator = PeriodicNonequilibriumIntegrator(alchemical_functions, nsteps_eq, nsteps_neq, neq_splitting,timestep=timestep)
     return integrator
 
-def relax_structure(temperature, system, positions, nequil = 4, n_steps_per_iteration=250):
+def relax_structure(temperature, system, positions, nequil = 4, n_steps_per_iteration=250,platform_name='CUDA'):
     """
     arguments
         temperature : simtk.unit.Quantity with units compatible with kelvin
@@ -80,6 +80,8 @@ def relax_structure(temperature, system, positions, nequil = 4, n_steps_per_iter
             number of equilibration applications
         n_steps_per_iteration : int
             numper of steps per nequil
+        platform name : str default='CUDA'
+            platform to run openmm on
 
     return
         state : openmm.State
@@ -91,24 +93,28 @@ def relax_structure(temperature, system, positions, nequil = 4, n_steps_per_iter
     import tqdm
     _logger.info(f'Starting to relax')
     integrator = LangevinIntegrator(temperature = temperature)
-    context = openmm.Context(system, integrator)
+    platform = openmm.Platform.getPlatformByName(platform_name)
+    if platform_name in ['CUDA', 'OpenCL']:
+        platform.setPropertyDefaultValue('Precision', 'mixed')
+    if platform_name in ['CUDA']:
+        platform.setPropertyDefaultValue('DeterministicForces', 'true')
+    context = openmm.Context(system, integrator, platform)
     context.setPeriodicBoxVectors(*system.getDefaultPeriodicBoxVectors())
     context.setPositions(positions)
 
     _logger.info(f'Starting to minimise')
     openmm.LocalEnergyMinimizer.minimize(context)
     # Equilibrate
-    _logger.info(f'Starting to equilibrate')
+    _logger.info(f'set velocities to temperature')
     context.setVelocitiesToTemperature(temperature)
-    for iteration in tqdm.tqdm(range(nequil)):
-        integrator.step(n_steps_per_iteration)
+    _logger.info(f'Starting to equilibrate')
+    integrator.step(nequil*n_steps_per_iteration)
     context.setVelocitiesToTemperature(temperature)
     state = context.getState(getEnergy=True, getForces=True, getPositions=True, getVelocities=True, getParameters=True)
     _logger.info(f'Relax done')
 
     del context, integrator
     return state
-
 
 def run_neq_fah_setup(ligand_file,
                       old_ligand_index,
