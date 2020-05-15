@@ -74,7 +74,7 @@ def getSetupOptions(filename):
 
 
     if 'small_molecule_forcefield' not in setup_options:
-        setup_options['small_molecule_forcefield'] = 'gaff-2.11'
+        setup_options['small_molecule_forcefield'] = None
 
     if 'small_molecule_parameters_cache' not in setup_options:
         setup_options['small_molecule_parameters_cache'] = None
@@ -94,6 +94,9 @@ def getSetupOptions(filename):
 
     if 'nonbonded_method' not in setup_options:
         setup_options['nonbonded_method'] = 'PME'
+
+    if 'render_atom_map' not in setup_options:
+        setup_options['render_atom_map'] = True
 
     if 'run_type' not in setup_options:
         _logger.info(f"\t\t\trun_type is not specified; default to None")
@@ -418,6 +421,9 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
             top_prop[f'{phase}_forward_neglected_angles'] = getattr(fe_setup, f'_{phase}_forward_neglected_angles')
             top_prop[f'{phase}_reverse_neglected_angles'] = getattr(fe_setup, f'_{phase}_reverse_neglected_angles')
 
+        top_prop['ligand_oemol_old'] = fe_setup._ligand_oemol_old
+        top_prop['ligand_oemol_new'] = fe_setup._ligand_oemol_new
+        top_prop['non_offset_new_to_old_atom_map'] = fe_setup.non_offset_new_to_old_atom_map
         _logger.info(f"\twriting atom_mapping.png")
         atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'atom_mapping.png')
 

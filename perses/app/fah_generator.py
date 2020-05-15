@@ -202,14 +202,13 @@ def run_neq_fah_setup(ligand_file,
     setup_options['anneal_1,4s'] = setup_options['anneal_14s']
 
     #run the run_setup to generate topology proposals and htfs
-    _logger.info('SETUP STARTED') 
     setup_dict = run_setup(setup_options, serialize_systems=False, build_samplers=False)
-    _logger.info('SETUP DONE') 
     topology_proposals = setup_dict['topology_proposals']
     htfs = setup_dict['hybrid_topology_factories']
 
     #create solvent and complex directories
     for phase in htfs.keys():
+        _logger.info(f'PHASE RUNNING: {phase}')
         _logger.info(f'Setting up phase {phase}')
         if phase == 'solvent':
             phase_dir = '13405/RUNS'
@@ -285,6 +284,9 @@ def run_neq_fah_setup(ligand_file,
 
         np.save(f'{dir}/references',references)
 
+        tp = topology_proposals
+        from perses.utils.smallmolecules import render_atom_mapping
+        render_atom_mapping(f'{dir}/atom_map.png', tp['ligand_oemol_old'], tp['ligand_oemol_new'], tp['non_offset_new_to_old_atom_map'])
 
 
 def run(yaml_filename=None,index=None):
