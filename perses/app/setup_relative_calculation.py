@@ -82,8 +82,10 @@ def getSetupOptions(filename):
     if 'spectators' not in setup_options:
         setup_options['spectators'] = None
     
-    if 'box_dimensions' not in setup_options:
-        setup_options['box_dimensions'] = None 
+    if 'complex_box_dimensions' not in setup_options:
+        setup_options['complex_box_dimensions'] = None 
+    if 'solvent_box_dimensions' not in setup_options:
+        setup_options['solvent_box_dimensions'] = None 
 
     # Not sure why these are needed
     # TODO: Revisit these?
@@ -382,7 +384,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         else:
             set_solvent_box_dims_to_complex=False
 
-        _logger.info(f'Box dimensions: {setup_options["box_dimensions"]}')
+        _logger.info(f'Box dimensions: {setup_options["complex_box_dimensions"]} and {setup_options["solvent_box_dimensions"]}')
         fe_setup = RelativeFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files,phases=phases,
                                           protein_pdb_filename=protein_pdb_filename,
                                           receptor_mol2_filename=receptor_mol2, pressure=pressure,
@@ -392,7 +394,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                           atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
                                           trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'],
-                                          box_dimensions=setup_options['box_dimensions'])
+                                          complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'])
 
         _logger.info(f"\twriting pickle output...")
         if setup_pickle_file is not None:
