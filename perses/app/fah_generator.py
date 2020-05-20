@@ -122,7 +122,8 @@ def run_neq_fah_setup(ligand_file,
                       forcefield_files,
                       trajectory_directory,
                       index=0,
-                      box_dimensions=(8.5,8.5,8.5),
+                      complex_box_dimensions=(9.8, 9.8, 9.8),
+                      solvent_box_dimensions=(3.5,3.5,3.5),
                       timestep=4.0 * unit.femtosecond,
                       eq_splitting = 'V R O R V',
                       neq_splitting='V R H O R V',
@@ -130,18 +131,17 @@ def run_neq_fah_setup(ligand_file,
                       pressure=1.0,
                       temperature=300,
                       solvent_padding=9*unit.angstroms,
-                      set_solvent_box_dims_to_complex=True,
                       phases=['complex','solvent','vacuum'],
                       protein_pdb=None,
                       receptor_mol2=None,
                       small_molecule_forcefield = 'openff-1.0.0',
                       small_molecule_parameters_cache = None,
+                      atom_expression=['IntType'],
+                      bond_expression=['DefaultBonds'],
                       spectators=None,
                       neglect_angles=True,
                       anneal_14s=False,
                       nonbonded_method='PME',
-                      atom_expr=None,
-                      bond_expr=None,
                       map_strength=None,
                       softcore_v2=False,
                       save_setup_pickle_as=None,
@@ -199,7 +199,10 @@ def run_neq_fah_setup(ligand_file,
 
     #some modification for fah-specific functionality:
     setup_options['trajectory_prefix']=None
-    setup_options['anneal_1,4s'] = setup_options['anneal_14s']
+    setup_options['anneal_1,4s'] = False 
+    from perses.utils.openeye import generate_expression
+    setup_options['atom_expr'] = generate_expression(setup_options['atom_expression'])
+    setup_options['bond_expr'] = generate_expression(setup_options['bond_expression'])
 
     #run the run_setup to generate topology proposals and htfs
     setup_dict = run_setup(setup_options, serialize_systems=False, build_samplers=False)
@@ -220,7 +223,7 @@ def run_neq_fah_setup(ligand_file,
         if not os.path.exists(dir):
             os.mkdir(dir)
 
-        np.savez(f'{dir}/htf',htfs[phase])
+        np.savez_compressed(f'{dir}/htf',htfs[phase])
 
         #serialize the hybrid_system
         data.serialize(htfs[phase].hybrid_system, f"{dir}/system.xml")
