@@ -70,7 +70,8 @@ class RelativeFEPSetup(object):
                  trajectory_prefix=None,
                  spectator_filenames=None,
                  nonbonded_method = 'PME',
-                 box_dimensions=None
+                 complex_box_dimensions=None,
+                 solvent_box_dimensions=None
                  ):
         """
         Initialize a NonequilibriumFEPSetup object
@@ -115,6 +116,10 @@ class RelativeFEPSetup(object):
             These will be treated with the same small molecule forcefield as the alchemical ligands, and will only be present in the complex phase
         nonbonded_method : str, default = 'PME'
             nonbonded method, chose one of ['PME','CutoffNonPeriodic','CutoffPeriodic','NoCutoff']
+        complex_box_dimensions: Vec(3), optional, default=None
+            box dimensions for the complex phase
+        solvent_box_dimensions: Vec(3), optional, default=None
+            box dimensions for the solvent phase
         """
         self._pressure = pressure
         self._temperature = temperature
@@ -129,7 +134,8 @@ class RelativeFEPSetup(object):
         self._bond_expr = bond_expr
         self._anneal_14s = anneal_14s
         self._spectator_filenames = spectator_filenames
-        self._box_dimensions = box_dimensions
+        self._complex_box_dimensions = complex_box_dimensions
+        self._solvent_box_dimensions = solvent_box_dimensions
 
         try:
             self._nonbonded_method = getattr(app,nonbonded_method)
@@ -186,7 +192,7 @@ class RelativeFEPSetup(object):
                 self._ligand_topology_new = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_new)
                 _logger.info(f"\tsuccessfully generated topologies for both oemols.")
 
-            elif self._ligand_input[-3:] == 'sdf': #
+            elif self._ligand_input[-3:] == 'sdf' or self._ligand_input[-4:] == 'mol2': #
                 _logger.info(f"Detected .sdf format.  Proceeding...") #TODO: write checkpoints for sdf format
                 self._ligand_oemol_old = createOEMolFromSDF(self._ligand_input, index=self._old_ligand_index)
                 self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input, index=self._new_ligand_index)
@@ -301,7 +307,7 @@ class RelativeFEPSetup(object):
             _logger.info(f"setting up complex phase...")
             self._setup_complex_phase(protein_pdb_filename,receptor_mol2_filename,mol_list)
             self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(
-            self._complex_topology_old, self._complex_positions_old,phase='complex',box_dimensions=self._box_dimensions)
+            self._complex_topology_old, self._complex_positions_old,phase='complex',box_dimensions=self._complex_box_dimensions)
             _logger.info(f"successfully generated complex topology, positions, system")
 
             self._complex_md_topology_old_solvated = md.Topology.from_openmm(self._complex_topology_old_solvated)
@@ -345,7 +351,7 @@ class RelativeFEPSetup(object):
                 _logger.info(f"no complex detected in phases...generating unique topology/geometry proposals...")
                 _logger.info(f"solvating ligand...")
                 self._ligand_topology_old_solvated, self._ligand_positions_old_solvated, self._ligand_system_old_solvated = self._solvate_system(
-                self._ligand_topology_old, self._ligand_positions_old,phase='solvent',box_dimensions=self._box_dimensions)
+                self._ligand_topology_old, self._ligand_positions_old,phase='solvent',box_dimensions=self._solvent_box_dimensions)
                 self._ligand_md_topology_old_solvated = md.Topology.from_openmm(self._ligand_topology_old_solvated)
 
                 _logger.info(f"creating TopologyProposal")
@@ -530,7 +536,7 @@ class RelativeFEPSetup(object):
 
         # solvate the old ligand topology:
         old_solvated_topology, old_solvated_positions, old_solvated_system = self._solvate_system(
-            old_ligand_topology.to_openmm(), old_ligand_positions,phase='solvent', box_dimensions=self._box_dimensions)
+            old_ligand_topology.to_openmm(), old_ligand_positions,phase='solvent', box_dimensions=self._solvent_box_dimensions)
 
         old_solvated_md_topology = md.Topology.from_openmm(old_solvated_topology)
 
