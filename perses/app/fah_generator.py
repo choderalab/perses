@@ -67,7 +67,7 @@ def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R 
     integrator = PeriodicNonequilibriumIntegrator(alchemical_functions, nsteps_eq, nsteps_neq, neq_splitting,timestep=timestep)
     return integrator
 
-def relax_structure(temperature, system, positions, nequil = 4, n_steps_per_iteration=250,platform_name='CUDA'):
+def relax_structure(temperature, system, positions, nequil = 10, n_steps_per_iteration=250,platform_name='CUDA'):
     """
     arguments
         temperature : simtk.unit.Quantity with units compatible with kelvin
