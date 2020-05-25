@@ -84,6 +84,9 @@ def getSetupOptions(filename):
     
     if 'complex_box_dimensions' not in setup_options:
         setup_options['complex_box_dimensions'] = None 
+    else:
+        setup_options['complex_box_dimensions'] = tuple([float(x) for x in setup_options['complex_box_dimensions']]) 
+
     if 'solvent_box_dimensions' not in setup_options:
         setup_options['solvent_box_dimensions'] = None 
 
