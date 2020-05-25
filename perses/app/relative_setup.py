@@ -124,7 +124,7 @@ class RelativeFEPSetup(object):
         self._pressure = pressure
         self._temperature = temperature
         self._barostat_period = 50
-        self._pme_tol = 1e-04
+        self._pme_tol = 2.5e-04
         self._padding = solvent_padding
         self._hmass = hmass
         _logger.info(f"\t\t\t_hmass: {hmass}.\n")
@@ -136,7 +136,6 @@ class RelativeFEPSetup(object):
         self._spectator_filenames = spectator_filenames
         self._complex_box_dimensions = complex_box_dimensions
         self._solvent_box_dimensions = solvent_box_dimensions
-
         try:
             self._nonbonded_method = getattr(app,nonbonded_method)
             _logger.info(f'Setting non bonded method to {nonbonded_method}')
@@ -219,29 +218,37 @@ class RelativeFEPSetup(object):
                 self._ligand_topology_old = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_old)
                 self._ligand_topology_new = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_new)
                 _logger.info(f"\tsuccessfully generated topologies for both OEMOLs.")
-            else:
-                print(f'RelativeFEPSetup can only handle .smi or .sdf files currently')
-
-        else: # the ligand has been provided as a list of .sdf files
-            _logger.info(f"Detected list...perhaps this is of sdf format.  Proceeding (but without checkpoints...this may be buggy).") #TODO: write checkpoints and debug for list
-            old_ligand = pm.load_file('%s.parm7' % self._ligand_input[0], '%s.rst7' % self._ligand_input[0])
-            self._ligand_topology_old = old_ligand.topology
-            self._ligand_positions_old = old_ligand.positions
-            self._ligand_oemol_old = createOEMolFromSDF('%s.mol2' % self._ligand_input[0])
+        else:
+            self._ligand_oemol_old = createOEMolFromSDF(self._ligand_input[self._old_ligand_index])
+            self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input[self._new_ligand_index])
             self._ligand_oemol_old = generate_unique_atom_names(self._ligand_oemol_old)
-            self._ligand_smiles_old = oechem.OECreateSmiString(self._ligand_oemol_old,
-                                                             oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
-
-            new_ligand = pm.load_file('%s.parm7' % self._ligand_input[1], '%s.rst7' % self._ligand_input[1])
-            self._ligand_topology_new = new_ligand.topology
-            self._ligand_positions_new = new_ligand.positions
-            self._ligand_oemol_new = createOEMolFromSDF('%s.mol2' % self._ligand_input[1])
             self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
-            self._ligand_smiles_new = oechem.OECreateSmiString(self._ligand_oemol_new,
-                                                             oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+
+            self._ligand_oemol_old.SetTitle("OLD")
+            self._ligand_oemol_new.SetTitle("NEW")
 
             mol_list.append(self._ligand_oemol_old)
             mol_list.append(self._ligand_oemol_new)
+
+            # forcefield_generators needs to be able to distinguish between the two ligands
+            # while topology_proposal needs them to have the same residue name
+            self._ligand_oemol_old.SetTitle("MOL")
+            self._ligand_oemol_new.SetTitle("MOL")
+
+            self._ligand_positions_old = extractPositionsFromOEMol(self._ligand_oemol_old)
+            _logger.info(f"\tsuccessfully extracted positions from OEMOL.")
+
+            self._ligand_oemol_old.SetTitle("MOL")
+            self._ligand_oemol_new.SetTitle("MOL")
+            _logger.info(f"\tsetting both molecule oemol titles to 'MOL'.")
+
+            self._ligand_smiles_old = oechem.OECreateSmiString(self._ligand_oemol_old,
+                        oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+            self._ligand_smiles_new = oechem.OECreateSmiString(self._ligand_oemol_new,
+                        oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+            _logger.info(f"\tsuccessfully created SMILES for both ligand OEMOLs.")
+            self._ligand_topology_old = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_old)
+            self._ligand_topology_new = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_new)
 
         self._ligand_md_topology_old = md.Topology.from_openmm(self._ligand_topology_old)
         self._ligand_md_topology_new = md.Topology.from_openmm(self._ligand_topology_new)
@@ -288,9 +295,14 @@ class RelativeFEPSetup(object):
 
         # Create SystemGenerator
         from openmmforcefields.generators import SystemGenerator
+        _logger.info(f'PME tolerance: {self._pme_tol}')
         forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'constraints' : app.HBonds, 'hydrogenMass' : self._hmass}
-        self._system_generator = SystemGenerator(forcefields=forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
-                                                 small_molecule_forcefield=small_molecule_forcefield, molecules=molecules, cache=small_molecule_parameters_cache, periodic_forcefield_kwargs = {'nonbondedMethod': self._nonbonded_method})
+        if small_molecule_forcefield is None or small_molecule_forcefield == 'None':
+            self._system_generator = SystemGenerator(forcefields=forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+                                      periodic_forcefield_kwargs = {'nonbondedMethod': self._nonbonded_method})
+        else:
+            self._system_generator = SystemGenerator(forcefields=forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+                                                     small_molecule_forcefield=small_molecule_forcefield, molecules=molecules, cache=small_molecule_parameters_cache, periodic_forcefield_kwargs = {'nonbondedMethod': self._nonbonded_method})
         _logger.info("successfully created SystemGenerator to create ligand systems")
 
         _logger.info(f"executing SmallMoleculeSetProposalEngine...")
@@ -691,15 +703,26 @@ class RelativeFEPSetup(object):
         #modeller.delete(hs)
         #modeller.addHydrogens(forcefield=self._system_generator.forcefield)
         _logger.info(f'box_dimensions: {box_dimensions}')
-        if phase != 'vacuum':
+        _logger.info(f'solvent padding: {self._padding._value}')
+        run_solvate = True
+        if phase == 'solvent':
+            self._padding = 9. * unit.angstrom
+        if phase == 'vacuum':
+            run_solvate = False
+            _logger.info(f"\tSkipping solvation of vacuum perturbation")
+        if self._padding._value == 0.:
+            run_solvate = False
+            _logger.info(f"\tSkipping solvation as solvent padding set to zero")
+        if run_solvate: 
             _logger.info(f"\tpreparing to add solvent")
             if box_dimensions is None:
                 modeller.addSolvent(self._system_generator.forcefield, model=model, padding=self._padding, ionicStrength=0.15*unit.molar)
             else:
                 modeller.addSolvent(self._system_generator.forcefield, model=model, ionicStrength=0.15*unit.molar, boxSize=box_dimensions)
-        else:
-            _logger.info(f"\tSkipping solvation of vacuum perturbation")
         solvated_topology = modeller.getTopology()
+        if phase == 'complex' and self._padding._value == 0. and box_dimensions is not None:
+            _logger.info(f'Complex phase, where padding is set to 0. and box dimensions are provided so setting unit cell dimensions')
+            solvated_topology.setUnitCellDimensions(box_dimensions)
         solvated_positions = modeller.getPositions()
 
         # canonicalize the solvated positions: turn tuples into np.array
