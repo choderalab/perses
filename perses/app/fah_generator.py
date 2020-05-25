@@ -67,7 +67,7 @@ def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R 
     integrator = PeriodicNonequilibriumIntegrator(alchemical_functions, nsteps_eq, nsteps_neq, neq_splitting,timestep=timestep)
     return integrator
 
-def relax_structure(temperature, system, positions, nequil = 10, n_steps_per_iteration=250,platform_name='CUDA'):
+def relax_structure(temperature, system, positions, nequil = 10, n_steps_per_iteration=250,platform_name='OpenCL'):
     """
     arguments
         temperature : simtk.unit.Quantity with units compatible with kelvin
@@ -214,9 +214,9 @@ def run_neq_fah_setup(ligand_file,
         _logger.info(f'PHASE RUNNING: {phase}')
         _logger.info(f'Setting up phase {phase}')
         if phase == 'solvent':
-            phase_dir = '13405/RUNS'
+            phase_dir = '13407/RUNS'
         if phase == 'complex':
-            phase_dir = '13404/RUNS'
+            phase_dir = '13406/RUNS'
         if phase == 'vacuum':
             phase_dir = 'VACUUM/RUNS'
         dir = os.path.join(os.getcwd(), phase_dir, f'RUN{index}')
@@ -315,18 +315,18 @@ def run(yaml_filename=None,index=None):
 
     import os
     # make master directories
-    if not os.path.exists('13404'):
-        os.makedirs('13404/RUNS/')
-    if not os.path.exists('13405'):
-        os.makedirs('13405/RUNS/')
+    if not os.path.exists('13406'):
+        os.makedirs('1340r/RUNS/')
+    if not os.path.exists('13407'):
+        os.makedirs('13407/RUNS/')
     if not os.path.exists('VACUUM'):
         os.makedirs('VACUUM/RUNS/')
 
     # make run directories
     #if not os.path.exists(f'13404/RUN{index}'):
-    os.makedirs(f'13404/RUNS/RUN{index}')
+    os.makedirs(f'13406/RUNS/RUN{index}')
     #if not os.path.exists(f'13405/RUN{index}'):
-    os.makedirs(f'13405/RUNS/RUN{index}')
+    os.makedirs(f'13407/RUNS/RUN{index}')
     #if not os.path.exists(f'VACUUM/RUN{index}'):
     os.makedirs(f'VACUUM/RUNS/RUN{index}')
 
