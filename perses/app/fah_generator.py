@@ -40,7 +40,7 @@ DEFAULT_ALCHEMICAL_FUNCTIONS = {
                              'lambda_torsions': x}
 
 
-def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R H O R V', timestep=4.0 * unit.femtosecond, alchemical_functions = DEFAULT_ALCHEMICAL_FUNCTIONS, **kwargs):
+def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R H O R V', timestep=2.0 * unit.femtosecond, alchemical_functions = DEFAULT_ALCHEMICAL_FUNCTIONS, **kwargs):
     """
     generate an openmmtools.integrators.PeriodicNonequilibriumIntegrator
 
@@ -52,7 +52,7 @@ def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R 
         neq_splitting : str, default='V R H O R V'
             Sequence of "R", "V", "O" (and optionally "{", "}", "V0", "V1", ...) substeps to be executed each timestep.
             "H" increments the global parameter `lambda` by 1/nsteps_neq for each step and accumulates protocol work.
-        timestep : int, default=4.0 * unit.femtosecond
+        timestep : int, default=2.0 * unit.femtosecond
             integrator timestep
         **kwargs :
             miscellaneous arguments for openmmtools.integrators.LangevinIntegrator
@@ -67,7 +67,7 @@ def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R 
     integrator = PeriodicNonequilibriumIntegrator(alchemical_functions, nsteps_eq, nsteps_neq, neq_splitting,timestep=timestep)
     return integrator
 
-def relax_structure(temperature, system, positions, nequil = 10, n_steps_per_iteration=250,platform_name='OpenCL'):
+def relax_structure(temperature, system, positions, nequil=1000, n_steps_per_iteration=250,platform_name='OpenCL',timestep=2.*unit.femtosecond,collision_rate=90/unit.picosecond):
     """
     arguments
         temperature : simtk.unit.Quantity with units compatible with kelvin
@@ -92,7 +92,7 @@ def relax_structure(temperature, system, positions, nequil = 10, n_steps_per_ite
     from openmmtools.integrators import LangevinIntegrator
     import tqdm
     _logger.info(f'Starting to relax')
-    integrator = LangevinIntegrator(temperature = temperature)
+    integrator = LangevinIntegrator(temperature = temperature,timestep=timestep,collision_rate=collision_rate)
     platform = openmm.Platform.getPlatformByName(platform_name)
     if platform_name in ['CUDA', 'OpenCL']:
         platform.setPropertyDefaultValue('Precision', 'mixed')
@@ -107,7 +107,7 @@ def relax_structure(temperature, system, positions, nequil = 10, n_steps_per_ite
     # Equilibrate
     _logger.info(f'set velocities to temperature')
     context.setVelocitiesToTemperature(temperature)
-    _logger.info(f'Starting to equilibrate')
+    _logger.info(f'Starting to equilibrate for {nequil*n_steps_per_iteration*timestep}')
     integrator.step(nequil*n_steps_per_iteration)
     context.setVelocitiesToTemperature(temperature)
     state = context.getState(getEnergy=True, getForces=True, getPositions=True, getVelocities=True, getParameters=True)
@@ -124,9 +124,9 @@ def run_neq_fah_setup(ligand_file,
                       index=0,
                       complex_box_dimensions=(9.8, 9.8, 9.8),
                       solvent_box_dimensions=(3.5,3.5,3.5),
-                      timestep=4.0 * unit.femtosecond,
+                      timestep=2.0 * unit.femtosecond,
                       eq_splitting = 'V R O R V',
-                      neq_splitting='V R H O R V',
+                      neq_splitting='V R H O R V', 
                       measure_shadow_work=False,
                       pressure=1.0,
                       temperature=300,
@@ -148,7 +148,7 @@ def run_neq_fah_setup(ligand_file,
                       render_atom_map=False,
                       alchemical_functions=DEFAULT_ALCHEMICAL_FUNCTIONS,
                       num_minimize_steps=100,
-                      num_equilibration_iterations=4,
+                      num_equilibration_iterations=1000,
                       num_equilibration_steps_per_iteration=250,
                       nsteps_eq=250000,
                       nsteps_neq=250000,
