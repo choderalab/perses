@@ -17,6 +17,8 @@ import mdtraj as md
 from openmmtools.constants import kB 
 from pkg_resources import resource_filename
 from perses.tests.utils import validate_endstate_energies
+from openforcefield.topology import Molecule
+from openmmforcefields.generators import SystemGenerator
 
 ENERGY_THRESHOLD = 1e-2
 temperature = 300 * unit.kelvin
@@ -54,7 +56,7 @@ class PointMutationExecutor(object):
         complex_htf = pm_delivery.get_complex_htf()
         apo_htf = pm_delivery.get_apo_htf()
 
-        #now we can build the hybrid repex samplers
+        # Now we can build the hybrid repex samplers
         from perses.annihilation.lambda_protocol import LambdaProtocol
         from openmmtools.multistate import MultiStateReporter
         from perses.samplers.multistate import HybridRepexSampler
@@ -64,7 +66,7 @@ class PointMutationExecutor(object):
 
         for htf in [complex_htf, apo_htf]:
             lambda_protocol = LambdaProtocol(functions='default')
-            reporter_file = pkl[:-3]+suffix+'.nc'
+            reporter_file = 'reporter.nc'
             reporter = MultiStateReporter(reporter_file, analysis_particle_indices = htf.hybrid_topology.select(selection), checkpoint_interval = checkpoint_interval)
             hss = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep= 4.0 * unit.femtoseconds,
                                                                                   collision_rate=5.0 / unit.picosecond,
@@ -121,8 +123,6 @@ class PointMutationExecutor(object):
         TODO : allow argument for separate apo structure if it exists separately
                allow argument for specator ligands besides the 'ligand_filename'
         """
-        from openforcefield.topology import Molecule
-        from openmmforcefields.generators import SystemGenerator
 
         # First thing to do is make a complex and apo...
         pdbfile = open(receptor_filename, 'r')
