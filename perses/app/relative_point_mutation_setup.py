@@ -5,7 +5,7 @@ from perses.utils.openeye import *
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.annihilation.lambda_protocol import LambdaProtocol
 from perses.rjmc.topology_proposal import PointMutationEngine
-from perses.rjmc.geometry import FFAllAngleGeometryEngine
+from perses.rjmc.geometry import FFAllAngleGeometryEnginee
 
 import simtk.openmm as openmm
 import simtk.openmm.app as app
