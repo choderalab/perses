@@ -1,12 +1,17 @@
 from __future__ import absolute_import
 
+from perses.dispersed import feptasks
 from perses.samplers import multistate
 from perses.utils.openeye import *
+from perses.utils.data import load_smi
 from perses.annihilation.relative import HybridTopologyFactory
-from perses.annihilation.lambda_protocol import LambdaProtocol
-from perses.rjmc.topology_proposal import PointMutationEngine
-from perses.rjmc.geometry import FFAllAngleGeometryEnginee
+from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
+from perses.rjmc.topology_proposal import TopologyProposal, TwoMoleculeSetProposalEngine, SmallMoleculeSetProposalEngine, PointMutationEngine
+from perses.rjmc.geometry import FFAllAngleGeometryEngine
 
+from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
+
+import pymbar
 import simtk.openmm as openmm
 import simtk.openmm.app as app
 import simtk.unit as unit
@@ -14,7 +19,17 @@ import numpy as np
 from openmoltools import forcefield_generators
 import copy
 import mdtraj as md
-from openmmtools.constants import kB 
+from io import StringIO
+from openmmtools.constants import kB
+import logging
+import os
+import dask.distributed as distributed
+import parmed as pm
+from collections import namedtuple
+from typing import List, Tuple, Union, NamedTuple
+from collections import namedtuple
+import random
+from scipy.special import logsumexp
 from pkg_resources import resource_filename
 from perses.tests.utils import validate_endstate_energies
 
@@ -124,7 +139,7 @@ class PointMutationExecutor(object):
         from openforcefield.topology import Molecule
         from openmmforcefields.generators import SystemGenerator
 
-        # First thing to do is make a complex and apo...
+        # first thing to do is make a complex and apo...
         pdbfile = open(receptor_filename, 'r')
         pdb = app.PDBFile(pdbfile)
         pdbfile.close()
@@ -140,14 +155,14 @@ class PointMutationExecutor(object):
         ligand_md_topology = md.Topology.from_openmm(ligand_topology)
         ligand_n_atoms = ligand_md_topology.n_atoms
 
-        # Now create a complex
+        #now create a complex
         complex_md_topology = receptor_md_topology.join(ligand_md_topology)
         complex_topology = complex_md_topology.to_openmm()
         complex_positions = unit.Quantity(np.zeros([receptor_n_atoms + ligand_n_atoms, 3]), unit=unit.nanometers)
         complex_positions[:receptor_n_atoms, :] = receptor_positions
         complex_positions[receptor_n_atoms:, :] = ligand_positions
 
-        # Now for a system_generator
+        #now for a system_generator
         self.system_generator = SystemGenerator(forcefields = forcefield_files,
                                                 barostat=barostat,
                                                 forcefield_kwargs=forcefield_kwargs,
@@ -155,9 +170,9 @@ class PointMutationExecutor(object):
                                                 molecules=molecules,
                                                 cache=None)
 
-        # Create complex and apo inputs...
+        #create complex and apo inputs...
         complex_topology, complex_positions, complex_system = self._solvate(complex_topology, complex_positions, 'tip3p', phase = phase)
-        apo_topology, apo_positions, apo_system = self._solvate(receptor_topology, receptor_positions, 'tip3p', phase = phase)
+        apo_topology, apo_positions, apo_system = self._solvate(receptor_topology, receptor_positions, 'tip3p', phase = 'phase')
 
         geometry_engine = FFAllAngleGeometryEngine(metadata=None,
                                                 use_sterics=False,
@@ -172,16 +187,16 @@ class PointMutationExecutor(object):
                                                 use_14_nonbondeds = True)
 
 
-        # Run pipeline...
+        #run pipeline...
         htfs = []
         for (top, pos, sys) in zip([complex_topology, apo_topology], [complex_positions, apo_positions], [complex_system, apo_system]):
             point_mutation_engine = PointMutationEngine(wildtype_topology = top,
                                                                  system_generator = self.system_generator,
-                                                                 chain_id = mutation_chain_id, # Denote the chain id allowed to mutate (it's always a string variable)
+                                                                 chain_id = mutation_chain_id, #denote the chain id allowed to mutate (it's always a string variable)
                                                                  max_point_mutants = 1,
-                                                                 residues_allowed_to_mutate = [mutation_residue_id], # The residue ids allowed to mutate
-                                                                 allowed_mutations = [(mutation_residue_id, proposed_residue)], # The residue ids allowed to mutate with the three-letter code allowed to change
-                                                                 aggregate = True) # Always allow aggregation
+                                                                 residues_allowed_to_mutate = [mutation_residue_id], #the residue ids allowed to mutate
+                                                                 allowed_mutations = [(mutation_residue_id, proposed_residue)], #the residue ids allowed to mutate with the three-letter code allowed to change
+                                                                 aggregate = True) #always allow aggregation
 
             topology_proposal = point_mutation_engine.propose(sys, top)
 
@@ -235,7 +250,6 @@ class PointMutationExecutor(object):
 
     def get_complex_htf(self):
         return copy.deepcopy(self.complex_htf)
-
     def get_apo_htf(self):
         return copy.deepcopy(self.apo_htf)
 
@@ -275,7 +289,7 @@ class PointMutationExecutor(object):
         modeller = app.Modeller(topology, positions)
 
 
-        # Now we have to add missing atoms
+        #now we have to add missing atoms
         if phase != 'vacuum':
             modeller.addSolvent(self.system_generator.forcefield, model=model, padding = 1.0 * unit.nanometers, ionicStrength=0.15*unit.molar)
         else:
@@ -284,7 +298,7 @@ class PointMutationExecutor(object):
         solvated_topology = modeller.getTopology()
         solvated_positions = modeller.getPositions()
 
-        # Canonicalize the solvated positions: turn tuples into np.array
+        # canonicalize the solvated positions: turn tuples into np.array
         solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
         solvated_system = self.system_generator.create_system(solvated_topology)
 
