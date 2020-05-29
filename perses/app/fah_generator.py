@@ -40,7 +40,7 @@ DEFAULT_ALCHEMICAL_FUNCTIONS = {
                              'lambda_torsions': x}
 
 
-def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R H O R V', timestep=2.0 * unit.femtosecond, alchemical_functions = DEFAULT_ALCHEMICAL_FUNCTIONS, **kwargs):
+def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R H O R V', timestep=4.0 * unit.femtosecond, alchemical_functions = DEFAULT_ALCHEMICAL_FUNCTIONS, **kwargs):
     """
     generate an openmmtools.integrators.PeriodicNonequilibriumIntegrator
 
@@ -52,7 +52,7 @@ def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R 
         neq_splitting : str, default='V R H O R V'
             Sequence of "R", "V", "O" (and optionally "{", "}", "V0", "V1", ...) substeps to be executed each timestep.
             "H" increments the global parameter `lambda` by 1/nsteps_neq for each step and accumulates protocol work.
-        timestep : int, default=2.0 * unit.femtosecond
+        timestep : int, default=4.0 * unit.femtosecond
             integrator timestep
         **kwargs :
             miscellaneous arguments for openmmtools.integrators.LangevinIntegrator
@@ -121,10 +121,9 @@ def run_neq_fah_setup(ligand_file,
                       new_ligand_index,
                       forcefield_files,
                       trajectory_directory,
-                      index=0,
                       complex_box_dimensions=(9.8, 9.8, 9.8),
                       solvent_box_dimensions=(3.5,3.5,3.5),
-                      timestep=2.0 * unit.femtosecond,
+                      timestep=4.0 * unit.femtosecond,
                       eq_splitting = 'V R O R V',
                       neq_splitting='V R H O R V', 
                       measure_shadow_work=False,
@@ -139,7 +138,7 @@ def run_neq_fah_setup(ligand_file,
                       atom_expression=['IntType'],
                       bond_expression=['DefaultBonds'],
                       spectators=None,
-                      neglect_angles=True,
+                      neglect_angles=False,
                       anneal_14s=False,
                       nonbonded_method='PME',
                       map_strength=None,
@@ -205,6 +204,7 @@ def run_neq_fah_setup(ligand_file,
     setup_options['bond_expr'] = generate_expression(setup_options['bond_expression'])
 
     #run the run_setup to generate topology proposals and htfs
+    _logger.info(f"spectators: {setup_options['spectators']}")
     setup_dict = run_setup(setup_options, serialize_systems=False, build_samplers=False)
     topology_proposals = setup_dict['topology_proposals']
     htfs = setup_dict['hybrid_topology_factories']
@@ -219,7 +219,7 @@ def run_neq_fah_setup(ligand_file,
             phase_dir = '13406/RUNS'
         if phase == 'vacuum':
             phase_dir = 'VACUUM/RUNS'
-        dir = os.path.join(os.getcwd(), phase_dir, f'RUN{index}')
+        dir = os.path.join(os.getcwd(), phase_dir, f"setup_dict['trajectory_directory']")
         if not os.path.exists(dir):
             os.mkdir(dir)
 
@@ -292,7 +292,7 @@ def run_neq_fah_setup(ligand_file,
         render_atom_mapping(f'{dir}/atom_map.png', tp['ligand_oemol_old'], tp['ligand_oemol_new'], tp['non_offset_new_to_old_atom_map'])
 
 
-def run(yaml_filename=None,index=None):
+def run(yaml_filename=None):
     import sys
     if yaml_filename is None:
        try:
@@ -300,12 +300,6 @@ def run(yaml_filename=None,index=None):
           _logger.info(f"Detected yaml file: {yaml_filename}")
        except IndexError as e:
            _logger.critical(f"You must specify the setup yaml file as an argument to the script.")
-    if index is None:
-       try:
-          index = sys.argv[2]
-          _logger.info(f"Detected index: {index}")
-       except IndexError as e:
-           _logger.critical(f"FAH generator needs an index to know which run this job is for")
     from perses.app.setup_relative_calculation import getSetupOptions
     import yaml
     yaml_file = open(yaml_filename, 'r')
@@ -315,29 +309,26 @@ def run(yaml_filename=None,index=None):
 
     import os
     # make master directories
-    if not os.path.exists('13406'):
-        os.makedirs('1340r/RUNS/')
-    if not os.path.exists('13407'):
-        os.makedirs('13407/RUNS/')
+    if not os.path.exists('13408'):
+        os.makedirs('13408/RUNS/')
+    if not os.path.exists('13409'):
+        os.makedirs('13409/RUNS/')
     if not os.path.exists('VACUUM'):
         os.makedirs('VACUUM/RUNS/')
 
     # make run directories
-    #if not os.path.exists(f'13404/RUN{index}'):
-    os.makedirs(f'13406/RUNS/RUN{index}')
-    #if not os.path.exists(f'13405/RUN{index}'):
-    os.makedirs(f'13407/RUNS/RUN{index}')
-    #if not os.path.exists(f'VACUUM/RUN{index}'):
-    os.makedirs(f'VACUUM/RUNS/RUN{index}')
+    os.makedirs(f"13408/RUNS/{setup_options['trajectory_directory']}")
+    os.makedirs(f"13409/RUNS/{setup_options['trajectory_directory']}")
+    os.makedirs(f"VACUUM/RUNS/{setup_options['trajectory_directory']}")
 
     ligand_file = setup_options['ligand_file']
     old_ligand_index = setup_options['old_ligand_index']
     new_ligand_index = setup_options['new_ligand_index']
     forcefield_files = setup_options['forcefield_files']
     protein_pdb = setup_options['protein_pdb']
-    trajectory_directory = f'RUN{index}'
+    trajectory_directory = setup_options['trajectory_directory'] 
 
-    run_neq_fah_setup(ligand_file,old_ligand_index,new_ligand_index,forcefield_files,trajectory_directory,index=index, protein_pdb=protein_pdb)
+    run_neq_fah_setup(**setup_options)
 
 # if __name__ == "__main__":
 #     setup_yaml, neq_setup_yaml, run_number = sys.argv[1], sys.argv[2], sys.argv[3] #define args
