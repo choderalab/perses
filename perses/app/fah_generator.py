@@ -214,12 +214,12 @@ def run_neq_fah_setup(ligand_file,
         _logger.info(f'PHASE RUNNING: {phase}')
         _logger.info(f'Setting up phase {phase}')
         if phase == 'solvent':
-            phase_dir = '13407/RUNS'
+            phase_dir = f"{setup_options['solvent_projid']}/RUNS"
         if phase == 'complex':
-            phase_dir = '13406/RUNS'
+            phase_dir = f"{setup_options['complex_projid']}/RUNS"
         if phase == 'vacuum':
             phase_dir = 'VACUUM/RUNS'
-        dir = os.path.join(os.getcwd(), phase_dir, f"setup_dict['trajectory_directory']")
+        dir = os.path.join(os.getcwd(), phase_dir, trajectory_directory)
         if not os.path.exists(dir):
             os.mkdir(dir)
 
@@ -306,19 +306,18 @@ def run(yaml_filename=None):
     setup_options = yaml.load(yaml_file, Loader=yaml.FullLoader)
     yaml_file.close()
 
-
     import os
     # make master directories
-    if not os.path.exists('13408'):
-        os.makedirs('13408/RUNS/')
-    if not os.path.exists('13409'):
-        os.makedirs('13409/RUNS/')
+    if not os.path.exists(f"{setup_options['complex_projid']}"):
+        os.makedirs(f"{setup_options['complex_projid']}/RUNS/")
+    if not os.path.exists(f"{setup_options['solvent_projid']}"):
+        os.makedirs(f"{setup_options['solvent_projid']}/RUNS/")
     if not os.path.exists('VACUUM'):
         os.makedirs('VACUUM/RUNS/')
 
     # make run directories
-    os.makedirs(f"13408/RUNS/{setup_options['trajectory_directory']}")
-    os.makedirs(f"13409/RUNS/{setup_options['trajectory_directory']}")
+    os.makedirs(f"{setup_options['complex_projid']}/RUNS/{setup_options['trajectory_directory']}")
+    os.makedirs(f"{setup_options['solvent_projid']}/RUNS/{setup_options['trajectory_directory']}")
     os.makedirs(f"VACUUM/RUNS/{setup_options['trajectory_directory']}")
 
     ligand_file = setup_options['ligand_file']
@@ -329,22 +328,3 @@ def run(yaml_filename=None):
     trajectory_directory = setup_options['trajectory_directory'] 
 
     run_neq_fah_setup(**setup_options)
-
-# if __name__ == "__main__":
-#     setup_yaml, neq_setup_yaml, run_number = sys.argv[1], sys.argv[2], sys.argv[3] #define args
-#
-#     #open the setup yaml to pull trajectory_directory
-#     yaml_file = open(setup_yaml, 'r')
-#     setup_options = yaml.load(yaml_file, Loader=yaml.FullLoader)
-#     yaml_file.close()
-#     traj_dir = setup_options['trajectory_directory']
-#
-#     gather all
-#     phases = setup_options['phases']
-#     for phase in phases:
-#         now_path = os.path.join(os.getcwd(), f"{traj_dir}_{phase}")
-#         if not os.path.exists(now_path):
-#             os.mkdir(now_path)
-#         else:
-#             raise Exception(f"{now_path} already exists.  Aborting.")
-#     run_neq_fah_setup(setup_yaml, neq_yaml, int(run_number), **kwargs)
