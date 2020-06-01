@@ -90,6 +90,7 @@ class PointMutationExecutor(object):
                  barostat=openmm.MonteCarloBarostat(1.0 * unit.atmosphere, temperature, 50),
                  forcefield_kwargs={'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus},
                  periodic_forcefield_kwargs={'nonbondedMethod': app.PME},
+                 nonperiodic_forcefield_kwargs=None,
                  small_molecule_forcefields='gaff-2.11',
                  **kwargs):
         """
@@ -118,6 +119,8 @@ class PointMutationExecutor(object):
                 forcefield kwargs for system parametrization
             periodic_forcefield_kwargs : dict, default {'nonbondedMethod': app.PME}
                 periodic forcefield kwargs for system parametrization
+            nonperiodic_forcefield_kwargs : dict, default None
+                non-periodic forcefield kwargs for system parametrization
             small_molecule_forcefields : str, default 'gaff-2.11'
                 the forcefield string for small molecule parametrization
 
@@ -164,7 +167,8 @@ class PointMutationExecutor(object):
                                                 barostat=barostat,
                                                 forcefield_kwargs=forcefield_kwargs,
                                                 periodic_forcefield_kwargs=periodic_forcefield_kwargs,
-                                                small_molecule_forcefield = small_molecule_forcefields,
+                                                nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
+                                                small_molecule_forcefield=small_molecule_forcefields,
                                                 molecules=molecules,
                                                 cache=None)
 
