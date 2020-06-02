@@ -15,16 +15,17 @@ Topology proposal engines
 
     TopologyProposal
     ProposalEngine
-    SmallMoleculeAtomMapper
-    PremappedSmallMoleculeSetProposalEngine
+    .. SmallMoleculeAtomMapper
+    .. PremappedSmallMoleculeSetProposalEngine
     SmallMoleculeSetProposalEngine
     PolymerProposalEngine
     PointMutationEngine
     PeptideLibraryEngine
-    NullProposalEngine
-    NaphthaleneProposalEngine
-    ButaneProposalEngine
-    PropaneProposalEngine
+    .. JRG: This class does not exist anymore?
+    .. ButaneProposalEngine
+    .. NaphthaleneProposalEngine
+    .. PropaneProposalEngine
+    .. NullProposalEngine
 
 OpenMM System generation utilities
 ----------------------------------
@@ -34,7 +35,8 @@ OpenMM System generation utilities
     :nosignatures:
     :toctree: api/generated/
 
-    SystemGenerator
+    .. .. This has moved to openforcefields?
+    .. SystemGenerator
 
 Geometry proposal engines
 -------------------------
@@ -46,7 +48,8 @@ Geometry proposal engines
 
     GeometryEngine
     FFAllAngleGeometryEngine
-    OmegaGeometryEngine
+    .. JRG: This class does not exist anymore?
+    .. OmegaGeometryEngine
 
 Geometry utility classes
 ------------------------
@@ -56,9 +59,11 @@ Geometry utility classes
     :nosignatures:
     :toctree: api/generated/
 
-    PredAtomTopologyIndex
-    BootstrapParticleFilter
     GeometrySystemGenerator
-    GeometrySystemGeneratorFast
-    PredHBond
-    ProposalOrderTools
+    .. JRG: These classes does not exist anymore?
+    .. BootstrapParticleFilter
+    .. GeometrySystemGeneratorFast
+    .. PredAtomTopologyIndex
+    .. PredHBond
+    .. .. This one is also dead code in some modules!
+    .. ProposalOrderTools
