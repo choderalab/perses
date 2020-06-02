@@ -413,7 +413,7 @@ class Analysis(object):
         """
         Generate histograms of each component of Expanded Ensemble log acceptance probability
 
-        Arguments:
+        Parameters
         ----------
         environment : str
             The environment to use

@@ -121,15 +121,15 @@ class Parallelism(object):
         """
         wrapper to scatter the local data to distributed memory
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         df : object
             any python object to be distributed to workers
         workers : list of str
             worker addresses
 
-        Return
-        ------
+        Returns
+        -------
         scatter_future : <generalized> future
             scattered future
         """
@@ -151,8 +151,8 @@ class Parallelism(object):
         """
         wrapper to map a function and its arguments to the client for scheduling
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         func : function
             python function to distribute
         arguments : tuple of lists, default None
@@ -161,7 +161,7 @@ class Parallelism(object):
             worker address list
 
         Returns
-        ---------
+        -------
         futures: <generalized> future object
             futures of the map
         """
@@ -184,8 +184,8 @@ class Parallelism(object):
         """
         distribute single function with single set of arguments to all workers
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         func : function
             python function to distribute
         arguments : tuple of args, default None
@@ -194,7 +194,7 @@ class Parallelism(object):
             worker address list
 
         Returns
-        ---------
+        -------
         futures: <generalized> future object
             futures of the map
         """
@@ -212,8 +212,8 @@ class Parallelism(object):
         """
         wrapper to gather a function given its arguments
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         futures : list of <generalized> futures
             futures that are to be gathered
         omit_errors : bool, default False
@@ -222,7 +222,7 @@ class Parallelism(object):
                      If this is the case, then the function/method pointer to `futures` must be safe
 
         Returns
-        ---------
+        -------
         results: <generalized> function output
             the results of the futures
         """
@@ -240,8 +240,8 @@ class Parallelism(object):
         """
         wrapper to pull the .result() of a method called to an actor
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         future : <generalized> future
             the future object to be collected from an actor
         """
@@ -259,13 +259,13 @@ class Parallelism(object):
         """
         wrapper to launch an actor
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         _class : class object
             class to put on a worker
 
         Returns
-        ---------
+        -------
         actor : dask.distributed.Actor pointer (future)
         """
         if self.client is not None:
@@ -284,8 +284,8 @@ class Parallelism(object):
         """
         wrapper to log the progress of futures
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         futures : list of <generalized> futures
             futures that are to be gathered
         """
@@ -302,8 +302,8 @@ class Parallelism(object):
         """
         wrapper to wait until futures are complete.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         futures : list of <generalized> futures
             futures that are to be gathered
         """

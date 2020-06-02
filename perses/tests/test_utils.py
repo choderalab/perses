@@ -38,7 +38,7 @@ def test_extractPositionsFromOEMol(molecule=smiles_to_oemol('CC')):
     Generates an ethane OEMol from string and checks it returns positions of correct length and units
 
     Paramters
-    ---------
+    ----------
     smiles : str, default 'CC'
         default is ethane molecule
 
@@ -63,7 +63,7 @@ def test_giveOpenmmPositionsToOEMol(positions=None, molecule=smiles_to_oemol('CC
     Checks that positions of an OEMol can be updated using openmm positions by shifting a molecule by 1 A
 
     Paramters
-    ---------
+    ----------
     positions : openmm positions, default None
         openmm positions that will be used to update the OEMol
     molecule : openeye.oechem.OEMol

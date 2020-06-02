@@ -53,7 +53,7 @@ def plot_logPs(logps, molecule_name, scheme, component):
     """
     Create line plot of mean and standard deviation of given logPs.
 
-    Arguments:
+    Parameters
     ----------
         logps: dict { int : np.ndarray }
             key : number of total NCMC steps
@@ -94,7 +94,7 @@ def benchmark_exen_ncmc_protocol(analyses, molecule_name, scheme):
         * Plot mean and standard deviation of EXEN logP as a function of
           total steps
 
-    Arguments:
+    Parameters
     ----------
         analyses : dict { int : perses.Analysis }
             key : number of total NCMC steps

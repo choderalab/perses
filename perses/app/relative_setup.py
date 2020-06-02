@@ -784,14 +784,14 @@ class DaskClient(object):
         """
         wrapper to map a function and its arguments to the client for scheduling
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         func : function to map
             arguments: tuple of the arguments that the function will take
         argument : tuple of argument lists
 
         Returns
-        ---------
+        -------
         futures
         """
         if self.client is None:
@@ -807,12 +807,12 @@ class DaskClient(object):
         """
         wrapper to gather a function given its arguments
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         futures : future pointers
 
         Returns
-        ---------
+        -------
         results
         """
         if self.client is None:
@@ -1101,7 +1101,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
         Instantiate sMC particles. This entails loading n_iterations snapshots from disk (from each endstate of specified)
         and distributing Particle classes.
 
-        Arguments
+        Parameters
         ----------
         n_lambdas : int, default None
             number of lambdas values.
@@ -1600,7 +1600,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
         Given corresponding start_val and end_val of observables, conduct a binary search to find min value for which the observable threshold
         is exceeded.
 
-        Arguments
+        Parameters
         ----------
         futures:
             list of dask.Future objects that point to futures

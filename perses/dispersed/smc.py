@@ -213,8 +213,8 @@ class SequentialMonteCarlo():
         Function to implement the approprate parallelism given input arguments.
         This is exposed as a method in case the class already exists and the user wants to change the parallelism scheme.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         external_parallelism : dict('parallelism': perses.dispersed.parallel.Parallelism, 'available_workers': list(str)), default None
             an external parallelism dictionary
         internal_parallelism : dict, default {'library': ('dask', 'LSF'), 'num_processes': 2}
@@ -312,7 +312,7 @@ class SequentialMonteCarlo():
         Conduct vanilla AIS (i.e. nonequilibrium switching FEP) with a given protocol (for each direction), specified annealing time per lambda, and support for rethermalization (i.e. velocity resampling)
         NOTE: AIS is NaN-safe
 
-        Arguments
+        Parameters
         ----------
         num_particles : int
             number of particles to run in each direction
@@ -436,7 +436,7 @@ class SequentialMonteCarlo():
         """
         Conduct SequentialMonteCarlo sampling with a trailblazed protocol.  Resampling is supported.
 
-        Arguments
+        Parameters
         ----------
         num_particles : int
             number of particles to run in each direction
@@ -740,8 +740,8 @@ class SequentialMonteCarlo():
         via AIS or generalized sMC.  The self.cumulative_works, self.dg_EXP, and self.dg_BAR (if applicable) are returned as
         instance attributes.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         cumulative_work_dict : dict
             dictionary of the form {_direction <str>: np.nddarray of shape (num_particles, iterations)}
             where _direction is 'forward' or 'reverse' and np.2darray is of the shape (num_particles, iteration_number + 2)
@@ -947,7 +947,7 @@ class SequentialMonteCarlo():
         """
         Attempt to resample particles given an observable diagnostic and a resampling method.
 
-        Arguments
+        Parameters
         ----------
         incremental_works : np.array() of floats
             the incremental work accumulated from importance sampling at time t
@@ -1025,7 +1025,7 @@ class SequentialMonteCarlo():
         """
         Given corresponding start_val and end_val of observables, conduct a binary search to find min value for which the observable threshold
         is exceeded.
-        Arguments
+        Parameters
         ----------
         sampler_states : np.array(openmmtools.states.SamplerState)
             numpy array of sampler states

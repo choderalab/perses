@@ -121,7 +121,7 @@ def show_topology(topology):
     Outputs bond atoms and bonds in topology object
 
     Paramters
-    ---------
+    ----------
     topology : Topology object
     """
     output = ""
@@ -139,8 +139,8 @@ def render_single_molecule(filename, molecule, width=1200, height=600):
     """
     simple function to create an oemol image
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     filename : str
         The PDF filename to write to.
     molecule : openeye.oechem.OEMol

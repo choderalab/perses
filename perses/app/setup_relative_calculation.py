@@ -47,10 +47,12 @@ from openmmtools.constants import kB
 def getSetupOptions(filename):
     """
     Reads input yaml file, makes output directory and returns setup options
-    Parameter
-    ---------
+
+    Parameters
+    ----------
     filename : str
         .yaml file containing simulation parameters
+
     Returns
     -------
     setup_options :
@@ -253,7 +255,7 @@ def getSetupOptions(filename):
         setup_options['bond_expr'] = None
 
     if 'map_strength' not in setup_options:
-        setup_options['map_strength'] = None 
+        setup_options['map_strength'] = None
 
     if 'anneal_1,4s' not in setup_options:
         setup_options['anneal_1,4s'] = False

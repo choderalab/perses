@@ -84,8 +84,8 @@ def add_method(object, function):
         """
         Bind a function to an object instance
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         object : class instance
             object to which function will be bound
         function : function
@@ -100,8 +100,8 @@ def set_residue_oemol_and_openmm_topology_attributes(object, residue_oemol, resi
         openmm.Topology.residue,
         and the corresponding index map.
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     object : class instance
         object to which function will be bound
     residue_oemol : openeye.oechem.OEMol
@@ -189,8 +189,8 @@ def augment_openmm_topology(topology, residue_oemol, residue_topology, residue_t
     """
     Add the networkx builder tools as attribute and methods to the specified topology
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     topology : simtk.openmm.topology.Topology
         topology that will be augmented
     residue_oemol : openeye.oechem.OEMol
@@ -314,8 +314,8 @@ class AtomMapper(object):
         """
         Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         current_oemol : openeye.oechem.oemol object
              The current molecule in the sampler
         proposed_oemol : openeye.oechem.oemol object
@@ -350,7 +350,7 @@ class AtomMapper(object):
                              'strong': [STRONG_ATOM_EXPRESSION, STRONG_BOND_EXPRESSION]}
         if map_strength is None:
             map_strength = 'default'
-    
+
         if atom_expr is None:
             _logger.debug(f'No atom expression defined, using map strength : {map_strength}')
             atom_expr = map_strength_dict[map_strength][0]
@@ -401,19 +401,19 @@ class AtomMapper(object):
         max_num_atoms = max([match.NumAtoms() for match in top_matches])
         _logger.debug(f"\tthere are {len(top_matches)} top matches with at most {max_num_atoms} before hydrogen exceptions")
         _logger.debug(f"\tthe max number of atom matches is: {max_num_atoms}; there are {len([m for m in top_matches if m.NumAtoms() == max_num_atoms])} matches herein")
-        
+
         # check the most mapped is the same once hydrogen exceptions are handled
         all_new_to_old_atom_maps = []
         count_after_hydrogen_mapping = []
         for match in top_matches:
-            map_dict = AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion) 
+            map_dict = AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion)
             count_after_hydrogen_mapping.append(len(map_dict))
             all_new_to_old_atom_maps.append(map_dict)
 
         max_num_atoms = max(count_after_hydrogen_mapping)
         _logger.info(f'Maximum atom matched after hydrogen exceptions: {max_num_atoms}')
         new_to_old_atom_maps = [map for count, map in zip(count_after_hydrogen_mapping,all_new_to_old_atom_maps) if count == max_num_atoms]
-        
+
 
         #now all else is equal; we will choose the map with the highest overlap of atom indices
         index_overlap_numbers = []
@@ -447,8 +447,8 @@ class AtomMapper(object):
         """
         Create a dict of {pattern_atom: target_atom}
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         current_mol : openeye.oechem.oemol object
         proposed_mol : openeye.oechem.oemol object
         match : oechem.OEMCSSearch.Match iter
@@ -481,8 +481,8 @@ class AtomMapper(object):
         """
         Returns an atom map that omits hydrogen-to-nonhydrogen atom maps AND X-H to Y-H where element(X) != element(Y)
         or aromatic(X) != aromatic(Y)
-        Arguments
-        ---------
+        Parameters
+        ----------
         old_mol : openeye.oechem.oemol object
         new_mol : openeye.oechem.oemol object
         match : oechem.OEMCSSearch.Match iter
@@ -760,8 +760,8 @@ class TopologyProposal(object):
     This is a container class with convenience methods to access various objects needed
     for a topology proposal
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     new_topology : simtk.openmm.topology.Topology object (augmented)
         openmm Topology representing the proposed new system
     new_system : simtk.openmm.System object
@@ -928,7 +928,7 @@ class ProposalEngine(object):
     This defines a type which, given the requisite metadata, can produce Proposals (namedtuple)
     of new topologies.
 
-    Arguments
+    Parameters
     --------
     system_generator : SystemGenerator
         The SystemGenerator to use to generate new System objects for proposed Topology objects
@@ -950,8 +950,8 @@ class ProposalEngine(object):
         """
         Base interface for proposal method.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         current_system : simtk.openmm.System object
             The current system object
         current_topology : simtk.openmm.app.Topology object
@@ -1069,8 +1069,8 @@ class PolymerProposalEngine(ProposalEngine):
         """
         Generate a TopologyProposal
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         current_system : simtk.openmm.System object
             The current system object
         current_topology : simtk.openmm.app.Topology object
@@ -1278,8 +1278,8 @@ class PolymerProposalEngine(ProposalEngine):
         """
         return the maps of the adjacent residue atoms; here, we will ALWAYS consider the atoms of the residues adjacent to the mutation residue to be core
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         old_topology : simtk.openmm.app.Topology object
             topology of the old system
         new_topology : simtk.openmm.app.Topology object
@@ -1336,8 +1336,8 @@ class PolymerProposalEngine(ProposalEngine):
         """
         Dummy function in parent (PolymerProposalEngine) class to choose a mutant
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
             topology of the protein
         metadata : dict
@@ -1357,8 +1357,8 @@ class PolymerProposalEngine(ProposalEngine):
         """
         generates list to reference residue instance to be edited, because topology.residues() cannot be referenced directly by index
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
         index_to_new_residues : dict
             key : int (index, zero-indexed in chain)
@@ -1377,8 +1377,8 @@ class PolymerProposalEngine(ProposalEngine):
         """
         Identify excess atoms, excess bonds, missing atoms, and missing bonds.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
             The original Topology object to be processed
         residue_map : list(tuples)
@@ -1527,8 +1527,8 @@ class PolymerProposalEngine(ProposalEngine):
     def _add_new_atoms(self, topology, missing_atoms, missing_bonds, residue_map):
         """
         Add new atoms (and corresponding bonds) to new residues
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
             extra atoms from old residue have been deleted, missing atoms in new residue not yet added
         missing_atoms : dict
@@ -1591,8 +1591,8 @@ class PolymerProposalEngine(ProposalEngine):
     def _is_residue_equal(self, residue, other_residue):
         """
             Check if residue is equal to other_residue based on their names, indices, ids, and chain ids.
-            Arguments
-            ---------
+            Parameters
+            ----------
             residue : simtk.openmm.app.topology.Residue
             other_residue : simtk.openmm.app.topology.Residue
             Returns
@@ -1609,8 +1609,8 @@ class PolymerProposalEngine(ProposalEngine):
         """
         Construct atom map (key: index to new residue, value: index to old residue) to supply as an argument to the TopologyProposal.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         residue_map : list(tuples)
             simtk.openmm.app.topology.Residue, str (three letter residue name of new residue)
         old_topology : simtk.openmm.app.Topology
@@ -1813,8 +1813,8 @@ class PolymerProposalEngine(ProposalEngine):
         """
         Given two molecules, returns the mapping of atoms between them.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         current_molecule : openeye.oechem.oemol object
              The current molecule in the sampler
         proposed_molecule : openeye.oechem.oemol object
@@ -1912,8 +1912,8 @@ class PolymerProposalEngine(ProposalEngine):
         """
         Utility function to ensure that the valence terms and nonbonded exceptions do not change between alchemical and environment atoms.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology_proposal : TopologyProposal
             topology proposal
 
@@ -2105,8 +2105,8 @@ class PointMutationEngine(PolymerProposalEngine):
         """
         Method to choose a mutant.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
             topology of the protein
         metadata : dict
@@ -2152,8 +2152,8 @@ class PointMutationEngine(PolymerProposalEngine):
         """
         Function to find the residue indices in the chain_id with residues that are different from WT.  This is a dict of form {idx : res.name}.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
             topology of the protein
         chain_id : str
@@ -2193,8 +2193,8 @@ class PointMutationEngine(PolymerProposalEngine):
         Used when allowed mutations have been specified
         Assume (for now) uniform probability of selecting each specified mutant
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
         chain_id : str
         allowed_mutations : list(tuple)
@@ -2308,8 +2308,8 @@ class PointMutationEngine(PolymerProposalEngine):
     def _propose_mutation(self, topology, chain_id, index_to_new_residues):
         """
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
         chain_id : str
         index_to_new_residues : dict
@@ -2400,8 +2400,8 @@ class PointMutationEngine(PolymerProposalEngine):
 
     def _save_mutations(self, topology, index_to_new_residues):
         """
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
         index_to_new_residues : dict
             key : int (index, zero-indexed in chain)
@@ -2421,8 +2421,8 @@ class PointMutationEngine(PolymerProposalEngine):
         """
         Compute the key of a mutant topology
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
             topology of the protein
 
@@ -2470,7 +2470,7 @@ class PeptideLibraryEngine(PolymerProposalEngine):
     """
     Note: The PeptideLibraryEngine currently doesn't work because PolymerProposalEngine has been modified to handle
     only one mutation at a time (in accordance with the geometry engine).
-    Arguments
+    Parameters
     --------
     system_generator : SystemGenerator
     library : list of strings
@@ -2492,8 +2492,8 @@ class PeptideLibraryEngine(PolymerProposalEngine):
         """
         Used when library of pepide sequences has been provided
         Assume (for now) uniform probability of selecting each peptide
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
         chain_id : str
         allowed_mutations : list(list(tuple))
@@ -2610,7 +2610,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         self._storage = storage
         if self._storage is not None:
             self._storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
-   
+
         # no point in doing this if there are only two molecules
         if self._n_molecules != 2:
             _logger.info(f"creating probability matrix...")
@@ -2963,8 +2963,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         The current scheme uses a probability matrix computed via _calculate_probability_matrix.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         system : simtk.openmm.System object
             The current system
         topology : simtk.openmm.app.Topology object

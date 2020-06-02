@@ -43,7 +43,10 @@ extensions = [
     ]
 
 autosummary_generate = True
-autodoc_default_flags = ['members', 'inherited-members']
+autodoc_default_options = {
+    "members": True,
+    "inherited-members": True,
+}
 autodoc_mock_imports = [
     "matplotlib",
     "mdtraj",
