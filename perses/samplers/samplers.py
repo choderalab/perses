@@ -239,8 +239,8 @@ class ExpandedEnsembleSampler(object):
         log_weight : float
             The log weight of the provided state key.
 
-        Note
-        ----
+        Notes
+        -----
         This adds the key to the self.log_weights dict.
 
         """

@@ -929,7 +929,7 @@ class ProposalEngine(object):
     of new topologies.
 
     Parameters
-    --------
+    ----------
     system_generator : SystemGenerator
         The SystemGenerator to use to generate new System objects for proposed Topology objects
     proposal_metadata : dict
@@ -998,7 +998,9 @@ class PolymerProposalEngine(ProposalEngine):
     # TODO: Document meaning of 'aggregate'
     def __init__(self, system_generator, chain_id, proposal_metadata=None, always_change=True, aggregate=False):
         """
-        Create a polymer proposal engine
+        Create a polymer proposal engine.
+
+        This base class is not meant to be invoked directly.
 
         Parameters
         ----------
@@ -1011,9 +1013,9 @@ class PolymerProposalEngine(ProposalEngine):
         always_change : bool, optional, default=True
             If True, will not propose self transitions
         aggregate : bool, optional, default=False
-            ???????
+            (FIXME: Description needed!!)
 
-        This base class is not meant to be invoked directly.
+
         """
         import pickle
         from perses.utils.smallmolecules import render_atom_mapping
@@ -2017,10 +2019,8 @@ class PointMutationEngine(PolymerProposalEngine):
     >>> from openmmtools.testsystems import AlanineDipeptideExplicit
     >>> testsystem = AlanineDipeptideExplicit()
     >>> system, topology, positions = testsystem.system, testsystem.topology, testsystem.positions
-
     >>> from topology_proposal import PointMutationEngine
     >>> engine = PointMutationEngine(topology, system_generator, chain_id='A', residues_allowed_to_mutate='max_point_mutants=1)
-
     """
 
     # TODO: Overhaul API to make it easier to specify mutations
@@ -2059,13 +2059,9 @@ class PointMutationEngine(PolymerProposalEngine):
             If not specified, engine assumes all residues (except ACE and NME caps) may be mutated.
         allowed_mutations : list(tuple), optional, default=None
             ('residue id to mutate','desired mutant residue name (3-letter code)')
-            Example:
-                Desired systems are wild type T4 lysozyme, T4 lysozyme L99A, and T4 lysozyme L99A/M102Q
-                allowed_mutations = [
-                    ('99', 'ALA'),
-                    ('102','GLN')
-                ]
-            If this is not specified, the engine will propose a random amino acid at a random location.
+            For example, the desired systems are wild type T4 lysozyme, T4 lysozyme L99A, and T4 lysozyme L99A/M102Q:
+            ``allowed_mutations = [ ('99', 'ALA'), ('102','GLN') ]``. If this is not specified, the engine will propose
+            a random amino acid at a random location.
         always_change : bool, optional, default=True
             Have the proposal engine always propose a state different from the current state.
             If the current state is WT, always propose a mutation.
@@ -2470,15 +2466,16 @@ class PeptideLibraryEngine(PolymerProposalEngine):
     """
     Note: The PeptideLibraryEngine currently doesn't work because PolymerProposalEngine has been modified to handle
     only one mutation at a time (in accordance with the geometry engine).
+
     Parameters
-    --------
+    ----------
     system_generator : SystemGenerator
     library : list of strings
         each string is a 1-letter-code list of amino acid sequence
     chain_id : str
         id of the chain to mutate
         (using the first chain with the id, if there are multiple)
-    proposal_metadata : dict -- OPTIONAL
+    proposal_metadata : dict, optional
         Contains information necessary to initialize proposal engine
     """
 
