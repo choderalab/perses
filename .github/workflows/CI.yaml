@@ -22,15 +22,11 @@ jobs:
       matrix:
         cfg:
           # - { os: macOS-latest, python-version: 3.7, openmm: latest }
-          # - { os: macOS-latest, python-version: 3.8, openmm: latest }
-          # - { os: windows-latest, python-version: 3.8, openmm: latest }
-          # - { os: windows-latest, python-version: 3.8, openmm: latest }
+          # - { os: windows-latest, python-version: 3.7, openmm: latest }
           - { os: ubuntu-latest, python-version: 3.7, openmm: latest }
           - { os: ubuntu-latest, python-version: 3.8, openmm: latest }
           - { os: ubuntu-latest, python-version: 3.7, openmm: nightly }
-          - { os: ubuntu-latest, python-version: 3.8, openmm: nightly }
           - { os: ubuntu-latest, python-version: 3.7, openmm: conda-forge }
-          - { os: ubuntu-latest, python-version: 3.8, openmm: conda-forge }
 
     env:
       OPENMM: ${{ matrix.cfg.openmm }}
@@ -51,14 +47,14 @@ jobs:
           python-version: ${{ matrix.cfg.python-version }}
           environment-file: environment.yml
           channels: conda-forge,defaults
-          activate-environment: test
+          activate-environment: perses
           auto-update-conda: true
           auto-activate-base: false
           show-channel-urls: true
 
       - name: Install OpenMM variants
         shell: bash -l {0}
-        if: startsWith(matrix.os, 'ubuntu')
+        if: startsWith(matrix.cfg.os, 'ubuntu')
         run: |
           # Install desired OpenMM version
           if [ "$OPENMM" == "latest" ]; then
