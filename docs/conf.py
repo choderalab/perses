@@ -127,7 +127,7 @@ html_theme_options = {
     'github_user': 'choderalab',
     'github_repo': 'perses',
     'github_banner': 'true',
-    'travis_button': 'true',
+    'travis_button': 'false',
     'show_powered_by' :'true',
     'font_family': 'calibri, helvetica, sans-serif',
     'head_font_family': 'cambria, tahoma, serif',
