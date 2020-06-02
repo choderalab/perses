@@ -47,25 +47,26 @@ autodoc_default_options = {
     "members": True,
     "inherited-members": True,
 }
-autodoc_mock_imports = [
-    "matplotlib",
-    "mdtraj",
-    "netCDF4",
-    "networkx",
-    "oechem",
-    "openeye",
-    "openmmtools",
-    "openmoltools",
-    "parmed",
-    "progressbar",
-    "pymbar",
-    "scipy",
-    "seaborn",
-    "simtk",
-    "tqdm",
-    # "numba", # this must be installed because mocking fails with jit stuff
-    # "perses.rjmc.coordinate_numba",
-]
+# autodoc_mock_imports = [
+#     "matplotlib",
+#     "mdtraj",
+#     "netCDF4",
+#     "networkx",
+#     "oechem",
+#     "openeye",
+#     "openforcefield",
+#     "openmmtools",
+#     "openmoltools",
+#     "parmed",
+#     "progressbar",
+#     "pymbar",
+#     "scipy",
+#     "seaborn",
+#     "simtk",
+#     "tqdm",
+#     # "numba", # this must be installed because mocking fails with jit stuff
+#     # "perses.rjmc.coordinate_numba",
+# ]
 numpydoc_class_members_toctree = False
 
 # Add any paths that contain templates here, relative to this directory.

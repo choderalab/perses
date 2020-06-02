@@ -123,9 +123,9 @@ jobs:
       - uses: goanpeca/setup-miniconda@v1
         with:
           python-version: "3.7"
-          environment-file: docs/environment.yml
+          environment-file: environment.yml
           channels: conda-forge,defaults
-          activate-environment: perses-docs
+          activate-environment: perses
           auto-update-conda: true
           auto-activate-base: false
           show-channel-urls: true
