@@ -125,7 +125,7 @@ jobs:
           python-version: "3.7"
           environment-file: docs/environment.yml
           channels: conda-forge,defaults
-          activate-environment: test
+          activate-environment: perses-docs
           auto-update-conda: true
           auto-activate-base: false
           show-channel-urls: true

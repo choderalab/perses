@@ -1,4 +1,4 @@
-name: perses
+name: perses-docs
 channels:
   - conda-forge
   - defaults
