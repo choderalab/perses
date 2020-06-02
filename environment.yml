@@ -1,10 +1,10 @@
 name: perses
 channels:
+  - conda-forge
+  - defaults
   - omnia-dev
   - omnia
   - openeye
-  - conda-forge
-  - defaults
 dependencies:
   - python >=3.6
   - setuptools
@@ -32,3 +32,5 @@ dependencies:
   - tqdm
   - nose
   - nose-timer
+  - openforcefield
+  - sphinx
