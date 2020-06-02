@@ -30,6 +30,7 @@ jobs:
 
     env:
       OPENMM: ${{ matrix.cfg.openmm }}
+      OE_LICENSE: ${{ github.workspace }}/oe_license.txt
 
     steps:
       - uses: actions/checkout@v1
@@ -83,17 +84,16 @@ jobs:
         env:
           ENC_OE_LICENSE: ${{ secrets.ENC_OE_LICENSE }}
         run: |
-          echo "${ENC_OE_LICENSE}" > $HOME/oe_license.txt
+          echo "${ENC_OE_LICENSE}" > ${OE_LICENSE}
+
       - name: Check OpenEye license
         shell: bash -l {0}
         run: |
-          export OE_LICENSE="$HOME/oe_license.txt"
           python -c "from openeye import oechem; assert oechem.OEChemIsLicensed()"
 
       - name: Run tests
         shell: bash -l {0}
         run: |
-          export OE_LICENSE="$HOME/oe_license.txt"
           export TRAVIS=true
           nosetests openmmtools --with-coverage --verbosity=3 --with-timer -a '!advanced'
 
@@ -107,6 +107,9 @@ jobs:
   docs:
     name: Build documentation
     runs-on: ubuntu-latest
+    env:
+      OE_LICENSE: ${{ github.workspace }}/oe_license.txt
+
     steps:
       - uses: actions/checkout@v1
 
@@ -128,9 +131,15 @@ jobs:
           auto-activate-base: false
           show-channel-urls: true
 
+      - name: Decrypt OpenEye license
+        shell: bash
+        env:
+          ENC_OE_LICENSE: ${{ secrets.ENC_OE_LICENSE }}
+        run: |
+          echo "${ENC_OE_LICENSE}" > ${OE_LICENSE}
+
       - name: Build docs
         shell: bash -l {0}
         run: |
           cd docs
-          export OE_LICENSE="$HOME/oe_license.txt"
           make html SPHINXOPTS="-W --keep-going -n"
