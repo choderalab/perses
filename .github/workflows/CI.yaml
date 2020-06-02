@@ -86,7 +86,9 @@ jobs:
           echo "${ENC_OE_LICENSE}" > $HOME/oe_license.txt
       - name: Check OpenEye license
         shell: bash -l {0}
-        run: python -c "from openeye import oechem; assert oechem.OEChemIsLicensed()"
+        run: |
+          export OE_LICENSE="$HOME/oe_license.txt"
+          python -c "from openeye import oechem; assert oechem.OEChemIsLicensed()"
 
       - name: Run tests
         shell: bash -l {0}
@@ -130,4 +132,5 @@ jobs:
         shell: bash -l {0}
         run: |
           cd docs
+          export OE_LICENSE="$HOME/oe_license.txt"
           make html SPHINXOPTS="-W --keep-going -n"
