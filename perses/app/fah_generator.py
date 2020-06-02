@@ -1,5 +1,3 @@
-#1/usr/bin/env python
-
 __author__ = 'dominic rufa'
 
 """
@@ -12,22 +10,19 @@ pip uninstall --yes openmmtools
 pip install git+https://github.com/choderalab/openmmtools.git
 
 argv[1]: setup.yaml (argument for perses.app.setup_relative_calculation.getSetupOptions)
-argv[2]: neq_setup.yaml (contains keywords for openmmtools.integrators.PeriodicNonequilibriumIntegrator arguments)
-argv[3]: run_number (project run number; defined by f"setup_options['trajectory_directory']_phase/RUN_{run_number}")
 """
-import yaml
 import numpy as np
 import os
-import sys
 import simtk.unit as unit
 from simtk import openmm
 import logging
 _logger = logging.getLogger()
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.INFO)
 
 
 #let's make a default lambda protocol
 x = 'lambda'
+# TODO change this for perses.annihilation.LambdaProtocol.default_functions
 DEFAULT_ALCHEMICAL_FUNCTIONS = {
                              'lambda_sterics_core': x,
                              'lambda_electrostatics_core': x,
@@ -40,20 +35,22 @@ DEFAULT_ALCHEMICAL_FUNCTIONS = {
                              'lambda_torsions': x}
 
 
-def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R H O R V', timestep=4.0 * unit.femtosecond, alchemical_functions = DEFAULT_ALCHEMICAL_FUNCTIONS, **kwargs):
+def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R H O R V', timestep=4.0 * unit.femtosecond, alchemical_functions=DEFAULT_ALCHEMICAL_FUNCTIONS, **kwargs):
     """
     generate an openmmtools.integrators.PeriodicNonequilibriumIntegrator
 
     arguments
-        nsteps_eq : int, default=1000
+        nsteps_eq : int, default=250000
             Number of equilibration steps to dwell within lambda = 0 or 1 when reached
-        nsteps_neq : int, default=1000
+        nsteps_neq : int, default=250000
             Number of nonequilibrium switching steps for 0->1 and 1->0 switches
         neq_splitting : str, default='V R H O R V'
             Sequence of "R", "V", "O" (and optionally "{", "}", "V0", "V1", ...) substeps to be executed each timestep.
             "H" increments the global parameter `lambda` by 1/nsteps_neq for each step and accumulates protocol work.
         timestep : int, default=4.0 * unit.femtosecond
             integrator timestep
+        alchemical_functions=dict
+            dictionary containing alchemical functions of how to perturb each group. See DEFAULT_ALCHEMICAL_FUNCTIONS for example
         **kwargs :
             miscellaneous arguments for openmmtools.integrators.LangevinIntegrator
 
@@ -62,12 +59,10 @@ def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R 
 
     """
     from openmmtools.integrators import PeriodicNonequilibriumIntegrator
-    #from copy import deepcopy
-    #integrator_kwargs = deepcopy(setup_options_dict)
-    integrator = PeriodicNonequilibriumIntegrator(alchemical_functions, nsteps_eq, nsteps_neq, neq_splitting,timestep=timestep)
+    integrator = PeriodicNonequilibriumIntegrator(alchemical_functions, nsteps_eq, nsteps_neq, neq_splitting, timestep=timestep)
     return integrator
 
-def relax_structure(temperature, system, positions, nequil=1000, n_steps_per_iteration=250,platform_name='OpenCL',timestep=2.*unit.femtosecond,collision_rate=90/unit.picosecond):
+def relax_structure(temperature, system, positions, nequil=1000, n_steps_per_iteration=250,platform_name='OpenCL',timestep=2.*unit.femtosecond,collision_rate=90./unit.picosecond):
     """
     arguments
         temperature : simtk.unit.Quantity with units compatible with kelvin
@@ -76,24 +71,27 @@ def relax_structure(temperature, system, positions, nequil=1000, n_steps_per_ite
             system object for simulation
         positions : simtk.unit.Quantity of shape (natoms,3) with units compatible with nanometers
             Positions of the atoms in the system
-        nequil : int
+        nequil : int, default = 1000
             number of equilibration applications
-        n_steps_per_iteration : int
+        n_steps_per_iteration : int, default = 250
             numper of steps per nequil
-        platform name : str default='CUDA'
-            platform to run openmm on
+        platform name : str default='OpenCL'
+            platform to run openmm on. OpenCL is best as this is what is used on FAH
+        timestep : simtk.unit.Quantity, default = 2*unit.femtosecond
+            timestep for equilibration NOT for production
+        collision_rate : simtk.unit.Quantity, default=90./unit.picosecond
 
     return
         state : openmm.State
             state of simulation (getEnergy=True, getForces=True, getPositions=True, getVelocities=True, getParameters=True)
     """
 
-    from perses.dispersed.feptasks import minimize
     from openmmtools.integrators import LangevinIntegrator
-    import tqdm
     _logger.info(f'Starting to relax')
-    integrator = LangevinIntegrator(temperature = temperature,timestep=timestep,collision_rate=collision_rate)
+    integrator = LangevinIntegrator(temperature=temperature, timestep=timestep, collision_rate=collision_rate)
     platform = openmm.Platform.getPlatformByName(platform_name)
+
+    # prepare the plaform
     if platform_name in ['CUDA', 'OpenCL']:
         platform.setPropertyDefaultValue('Precision', 'mixed')
     if platform_name in ['CUDA']:
@@ -104,6 +102,7 @@ def relax_structure(temperature, system, positions, nequil=1000, n_steps_per_ite
 
     _logger.info(f'Starting to minimise')
     openmm.LocalEnergyMinimizer.minimize(context)
+
     # Equilibrate
     _logger.info(f'set velocities to temperature')
     context.setVelocitiesToTemperature(temperature)
@@ -125,7 +124,7 @@ def run_neq_fah_setup(ligand_file,
                       solvent_box_dimensions=(3.5,3.5,3.5),
                       timestep=4.0 * unit.femtosecond,
                       eq_splitting = 'V R O R V',
-                      neq_splitting='V R H O R V', 
+                      neq_splitting='V R H O R V',
                       measure_shadow_work=False,
                       pressure=1.0,
                       temperature=300,
@@ -146,17 +145,14 @@ def run_neq_fah_setup(ligand_file,
                       save_setup_pickle_as=None,
                       render_atom_map=False,
                       alchemical_functions=DEFAULT_ALCHEMICAL_FUNCTIONS,
-                      num_minimize_steps=100,
                       num_equilibration_iterations=1000,
                       num_equilibration_steps_per_iteration=250,
                       nsteps_eq=250000,
                       nsteps_neq=250000,
                       fe_type='fah',
-                      n_steps_per_move_application=1,
-                      n_equilibrium_steps_per_iteration=1,
-                      collision_rate=1.0/unit.picoseconds,
+                      collision_rate=1./unit.picoseconds,
+                      collision_rate_setup=90./unit.picoseconds,
                       constraint_tolerance=1e-6,
-                      measure_heat=False,
                       **kwargs):
     """
     main execution function that will:
@@ -179,17 +175,68 @@ def run_neq_fah_setup(ligand_file,
         forcefield_files : list of str
             list of forcefields to use for complex/solvent parameterization
         trajectory_directory : str
-            name of project
-        timestep : simtk.unit.Quantity with units compatible with picoseconds
+            RUNXXX for FAH deployment
+        complex_box_dimensions : Vec3, default=(9.8, 9.8, 9.8)
+            define box dimensions of complex phase
+        solvent_box_dimensions : Vec3, default=(3.5, 3.5, 3.5)
+            define box dimensions of solvent phase
+        timestep : simtk.unit.Quantity, default=4.*unit.femtosecond
             step size of nonequilibrium integration
-        eq_splitting : str
+        eq_splitting : str, default = 'V R O R V'
             splitting string of relaxation dynamics
         neq_splitting : str, default = 'V R H O R V'
             splitting string of nonequilibrium dynamics
-
+        measure_shadow_work : bool, default=False
+            True/False to measure shadow work
+        pressure: float, default=1.
+            pressure in atms for simulation
+        temperature: float, default=300.,
+            temperature in K for simulation
+        phases: list, default = ['complex','solvent','vacuum']
+            phases to run, where allowed phases are 'complex','solvent','vacuum'
+        protein_pdb : str, default=None
+            name of protein file
+        receptor_mol2 : str, default=None
+            name of receptor file if protein_pdb not provided
+        small_molecule_forcefield : str, default='openff-1.0.0'
+            small molecule forcefield filename
+        small_molecule_parameters_cache : str, default=None
+            cache file containing small molecule forcefield files
+        atom_expression : list default=['IntType']
+            list of string for atom mapping criteria. see oechem.OEExprOpts for options
+        bond_expression : list default=['DefaultBonds']
+            list of string for bond mapping criteria. see oechem.OEExprOpts for options
+        map_strength : 'str', default=None
+            atom and bond expressions will be ignored, and either a 'weak', 'default' or 'strong' map_strength will be used.
+        spectators : str, default=None
+            path to any non-alchemical atoms in simulation
+        neglect_angles : bool, default=False
+            wether to use angle terms in building of unique-new groups. False is strongly recommended
+        anneal_14s : bool, default False
+            Whether to anneal 1,4 interactions over the protocol;
+        nonbonded_method : str, default='PME'
+            nonbonded method to use
+        softcore_v2=bool, default=False
+            wether to use v2 softcore
+        alchemical_functions : dict, default=DEFAULT_ALCHEMICAL_FUNCTIONS
+            alchemical functions for transformation
+        num_equilibration_iterations: int, default=1000
+            number of equilibration steps to do during set up
+        num_equilibration_steps_per_iteration: int, default=250,
+            number of steps per iteration. default is 250 steps of 2fs, 1000 times which is 500ps of equilibration for SETUP
+        nsteps_eq : int, default=250000
+            number of normal MD steps to take for FAH integrator for PRODUCTION
+        nsteps_neq : int, default=250000
+            number of nonequilibrium steps to take for FAH integrator for PRODUCTION
+        fe_type : str, default='fah'
+            tells setup_relative_calculation() to use the fah pipeline
+        collision_rate : simtk.unit.Quantity, default=1./unit.picosecond
+            collision_rate for PRODUCTION
+        collision_rate_setup : simtk.unit.Quantity, default=90./unit.picosecond
+        constraint_tolerance : float, default=1e-6
+            tolerance to use for constraints
     """
     from perses.app.setup_relative_calculation import run_setup
-    from simtk.openmm import XmlSerializer
     from perses.utils import data
     #turn all of the args into a dict for passing to run_setup
     setup_options = locals()
@@ -198,7 +245,7 @@ def run_neq_fah_setup(ligand_file,
 
     #some modification for fah-specific functionality:
     setup_options['trajectory_prefix']=None
-    setup_options['anneal_1,4s'] = False 
+    setup_options['anneal_1,4s'] = False
     from perses.utils.openeye import generate_expression
     setup_options['atom_expr'] = generate_expression(setup_options['atom_expression'])
     setup_options['bond_expr'] = generate_expression(setup_options['bond_expression'])
@@ -238,7 +285,7 @@ def run_neq_fah_setup(ligand_file,
                             system = htfs[phase].hybrid_system,
                             positions = htfs[phase].hybrid_positions,
                             nequil = num_equilibration_iterations,
-                            n_steps_per_iteration=num_equilibration_steps_per_iteration)
+                            n_steps_per_iteration=num_equilibration_steps_per_iteration, collision_rate=collision_rate_setup)
 
             data.serialize(state, f"{dir}/state.xml")
         except Exception as e:
@@ -250,17 +297,16 @@ def run_neq_fah_setup(ligand_file,
         pos = state.getPositions(asNumpy=True)
         pos = np.asarray(pos)
 
-        np.save(f'{dir}/positions',pos)
         import mdtraj as md
         top = htfs[phase].hybrid_topology
-        np.save(f'{dir}/hybrid_topology',top)
+        np.save(f'{dir}/hybrid_topology', top)
         traj = md.Trajectory(pos, top)
         traj.remove_solvent(exclude=['CL','NA'],inplace=True)
         traj.save(f'{dir}/hybrid_{phase}.pdb')
 
         #lastly, make a core.xml
         nsteps_per_cycle = 2*nsteps_eq + 2*nsteps_neq
-        ncycles = 1    
+        ncycles = 1
         nsteps_per_ps = 250
         core_parameters = {
             'numSteps' : ncycles * nsteps_per_cycle,
@@ -295,11 +341,11 @@ def run_neq_fah_setup(ligand_file,
 def run(yaml_filename=None):
     import sys
     if yaml_filename is None:
-       try:
-          yaml_filename = sys.argv[1]
-          _logger.info(f"Detected yaml file: {yaml_filename}")
-       except IndexError as e:
-           _logger.critical(f"You must specify the setup yaml file as an argument to the script.")
+        try:
+            yaml_filename = sys.argv[1]
+            _logger.info(f"Detected yaml file: {yaml_filename}")
+        except IndexError as e:
+            _logger.critical(f"You must specify the setup yaml file as an  argument to the script.")
     from perses.app.setup_relative_calculation import getSetupOptions
     import yaml
     yaml_file = open(yaml_filename, 'r')
@@ -319,12 +365,5 @@ def run(yaml_filename=None):
     os.makedirs(f"{setup_options['complex_projid']}/RUNS/{setup_options['trajectory_directory']}")
     os.makedirs(f"{setup_options['solvent_projid']}/RUNS/{setup_options['trajectory_directory']}")
     os.makedirs(f"VACUUM/RUNS/{setup_options['trajectory_directory']}")
-
-    ligand_file = setup_options['ligand_file']
-    old_ligand_index = setup_options['old_ligand_index']
-    new_ligand_index = setup_options['new_ligand_index']
-    forcefield_files = setup_options['forcefield_files']
-    protein_pdb = setup_options['protein_pdb']
-    trajectory_directory = setup_options['trajectory_directory'] 
 
     run_neq_fah_setup(**setup_options)
