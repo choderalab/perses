@@ -36,7 +36,7 @@ from openmmtools import utils
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("sMC_utils")
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.INFO)
 DISTRIBUTED_ERROR_TOLERANCE = 1e-6
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
 
