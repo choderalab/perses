@@ -1965,7 +1965,7 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         from pkg_resources import resource_filename
         from perses.utils.openeye import smiles_to_oemol,extractPositionsFromOEMol
         system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
-                                                        forcefield_kwargs = {'implicitSolvent' : None, nonperiodic_forcefield_kwargs={ 'nonbondedMethod':app.NoCutoff}},
+                                                        forcefield_kwargs = {'implicitSolvent' : None}, nonperiodic_forcefield_kwargs={ 'nonbondedMethod':app.NoCutoff},
                                                         molecules = [Molecule.from_openeye(smiles_to_oemol(q)) for q in molecules],
                                                         small_molecule_forcefield = small_molecule_forcefield)
 
