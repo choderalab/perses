@@ -8,15 +8,15 @@ The input files in this directory are from the Schrodinger JACS dataset, with th
 
 ## File description
 
-* CDK2_fixed_nohet.pdb: PDB file for CDK2 structure from JACS benchmark (cited below) run through PDBFixer and pdb4amber.
+* CDK2_protein.pdb: PDB file for CDK2 structure from JACS benchmark (cited below) run through PDBFixer and pdb4amber.
 
-* CDK2_ligands.sdf: SDF file of CDK2 ligands from JACS structure
+* CDK2_ligands_shifted.sdf: SDF file of CDK2 ligands from JACS structure
 
 * cdk2_nonequilibrium.yaml: Example configuration file for running CDK2 relative free energy calculations with nonequilibrium switching
 
 * cdk2_sams.yaml: Example configuration file for running CDK2 relative free energy calculations with SAMS.
 
-* cdk2_repex.yaml: Example configuration file for running CDK2 relative free energy calculations with SAMS.
+* cdk2_repex.yaml: Example configuration file for running CDK2 relative free energy calculations with REPEX.
 
 * run.py: Helper script to run a range of pairs in the same job submission script
 
