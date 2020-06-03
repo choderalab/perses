@@ -104,7 +104,7 @@ class PointMutationExecutor(object):
                  forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
                  barostat = openmm.MonteCarloBarostat(1.0 * unit.atmosphere, temperature, 50),
                  forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus},
-                 periodic_forcefield_kwargs={'nonbondedMethod': app.PME}
+                 periodic_forcefield_kwargs={'nonbondedMethod': app.PME},
                  small_molecule_forcefields = 'gaff-2.11',
                  **kwargs):
         """
