@@ -23,7 +23,7 @@ def system_generator_wrapper(oemols,
                             barostat = None,
                             forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
                             forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus},
-                            nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff}
+                            nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff},
                             small_molecule_forcefield = 'gaff-2.11',
                             **kwargs
                             ):
