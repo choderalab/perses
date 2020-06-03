@@ -117,9 +117,8 @@ if __name__=="__main__":
 
     barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
 
-    system_generator = SystemGenerator(['amber14/protein.ff14SB.xml', 'gaff.xml', 'amber14/tip3p.xml', 'MCL1_ligands.xml'], barostat=barostat, forcefield_kwargs={'nonbondedMethod': app.PME,
-                                                                        'constraints': app.HBonds,
-                                                                        'hydrogenMass': 4 * unit.amus}, use_antechamber=False)
+    system_generator = SystemGenerator(['amber14/protein.ff14SB.xml', 'gaff.xml', 'amber14/tip3p.xml', 'MCL1_ligands.xml'], barostat=barostat, forcefield_kwargs={'constraints': app.HBonds,
+                                                               'hydrogenMass': 4 * unit.amus}, periodic_forcefield_kwargs={'nonbondedMethod': app.PME} use_antechamber=False)
 
     atom_mapper_filename = os.path.join(setup_directory, "{}_atom_mapper.json".format(project_prefix))
     with open(atom_mapper_filename, 'r') as infile:

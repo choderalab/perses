@@ -570,7 +570,7 @@ class RelativeFEPSetup(object):
         new_to_old_atom_map = {atom_map[x] - new_mol_start_index: x - old_mol_start_index for x in
                                old_complex.select("resname == 'MOL' ") if x in atom_map.keys()}
 
-        old_alchemical_atoms = [i for i in range(old_mol_len)] 
+        old_alchemical_atoms = [i for i in range(old_mol_len)]
         # adjust the atom map to account for the presence of solvent degrees of freedom:
         # By design, all atoms after the ligands are water, and should be mapped.
         n_water_atoms = solvent_only_topology.to_openmm().getNumAtoms()
@@ -713,7 +713,7 @@ class RelativeFEPSetup(object):
         if self._padding._value == 0.:
             run_solvate = False
             _logger.info(f"\tSkipping solvation as solvent padding set to zero")
-        if run_solvate: 
+        if run_solvate:
             _logger.info(f"\tpreparing to add solvent")
             if box_dimensions is None:
                 modeller.addSolvent(self._system_generator.forcefield, model=model, padding=self._padding, ionicStrength=0.15*unit.molar)
