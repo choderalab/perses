@@ -22,7 +22,7 @@ requirements:
     - numpy >=1.14
     - scipy
     - pymbar
-    - openmm >= 7.4.2
+    - openmm >=7.4.2
     - parmed
     - openmoltools >=0.8.4
     - openmmtools
@@ -39,7 +39,6 @@ requirements:
     - distributed
     - yank
     - progressbar2
-    - parmed
     - tqdm
     - dask-jobqueue
     - openmmforcefields
