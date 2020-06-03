@@ -5,6 +5,9 @@ on:
   schedule:
     # nightly tests
     - cron: '0 0 * * *'
+  push:
+    branches:
+      - master
 
 jobs:
   test:
