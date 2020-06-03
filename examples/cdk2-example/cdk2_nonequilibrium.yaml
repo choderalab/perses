@@ -12,9 +12,10 @@ new_ligand_index: 15
 #Provide the list of forcefield files. Non-standard files should
 #be provided with a full path
 forcefield_files:
-    - gaff.xml
-    - amber14/protein.ff14SB.xml
-    - amber14/tip3p.xml
+    - amber/ff14SB.xml # ff14SB protein force field
+    - amber/tip3p_standard.xml # TIP3P and recommended monovalent ion parameters
+    - amber/tip3p_HFE_multivalent.xml # for divalent ions
+    - amber/phosaa10.xml # HANDLES THE TPO
 
 #the temperature and pressure of the simulation, as well as how much solvent paddding to add
 #units:
