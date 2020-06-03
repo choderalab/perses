@@ -80,6 +80,7 @@ def getSetupOptions(filename):
         setup_options['small_molecule_parameters_cache'] = None
 
     if 'spectators' not in setup_options:
+        _logger.info(f'No spectators')
         setup_options['spectators'] = None
     
     if 'complex_box_dimensions' not in setup_options:
@@ -102,6 +103,9 @@ def getSetupOptions(filename):
 
     if 'render_atom_map' not in setup_options:
         setup_options['render_atom_map'] = True
+
+    if 'n_steps_per_move_application' not in setup_options:
+        setup_options['n_steps_per_move_application'] = 1
 
     if 'run_type' not in setup_options:
         _logger.info(f"\t\t\trun_type is not specified; default to None")

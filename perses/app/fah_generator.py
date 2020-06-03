@@ -153,6 +153,7 @@ def run_neq_fah_setup(ligand_file,
                       collision_rate=1./unit.picoseconds,
                       collision_rate_setup=90./unit.picoseconds,
                       constraint_tolerance=1e-6,
+                      n_steps_per_move_application=250,
                       **kwargs):
     """
     main execution function that will:
@@ -235,6 +236,8 @@ def run_neq_fah_setup(ligand_file,
         collision_rate_setup : simtk.unit.Quantity, default=90./unit.picosecond
         constraint_tolerance : float, default=1e-6
             tolerance to use for constraints
+        n_steps_per_move_application : int default=250
+            number of equilibrium steps to take per move
     """
     from perses.app.setup_relative_calculation import run_setup
     from perses.utils import data
@@ -273,7 +276,7 @@ def run_neq_fah_setup(ligand_file,
         np.savez_compressed(f'{dir}/htf',htfs[phase])
 
         #serialize the hybrid_system
-        data.serialize(htfs[phase].hybrid_system, f"{dir}/system.xml")
+        data.serialize(htfs[phase].hybrid_system, f"{dir}/system.xml.bz2")
 
         #make and serialize an integrator
         integrator = make_neq_integrator(**setup_options)
@@ -287,7 +290,7 @@ def run_neq_fah_setup(ligand_file,
                             nequil = num_equilibration_iterations,
                             n_steps_per_iteration=num_equilibration_steps_per_iteration, collision_rate=collision_rate_setup)
 
-            data.serialize(state, f"{dir}/state.xml")
+            data.serialize(state, f"{dir}/state.xml.bz2")
         except Exception as e:
             print(e)
             passed=False
