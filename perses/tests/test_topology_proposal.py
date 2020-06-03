@@ -30,7 +30,8 @@ from openmoltools.forcefield_generators import generateTopologyFromOEMol, genera
 #default arguments for SystemGenerators
 barostat = None
 forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
-forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff}
 small_molecule_forcefield = 'gaff-2.11'
 
 temperature = 300*unit.kelvin
@@ -52,7 +53,7 @@ def test_small_molecule_proposals():
         list_of_mols.append(mol)
     molecules = [Molecule.from_openeye(mol) for mol in list_of_mols]
     stats_dict = defaultdict(lambda: 0)
-    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs, nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
                                          small_molecule_forcefield = small_molecule_forcefield, molecules=molecules, cache=None)
     proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_mols, system_generator)
     initial_system, initial_positions, initial_topology,  = OEMol_to_omm_ff(list_of_mols[0], system_generator)
@@ -87,7 +88,7 @@ def test_mapping_strength_levels(pairs_of_smiles=[('Cc1ccccc1','c1ccc(cc1)N'),('
             initial_molecule = smiles_to_oemol(lig_a)
             proposed_molecule = smiles_to_oemol(lig_b)
             molecules = [Molecule.from_openeye(mol) for mol in [initial_molecule, proposed_molecule]]
-            system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+            system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
                                                  small_molecule_forcefield = 'gaff-1.81', molecules=molecules, cache=None)
             proposal_engine = SmallMoleculeSetProposalEngine([initial_molecule, proposed_molecule], system_generator)
             initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(initial_molecule, system_generator)
@@ -147,9 +148,10 @@ def create_simple_protein_system_generator():
     from openmmforcefields.generators import SystemGenerator
     barostat = None
     forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
-    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+    nonperiodic_forcefield_kwargs={'nonbondedMethod': app.NoCutoff}
 
-    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs, nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
                                          small_molecule_forcefield = 'gaff-2.11', molecules=None, cache=None)
     return system_generator
 
