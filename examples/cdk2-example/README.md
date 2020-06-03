@@ -24,10 +24,10 @@ The input files in this directory are from the Schrodinger JACS dataset, with th
 
 ## Running example
 
-The example can be run by calling `python ../../scripts/setup_relative_calculation.py cdk2_sams.yaml`. By default, the included yaml file directs the code to set up and run the solvent phase. 
+The example can be run by calling `perses-relative cdk2_sams.yaml`. By default, the included yaml file directs the code to set up and run the solvent phase. 
 
-The options for the run are contained in the `yaml` file passed to the `setup_relative_calculation.py` script. There are two examples provided,
-`cdk2_sams.yaml` and `cdk2_nonequilibrium.yaml`, which allow the user to run either a SAMS or nonequilibrium switching-based free energy calculation, respectively.
+The options for the run are contained in the `yaml` file passed to the `perses.app.setup_relative_calculation.py` script. There are three examples provided,
+`cdk2_sams.yaml`, `cdk2_nonequilibrium.yaml` and `cdk2_repex.yaml`, which allow the user to run either a SAMS, REPEX or nonequilibrium switching-based free energy calculation.
 
 To run a range of ligands, change the ligand indexed in `run.py` to those of interest. In `submit-ligpairs.sh`, change the jobarray so that it is the same length of the list of ligand pairs.
 To run the job on lilac, or a similar cluster, use `bsub < submit-ligpairs.sh`.
