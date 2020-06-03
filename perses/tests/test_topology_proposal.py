@@ -189,9 +189,9 @@ def generate_atp(phase = 'vacuum'):
                                        barostat = barostat,
                                        forcefield_kwargs = {'removeCMMotion': False,
                                                             'ewaldErrorTolerance': 1e-4,
-                                                            'nonbondedMethod': app.NoCutoff,
                                                             'constraints' : app.HBonds,
                                                             'hydrogenMass' : 4 * unit.amus},
+                                        nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff},
                                         small_molecule_forcefield = 'gaff-2.11', molecules = None, cache = None)
 
         atp.system = system_generator.create_system(atp.topology) #update the parametrization scheme to amberff14sb

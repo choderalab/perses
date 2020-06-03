@@ -442,9 +442,9 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene",atom_express
     barostat = None
     forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
     forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
-    nonperiodic_forcefied_kwargs = {'nonbondedMethod': app.NoCutoff}
+    nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff}
 
-    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs, nonperiodic_forcefied_kwargs=nonperiodic_forcefied_kwargs,
+    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs, nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
                                          small_molecule_forcefield = 'gaff-2.11', molecules=molecules, cache=None)
 
     topology = generateTopologyFromOEMol(refmol)
