@@ -22,7 +22,8 @@ _logger.setLevel(logging.INFO)
 def system_generator_wrapper(oemols,
                             barostat = None,
                             forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
-                            forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus},
+                            forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus},
+                            nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff},
                             small_molecule_forcefield = 'gaff-2.11',
                             **kwargs
                             ):
@@ -39,6 +40,8 @@ def system_generator_wrapper(oemols,
         pointers to protein forcefields and solvent
     forcefield_kwargs : dict
         dict of forcefield_kwargs
+    nonperiodic_forcefield_kwargs : dict
+        dict of args for non-periodic system
     small_molecule_forcefield : str
         pointer to small molecule forcefield to use
 
@@ -48,7 +51,7 @@ def system_generator_wrapper(oemols,
     """
     from openforcefield.topology import Molecule
     from openmmforcefields.generators import SystemGenerator
-    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
                                          small_molecule_forcefield = small_molecule_forcefield, molecules=[Molecule.from_openeye(oemol) for oemol in oemols], cache=None)
     return system_generator
 
