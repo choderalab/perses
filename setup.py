@@ -80,7 +80,7 @@ setup(name='perses',
       zip_safe=False,
       entry_points={
        'openmm.forcefielddir' : ['perses=perses:get_datadir'],
-       'console_scripts' : ['perses-relative = perses.app.setup_relative_calculation:run']
+       'console_scripts' : ['perses-relative = perses.app.setup_relative_calculation:run','perses-fah = perses.app.fah_generator:run']
       },
       ext_modules=extensions,
       install_requires=[],

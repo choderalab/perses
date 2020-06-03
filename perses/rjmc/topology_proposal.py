@@ -526,6 +526,12 @@ class AtomMapper(object):
                 rings += str(int(oechem.OEAtomIsInRingSize(atom, i)))
             ring_as_base_ten = int(rings, 2)
             atom.SetIntType(ring_as_base_ten)
+        for bond in id_molecule.GetBonds():
+            rings = ''
+            for i in range(3, max_ring_size+1): # smallest feasible ring size is 3
+                rings += str(int(oechem.OEBondIsInRingSize(bond, i)))
+            ring_as_base_ten = int(rings, 2)
+            atom.SetIntType(ring_as_base_ten)
         return id_molecule
 
     @staticmethod
