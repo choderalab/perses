@@ -4,7 +4,8 @@ import tqdm
 from openeye import oechem, oeiupac
 from openmmtools import integrators, states, mcmc, constants
 from openmoltools import forcefield_generators
-from perses.rjmc.topology_proposal import TopologyProposal, SystemGenerator
+from openmmforcefields.generators import SystemGenerator
+from perses.rjmc.topology_proposal import TopologyProposal
 from perses.utils.openeye import extractPositionsFromOEMol
 from simtk import openmm, unit
 from io import StringIO
@@ -162,14 +163,14 @@ def solvate_system(topology, positions, system_generator, padding=9.0 * unit.ang
 
     hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name[:3] != "MOL"]
     modeller.delete(hs)
-    modeller.addHydrogens(forcefield=system_generator._forcefield)
+    modeller.addHydrogens(forcefield=system_generator.forcefield)
 
-    modeller.addSolvent(system_generator._forcefield, model=water_model, padding=padding, numAdded=num_added)
+    modeller.addSolvent(system_generator.forcefield, model=water_model, padding=padding, numAdded=num_added)
 
     solvated_topology = modeller.topology
     solvated_positions = modeller.positions
 
-    solvated_system = system_generator.build_system(solvated_topology)
+    solvated_system = system_generator.create_system(solvated_topology)
 
     return solvated_positions, solvated_topology, solvated_system
 
@@ -192,9 +193,8 @@ def create_systems(topologies_dict, positions_dict, output_directory, project_pr
     """
     barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
 
-    system_generator = SystemGenerator(['amber14/protein.ff14SB.xml', 'gaff.xml', 'amber14/tip3p.xml', 'MCL1_ligands.xml'], barostat=barostat, forcefield_kwargs={'nonbondedMethod': app.PME,
-                                                                        'constraints': app.HBonds,
-                                                                        'hydrogenMass': 4 * unit.amus}, use_antechamber=False)
+    system_generator = SystemGenerator(['amber14/protein.ff14SB.xml', 'gaff.xml', 'amber14/tip3p.xml', 'MCL1_ligands.xml'], barostat=barostat, forcefield_kwargs={'constraints': app.HBonds,
+    'hydrogenMass': 4 * unit.amus}, nonperiodic_forcefield_kwargs={'nonbondedMethod': app.PME})
 
     list_of_smiles = list(topologies_dict.keys())
 
@@ -208,7 +208,7 @@ def create_systems(topologies_dict, positions_dict, output_directory, project_pr
     else:
         solvated_initial_positions = initial_positions
         solvated_topology = initial_topology
-        solvated_system = system_generator.build_system(solvated_topology)
+        solvated_system = system_generator.create_system(solvated_topology)
 
     md_topology = md.Topology.from_openmm(solvated_topology)
 
@@ -232,7 +232,7 @@ def create_systems(topologies_dict, positions_dict, output_directory, project_pr
         else:
             solvated_positions = initial_positions
             solvated_topology = initial_topology
-            solvated_system = system_generator.build_system(solvated_topology)
+            solvated_system = system_generator.create_system(solvated_topology)
 
         np.save("{}/{}_{}_initial.npy".format(output_directory,project_prefix, i),
                 (solvated_positions, md.Topology.from_openmm(solvated_topology), solvated_system, smiles))
