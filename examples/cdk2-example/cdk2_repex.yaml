@@ -1,7 +1,7 @@
 # Provide the full path of the protein PDB file
 protein_pdb: CDK2_protein.pdb
 
-# Orovide the path to the ligand file with coordinates
+# Provide the path to the ligand file with coordinates
 ligand_file: CDK2_ligands_shifted.sdf
 
 # The ligand file contains multiple ligands. Choose the indices of the ligands
@@ -44,7 +44,7 @@ checkpoint_interval: 100
 # Number of iterations
 n_cycles: 5000 
 
-#The number of states
+# The number of states
 n_states: 14
 
 # The number of equilibration iterations:
