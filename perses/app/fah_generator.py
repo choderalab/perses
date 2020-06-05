@@ -273,7 +273,10 @@ def run_neq_fah_setup(ligand_file,
         if not os.path.exists(dir):
             os.mkdir(dir)
 
-        np.savez_compressed(f'{dir}/htf',htfs[phase])
+        import gzip
+        f = gzip.GzipFile(f"{dir}/htf.npy.gz", "w")
+        np.save(file=f, arr=htfs[phase])
+        f.close()
 
         #serialize the hybrid_system
         data.serialize(htfs[phase].hybrid_system, f"{dir}/system.xml.bz2")
