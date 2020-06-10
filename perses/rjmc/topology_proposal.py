@@ -311,7 +311,9 @@ class AtomMapper(object):
                           map_strength='default',
                           allow_ring_breaking=True,
                           matching_criterion = 'index',
-                          external_inttypes=False):
+                          external_inttypes=False,
+                          return_all_maps=False,
+                          use_geometry=True):
         """
         Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
 
@@ -342,7 +344,11 @@ class AtomMapper(object):
         external_inttypes : bool, default False
             If True, IntTypes already assigned to oemols will be used for mapping, if IntType is in the atom or bond expression.
             Otherwise, IntTypes will be overwritten such as to ensure rings of different sizes are not matched.
-
+        return_all_maps : bool, default False
+            will return a list of viable maps. This is for debugging purposes only
+            as a list being returned in the overall pipeline would break everything
+        use_geometry : bool, default True
+            if the geometry of ligand B is known, it can be used to pick the optimal atom map
         Returns
         -------
         matches : list of match
@@ -362,6 +368,9 @@ class AtomMapper(object):
             _logger.debug(f'No bond expression defined, using map strength : {map_strength}')
             bond_expr = map_strength_dict[map_strength][1]
 
+        if return_all_maps:
+            _logger.warning('return_all_maps is TRUE - a list of maps will be returned')
+            _logger.warning('this will likely break when called from SmallMoleculeSetProposalEngine')
         # this ensures that the hybridization of the oemols is done for correct atom mapping
         oechem.OEAssignHybridization(current_oemol)
         oechem.OEAssignHybridization(proposed_oemol)
@@ -375,7 +384,7 @@ class AtomMapper(object):
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
         mcs.Init(oegraphmol_current, atom_expr, bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
-        unique = False
+        unique = True
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
         _logger.info([m.NumAtoms() for m in matches])
 
@@ -386,7 +395,7 @@ class AtomMapper(object):
         if not matches:
             _logger.info('Cannot generate atom map without breaking rings, trying again with weaker mapping.')
             mcs.SetMCSFunc(oechem.OEMCSMaxAtoms())
-            unique = False
+            unique = False # try increase matches
             matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
 
             if allow_ring_breaking is False:
@@ -395,7 +404,6 @@ class AtomMapper(object):
             if not matches:
                 return None
 
-        #_logger.debug(f"matches before degeneracy ranking: {matches}")
         _logger.debug(f"ranking match degeneracy w.r.t. current oemol ({current_oemol}) and proposed oemol({proposed_oemol})")
         try:
             top_matches = AtomMapper.rank_degenerate_maps(matches, current_oemol, proposed_oemol) #remove the matches with the lower rank score (filter out bad degeneracies)
@@ -410,6 +418,12 @@ class AtomMapper(object):
         # check the most mapped is the same once hydrogen exceptions are handled
         all_new_to_old_atom_maps = []
         count_after_hydrogen_mapping = []
+        if return_all_maps:
+            list_of_dicts = []
+            for match in top_matches:
+                    list_of_dicts.append(AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion))
+            return list_of_dicts
+
         for match in top_matches:
             map_dict = AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion)
             count_after_hydrogen_mapping.append(len(map_dict))
@@ -417,35 +431,62 @@ class AtomMapper(object):
 
         max_num_atoms = max(count_after_hydrogen_mapping)
         _logger.info(f'Maximum atom matched after hydrogen exceptions: {max_num_atoms}')
-        new_to_old_atom_maps = [map for count, map in zip(count_after_hydrogen_mapping,all_new_to_old_atom_maps) if count == max_num_atoms]
+        _logger.info(f'Number of maps is {len(all_new_to_old_atom_maps)}')
 
+        if use_geometry:
+            # now want to pick the map with smallest distance for B geometry
+            current_coords = np.zeros(shape=(current_oemol.NumAtoms(),3))
+            for i in current_oemol.GetCoords():
+                current_coords[i] = proposed_oemol.GetCoords()[i]
+            proposed_coords = np.zeros(shape=(proposed_oemol.NumAtoms(),3))
+            for i in proposed_oemol.GetCoords():
+                proposed_coords[i] = proposed_oemol.GetCoords()[i]
+            from scipy.spatial.distance import cdist
+            all_to_all = cdist(current_coords, proposed_coords, 'euclidean')
 
-        #now all else is equal; we will choose the map with the highest overlap of atom indices
-        index_overlap_numbers = []
-        if matching_criterion == 'index':
-            for map in new_to_old_atom_maps:
-                hit_number = 0
-                for key, value in map.items():
-                    if key == value:
-                        hit_number += 1
-                index_overlap_numbers.append(hit_number)
-        elif matching_criterion == 'name':
-            for map in new_to_old_atom_maps:
-                hit_number = 0
-                map_tuples = list(map.items())
-                atom_map = {atom_new: atom_old for atom_new, atom_old in zip(list(proposed_oemol.GetAtoms()), list(current_oemol.GetAtoms())) if (atom_new.GetIdx(), atom_old.GetIdx()) in map_tuples}
-                for key, value in atom_map.items():
-                    if key.GetName() == value.GetName():
-                        hit_number += 1
-                index_overlap_numbers.append(hit_number)
+            current_H = {x.GetIdx():x.IsHydrogen() for x in current_oemol.GetAtoms()}
+            all_scores = []
+            for M in all_new_to_old_atom_maps:
+                map_score = 0
+                for atom in M:
+                    if not current_H[atom]:  # skip H's - only look at heavy atoms
+                        map_score += all_to_all[M[atom], atom]
+                all_scores.append(map_score/len(M))
+
+            # TODO: return one map from any group of scores
+
+            # returning lowest score
+            best_map_index = np.argmin(all_scores)
+            return all_new_to_old_atom_maps[best_map_index]
         else:
-            raise Exception(f"the ranking criteria {ranking_criteria} is not supported.")
+            new_to_old_atom_maps = [map for count, map in zip(count_after_hydrogen_mapping, all_new_to_old_atom_maps) if count == max_num_atoms]
 
-        max_index_overlap_number = max(index_overlap_numbers)
-        max_index = index_overlap_numbers.index(max_index_overlap_number)
-        _logger.debug(f"\tchose {new_to_old_atom_maps[max_index]} with {len(new_to_old_atom_maps[max_index])} mapped atoms")
+        # now all else is equal; we will choose the map with the highest overlap of atom indices
+            index_overlap_numbers = []
+            if matching_criterion == 'index':
+                for map in new_to_old_atom_maps:
+                    hit_number = 0
+                    for key, value in map.items():
+                        if key == value:
+                            hit_number += 1
+                    index_overlap_numbers.append(hit_number)
+            elif matching_criterion == 'name':
+                for map in new_to_old_atom_maps:
+                    hit_number = 0
+                    map_tuples = list(map.items())
+                    atom_map = {atom_new: atom_old for atom_new, atom_old in zip(list(proposed_oemol.GetAtoms()), list(current_oemol.GetAtoms())) if (atom_new.GetIdx(), atom_old.GetIdx()) in map_tuples}
+                    for key, value in atom_map.items():
+                        if key.GetName() == value.GetName():
+                            hit_number += 1
+                    index_overlap_numbers.append(hit_number)
+            else:
+                raise Exception(f"the ranking criteria {matching_criterion} is not supported.")
 
-        return new_to_old_atom_maps[max_index]
+            max_index_overlap_number = max(index_overlap_numbers)
+            max_index = index_overlap_numbers.index(max_index_overlap_number)
+            _logger.debug(f"\tchose {new_to_old_atom_maps[max_index]} with {len(new_to_old_atom_maps[max_index])} mapped atoms")
+
+            return new_to_old_atom_maps[max_index]
 
     @staticmethod
     def _create_pattern_to_target_map(current_mol, proposed_mol, match, matching_criterion = 'index'):
