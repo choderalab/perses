@@ -310,7 +310,8 @@ class AtomMapper(object):
                           bond_expr=None,
                           map_strength='default',
                           allow_ring_breaking=True,
-                          matching_criterion = 'index'):
+                          matching_criterion = 'index',
+                          external_inttypes=False):
         """
         Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
 
@@ -338,6 +339,9 @@ class AtomMapper(object):
              else: raise Exception.
              NOTE : the matching criterion pulls patterns and target matches based on indices or names;
                     if 'names' is chosen, it is first asserted that the current_oemol and the proposed_oemol have atoms that are uniquely named
+        external_inttypes : bool, default False
+            If True, IntTypes already assigned to oemols will be used for mapping, if IntType is in the atom or bond expression.
+            Otherwise, IntTypes will be overwritten such as to ensure rings of different sizes are not matched.
 
         Returns
         -------
@@ -350,7 +354,7 @@ class AtomMapper(object):
                              'strong': [STRONG_ATOM_EXPRESSION, STRONG_BOND_EXPRESSION]}
         if map_strength is None:
             map_strength = 'default'
-    
+
         if atom_expr is None:
             _logger.debug(f'No atom expression defined, using map strength : {map_strength}')
             atom_expr = map_strength_dict[map_strength][0]
@@ -365,8 +369,9 @@ class AtomMapper(object):
         oegraphmol_proposed = oechem.OEGraphMol(proposed_oemol)  # target molecule
 
         # assigning ring membership to prevent ring breaking
-        oegraphmol_current = AtomMapper._assign_ring_ids(oegraphmol_current)
-        oegraphmol_proposed = AtomMapper._assign_ring_ids(oegraphmol_proposed)
+        if not external_inttypes:
+            oegraphmol_current = AtomMapper._assign_ring_ids(oegraphmol_current)
+            oegraphmol_proposed = AtomMapper._assign_ring_ids(oegraphmol_proposed)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
         mcs.Init(oegraphmol_current, atom_expr, bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
@@ -401,19 +406,19 @@ class AtomMapper(object):
         max_num_atoms = max([match.NumAtoms() for match in top_matches])
         _logger.debug(f"\tthere are {len(top_matches)} top matches with at most {max_num_atoms} before hydrogen exceptions")
         _logger.debug(f"\tthe max number of atom matches is: {max_num_atoms}; there are {len([m for m in top_matches if m.NumAtoms() == max_num_atoms])} matches herein")
-        
+
         # check the most mapped is the same once hydrogen exceptions are handled
         all_new_to_old_atom_maps = []
         count_after_hydrogen_mapping = []
         for match in top_matches:
-            map_dict = AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion) 
+            map_dict = AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion)
             count_after_hydrogen_mapping.append(len(map_dict))
             all_new_to_old_atom_maps.append(map_dict)
 
         max_num_atoms = max(count_after_hydrogen_mapping)
         _logger.info(f'Maximum atom matched after hydrogen exceptions: {max_num_atoms}')
         new_to_old_atom_maps = [map for count, map in zip(count_after_hydrogen_mapping,all_new_to_old_atom_maps) if count == max_num_atoms]
-        
+
 
         #now all else is equal; we will choose the map with the highest overlap of atom indices
         index_overlap_numbers = []
@@ -2616,7 +2621,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         self._storage = storage
         if self._storage is not None:
             self._storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
-   
+
         # no point in doing this if there are only two molecules
         if self._n_molecules != 2:
             _logger.info(f"creating probability matrix...")
