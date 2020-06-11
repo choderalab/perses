@@ -362,6 +362,8 @@ class AtomMapper(object):
             list of the matches between the molecules, or None if no matches possible
 
         """
+        allowed_geometries = ['strong','weak',None]
+        assert geometry in allowed_geometries, f"geometry cannot be {geometry}, please use one of {allowed_geometries}"
         map_strength_dict = {'default': [DEFAULT_ATOM_EXPRESSION, DEFAULT_BOND_EXPRESSION],
                              'weak': [WEAK_ATOM_EXPRESSION, WEAK_BOND_EXPRESSION],
                              'strong': [STRONG_ATOM_EXPRESSION, STRONG_BOND_EXPRESSION]}
@@ -387,7 +389,7 @@ class AtomMapper(object):
 
         # assigning ring membership to prevent ring breaking
         if not external_inttypes:
-            if geometry == 'strict':
+            if geometry == 'strong':
                 oegraphmol_current, oegraphmol_proposed = AtomMapper._assign_distance_ids(oegraphmol_current,oegraphmol_proposed)
             else:
                 oegraphmol_current = AtomMapper._assign_ring_ids(oegraphmol_current)
@@ -395,7 +397,6 @@ class AtomMapper(object):
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
         mcs.Init(oegraphmol_current, atom_expr, bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
-        unique = True
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
         _logger.info([m.NumAtoms() for m in matches])
 
@@ -595,7 +596,7 @@ class AtomMapper(object):
         return id_molecule
 
     @staticmethod
-    def _assign_distance_ids(old_mol, new_mol, distance=0.2):
+    def _assign_distance_ids(old_mol, new_mol, distance=0.3):
         """ Gives atoms in both molecules matching Int numbers if they are close
         to each other. This should ONLY be  used if the geometry (i.e. binding mode)
         of both molecules are known, and they are aligned to the same frame of reference.
@@ -615,6 +616,7 @@ class AtomMapper(object):
         -------
         copies of old_mol and new_mol, with IntType set according to inter-molecular distances
         """
+        _logger.info(f'Using a distance of {distance} to force the mapping of close atoms')
         from scipy.spatial.distance import cdist
         A = copy.deepcopy(old_mol)
         B = copy.deepcopy(new_mol)
