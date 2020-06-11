@@ -424,11 +424,11 @@ class AtomMapper(object):
                 list_of_dicts.append(AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion))
             return list_of_dicts
 
-        for match in top_matches:
+        for i, match in enumerate(top_matches):
             map_dict = AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion)
             count_after_hydrogen_mapping.append(len(map_dict))
             all_new_to_old_atom_maps.append(map_dict)
-            _logger.debug(map_dict)
+            _logger.debug(f'index {i} = {map_dict}')
 
         max_num_atoms = max(count_after_hydrogen_mapping)
         _logger.info(f'Maximum atom matched after hydrogen exceptions: {max_num_atoms}')
@@ -438,7 +438,7 @@ class AtomMapper(object):
             # now want to pick the map with smallest distance for B geometry
             current_coords = np.zeros(shape=(current_oemol.NumAtoms(),3))
             for i in current_oemol.GetCoords():
-                current_coords[i] = proposed_oemol.GetCoords()[i]
+                current_coords[i] = current_oemol.GetCoords()[i]
             proposed_coords = np.zeros(shape=(proposed_oemol.NumAtoms(),3))
             for i in proposed_oemol.GetCoords():
                 proposed_coords[i] = proposed_oemol.GetCoords()[i]
@@ -458,6 +458,7 @@ class AtomMapper(object):
 
             # returning lowest score
             best_map_index = np.argmin(all_scores)
+            _logger.debug(f'Returning map index: {best_map_index}')
             return all_new_to_old_atom_maps[best_map_index]
         else:
             new_to_old_atom_maps = [map for count, map in zip(count_after_hydrogen_mapping, all_new_to_old_atom_maps) if count == max_num_atoms]
