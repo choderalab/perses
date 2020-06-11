@@ -421,13 +421,14 @@ class AtomMapper(object):
         if return_all_maps:
             list_of_dicts = []
             for match in top_matches:
-                    list_of_dicts.append(AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion))
+                list_of_dicts.append(AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion))
             return list_of_dicts
 
         for match in top_matches:
             map_dict = AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion)
             count_after_hydrogen_mapping.append(len(map_dict))
             all_new_to_old_atom_maps.append(map_dict)
+            _logger.debug(map_dict)
 
         max_num_atoms = max(count_after_hydrogen_mapping)
         _logger.info(f'Maximum atom matched after hydrogen exceptions: {max_num_atoms}')
@@ -444,15 +445,15 @@ class AtomMapper(object):
             from scipy.spatial.distance import cdist
             all_to_all = cdist(current_coords, proposed_coords, 'euclidean')
 
-            current_H = {x.GetIdx():x.IsHydrogen() for x in current_oemol.GetAtoms()}
+            proposed_H = {x.GetIdx(): x.IsHydrogen() for x in proposed_oemol.GetAtoms()}
             all_scores = []
             for M in all_new_to_old_atom_maps:
                 map_score = 0
                 for atom in M:
-                    if not current_H[atom]:  # skip H's - only look at heavy atoms
+                    if not proposed_H[atom]:  # skip H's - only look at heavy atoms
                         map_score += all_to_all[M[atom], atom]
                 all_scores.append(map_score/len(M))
-
+            _logger.debug(f'Mapping scores: {all_scores}')
             # TODO: return one map from any group of scores
 
             # returning lowest score
