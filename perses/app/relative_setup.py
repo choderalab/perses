@@ -123,6 +123,7 @@ class RelativeFEPSetup(object):
             box dimensions for the solvent phase
         geometry : 'str', default 'strong'
             wether to use geometry of the second ligand during atom mapping
+            allowed  options are 'strong', 'weak' or None
         """
         self._pressure = pressure
         self._temperature = temperature
