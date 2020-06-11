@@ -444,7 +444,7 @@ class AtomMapper(object):
         _logger.info(f'Number of maps is {len(all_new_to_old_atom_maps)}')
 
         if geometry is not None:
-            map = _find_closest_map(current_oemol, proposed_oemol, all_new_to_old_atom_maps)
+            map = AtomMapper._find_closest_map(current_oemol, proposed_oemol, all_new_to_old_atom_maps)
         else:
             new_to_old_atom_maps = [map for count, map in zip(count_after_hydrogen_mapping, all_new_to_old_atom_maps) if count == max_num_atoms]
 
@@ -497,10 +497,10 @@ class AtomMapper(object):
         """
         if len(maps) == 1:
             return maps[0]
-        current_coords = np.zeros(shape=(mol_A.NumAtoms(), 3))
+        coords_A = np.zeros(shape=(mol_A.NumAtoms(), 3))
         for i in mol_A.GetCoords():
             coords_A[i] = mol_A.GetCoords()[i]
-        mol_B = np.zeros(shape=(mol_B.NumAtoms(), 3))
+        coords_B = np.zeros(shape=(mol_B.NumAtoms(), 3))
         for i in mol_B.GetCoords():
             coords_B[i] = mol_B.GetCoords()[i]
         from scipy.spatial.distance import cdist
