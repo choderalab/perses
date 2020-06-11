@@ -196,6 +196,7 @@ def create_systems(topologies_dict, positions_dict, output_directory, project_pr
     system_generator = SystemGenerator(['amber14/protein.ff14SB.xml', 'gaff.xml', 'amber14/tip3p.xml', 'MCL1_ligands.xml'], barostat=barostat, forcefield_kwargs={'constraints': app.HBonds,
     'hydrogenMass': 4 * unit.amus}, periodic_forcefield_kwargs={'nonbondedMethod': app.PME})
 
+
     list_of_smiles = list(topologies_dict.keys())
 
     initial_smiles = list_of_smiles[0]

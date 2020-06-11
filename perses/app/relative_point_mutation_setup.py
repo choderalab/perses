@@ -63,7 +63,7 @@ class PointMutationExecutor(object):
                                      ligand_index = 0,
                                      forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
                                      barostat = openmm.MonteCarloBarostat(1.0 * unit.atmosphere, temperature, 50),
-                                     forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.PME, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus},
+                                     forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}, periodic_forcefield_kwargs = {'nonbondedMethod': app.PME}
                                      small_molecule_forcefields = 'gaff-2.11')
 
         complex_htf = pm_delivery.get_complex_htf()
@@ -103,7 +103,8 @@ class PointMutationExecutor(object):
                  ligand_index = 0,
                  forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
                  barostat = openmm.MonteCarloBarostat(1.0 * unit.atmosphere, temperature, 50),
-                 forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.PME, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus},
+                 forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus},
+                 periodic_forcefield_kwargs={'nonbondedMethod': app.PME},
                  small_molecule_forcefields = 'gaff-2.11',
                  **kwargs):
         """
@@ -130,6 +131,7 @@ class PointMutationExecutor(object):
                 barostat to use
             forcefield_kwargs : dict, default {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
                 forcefield kwargs for system parametrization
+            periodic_forcefield_kwargs : dict default {'nonbondedMethod':app.PME}
             small_molecule_forcefields : str, default 'gaff-2.11'
                 the forcefield string for small molecule parametrization
 
@@ -166,6 +168,7 @@ class PointMutationExecutor(object):
         self.system_generator = SystemGenerator(forcefields = forcefield_files,
                                                 barostat=barostat,
                                                 forcefield_kwargs=forcefield_kwargs,
+                                                periodic_forcefield_kwargs=periodic_forcefield_kwargs,
                                                 small_molecule_forcefield = small_molecule_forcefields,
                                                 molecules=molecules,
                                                 cache=None)

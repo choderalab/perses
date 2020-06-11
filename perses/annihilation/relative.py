@@ -621,7 +621,7 @@ class HybridTopologyFactory(object):
             custom_core_force.addGlobalParameter('lambda_angles', 0.0)
             if len(self.neglected_new_angle_terms) > 0:
                 custom_neglected_new_force.addGlobalParameter('lambda_angles', 0.0)
-            if len(self.neglected_new_angle_terms) > 0:
+            if len(self.neglected_old_angle_terms) > 0:
                 custom_neglected_old_force.addGlobalParameter('lambda_angles', 0.0)
 
 
