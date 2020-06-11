@@ -71,7 +71,8 @@ class RelativeFEPSetup(object):
                  spectator_filenames=None,
                  nonbonded_method = 'PME',
                  complex_box_dimensions=None,
-                 solvent_box_dimensions=None
+                 solvent_box_dimensions=None,
+                 geometry='strong'
                  ):
         """
         Initialize a NonequilibriumFEPSetup object
@@ -120,6 +121,8 @@ class RelativeFEPSetup(object):
             box dimensions for the complex phase
         solvent_box_dimensions: Vec(3), optional, default=None
             box dimensions for the solvent phase
+        geometry : 'str', default 'strong'
+            wether to use geometry of the second ligand during atom mapping
         """
         self._pressure = pressure
         self._temperature = temperature
@@ -136,6 +139,7 @@ class RelativeFEPSetup(object):
         self._spectator_filenames = spectator_filenames
         self._complex_box_dimensions = complex_box_dimensions
         self._solvent_box_dimensions = solvent_box_dimensions
+        self._geometry = geometry
         try:
             self._nonbonded_method = getattr(app,nonbonded_method)
             _logger.info(f'Setting non bonded method to {nonbonded_method}')
@@ -327,7 +331,8 @@ class RelativeFEPSetup(object):
             _logger.info(f"creating TopologyProposal...")
             self._complex_topology_proposal = self._proposal_engine.propose(self._complex_system_old_solvated,
                                           self._complex_topology_old_solvated,
-                                          current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr)
+                                          current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr,
+                                          geometry=self._geometry)
 
             self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
 

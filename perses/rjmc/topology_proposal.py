@@ -2726,7 +2726,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 map_strength='default',
                 preserve_chirality = True,
                 current_metadata = None,
-                external_inttypes = False):
+                external_inttypes = False,
+                geometry='strong'):
         """
         Propose the next state, given the current state
 
@@ -2764,6 +2765,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             self.proposed_mol_id = proposed_mol_id
         self.current_molecule = self.list_of_oemols[self.current_mol_id]
         self._external_inttypes = external_inttypes
+        self._geometry = geometry
         # Remove the small molecule from the current Topology object
         _logger.info(f"creating current receptor topology by removing small molecule from current topology...")
         current_receptor_topology = self._remove_small_molecule(current_topology)
@@ -2811,7 +2813,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         _logger.info(f"determining atom map between old and new molecules...")
         if atom_map is None:
             _logger.info(f"the atom map is not specified; proceeding to generate an atom map...")
-            mol_atom_map = AtomMapper._get_mol_atom_map(self.current_molecule, self.proposed_molecule, atom_expr=atom_expr, bond_expr=bond_expr, map_strength=map_strength, external_inttypes=self._external_inttypes)
+            mol_atom_map = AtomMapper._get_mol_atom_map(self.current_molecule, self.proposed_molecule, atom_expr=atom_expr, bond_expr=bond_expr, map_strength=map_strength, external_inttypes=self._external_inttypes,geometry=self._geometry)
         else:
             _logger.info(f"atom map is pre-determined as {atom_map}")
             mol_atom_map = atom_map
