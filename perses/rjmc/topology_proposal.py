@@ -313,7 +313,8 @@ class AtomMapper(object):
                           matching_criterion = 'index',
                           external_inttypes=False,
                           return_all_maps=False,
-                          use_geometry=True):
+                          geometry='strong',
+                          unique=True):
         """
         Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
 
@@ -347,8 +348,14 @@ class AtomMapper(object):
         return_all_maps : bool, default False
             will return a list of viable maps. This is for debugging purposes only
             as a list being returned in the overall pipeline would break everything
-        use_geometry : bool, default True
-            if the geometry of ligand B is known, it can be used to pick the optimal atom map
+        geometry : str, default 'weak'
+            one of ['strong','weak' or None]
+            if strong -- atoms that are close in the geometries of ligand A and B are forced to map together
+            if weak -- if there are multiple mappings, the mapping that is closer to the geometry of ligand B is chosen
+            if None, all geometry information is ignored
+        unique : bool default True
+            this is a kwarg for oechem.OEMCSSearch and reduces redundant maps -- i.e. 3 maps for a methyl rotor.
+            There are some circumstances when with `return_all_maps` it might be useful for this to be set to False to increase the number of maps.
         Returns
         -------
         matches : list of match
@@ -377,10 +384,14 @@ class AtomMapper(object):
         oegraphmol_current = oechem.OEGraphMol(current_oemol)  # pattern molecule
         oegraphmol_proposed = oechem.OEGraphMol(proposed_oemol)  # target molecule
 
+
         # assigning ring membership to prevent ring breaking
         if not external_inttypes:
-            oegraphmol_current = AtomMapper._assign_ring_ids(oegraphmol_current)
-            oegraphmol_proposed = AtomMapper._assign_ring_ids(oegraphmol_proposed)
+            if geometry == 'strict':
+                oegraphmol_current, oegraphmol_proposed = AtomMapper._assign_distance_ids(oegraphmol_current,oegraphmol_proposed)
+            else:
+                oegraphmol_current = AtomMapper._assign_ring_ids(oegraphmol_current)
+                oegraphmol_proposed = AtomMapper._assign_ring_ids(oegraphmol_proposed)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
         mcs.Init(oegraphmol_current, atom_expr, bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
@@ -434,7 +445,7 @@ class AtomMapper(object):
         _logger.info(f'Maximum atom matched after hydrogen exceptions: {max_num_atoms}')
         _logger.info(f'Number of maps is {len(all_new_to_old_atom_maps)}')
 
-        if use_geometry:
+        if geometry is not None:
             # now want to pick the map with smallest distance for B geometry
             current_coords = np.zeros(shape=(current_oemol.NumAtoms(),3))
             for i in current_oemol.GetCoords():
@@ -460,6 +471,7 @@ class AtomMapper(object):
             best_map_index = np.argmin(all_scores)
             _logger.debug(f'Returning map index: {best_map_index}')
             return all_new_to_old_atom_maps[best_map_index]
+
         else:
             new_to_old_atom_maps = [map for count, map in zip(count_after_hydrogen_mapping, all_new_to_old_atom_maps) if count == max_num_atoms]
 
@@ -581,6 +593,40 @@ class AtomMapper(object):
             ring_as_base_ten = int(rings, 2)
             atom.SetIntType(ring_as_base_ten)
         return id_molecule
+
+    @staticmethod
+    def _assign_distance_ids(old_mol, new_mol, distance=0.2):
+        """ Gives atoms in both molecules matching Int numbers if they are close
+        to each other. This should ONLY be  used if the geometry (i.e. binding mode)
+        of both molecules are known, and they are aligned to the same frame of reference.
+
+        this function is invariant to which is passed in as {old|new}_mol
+        Parameters
+        ----------
+        old_mol : oechem.OEMol
+            first molecule to compare
+        new_mol : oechem.OEMol
+            second molecule to compare
+        distance : float, default = 0.2
+            Distance (in angstrom) that two atoms need to be closer than to be
+            labelled as the same.
+
+        Returns
+        -------
+        copies of old_mol and new_mol, with IntType set according to inter-molecular distances
+        """
+        from scipy.spatial.distance import cdist
+        A = copy.deepcopy(old_mol)
+        B = copy.deepcopy(new_mol)
+        unique_integer = 1
+        for atomA, coordsA in zip(A.GetAtoms(), A.GetCoords().values()):
+            for atomB, coordsB in zip(B.GetAtoms(), B.GetCoords().values()):
+                distances_ij = cdist([coordsA], [coordsB], 'euclidean')[0]
+                if distances_ij < distance:
+                    atomA.SetIntType(unique_integer)
+                    atomB.SetIntType(unique_integer)
+                    unique_integer += 1
+        return A, B
 
     @staticmethod
     def preserves_rings(match, current, proposed):
