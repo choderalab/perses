@@ -168,6 +168,8 @@ class RelativeFEPSetup(object):
         if type(self._ligand_input) is not list: # the ligand has been provided as a single file
             if self._ligand_input[-3:] == 'smi': #
                 _logger.info(f"Detected .smi format.  Proceeding...")
+                _logger.info('No geometry information for smiles, so ensuring mapping does not try use it')
+                self._geometry = None
                 self._ligand_smiles_old = load_smi(self._ligand_input,self._old_ligand_index)
                 self._ligand_smiles_new = load_smi(self._ligand_input,self._new_ligand_index)
                 _logger.info(f"\told smiles: {self._ligand_smiles_old}")

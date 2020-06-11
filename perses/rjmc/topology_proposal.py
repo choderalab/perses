@@ -444,32 +444,7 @@ class AtomMapper(object):
         _logger.info(f'Number of maps is {len(all_new_to_old_atom_maps)}')
 
         if geometry is not None:
-            # now want to pick the map with smallest distance for B geometry
-            current_coords = np.zeros(shape=(current_oemol.NumAtoms(),3))
-            for i in current_oemol.GetCoords():
-                current_coords[i] = current_oemol.GetCoords()[i]
-            proposed_coords = np.zeros(shape=(proposed_oemol.NumAtoms(),3))
-            for i in proposed_oemol.GetCoords():
-                proposed_coords[i] = proposed_oemol.GetCoords()[i]
-            from scipy.spatial.distance import cdist
-            all_to_all = cdist(current_coords, proposed_coords, 'euclidean')
-
-            proposed_H = {x.GetIdx(): x.IsHydrogen() for x in proposed_oemol.GetAtoms()}
-            all_scores = []
-            for M in all_new_to_old_atom_maps:
-                map_score = 0
-                for atom in M:
-                    if not proposed_H[atom]:  # skip H's - only look at heavy atoms
-                        map_score += all_to_all[M[atom], atom]
-                all_scores.append(map_score/len(M))
-            _logger.debug(f'Mapping scores: {all_scores}')
-            # TODO: return one map from any group of scores
-
-            # returning lowest score
-            best_map_index = np.argmin(all_scores)
-            _logger.debug(f'Returning map index: {best_map_index}')
-            return all_new_to_old_atom_maps[best_map_index]
-
+            map = _find_closest_map(current_oemol, proposed_oemol, all_new_to_old_atom_maps)
         else:
             new_to_old_atom_maps = [map for count, map in zip(count_after_hydrogen_mapping, all_new_to_old_atom_maps) if count == max_num_atoms]
 
@@ -497,8 +472,55 @@ class AtomMapper(object):
             max_index_overlap_number = max(index_overlap_numbers)
             max_index = index_overlap_numbers.index(max_index_overlap_number)
             _logger.debug(f"\tchose {new_to_old_atom_maps[max_index]} with {len(new_to_old_atom_maps[max_index])} mapped atoms")
+            map = new_to_old_atom_maps[max_index]
 
-            return new_to_old_atom_maps[max_index]
+        return map
+
+    @staticmethod
+    def _find_closest_map(mol_A, mol_B, maps):
+        """ from a list of maps, finds the one that is geometrically the closest match for molecule B
+
+        Parameters
+        ----------
+        mol_A : oechem.oemol
+            The first moleule in the mapping
+        mol_B : oechem.oemol
+            Second molecule in the mapping
+        maps : list(dict)
+            A list of maps to search through
+
+        Returns
+        -------
+        dict
+            the single best match from all maps
+
+        """
+        if len(maps) == 1:
+            return maps[0]
+        current_coords = np.zeros(shape=(mol_A.NumAtoms(), 3))
+        for i in mol_A.GetCoords():
+            coords_A[i] = mol_A.GetCoords()[i]
+        mol_B = np.zeros(shape=(mol_B.NumAtoms(), 3))
+        for i in mol_B.GetCoords():
+            coords_B[i] = mol_B.GetCoords()[i]
+        from scipy.spatial.distance import cdist
+
+        all_to_all = cdist(coords_A, coords_B, 'euclidean')
+
+        mol_B_H = {x.GetIdx(): x.IsHydrogen() for x in mol_B.GetAtoms()}
+        all_scores = []
+        for M in maps:
+            map_score = 0
+            for atom in M:
+                if not mol_B_H[atom]:  # skip H's - only look at heavy atoms
+                    map_score += all_to_all[M[atom], atom]
+            all_scores.append(map_score/len(M))
+        _logger.debug(f'Mapping scores: {all_scores}')
+
+        # returning lowest score
+        best_map_index = np.argmin(all_scores)
+        _logger.debug(f'Returning map index: {best_map_index}')
+        return maps[best_map_index]
 
     @staticmethod
     def _create_pattern_to_target_map(current_mol, proposed_mol, match, matching_criterion = 'index'):
@@ -605,7 +627,7 @@ class AtomMapper(object):
             first molecule to compare
         new_mol : oechem.OEMol
             second molecule to compare
-        distance : float, default = 0.2
+        distance : float, default = 0.3
             Distance (in angstrom) that two atoms need to be closer than to be
             labelled as the same.
 
