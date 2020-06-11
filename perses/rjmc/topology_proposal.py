@@ -1855,7 +1855,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         #now we can get the mol atom map of the sidechain
         #NOTE: since the sidechain oemols are NOT zero-indexed anymore, we need to match by name (since they are unique identifiers)
-        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength = 'default', matching_criterion = 'name')
+        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength = 'default', matching_criterion = 'name',geometry=None)
 
         #check the atom map thus far:
         _logger.debug(f"\t\t\tlocal atom map nonstereo sidechain: {local_atom_map_nonstereo_sidechain}")
