@@ -313,8 +313,7 @@ class AtomMapper(object):
                           matching_criterion = 'index',
                           external_inttypes=False,
                           return_all_maps=False,
-                          geometry='strong',
-                          unique=True):
+                          geometry='weak'):
         """
         Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
 
@@ -353,9 +352,6 @@ class AtomMapper(object):
             if strong -- atoms that are close in the geometries of ligand A and B are forced to map together
             if weak -- if there are multiple mappings, the mapping that is closer to the geometry of ligand B is chosen
             if None, all geometry information is ignored
-        unique : bool default True
-            this is a kwarg for oechem.OEMCSSearch and reduces redundant maps -- i.e. 3 maps for a methyl rotor.
-            There are some circumstances when with `return_all_maps` it might be useful for this to be set to False to increase the number of maps.
         Returns
         -------
         matches : list of match
@@ -397,6 +393,7 @@ class AtomMapper(object):
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
         mcs.Init(oegraphmol_current, atom_expr, bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
+        unique = False
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
         _logger.info([m.NumAtoms() for m in matches])
 
