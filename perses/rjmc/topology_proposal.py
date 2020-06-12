@@ -539,6 +539,7 @@ class AtomMapper(object):
 #                          matching_criterion = 'index',
 #                          external_inttypes=False,
 #                          return_all_maps=False,
+#                          geometry='weak',
 #                          unique=True):
 #        """
 #        Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
@@ -2975,7 +2976,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 preserve_chirality = True,
                 current_metadata = None,
                 external_inttypes = False,
-                best='geometry')
+                best='geometry'):
         """
         Propose the next state, given the current state
 
