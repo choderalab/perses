@@ -539,7 +539,6 @@ class AtomMapper(object):
 #                          matching_criterion = 'index',
 #                          external_inttypes=False,
 #                          return_all_maps=False,
-#                          geometry='weak',
 #                          unique=True):
 #        """
 #        Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
@@ -2104,7 +2103,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         #now we can get the mol atom map of the sidechain
         #NOTE: since the sidechain oemols are NOT zero-indexed anymore, we need to match by name (since they are unique identifiers)
-        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength = 'default', matching_criterion = 'name',geometry=None)
+        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength = 'default', matching_criterion = 'name')
 
         #check the atom map thus far:
         _logger.debug(f"\t\t\tlocal atom map nonstereo sidechain: {local_atom_map_nonstereo_sidechain}")
@@ -2976,7 +2975,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 preserve_chirality = True,
                 current_metadata = None,
                 external_inttypes = False,
-                geometry='strong'):
+                best='geometry')
         """
         Propose the next state, given the current state
 
@@ -3062,7 +3061,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         _logger.info(f"determining atom map between old and new molecules...")
         if atom_map is None:
             _logger.info(f"the atom map is not specified; proceeding to generate an atom map...")
-            mol_atom_map = AtomMapper._get_mol_atom_map(self.current_molecule, self.proposed_molecule, atom_expr=atom_expr, bond_expr=bond_expr, map_strength=map_strength, external_inttypes=self._external_inttypes,geometry=self._geometry)
+            mol_atom_map = AtomMapper._get_mol_atom_map(self.current_molecule, self.proposed_molecule, atom_expr=atom_expr, bond_expr=bond_expr, map_strength=map_strength, external_inttypes=self._external_inttypes)
         else:
             _logger.info(f"atom map is pre-determined as {atom_map}")
             mol_atom_map = atom_map
