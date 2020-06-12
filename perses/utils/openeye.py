@@ -492,3 +492,64 @@ def generate_expression(list):
         total_expr = total_expr | expr
 
     return total_expr
+
+
+def get_scaffold(molecule):
+    """
+    Takes an openeye.oechem.oemol and returns
+    an openeye.oechem.oemol of the scaffold
+
+    Parameters
+    ----------
+    mol : openeye.oechem.oemol
+        molecule to draw
+    """
+    def TraverseForRing(visited, atom):
+        visited.add(atom.GetIdx())
+
+        for nbor in atom.GetAtoms():
+            if nbor.GetIdx() not in visited:
+                if nbor.IsInRing():
+                    return True
+
+                if TraverseForRing(visited, nbor):
+                    return True
+
+        return False
+
+    def DepthFirstSearchForRing(root, nbor):
+        visited = set()
+        visited.add(root.GetIdx())
+
+        return TraverseForRing(visited, nbor)
+
+    class IsInScaffold(oechem.OEUnaryAtomPred):
+        def __call__(self, atom):
+            if atom.IsInRing():
+                return True
+
+            count = 0
+            for nbor in atom.GetAtoms():
+                if DepthFirstSearchForRing(atom, nbor):
+                    count += 1
+
+            return count > 1
+
+    dst = oechem.OEMol()
+    pred = IsInScaffold()
+
+    adjustHcount = True
+    oechem.OESubsetMol(dst, molecule, pred, adjustHcount)
+    return dst
+
+
+def _map_oemol_to_scaffold(scaffold, mol):
+    import copy
+    from scipy.spatial.distance import cdist
+    mol = copy.deepcopy(mol)
+    scaffold_to_mol_map = {}
+    for i in scaffold.GetCoords():
+        for j in mol.GetCoords():
+            if cdist([scaffold.GetCoords()[i]], [mol.GetCoords()[j]], 'euclidean')[0][0] < 0.05:
+                scaffold_to_mol_map[i] = j
+    return scaffold_to_mol_map
