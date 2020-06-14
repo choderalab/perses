@@ -254,10 +254,10 @@ class PointMutationExecutor(object):
         self.complex_htf = htfs[1] if ligand_filename else None
 
     def get_complex_htf(self):
-        return copy.deepcopy(self.complex_htf)
+        return self.complex_htf
 
     def get_apo_htf(self):
-        return copy.deepcopy(self.apo_htf)
+        return self.apo_htf
 
 
     def _solvate(self,
