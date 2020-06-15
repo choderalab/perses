@@ -355,7 +355,7 @@ class AtomMapper(object):
                           allow_ring_breaking=True,
                           matching_criterion='index',
                           external_inttypes=False,
-                          best='geometry'):
+                          map_strategy='matching_criterion'):
         """Find a suitable atom map between two molecules, according
         to the atom_expr, bond_expr or map_strength
 
@@ -384,19 +384,40 @@ class AtomMapper(object):
         external_inttypes : bool, default False
             If True, IntTypes already assigned to oemols will be used for mapping, if IntType is in the atom or bond expression.
             Otherwise, IntTypes will be overwritten such as to ensure rings of different sizes are not matched.
-        best : str, default='geometry'
+        best : str, default='matching_criterion'
             determines which map is considered the best and returned
             can be one of ['geometry', 'matching_criterion', 'random', 'weighted-random', 'return-all']
-            only use geometry if the geometry of ligand B is correctly aligned.
-            return-all breaks the API as it returns a list of dicts, rather than list - use with care
+            - geometry uses the coordinates of the molB oemol to calculate the heavy atom distance between the proposed map and the actual geometry
+            this can be vital for getting the orientation of ortho- and meta- substituents correct in constrained (i.e. protein-like) environments.
+            this is ONLY useful if the positions of ligand B are known and/or correctly aligned.
+            - matching_criterion uses the `matching_criterion` flag to pick which of the maps best satisfies a 2D requirement.
+            - random will use a random map of those that are possible
+            - weighted-random uses a map chosen at random, proportional to how close it is in geometry to ligand B. The same as for 'geometry', this requires the coordinates of ligand B to be meaninful
+            - return-all BREAKS THE API as it returns a list of dicts, rather than list. This is intended for development code, not main pipeline.
         Returns
         -------
         dict
             dictionary of scores (keys) and maps (dict)
 
         """
-        allowed_best = ['geometry', 'matching_criterion', 'random', 'weighted-random', 'return-all']
-        assert best in allowed_best, f'best cannot be {best}, it must be one of the allowed options {allowed_best}.'
+        allowed_map_strategy = ['geometry', 'matching_criterion', 'random', 'weighted-random', 'return-all']
+        assert map_strategy in allowed_map_strategy, f'map_strategy cannot be {map_strategy}, it must be one of the allowed options {allowed_map_strategy}.'
+
+
+        map_strength_dict = {'default': [DEFAULT_ATOM_EXPRESSION, DEFAULT_BOND_EXPRESSION],
+                             'weak': [WEAK_ATOM_EXPRESSION, WEAK_BOND_EXPRESSION],
+                             'strong': [STRONG_ATOM_EXPRESSION, STRONG_BOND_EXPRESSION]}
+        if map_strength is None:
+            map_strength = 'default'
+
+        if atom_expr is None:
+            _logger.debug(f'No atom expression defined, using map strength : {map_strength}')
+            atom_expr = map_strength_dict[map_strength][0]
+        if bond_expr is None:
+            _logger.debug(f'No bond expression defined, using map strength : {map_strength}')
+            bond_expr = map_strength_dict[map_strength][1]
+
+
         if not external_inttypes or allow_ring_breaking:
             molA = AtomMapper._assign_ring_ids(molA)
             molB = AtomMapper._assign_ring_ids(molB)
@@ -418,9 +439,12 @@ class AtomMapper(object):
 
             # if no commonality with the scaffold, don't use it.
             all_molecule_maps = AtomMapper._get_all_maps(molA, molB,
-                                                     external_inttypes=True,
+                                                     external_inttypes=external_inttypes,
                                                      atom_expr=atom_expr,
                                                      bond_expr=bond_expr)
+            _logger.info(f'len {all_molecule_maps}')
+            for x in all_molecule_maps:
+                _logger.info(x)
 
         else:
 
@@ -464,23 +488,25 @@ class AtomMapper(object):
                                                      bond_expr=bond_expr)
                 all_molecule_maps.extend(molecule_maps)
 
+            
         molecule_maps_scores = AtomMapper._remove_rendundant_maps(molA, molB, all_molecule_maps)
+        _logger.info(f'molecule_maps_scores: {molecule_maps_scores.values()}')
 
         #  TODO - there will be other options that we might want in future here
         #  maybe _get_mol_atom_map  should return a list of maps and then we have
         # a pick_map() function elsewhere?
         # but this would break the API so I'm not doing it now
-        if best == 'geometry':
+        if map_strategy == 'geometry':
             return molecule_maps_scores[min(molecule_maps_scores)]
-        elif best == 'matching_criterion':
-            best_map = AtomMapper._score_nongeometric(molecule_maps_scores.values(), matching_criterion)
+        elif map_strategy == 'matching_criterion':
+            best_map = AtomMapper._score_nongeometric(molA, molB, list(molecule_maps_scores.values()), matching_criterion)
             return best_map
-        elif best == 'random':
+        elif map_strategy == 'random':
             return np.random.choice(molecule_maps_scores.values())
-        elif best == 'weighted-random':
+        elif map_strategy == 'weighted-random':
             return np.random.choice(molecule_maps_scores.values(),
                                     [x**-1 for x in molecule_maps_scores.keys()])
-        elif best == 'return-all':
+        elif map_strategy == 'return-all':
             _logger.warning('Returning a list of all maps, rather than a dictionary.')
             return molecule_maps_scores
 
@@ -497,11 +523,15 @@ class AtomMapper(object):
             new molecule
         all_molecule_maps : list(dict)
             list of mappings to check for redundancies
+            where the maps are molB to molA
 
         Returns
         -------
         dict
-            dictionary of scores (keys) and maps (dict)
+            dictionary of scores (keys) and maps (dict of new-to-old atom indices)
+            where the score is the sum of the distances in cartesian space between atoms that have been mapped
+            this helps identify when two core atoms that have been assigned to eachother are actually far away.
+            maps are molB indices to molA indices.
 
         """
         scores = AtomMapper._score_maps(molA, molB, all_molecule_maps)
@@ -576,31 +606,20 @@ class AtomMapper(object):
 
         """
 
-        max_num_atoms = max([match.NumAtoms() for match in maps])
+        max_num_atoms = max([len(m) for m in maps])
         _logger.debug(f"\tthere are {len(maps)} top matches with at most {max_num_atoms} before hydrogen exceptions")
-        _logger.debug(f"\tthe max number of atom matches is: {max_num_atoms}; there are {len([m for m in maps if m.NumAtoms() == max_num_atoms])} matches herein")
-
-        # check the most mapped is the same once hydrogen exceptions are handled
-        all_new_to_old_atom_maps = []
-        count_after_hydrogen_mapping = []
-
-        max_num_atoms = max(count_after_hydrogen_mapping)
-        _logger.info(f'Maximum atom matched after hydrogen exceptions: {max_num_atoms}')
-        _logger.info(f'Number of maps is {len(all_new_to_old_atom_maps)}')
-
-        new_to_old_atom_maps = [map for count, map in zip(count_after_hydrogen_mapping, all_new_to_old_atom_maps) if count == max_num_atoms]
 
         # now all else is equal; we will choose the map with the highest overlap of atom indices
         index_overlap_numbers = []
         if matching_criterion == 'index':
-            for map in new_to_old_atom_maps:
+            for map in maps: 
                 hit_number = 0
                 for key, value in map.items():
                     if key == value:
                         hit_number += 1
                 index_overlap_numbers.append(hit_number)
         elif matching_criterion == 'name':
-            for map in new_to_old_atom_maps:
+            for map in maps: 
                 hit_number = 0
                 map_tuples = list(map.items())
                 atom_map = {atom_new: atom_old for atom_new, atom_old in zip(list(molB.GetAtoms()), list(molA.GetAtoms())) if (atom_new.GetIdx(), atom_old.GetIdx()) in map_tuples}
@@ -613,8 +632,7 @@ class AtomMapper(object):
 
         max_index_overlap_number = max(index_overlap_numbers)
         max_index = index_overlap_numbers.index(max_index_overlap_number)
-        _logger.debug(f"\tchose {new_to_old_atom_maps[max_index]} with {len(new_to_old_atom_maps[max_index])} mapped atoms")
-        map = new_to_old_atom_maps[max_index]
+        map = maps[max_index]
 
         return map
 
@@ -707,10 +725,7 @@ class AtomMapper(object):
         ---------
         old_mol : openeye.oechem.oemol object
         new_mol : openeye.oechem.oemol object
-        match : oechem.OEMCSSearch.Match iter
-        matching_criterion : str, default 'index'
-            whether the pattern to target map is chosen based on atom indices or names (which should be uniquely defined)
-            allowables: ['index', 'name']
+        mapping : dict
         """
         new_to_old_atom_map = {}
         pattern_to_target_map = AtomMapper._create_pattern_to_target_map(old_mol, new_mol, match, matching_criterion)
@@ -871,6 +886,7 @@ class AtomMapper(object):
         # _logger.warning(f"\t\t\told oemols: {pattern_atoms}")
         # _logger.warning(f"\t\t\tnew oemols: {target_atoms}")
         copied_new_to_old_atom_map = copy.deepcopy(new_to_old_atom_map)
+        print(new_to_old_atom_map)
 
         for new_index, old_index in new_to_old_atom_map.items():
 
@@ -2926,7 +2942,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 preserve_chirality = True,
                 current_metadata = None,
                 external_inttypes = False,
-                best='geometry'):
+                map_strategy='geometry'):
         """
         Propose the next state, given the current state
 
@@ -3326,6 +3342,13 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         for i in range(n_mols):
             for j in range(i):
                 oemol_i = self.list_of_oemols[i]
+                oemol_j = self.list_of_oemols[j]
+                atom_map = AtomMapper._get_mol_atom_map(oemol_i, oemol_j)
+                if not atom_map:
+                    n_atoms_matching = 0
+                    continue
+                n_atoms_matching = len(atom_map.keys())
+                probability_matrix[i, j] = n_atoms_matching
                 oemol_j = self.list_of_oemols[j]
                 atom_map = AtomMapper._get_mol_atom_map(oemol_i, oemol_j)
                 if not atom_map:

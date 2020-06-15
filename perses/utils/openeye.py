@@ -499,10 +499,20 @@ def get_scaffold(molecule):
     Takes an openeye.oechem.oemol and returns
     an openeye.oechem.oemol of the scaffold
 
+    The scaffold is a molecule where all the atoms that are not in rings, and are not linkers between rings.
+    double bonded atoms exo to a ring are included as ring atoms
+
+    This function has been completely taken from openeye's extractscaffold.py script
+    https://docs.eyesopen.com/toolkits/python/oechemtk/oechem_examples/oechem_example_extractscaffold.html#section-example-oechem-extractscaffold
     Parameters
     ----------
     mol : openeye.oechem.oemol
-        molecule to draw
+        entire molecule to get the scaffold of 
+
+    Returns
+    -------
+    openeye.oechem.oemol
+        scaffold oemol of the input mol 
     """
     def TraverseForRing(visited, atom):
         visited.add(atom.GetIdx())
@@ -542,14 +552,3 @@ def get_scaffold(molecule):
     oechem.OESubsetMol(dst, molecule, pred, adjustHcount)
     return dst
 
-
-def _map_oemol_to_scaffold(scaffold, mol):
-    import copy
-    from scipy.spatial.distance import cdist
-    mol = copy.deepcopy(mol)
-    scaffold_to_mol_map = {}
-    for i in scaffold.GetCoords():
-        for j in mol.GetCoords():
-            if cdist([scaffold.GetCoords()[i]], [mol.GetCoords()[j]], 'euclidean')[0][0] < 0.05:
-                scaffold_to_mol_map[i] = j
-    return scaffold_to_mol_map
