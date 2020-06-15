@@ -397,11 +397,11 @@ class AtomMapper(object):
         """
         allowed_best = ['geometry', 'matching_criterion', 'random', 'weighted-random', 'return-all']
         assert best in allowed_best, f'best cannot be {best}, it must be one of the allowed options {allowed_best}.'
-        if not external_inttypes:
+        if not external_inttypes or allow_ring_breaking:
             molA = AtomMapper._assign_ring_ids(molA)
             molB = AtomMapper._assign_ring_ids(molB)
 
-        from perses.utils.openeye import get_scaffold, _map_oemol_to_scaffold
+        from perses.utils.openeye import get_scaffold
         scaffoldA = get_scaffold(molA)
         scaffoldB = get_scaffold(molB)
 
@@ -413,6 +413,9 @@ class AtomMapper(object):
         _logger.info(f'Scaffold has symmetry of {len(scaffold_maps)}')
 
         if len(scaffold_maps) == 0:
+            _logger.warning('Two molecules are not similar to have a common scaffold')
+            _logger.warning('Proceeding with direct mapping of molecules, but please check atom mapping and the geometry of the ligands.')
+
             # if no commonality with the scaffold, don't use it.
             all_molecule_maps = AtomMapper._get_all_maps(molA, molB,
                                                      external_inttypes=True,
@@ -435,24 +438,25 @@ class AtomMapper(object):
             # for all of the possible scaffold  symmetries
             all_molecule_maps = []
             for scaffold_map in scaffold_maps:
-                # reset the IntTypes
-                for atom in molA.GetAtoms():
-                    atom.SetIntType(0)
-                for atom in molB.GetAtoms():
-                    atom.SetIntType(0)
-                index = 1
-                for scaff_b_id, scaff_a_id in scaffold_map.items():
+                if not external_inttypes or allow_ring_breaking:
+                    # reset the IntTypes
                     for atom in molA.GetAtoms():
-                        if atom.GetIdx() == scaffold_A_map[scaff_a_id]:
-                            atom.SetIntType(index)
-                        else:
-                            atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
+                        atom.SetIntType(0)
                     for atom in molB.GetAtoms():
-                        if atom.GetIdx() == scaffold_B_map[scaff_b_id]:
-                            atom.SetIntType(index)
-                        else:
-                            atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
-                    index += 1
+                        atom.SetIntType(0)
+                    index = 1
+                    for scaff_b_id, scaff_a_id in scaffold_map.items():
+                        for atom in molA.GetAtoms():
+                            if atom.GetIdx() == scaffold_A_map[scaff_a_id]:
+                                atom.SetIntType(index)
+                            else:
+                                atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
+                        for atom in molB.GetAtoms():
+                            if atom.GetIdx() == scaffold_B_map[scaff_b_id]:
+                                atom.SetIntType(index)
+                            else:
+                                atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
+                        index += 1
 
                 molecule_maps = AtomMapper._get_all_maps(molA, molB,
                                                      external_inttypes=True,
@@ -469,14 +473,15 @@ class AtomMapper(object):
         if best == 'geometry':
             return molecule_maps_scores[min(molecule_maps_scores)]
         elif best == 'matching_criterion':
-            best_map = _score_nongeometric(molecule_maps_scores.values(), matching_criterion)
+            best_map = AtomMapper._score_nongeometric(molecule_maps_scores.values(), matching_criterion)
             return best_map
         elif best == 'random':
             return np.random.choice(molecule_maps_scores.values())
         elif best == 'weighted-random':
             return np.random.choice(molecule_maps_scores.values(),
-                                    molecule_maps_scores.keys())
+                                    [x**-1 for x in molecule_maps_scores.keys()])
         elif best == 'return-all':
+            _logger.warning('Returning a list of all maps, rather than a dictionary.')
             return molecule_maps_scores
 
     @staticmethod
@@ -723,13 +728,13 @@ class AtomMapper(object):
 
     @staticmethod
     def _assign_atom_ring_id(atom, max_ring_size=10):
-        """ Sets the Int of each atom in the oemol to a number
-        corresponding to the ring membership of that atom
+        """ Returns the int type based on the ring occupancy
+        of the atom
 
         Parameters
         ----------
-        molecule : oechem.OEMol
-            oemol to assign ring ID to
+        atom : oechem.OEAtomBase
+            atom to compute integer of
         max_ring_size : int, default = 10
             Largest ring size that will be checked for
 
@@ -741,6 +746,28 @@ class AtomMapper(object):
             rings += str(int(oechem.OEAtomIsInRingSize(atom, i)))
         ring_as_base_two = int(rings, 2)
         return ring_as_base_two
+
+    @staticmethod
+    def _assign_bond_ring_id(bond, max_ring_size=10):
+        """ Returns the int type based on the ring occupancy
+        of the bond
+
+        Parameters
+        ----------
+        bond : oechem.OEBondBase
+            atom to compute integer of
+        max_ring_size : int, default = 10
+            Largest ring size that will be checked for
+
+        Returns
+        -------
+        """
+        rings = ''
+        for i in range(3, max_ring_size+1): #  smallest feasible ring size is 3
+            rings += str(int(oechem.OEBondIsInRingSize(bond, i)))
+        ring_as_base_two = int(rings, 2)
+        return ring_as_base_two
+
 
     @staticmethod
     def _assign_ring_ids(molecule, max_ring_size=10):
@@ -759,17 +786,9 @@ class AtomMapper(object):
         """
         id_molecule = copy.deepcopy(molecule)
         for atom in id_molecule.GetAtoms():
-            rings = ''
-            for i in range(3, max_ring_size+1): # smallest feasible ring size is 3
-                rings += str(int(oechem.OEAtomIsInRingSize(atom, i)))
-            ring_as_base_ten = int(rings, 2)
-            atom.SetIntType(ring_as_base_ten)
+            atom.SetIntType(AtomMapper._assign_atom_ring_id(atom, max_ring_size=max_ring_size))
         for bond in id_molecule.GetBonds():
-            rings = ''
-            for i in range(3, max_ring_size+1): # smallest feasible ring size is 3
-                rings += str(int(oechem.OEBondIsInRingSize(bond, i)))
-            ring_as_base_ten = int(rings, 2)
-            atom.SetIntType(ring_as_base_ten)
+            bond.SetIntType(AtomMapper._assign_bond_ring_id(bond, max_ring_size=max_ring_size))
         return id_molecule
 
     @staticmethod
