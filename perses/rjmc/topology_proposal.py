@@ -421,8 +421,15 @@ class AtomMapper(object):
 
         else:
 
-            scaffold_A_map = _map_oemol_to_scaffold(scaffoldA, molA)
-            scaffold_B_map = _map_oemol_to_scaffold(scaffoldB, molB)
+            scaffold_A_map = AtomMapper._get_all_maps(molA, scaffoldA,
+                                     atom_expr=oechem.OEExprOpts_DefaultAtoms,
+                                     bond_expr=oechem.OEExprOpts_DefaultBonds)[0]
+
+
+            scaffold_B_map = AtomMapper._get_all_maps(molB, scaffoldB,
+            atom_expr=oechem.OEExprOpts_DefaultAtoms,
+            bond_expr=oechem.OEExprOpts_DefaultBonds)[0]
+
 
             # now want to find all of the maps
             # for all of the possible scaffold  symmetries
@@ -434,13 +441,17 @@ class AtomMapper(object):
                 for atom in molB.GetAtoms():
                     atom.SetIntType(0)
                 index = 1
-                for scaff_a_id, scaff_b_id in scaffold_map.items():
+                for scaff_b_id, scaff_a_id in scaffold_map.items():
                     for atom in molA.GetAtoms():
                         if atom.GetIdx() == scaffold_A_map[scaff_a_id]:
                             atom.SetIntType(index)
+                        else:
+                            atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
                     for atom in molB.GetAtoms():
                         if atom.GetIdx() == scaffold_B_map[scaff_b_id]:
                             atom.SetIntType(index)
+                        else:
+                            atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
                     index += 1
 
                 molecule_maps = AtomMapper._get_all_maps(molA, molB,
@@ -540,7 +551,7 @@ class AtomMapper(object):
 
     @staticmethod
     def _score_nongeometric(molA, molB, maps,
-                          matching_criterion='index'):
+                            matching_criterion='index'):
         """
         Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
 
@@ -575,32 +586,32 @@ class AtomMapper(object):
         new_to_old_atom_maps = [map for count, map in zip(count_after_hydrogen_mapping, all_new_to_old_atom_maps) if count == max_num_atoms]
 
         # now all else is equal; we will choose the map with the highest overlap of atom indices
-            index_overlap_numbers = []
-            if matching_criterion == 'index':
-                for map in new_to_old_atom_maps:
-                    hit_number = 0
-                    for key, value in map.items():
-                        if key == value:
-                            hit_number += 1
-                    index_overlap_numbers.append(hit_number)
-            elif matching_criterion == 'name':
-                for map in new_to_old_atom_maps:
-                    hit_number = 0
-                    map_tuples = list(map.items())
-                    atom_map = {atom_new: atom_old for atom_new, atom_old in zip(list(molB.GetAtoms()), list(molA.GetAtoms())) if (atom_new.GetIdx(), atom_old.GetIdx()) in map_tuples}
-                    for key, value in atom_map.items():
-                        if key.GetName() == value.GetName():
-                            hit_number += 1
-                    index_overlap_numbers.append(hit_number)
-            else:
-                raise Exception(f"the ranking criteria {matching_criterion} is not supported.")
+        index_overlap_numbers = []
+        if matching_criterion == 'index':
+            for map in new_to_old_atom_maps:
+                hit_number = 0
+                for key, value in map.items():
+                    if key == value:
+                        hit_number += 1
+                index_overlap_numbers.append(hit_number)
+        elif matching_criterion == 'name':
+            for map in new_to_old_atom_maps:
+                hit_number = 0
+                map_tuples = list(map.items())
+                atom_map = {atom_new: atom_old for atom_new, atom_old in zip(list(molB.GetAtoms()), list(molA.GetAtoms())) if (atom_new.GetIdx(), atom_old.GetIdx()) in map_tuples}
+                for key, value in atom_map.items():
+                    if key.GetName() == value.GetName():
+                        hit_number += 1
+                index_overlap_numbers.append(hit_number)
+        else:
+            raise Exception(f"the ranking criteria {matching_criterion} is not supported.")
 
-            max_index_overlap_number = max(index_overlap_numbers)
-            max_index = index_overlap_numbers.index(max_index_overlap_number)
-            _logger.debug(f"\tchose {new_to_old_atom_maps[max_index]} with {len(new_to_old_atom_maps[max_index])} mapped atoms")
-            map = new_to_old_atom_maps[max_index]
+        max_index_overlap_number = max(index_overlap_numbers)
+        max_index = index_overlap_numbers.index(max_index_overlap_number)
+        _logger.debug(f"\tchose {new_to_old_atom_maps[max_index]} with {len(new_to_old_atom_maps[max_index])} mapped atoms")
+        map = new_to_old_atom_maps[max_index]
 
-    return map
+        return map
 
     @staticmethod
     def _find_closest_map(mol_A, mol_B, maps):
@@ -709,6 +720,27 @@ class AtomMapper(object):
             new_to_old_atom_map[new_index] = old_index
 
         return new_to_old_atom_map
+
+    @staticmethod
+    def _assign_atom_ring_id(atom, max_ring_size=10):
+        """ Sets the Int of each atom in the oemol to a number
+        corresponding to the ring membership of that atom
+
+        Parameters
+        ----------
+        molecule : oechem.OEMol
+            oemol to assign ring ID to
+        max_ring_size : int, default = 10
+            Largest ring size that will be checked for
+
+        Returns
+        -------
+        """
+        rings = ''
+        for i in range(3, max_ring_size+1): #  smallest feasible ring size is 3
+            rings += str(int(oechem.OEAtomIsInRingSize(atom, i)))
+        ring_as_base_two = int(rings, 2)
+        return ring_as_base_two
 
     @staticmethod
     def _assign_ring_ids(molecule, max_ring_size=10):
