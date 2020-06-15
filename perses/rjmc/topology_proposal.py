@@ -355,7 +355,7 @@ class AtomMapper(object):
                           allow_ring_breaking=True,
                           matching_criterion='index',
                           external_inttypes=False,
-                          map_strategy='matching_criterion'):
+                          map_strategy='core'):
         """Find a suitable atom map between two molecules, according
         to the atom_expr, bond_expr or map_strength
 
@@ -387,6 +387,7 @@ class AtomMapper(object):
         best : str, default='matching_criterion'
             determines which map is considered the best and returned
             can be one of ['geometry', 'matching_criterion', 'random', 'weighted-random', 'return-all']
+            - core will return the map with the largest number of atoms in the core. If there are multiple maps with the same highest score, then `matching_criterion` is used to tie break
             - geometry uses the coordinates of the molB oemol to calculate the heavy atom distance between the proposed map and the actual geometry
             this can be vital for getting the orientation of ortho- and meta- substituents correct in constrained (i.e. protein-like) environments.
             this is ONLY useful if the positions of ligand B are known and/or correctly aligned.
@@ -400,8 +401,9 @@ class AtomMapper(object):
             dictionary of scores (keys) and maps (dict)
 
         """
-        allowed_map_strategy = ['geometry', 'matching_criterion', 'random', 'weighted-random', 'return-all']
+        allowed_map_strategy = ['core','geometry', 'matching_criterion', 'random', 'weighted-random', 'return-all']
         assert map_strategy in allowed_map_strategy, f'map_strategy cannot be {map_strategy}, it must be one of the allowed options {allowed_map_strategy}.'
+        _logger.info(f'Using {map_strategy} to chose best atom map')
 
 
         map_strength_dict = {'default': [DEFAULT_ATOM_EXPRESSION, DEFAULT_BOND_EXPRESSION],
@@ -490,7 +492,7 @@ class AtomMapper(object):
 
             
         molecule_maps_scores = AtomMapper._remove_rendundant_maps(molA, molB, all_molecule_maps)
-        _logger.info(f'molecule_maps_scores: {molecule_maps_scores.values()}')
+        _logger.info(f'molecule_maps_scores: {molecule_maps_scores.keys()}')
 
         #  TODO - there will be other options that we might want in future here
         #  maybe _get_mol_atom_map  should return a list of maps and then we have
@@ -498,6 +500,16 @@ class AtomMapper(object):
         # but this would break the API so I'm not doing it now
         if map_strategy == 'geometry':
             return molecule_maps_scores[min(molecule_maps_scores)]
+        elif map_strategy == 'core':
+            maps = list(molecule_maps_scores.values())
+            core_count = [len(m) for m in maps] 
+            maximum_core_atoms = max(core_count)
+            if core_count.count(maximum_core_atoms) == 1:
+                return maps[core_count.index(maximum_core_atoms)]
+            else:
+                best_maps = [m for c, m in zip(core_count,maps) if c == maximum_core_atoms]
+                best_map = AtomMapper._score_nongeometric(molA, molB, best_maps, matching_criterion)
+                return best_map
         elif map_strategy == 'matching_criterion':
             best_map = AtomMapper._score_nongeometric(molA, molB, list(molecule_maps_scores.values()), matching_criterion)
             return best_map
@@ -606,6 +618,7 @@ class AtomMapper(object):
 
         """
 
+        _logger.info(f'Finding best map using matching_criterion {matching_criterion}')
         max_num_atoms = max([len(m) for m in maps])
         _logger.debug(f"\tthere are {len(maps)} top matches with at most {max_num_atoms} before hydrogen exceptions")
 
@@ -2942,7 +2955,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 preserve_chirality = True,
                 current_metadata = None,
                 external_inttypes = False,
-                map_strategy='geometry'):
+                map_strategy='matching_criterion'):
         """
         Propose the next state, given the current state
 
