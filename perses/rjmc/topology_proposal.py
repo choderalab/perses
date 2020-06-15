@@ -499,23 +499,29 @@ class AtomMapper(object):
         # a pick_map() function elsewhere?
         # but this would break the API so I'm not doing it now
         if map_strategy == 'geometry':
+            _logger.info('Returning map with closest geometry satisfaction')
             return molecule_maps_scores[min(molecule_maps_scores)]
         elif map_strategy == 'core':
             maps = list(molecule_maps_scores.values())
             core_count = [len(m) for m in maps] 
             maximum_core_atoms = max(core_count)
             if core_count.count(maximum_core_atoms) == 1:
+                _logger.info('Returning map with most atoms in core')
                 return maps[core_count.index(maximum_core_atoms)]
             else:
                 best_maps = [m for c, m in zip(core_count,maps) if c == maximum_core_atoms]
                 best_map = AtomMapper._score_nongeometric(molA, molB, best_maps, matching_criterion)
+                _logger.info(f'{len(best_maps)} have {maximum_core_atoms} core atoms. Using matching_criterion {matching_criterion} to return the best of those')
                 return best_map
         elif map_strategy == 'matching_criterion':
+            _logger.info('Returning map that best satisfies matching_criterion')
             best_map = AtomMapper._score_nongeometric(molA, molB, list(molecule_maps_scores.values()), matching_criterion)
             return best_map
         elif map_strategy == 'random':
+            _logger.info('Returning map at random')
             return np.random.choice(molecule_maps_scores.values())
         elif map_strategy == 'weighted-random':
+            _logger.info('Returning random map proportional to the geometic distance')
             return np.random.choice(molecule_maps_scores.values(),
                                     [x**-1 for x in molecule_maps_scores.keys()])
         elif map_strategy == 'return-all':
