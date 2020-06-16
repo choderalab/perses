@@ -459,7 +459,6 @@ class AtomMapper(object):
             atom_expr=oechem.OEExprOpts_DefaultAtoms,
             bond_expr=oechem.OEExprOpts_DefaultBonds)[0]
 
-
             # now want to find all of the maps
             # for all of the possible scaffold  symmetries
             all_molecule_maps = []
@@ -498,6 +497,9 @@ class AtomMapper(object):
         #  maybe _get_mol_atom_map  should return a list of maps and then we have
         # a pick_map() function elsewhere?
         # but this would break the API so I'm not doing it now
+        if len(molecule_maps_scores) == 1:
+            _logger.info('Only one map so returning that one')
+            return list(molecule_maps_scores.values())[0] #  can this be done in a less ugly way??
         if map_strategy == 'geometry':
             _logger.info('Returning map with closest geometry satisfaction')
             return molecule_maps_scores[min(molecule_maps_scores)]
@@ -818,12 +820,11 @@ class AtomMapper(object):
         Returns
         -------
         """
-        id_molecule = copy.deepcopy(molecule)
-        for atom in id_molecule.GetAtoms():
+        for atom in molecule.GetAtoms():
             atom.SetIntType(AtomMapper._assign_atom_ring_id(atom, max_ring_size=max_ring_size))
-        for bond in id_molecule.GetBonds():
+        for bond in molecule.GetBonds():
             bond.SetIntType(AtomMapper._assign_bond_ring_id(bond, max_ring_size=max_ring_size))
-        return id_molecule
+        return molecule
 
     @staticmethod
     def _assign_distance_ids(old_mol, new_mol, distance=0.3):
@@ -905,7 +906,7 @@ class AtomMapper(object):
         # _logger.warning(f"\t\t\told oemols: {pattern_atoms}")
         # _logger.warning(f"\t\t\tnew oemols: {target_atoms}")
         copied_new_to_old_atom_map = copy.deepcopy(new_to_old_atom_map)
-        print(new_to_old_atom_map)
+        _logger.info(new_to_old_atom_map)
 
         for new_index, old_index in new_to_old_atom_map.items():
 
@@ -2086,6 +2087,8 @@ class PolymerProposalEngine(ProposalEngine):
                 except Exception as e:
                     raise Exception(f"failed to map the backbone separately: {e}")
 
+        current_oemol = copy.deepcopy(current_oemol)
+        proposed_oemol = copy.deepcopy(proposed_oemol)
 
         #now we can get the mol atom map of the sidechain
         #NOTE: since the sidechain oemols are NOT zero-indexed anymore, we need to match by name (since they are unique identifiers)
