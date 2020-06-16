@@ -72,7 +72,7 @@ class RelativeFEPSetup(object):
                  nonbonded_method = 'PME',
                  complex_box_dimensions=None,
                  solvent_box_dimensions=None,
-                 best='geometry'
+                 map_strategy='geometry',
                  ):
         """
         Initialize a NonequilibriumFEPSetup object
@@ -140,6 +140,7 @@ class RelativeFEPSetup(object):
         self._spectator_filenames = spectator_filenames
         self._complex_box_dimensions = complex_box_dimensions
         self._solvent_box_dimensions = solvent_box_dimensions
+        self._map_strategy = map_strategy
         try:
             self._nonbonded_method = getattr(app,nonbonded_method)
             _logger.info(f'Setting non bonded method to {nonbonded_method}')
@@ -167,6 +168,10 @@ class RelativeFEPSetup(object):
         _logger.info(f"Handling files for ligands and indices...")
         if type(self._ligand_input) is not list: # the ligand has been provided as a single file
             if self._ligand_input[-3:] == 'smi': #
+                if self._map_strategy == 'geometry':
+                    _logger.warning('Geometry mapping strategy is not recommended with smiles input as the coordinates are meaningless')
+                    _logger.warning('setting map_strategy to core instead')
+                    self._map_strategy = 'core'
                 _logger.info(f"Detected .smi format.  Proceeding...")
                 _logger.info('No geometry information for smiles, so ensuring mapping does not try use it')
                 best = 'random'
@@ -334,7 +339,7 @@ class RelativeFEPSetup(object):
             self._complex_topology_proposal = self._proposal_engine.propose(self._complex_system_old_solvated,
                                           self._complex_topology_old_solvated,
                                           current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr,
-                                          best='geometry')
+                                          map_strategy=self._._map_strategy)
 
             self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
 
@@ -376,7 +381,7 @@ class RelativeFEPSetup(object):
                 _logger.info(f"creating TopologyProposal")
                 self._solvent_topology_proposal = self._proposal_engine.propose(self._ligand_system_old_solvated,
                                                                                 self._ligand_topology_old_solvated,
-                                          current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr)
+                                          current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr,map_strategy=self._map_strategy)
 
                 self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'solvent'
@@ -442,7 +447,7 @@ class RelativeFEPSetup(object):
             _logger.info(f"conducting geometry proposal...")
             self._vacuum_positions_new, self._vacuum_logp_proposal = self._geometry_engine.propose(self._vacuum_topology_proposal,
                                                                           self._vacuum_positions_old,
-                                                                          beta, validate_energy_bookkeeping=False)
+                                                                          beta, validate_energy_bookkeeping=False,map_strategy=self._map_strategy)
             self._vacuum_logp_reverse = self._geometry_engine.logp_reverse(self._vacuum_topology_proposal, self._vacuum_positions_new, self._vacuum_positions_old, beta, validate_energy_bookkeeping=False)
             if not self._vacuum_topology_proposal.unique_new_atoms:
                 assert self._geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"

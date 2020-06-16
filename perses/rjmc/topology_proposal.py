@@ -288,6 +288,7 @@ class AtomMapper(object):
         bond requirement to consider two bonds as the same
     allow_ring_breaking : bool, default=True
         Wether or not to allow ring breaking in map
+    map_strategy : str, default = 'core'
 
     Attributes
     ----------
@@ -300,6 +301,7 @@ class AtomMapper(object):
     atom_expr
     bond_expr
     allow_ring_breaking
+    map_strategy
 
     """
 
