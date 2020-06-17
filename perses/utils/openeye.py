@@ -494,7 +494,7 @@ def generate_expression(list):
     return total_expr
 
 
-def get_scaffold(molecule):
+def get_scaffold(molecule, adjustHcount=False):
     """
     Takes an openeye.oechem.oemol and returns
     an openeye.oechem.oemol of the scaffold
@@ -508,6 +508,9 @@ def get_scaffold(molecule):
     ----------
     mol : openeye.oechem.oemol
         entire molecule to get the scaffold of
+    adjustHcount : bool, default=False
+        add/remove hydrogens to satisfy valence of scaffold
+
 
     Returns
     -------
@@ -548,6 +551,5 @@ def get_scaffold(molecule):
     dst = oechem.OEMol()
     pred = IsInScaffold()
 
-    adjustHcount = True
     oechem.OESubsetMol(dst, molecule, pred, adjustHcount)
     return dst
