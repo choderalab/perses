@@ -462,12 +462,14 @@ class AtomMapper(object):
                                      atom_expr=oechem.OEExprOpts_DefaultAtoms,
                                      bond_expr=oechem.OEExprOpts_DefaultBonds)[0]
             _logger.info(f'Scaffold to molA: {scaffold_A_map}')
+            assert len(scaffold_A_map) == scaffoldA.NumAtoms(), 'Scaffold should be fully contained within the molecule it came from'
 
 
             scaffold_B_map = AtomMapper._get_all_maps(molB, scaffoldB,
             atom_expr=oechem.OEExprOpts_DefaultAtoms,
             bond_expr=oechem.OEExprOpts_DefaultBonds)[0]
             _logger.info(f'Scaffold to molB: {scaffold_B_map}')
+            assert len(scaffold_B_map) == scaffoldB.NumAtoms(), 'Scaffold should be fully contained within the molecule it came from'
 
             # now want to find all of the maps
             # for all of the possible scaffold  symmetries
@@ -3406,13 +3408,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         for i in range(n_mols):
             for j in range(i):
                 oemol_i = self.list_of_oemols[i]
-                oemol_j = self.list_of_oemols[j]
-                atom_map = AtomMapper._get_mol_atom_map(oemol_i, oemol_j)
-                if not atom_map:
-                    n_atoms_matching = 0
-                    continue
-                n_atoms_matching = len(atom_map.keys())
-                probability_matrix[i, j] = n_atoms_matching
                 oemol_j = self.list_of_oemols[j]
                 atom_map = AtomMapper._get_mol_atom_map(oemol_i, oemol_j)
                 if not atom_map:
