@@ -435,11 +435,6 @@ class AtomMapper(object):
                                                  bond_expr=bond_expr,
                                                  unique=False)
 
-        max_mapped = max([len(m) for m in scaffold_maps])
-        _logger.info(f'There are {len(scaffold_maps)} before filtering')
-        scaffold_maps = [m for m in scaffold_maps if len(m) == max_mapped]
-        _logger.info(f'There are {len(scaffold_maps)} after filtering to remove maps with fewer matches than {max_mapped} atoms')
-
 
         _logger.info(f'Scaffold has symmetry of {len(scaffold_maps)}')
 
@@ -457,6 +452,11 @@ class AtomMapper(object):
                 _logger.info(x)
 
         else:
+
+            max_mapped = max([len(m) for m in scaffold_maps])
+            _logger.info(f'There are {len(scaffold_maps)} before filtering')
+            scaffold_maps = [m for m in scaffold_maps if len(m) == max_mapped]
+            _logger.info(f'There are {len(scaffold_maps)} after filtering to remove maps with fewer matches than {max_mapped} atoms')
 
             scaffold_A_map = AtomMapper._get_all_maps(molA, scaffoldA,
                                      atom_expr=oechem.OEExprOpts_DefaultAtoms,
@@ -502,7 +502,7 @@ class AtomMapper(object):
             all_molecule_maps = [m for m in all_molecule_maps if AtomMapper.preserves_rings(m, molA, molB)]
             _logger.info(f'Checking maps to see if they break rings')
         if len(all_molecule_maps) == 0:
-            _logger.warning('No maps found. Try relaxing match criteria or setting allow_ring_breaking to True') 
+            _logger.warning('No maps found. Try relaxing match criteria or setting allow_ring_breaking to True')
             return None
 
         molecule_maps_scores = AtomMapper._remove_rendundant_maps(molA, molB, all_molecule_maps)
