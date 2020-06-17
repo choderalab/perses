@@ -507,12 +507,12 @@ def get_scaffold(molecule):
     Parameters
     ----------
     mol : openeye.oechem.oemol
-        entire molecule to get the scaffold of 
+        entire molecule to get the scaffold of
 
     Returns
     -------
     openeye.oechem.oemol
-        scaffold oemol of the input mol 
+        scaffold oemol of the input mol. New oemol.
     """
     def TraverseForRing(visited, atom):
         visited.add(atom.GetIdx())
@@ -551,4 +551,3 @@ def get_scaffold(molecule):
     adjustHcount = True
     oechem.OESubsetMol(dst, molecule, pred, adjustHcount)
     return dst
-

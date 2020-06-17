@@ -386,7 +386,7 @@ class AtomMapper(object):
         external_inttypes : bool, default False
             If True, IntTypes already assigned to oemols will be used for mapping, if IntType is in the atom or bond expression.
             Otherwise, IntTypes will be overwritten such as to ensure rings of different sizes are not matched.
-        best : str, default='matching_criterion'
+        map_strategy : str, default='core'
             determines which map is considered the best and returned
             can be one of ['geometry', 'matching_criterion', 'random', 'weighted-random', 'return-all']
             - core will return the map with the largest number of atoms in the core. If there are multiple maps with the same highest score, then `matching_criterion` is used to tie break
@@ -491,7 +491,7 @@ class AtomMapper(object):
                                                      bond_expr=bond_expr)
                 all_molecule_maps.extend(molecule_maps)
 
-            
+
         molecule_maps_scores = AtomMapper._remove_rendundant_maps(molA, molB, all_molecule_maps)
         _logger.info(f'molecule_maps_scores: {molecule_maps_scores.keys()}')
 
@@ -507,7 +507,7 @@ class AtomMapper(object):
             return molecule_maps_scores[min(molecule_maps_scores)]
         elif map_strategy == 'core':
             maps = list(molecule_maps_scores.values())
-            core_count = [len(m) for m in maps] 
+            core_count = [len(m) for m in maps]
             maximum_core_atoms = max(core_count)
             if core_count.count(maximum_core_atoms) == 1:
                 _logger.info('Returning map with most atoms in core')
@@ -575,6 +575,34 @@ class AtomMapper(object):
                       external_inttypes=False,
                       unique=True,
                       matching_criterion='index'):
+        """Generate all  possible maps between two oemols
+
+        Parameters
+        ----------
+        current_oemol : oechem.oemol
+            old molecule
+        proposed_oemol : oechem.oemol
+            new molecule
+        atom_expr : int, default=None
+            integer corresponding to atom matching, see `perses.openeye.generate_expression`
+        bond_expr : int, default=None
+            integer corresponding to bond matching, see `perses.openeye.generate_expression`
+        map_strength : str, default 'default'
+            pre-defined mapping strength that can be one of ['strong', 'default', 'weak']
+            this will be ignored if either atom_expr or bond_expr have been defined.
+        allow_ring_breaking : bool, optional, default=True
+             If False, will check to make sure rings are not being broken or formed.
+        external_inttypes : bool, default False
+            If True, IntTypes already assigned to oemols will be used for mapping, if IntType is in the atom or bond expression.
+            Otherwise, IntTypes will be overwritten such as to ensure rings of different sizes are not matched.
+        unique : bool, default True
+            openeye kwarg which either returns all maps, or filters out redundant ones
+        Returns
+        -------
+        dict
+            dictionary of scores (keys) and maps (dict)
+
+        """
         map_strength_dict = {'default': [DEFAULT_ATOM_EXPRESSION, DEFAULT_BOND_EXPRESSION],
                              'weak': [WEAK_ATOM_EXPRESSION, WEAK_BOND_EXPRESSION],
                              'strong': [STRONG_ATOM_EXPRESSION, STRONG_BOND_EXPRESSION]}
@@ -614,6 +642,12 @@ class AtomMapper(object):
 
         Arguments
         ---------
+        molA : openeye.oemol
+            first molecule
+        molB : openeye.oemol
+            second molecule
+        maps :  list(dict)
+            list of maps with which to identify the best match given matching_criterion
         matching_criterion : str, default 'index'
              The best atom map is pulled based on some ranking criteria;
              if 'index', the best atom map is chosen based on the map with the maximum number of atomic index matches;
@@ -635,14 +669,14 @@ class AtomMapper(object):
         # now all else is equal; we will choose the map with the highest overlap of atom indices
         index_overlap_numbers = []
         if matching_criterion == 'index':
-            for map in maps: 
+            for map in maps:
                 hit_number = 0
                 for key, value in map.items():
                     if key == value:
                         hit_number += 1
                 index_overlap_numbers.append(hit_number)
         elif matching_criterion == 'name':
-            for map in maps: 
+            for map in maps:
                 hit_number = 0
                 map_tuples = list(map.items())
                 atom_map = {atom_new: atom_old for atom_new, atom_old in zip(list(molB.GetAtoms()), list(molA.GetAtoms())) if (atom_new.GetIdx(), atom_old.GetIdx()) in map_tuples}
@@ -748,7 +782,13 @@ class AtomMapper(object):
         ---------
         old_mol : openeye.oechem.oemol object
         new_mol : openeye.oechem.oemol object
-        mapping : dict
+        match : openeye.oechem.OEMatchBase
+        matching_criterion : str, default
+
+        Returns
+        -------
+        new_to_old_atom_map : dict
+            map of new to old atom indices
         """
         new_to_old_atom_map = {}
         pattern_to_target_map = AtomMapper._create_pattern_to_target_map(old_mol, new_mol, match, matching_criterion)
@@ -778,6 +818,8 @@ class AtomMapper(object):
 
         Returns
         -------
+        ring_as_base_two : int
+            binary integer corresponding to the atoms ring membership
         """
         rings = ''
         for i in range(3, max_ring_size+1): #  smallest feasible ring size is 3
@@ -799,6 +841,8 @@ class AtomMapper(object):
 
         Returns
         -------
+        ring_as_base_two : int
+            binary integer corresponding to the bonds ring membership
         """
         rings = ''
         for i in range(3, max_ring_size+1): #  smallest feasible ring size is 3

@@ -121,9 +121,19 @@ class RelativeFEPSetup(object):
             box dimensions for the complex phase
         solvent_box_dimensions: Vec(3), optional, default=None
             box dimensions for the solvent phase
-        best : 'str' default='geometry'
-            how to pick the best atom map
+        map_strategy : 'str' default='geometry'
+            determines which map is considered the best and returned
             options are 'geometry', 'random', 'weighted-random', 'return-all'
+            can be one of ['geometry', 'matching_criterion', 'random', 'weighted-random', 'return-all']
+            - core will return the map with the largest number of atoms in the core. If there are multiple maps with the same highest score, then `matching_criterion` is used to tie break
+            - geometry uses the coordinates of the molB oemol to calculate the heavy atom distance between the proposed map and the actual geometry
+            this can be vital for getting the orientation of ortho- and meta- substituents correct in constrained (i.e. protein-like) environments.
+            this is ONLY useful if the positions of ligand B are known and/or correctly aligned.
+            - matching_criterion uses the `matching_criterion` flag to pick which of the maps best satisfies a 2D requirement.
+            - random will use a random map of those that are possible
+            - weighted-random uses a map chosen at random, proportional to how close it is in geometry to ligand B. The same as for 'geometry', this requires the coordinates of ligand B to be meaninful
+            - return-all BREAKS THE API as it returns a list of dicts, rather than list. This is intended for development code, not main pipeline.
+
         """
         self._pressure = pressure
         self._temperature = temperature
@@ -174,7 +184,7 @@ class RelativeFEPSetup(object):
                     self._map_strategy = 'core'
                 _logger.info(f"Detected .smi format.  Proceeding...")
                 _logger.info('No geometry information for smiles, so ensuring mapping does not try use it')
-                best = 'random'
+                self._map_strategy = 'core'
                 self._ligand_smiles_old = load_smi(self._ligand_input,self._old_ligand_index)
                 self._ligand_smiles_new = load_smi(self._ligand_input,self._new_ligand_index)
                 _logger.info(f"\told smiles: {self._ligand_smiles_old}")
@@ -339,7 +349,7 @@ class RelativeFEPSetup(object):
             self._complex_topology_proposal = self._proposal_engine.propose(self._complex_system_old_solvated,
                                           self._complex_topology_old_solvated,
                                           current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr,
-                                          map_strategy=self._._map_strategy)
+                                          map_strategy=self._map_strategy)
 
             self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
 
