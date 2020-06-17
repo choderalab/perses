@@ -435,6 +435,12 @@ class AtomMapper(object):
                                                  bond_expr=bond_expr,
                                                  unique=False)
 
+        max_mapped = max([len(m) for m in scaffold_maps])
+        _logger.info(f'There are {len(scaffold_maps)} before filtering')
+        scaffold_maps = [m for m in scaffold_maps if len(m) == max_mapped]
+        _logger.info(f'There are {len(scaffold_maps)} after filtering to remove maps with fewer matches than {max_mapped} atoms')
+
+
         _logger.info(f'Scaffold has symmetry of {len(scaffold_maps)}')
 
         if len(scaffold_maps) == 0:
