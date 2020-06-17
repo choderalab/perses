@@ -461,11 +461,13 @@ class AtomMapper(object):
             scaffold_A_map = AtomMapper._get_all_maps(molA, scaffoldA,
                                      atom_expr=oechem.OEExprOpts_DefaultAtoms,
                                      bond_expr=oechem.OEExprOpts_DefaultBonds)[0]
+            _logger.info(f'Scaffold to molA: {scaffold_A_map}')
 
 
             scaffold_B_map = AtomMapper._get_all_maps(molB, scaffoldB,
             atom_expr=oechem.OEExprOpts_DefaultAtoms,
             bond_expr=oechem.OEExprOpts_DefaultBonds)[0]
+            _logger.info(f'Scaffold to molB: {scaffold_B_map}')
 
             # now want to find all of the maps
             # for all of the possible scaffold  symmetries
@@ -639,7 +641,7 @@ class AtomMapper(object):
         mcs.Init(oegraphmol_current, atom_expr, bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
-        _logger.info([m.NumAtoms() for m in matches])
+        _logger.debug(f'all matches have atom counts of : {[m.NumAtoms() for m in matches]}')
 
         all_mappings = []
         for match in matches:
