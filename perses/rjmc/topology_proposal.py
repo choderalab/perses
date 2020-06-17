@@ -491,6 +491,13 @@ class AtomMapper(object):
                                                      bond_expr=bond_expr)
                 all_molecule_maps.extend(molecule_maps)
 
+        if not allow_ring_breaking:
+            # Filter the matches to remove any that allow ring breaking
+            all_molecule_maps = [m for m in all_molecule_maps if AtomMapper.preserves_rings(m, molA, molB)]
+            _logger.info(f'Checking maps to see if they break rings')
+        if len(all_molecule_maps) == 0:
+            _logger.warning('No maps found. Try relaxing match criteria or setting allow_ring_breaking to True') 
+            return None
 
         molecule_maps_scores = AtomMapper._remove_rendundant_maps(molA, molB, all_molecule_maps)
         _logger.info(f'molecule_maps_scores: {molecule_maps_scores.keys()}')
@@ -908,25 +915,16 @@ class AtomMapper(object):
         return A, B
 
     @staticmethod
-    def preserves_rings(match, current, proposed):
+    def preserves_rings(new_to_old_map, current, proposed):
         """Returns True if the transformation allows ring
         systems to be broken or created."""
-        pattern_atoms = {atom.GetIdx(): atom for atom in current.GetAtoms()}
-        target_atoms = {atom.GetIdx(): atom for atom in proposed.GetAtoms()}
-        pattern_to_target_map = {pattern_atoms[matchpair.pattern.GetIdx()]:
-                                 target_atoms[matchpair.target.GetIdx()]
-                                 for matchpair in match.GetAtoms()}
-        if AtomMapper.breaks_rings_in_transformation(pattern_to_target_map,
+        if AtomMapper.breaks_rings_in_transformation(new_to_old_map,
+                                                     proposed):
+            return False
+        old_to_new_map = {i : j for j,i in new_to_old_map.items()}
+        if AtomMapper.breaks_rings_in_transformation(old_to_new_map,
                                                      current):
             return False
-
-        target_to_pattern_map = {target_atoms[matchpair.target.GetIdx()]:
-                                 pattern_atoms[matchpair.pattern.GetIdx()]
-                                 for matchpair in match.GetAtoms()}
-        if AtomMapper.breaks_rings_in_transformation(target_to_pattern_map,
-                                                     current):
-            return False
-
         return True
 
     @staticmethod
@@ -1018,28 +1016,20 @@ class AtomMapper(object):
             -------
             bool
             """
-            # not sure how this works if proposed isn't called??
             for cycle in AtomMapper.enumerate_cycle_basis(current):
                 cycle_size = len(cycle)
                 # first check that ALL of the ring is in the map or out
-                atoms_in_cycle = set([bond.GetBgn() for bond in cycle] + [bond.GetEnd() for bond in cycle])
+                atoms_in_cycle = set([bond.GetBgn().GetIdx() for bond in cycle] + [bond.GetEnd().GetIdx() for bond in cycle])
                 number_of_cycle_atoms_mapped = 0
                 for atom in atoms_in_cycle:
                     if atom in atom_map:
                         number_of_cycle_atoms_mapped += 1
+                _logger.info(number_of_cycle_atoms_mapped)
                 if number_of_cycle_atoms_mapped == 0:
                     # none of the ring is mapped - ALL unique, so continue
                     continue
                 if number_of_cycle_atoms_mapped != len(atoms_in_cycle):
                     return True # not all atoms in ring are mapped
-                # now we are sure the ring is either fully core or fully unique, check the same is true of the proposed
-                for bond in cycle:
-                    # then check that all of the new ring is in the map
-                    if ((bond.GetBgn() in atom_map) and (bond.GetEnd() in atom_map)):
-                        if not oechem.OEAtomIsInRingSize(atom_map[bond.GetBgn()], cycle_size):
-                            return True
-                        if not oechem.OEAtomIsInRingSize(atom_map[bond.GetEnd()], cycle_size):
-                            return True
             return False  # no rings in molecule1 are broken in molecule2
 
     @staticmethod

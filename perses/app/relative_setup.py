@@ -457,7 +457,7 @@ class RelativeFEPSetup(object):
             _logger.info(f"conducting geometry proposal...")
             self._vacuum_positions_new, self._vacuum_logp_proposal = self._geometry_engine.propose(self._vacuum_topology_proposal,
                                                                           self._vacuum_positions_old,
-                                                                          beta, validate_energy_bookkeeping=False,map_strategy=self._map_strategy)
+                                                                          beta, validate_energy_bookkeeping=False)
             self._vacuum_logp_reverse = self._geometry_engine.logp_reverse(self._vacuum_topology_proposal, self._vacuum_positions_new, self._vacuum_positions_old, beta, validate_energy_bookkeeping=False)
             if not self._vacuum_topology_proposal.unique_new_atoms:
                 assert self._geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
