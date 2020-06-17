@@ -902,17 +902,15 @@ class AtomMapper(object):
         """
         _logger.info(f'Using a distance of {distance} to force the mapping of close atoms')
         from scipy.spatial.distance import cdist
-        A = copy.deepcopy(old_mol)
-        B = copy.deepcopy(new_mol)
         unique_integer = 1
-        for atomA, coordsA in zip(A.GetAtoms(), A.GetCoords().values()):
-            for atomB, coordsB in zip(B.GetAtoms(), B.GetCoords().values()):
+        for atomA, coordsA in zip(old_mol.GetAtoms(), old_mol.GetCoords().values()):
+            for atomB, coordsB in zip(new_mol.GetAtoms(), new_mol.GetCoords().values()):
                 distances_ij = cdist([coordsA], [coordsB], 'euclidean')[0]
                 if distances_ij < distance:
                     atomA.SetIntType(unique_integer)
                     atomB.SetIntType(unique_integer)
                     unique_integer += 1
-        return A, B
+        return old_mol, new_mol
 
     @staticmethod
     def preserves_rings(new_to_old_map, current, proposed):
