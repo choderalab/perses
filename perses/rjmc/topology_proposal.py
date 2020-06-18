@@ -521,7 +521,7 @@ class AtomMapper(object):
         # but this would break the API so I'm not doing it now
         if len(all_molecule_maps) == 1:
             _logger.info('Only one map so returning that one')
-            return [0] #  can this be done in a less ugly way??
+            return all_molecule_maps[0] #  can this be done in a less ugly way??
         if map_strategy == 'geometry':
             molecule_maps_scores = AtomMapper._remove_redundant_maps(molA, molB, all_molecule_maps)
             _logger.info(f'molecule_maps_scores: {molecule_maps_scores.keys()}')
