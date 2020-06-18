@@ -459,7 +459,7 @@ class AtomMapper(object):
             _logger.info(f'There are {len(scaffold_maps)} after filtering to remove maps with fewer matches than {max_mapped} atoms')
 
             scaffold_A_maps = AtomMapper._get_all_maps(molA, scaffoldA,
-                                     atom_expr=oechem.OEExprOpts_DefaultAtoms,
+                                     atom_expr=oechem.OEExprOpts_AtomicNumber | oechem.OEExprOpts_Aromaticity,
                                      bond_expr=oechem.OEExprOpts_DefaultBonds)
             _logger.info(f'{len(scaffold_A_maps)} scaffold maps for A')
             scaffold_A_map = scaffold_A_maps[0]
