@@ -431,8 +431,8 @@ class AtomMapper(object):
         scaffoldB = get_scaffold(molB)
 
         scaffold_maps = AtomMapper._get_all_maps(scaffoldA, scaffoldB,
-                                                 atom_expr=atom_expr,
-                                                 bond_expr=bond_expr,
+                                                 atom_expr=oechem.OEExprOpts_RingMember,
+                                                 bond_expr=oechem.OEExprOpts_RingMember,
                                                  unique=False)
 
 
@@ -479,24 +479,21 @@ class AtomMapper(object):
             # for all of the possible scaffold  symmetries
             all_molecule_maps = []
             for scaffold_map in scaffold_maps:
-                if not external_inttypes or allow_ring_breaking:
+                if external_inttypes is False and allow_ring_breaking is True:
                     # reset the IntTypes
                     for atom in molA.GetAtoms():
-                        atom.SetIntType(0)
+                        atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
                     for atom in molB.GetAtoms():
-                        atom.SetIntType(0)
+                        atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
+
                     index = 1
                     for scaff_b_id, scaff_a_id in scaffold_map.items():
                         for atom in molA.GetAtoms():
                             if atom.GetIdx() == scaffold_A_map[scaff_a_id]:
                                 atom.SetIntType(index)
-                            else:
-                                atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
                         for atom in molB.GetAtoms():
                             if atom.GetIdx() == scaffold_B_map[scaff_b_id]:
                                 atom.SetIntType(index)
-                            else:
-                                atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
                         index += 1
 
                 molecule_maps = AtomMapper._get_all_maps(molA, molB,
@@ -513,48 +510,50 @@ class AtomMapper(object):
             _logger.warning('No maps found. Try relaxing match criteria or setting allow_ring_breaking to True')
             return None
 
-        molecule_maps_scores = AtomMapper._remove_rendundant_maps(molA, molB, all_molecule_maps)
-        _logger.info(f'molecule_maps_scores: {molecule_maps_scores.keys()}')
+        if map_strategy == 'return-all':
+            _logger.warning('Returning a list of all maps, rather than a dictionary.')
+            return all_molecule_maps
+
 
         #  TODO - there will be other options that we might want in future here
         #  maybe _get_mol_atom_map  should return a list of maps and then we have
         # a pick_map() function elsewhere?
         # but this would break the API so I'm not doing it now
-        if len(molecule_maps_scores) == 1:
+        if len(all_molecule_maps) == 1:
             _logger.info('Only one map so returning that one')
-            return list(molecule_maps_scores.values())[0] #  can this be done in a less ugly way??
+            return [0] #  can this be done in a less ugly way??
         if map_strategy == 'geometry':
+            molecule_maps_scores = AtomMapper._remove_redundant_maps(molA, molB, all_molecule_maps)
+            _logger.info(f'molecule_maps_scores: {molecule_maps_scores.keys()}')
             _logger.info('Returning map with closest geometry satisfaction')
             return molecule_maps_scores[min(molecule_maps_scores)]
         elif map_strategy == 'core':
-            maps = list(molecule_maps_scores.values())
-            core_count = [len(m) for m in maps]
+            core_count = [len(m) for m in all_molecule_maps]
             maximum_core_atoms = max(core_count)
             if core_count.count(maximum_core_atoms) == 1:
                 _logger.info('Returning map with most atoms in core')
-                return maps[core_count.index(maximum_core_atoms)]
+                return all_molecule_maps[core_count.index(maximum_core_atoms)]
             else:
-                best_maps = [m for c, m in zip(core_count,maps) if c == maximum_core_atoms]
+                best_maps = [m for c, m in zip(core_count, all_molecule_maps) if c == maximum_core_atoms]
                 best_map = AtomMapper._score_nongeometric(molA, molB, best_maps, matching_criterion)
                 _logger.info(f'{len(best_maps)} have {maximum_core_atoms} core atoms. Using matching_criterion {matching_criterion} to return the best of those')
                 return best_map
         elif map_strategy == 'matching_criterion':
             _logger.info('Returning map that best satisfies matching_criterion')
-            best_map = AtomMapper._score_nongeometric(molA, molB, list(molecule_maps_scores.values()), matching_criterion)
+            best_map = AtomMapper._score_nongeometric(molA, molB, list(all_molecule_maps, matching_criterion))
             return best_map
         elif map_strategy == 'random':
             _logger.info('Returning map at random')
-            return np.random.choice(molecule_maps_scores.values())
+            return np.random.choice(all_molecule_maps.values())
         elif map_strategy == 'weighted-random':
+            molecule_maps_scores = AtomMapper._remove_redundant_maps(molA, molB, all_molecule_maps)
+            _logger.info(f'molecule_maps_scores: {molecule_maps_scores.keys()}')
             _logger.info('Returning random map proportional to the geometic distance')
             return np.random.choice(molecule_maps_scores.values(),
                                     [x**-1 for x in molecule_maps_scores.keys()])
-        elif map_strategy == 'return-all':
-            _logger.warning('Returning a list of all maps, rather than a dictionary.')
-            return molecule_maps_scores
 
     @staticmethod
-    def _remove_rendundant_maps(molA, molB, all_molecule_maps):
+    def _remove_redundant_maps(molA, molB, all_molecule_maps):
         """For a set of maps, it will filter out those that result in
         the same geometries. From redundant maps, one is chosen randomly.
 
