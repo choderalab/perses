@@ -464,7 +464,7 @@ class AtomMapper(object):
             _logger.info(f'{len(scaffold_A_maps)} scaffold maps for A')
             scaffold_A_map = scaffold_A_maps[0]
             _logger.info(f'Scaffold to molA: {scaffold_A_map}')
-            assert len(scaffold_A_map) == scaffoldA.NumAtoms(), 'Scaffold should be fully contained within the molecule it came from. {len(scaffold_A_map)} in map, and {scaffoldA.NumAtoms()} in scaffold'
+            assert len(scaffold_A_map) == scaffoldA.NumAtoms(), f'Scaffold should be fully contained within the molecule it came from. {len(scaffold_A_map)} in map, and {scaffoldA.NumAtoms()} in scaffold'
 
 
             scaffold_B_maps = AtomMapper._get_all_maps(molB, scaffoldB,
@@ -473,7 +473,7 @@ class AtomMapper(object):
             _logger.info(f'{len(scaffold_B_maps)} scaffold maps for B')
             scaffold_B_map = scaffold_B_maps[0]
             _logger.info(f'Scaffold to molB: {scaffold_B_map}')
-            assert len(scaffold_B_map) == scaffoldB.NumAtoms(), 'Scaffold should be fully contained within the molecule it came from. {len(scaffold_B_map)} in map, and {scaffoldB.NumAtoms()} in scaffold'
+            assert len(scaffold_B_map) == scaffoldB.NumAtoms(), f'Scaffold should be fully contained within the molecule it came from. {len(scaffold_B_map)} in map, and {scaffoldB.NumAtoms()} in scaffold'
 
             # now want to find all of the maps
             # for all of the possible scaffold  symmetries
