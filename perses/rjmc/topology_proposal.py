@@ -430,9 +430,16 @@ class AtomMapper(object):
         scaffoldA = get_scaffold(molA)
         scaffoldB = get_scaffold(molB)
 
+        for atom in scaffoldA.GetAtoms():
+            atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
+        for atom in scaffoldB.GetAtoms():
+            atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
+
+
         scaffold_maps = AtomMapper._get_all_maps(scaffoldA, scaffoldB,
-                                                 atom_expr=oechem.OEExprOpts_RingMember,
+                                                 atom_expr=oechem.OEExprOpts_RingMember | oechem.OEExprOpts_IntType,
                                                  bond_expr=oechem.OEExprOpts_RingMember,
+                                                 external_inttypes=True,
                                                  unique=False)
 
 
@@ -482,9 +489,9 @@ class AtomMapper(object):
                 if external_inttypes is False and allow_ring_breaking is True:
                     # reset the IntTypes
                     for atom in molA.GetAtoms():
-                        atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
+                        atom.SetIntType(0)
                     for atom in molB.GetAtoms():
-                        atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
+                        atom.SetIntType(0)
 
                     index = 1
                     for scaff_b_id, scaff_a_id in scaffold_map.items():
@@ -495,6 +502,12 @@ class AtomMapper(object):
                             if atom.GetIdx() == scaffold_B_map[scaff_b_id]:
                                 atom.SetIntType(index)
                         index += 1
+                    for atom in molA.GetAtoms():
+                        if atom.GetIntType() == 0:
+                            atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
+                    for atom in molB.GetAtoms():
+                        if atom.GetIntType() == 0:
+                            atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
 
                 molecule_maps = AtomMapper._get_all_maps(molA, molB,
                                                      external_inttypes=True,
