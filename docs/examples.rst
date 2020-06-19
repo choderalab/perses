@@ -10,7 +10,7 @@ If anything is unclear or incorrect, please open Issue_.
 ..
   abl-src-selectivity
 
-atom-mapping
+Atom Mapping
 ++++++++++++
 This example demonstrates some of the possible exposed options that can be used when generating a hybrid topology. What the **best** hybrid topology is for a simulation is an open research question.
 
