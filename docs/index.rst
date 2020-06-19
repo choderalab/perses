@@ -17,12 +17,12 @@
 .. _this feed: https://github.com/choderalab/perses/releases.atom
 .. _github repository: https://github.com/choderalab/perses
 
-perses
+PERSES
 ======
 
 A Python framework for automated small molecule free energy driven design.
 
-``perses`` is a Python framework that uses `OpenMM <http://openmm.org>`_ for GPU-accelerated molecular design driven by alchemical free energy calculations.
+``PERSES`` is a Python framework that uses `OpenMM <http://openmm.org>`_ for GPU-accelerated molecular design driven by alchemical free energy calculations.
 
 .. toctree::
    :maxdepth: 2
@@ -74,13 +74,13 @@ Developers
 * Patrick B. Grinaway
 * Julie M. Behr
 * Hannah E. Bruce Macdonald
-* dominic a. rufa
+* Dominic A. Rufa
 * Jaime Rodríguez-Guerra
 * Ivy Zhang
 * John D. Chodera
 
 Indices and tables
-==================
+++++++++++++++++++
 
 * :ref:`genindex`
 * :ref:`modindex`

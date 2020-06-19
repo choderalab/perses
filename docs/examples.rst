@@ -61,7 +61,7 @@ These symmetry scaffold pairs are then used as restraints to find as many maps a
 Sampler Example
 +++++++++++++++
 
-This folder contains an example setup for a protein-ligand relative free energy calculation for ligands bound to CDK2. The input files in this directory are from the Schrodinger JACS dataset (publication[#]_ and input files[#]_), with the protein pdb fixed using PDBFixer.
+This folder contains an example setup for a protein-ligand relative free energy calculation for ligands bound to CDK2. The input files in this directory are from the Schrodinger JACS dataset (publication [#]_ and input files [#]_ ), with the protein pdb fixed using PDBFixer.
 
 This example demonstrates how the free energy can be calculated using different sampler methods: REPEX, SAMS and nonequilibrium switching. Notice that the ``fe_type`` in each of these differ.
 
@@ -105,13 +105,11 @@ Use ``bsub < submit-ligpairs.sh`` (if on LSF, or adapt as appropriate).
 .. _Issue: https://github.com/choderalab/perses/issues/new
 Python_ is `my favourite
 programming language`__.
-.. _Python: http://www.python.org/
 
 References
 ----------
 
-.. [#] `Accurate and Reliable Prediction of Relative Ligand Binding Potency in Prospective Drug Discovery by Way of a Modern Free-Energy Calculation Protocol and Force Field
-<http://doi.org/10.1021/ja512751q>`_. Lingle Wang et al. JACS 137:2695, 2017.
+.. [#] `Accurate and Reliable Prediction of Relative Ligand Binding Potency in Prospective Drug Discovery by Way of a Modern Free-Energy Calculation Protocol and Force Field` Lingle Wang et al. JACS 137:2695, 2017.
 
 
 .. [#] `Input files are here <https://drive.google.com/drive/u/1/folders/0BylmDElgu6QLTnJ2WGMzNXBENkk>`_.
