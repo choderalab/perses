@@ -5,7 +5,7 @@ Examples
 
 All examples are located in ``perses/examples``. These are designed to demonstrate the functionality of perses, and are hopefully a good starting point to be adapted to other projects.
 
-If anything is unclear or incorrect, please open an Issue_.
+.. note:: If anything is unclear or incorrect, please open an Issue_.
 
 ..
   abl-src-selectivity
@@ -35,7 +35,7 @@ The next section uses two Jnk1 ligands to demonstrate two different sorts of map
 
 .. figure:: images/jnk1-ligands.png
    :width: 600
-   Ligands 0 (green) and 1 (yellow) for Jnk1 shown in 3D space. Notice that the meta substitutions (methyl and ether groups respectively) point in different directions. These may not interconvert through rotations in the active site. 
+   Ligands 0 (green) and 1 (yellow) for Jnk1 shown in 3D space. Notice that the meta substitutions (methyl and ether groups respectively) point in different directions. These may not interconvert through rotations in the active site.
 
 You can see above that the methyl group and the ether group point in different directions, which corresponds to different binding modes in the active site. Now lets look at the 'core' mapping strategy (which is the default). The O and the C are mapped (i.e. green). We can try stop them mapping like before (using AtomicNumber), but they're always going to map coming off carbon 19. This is because having the hydrogen 22 mapped is maximizing the number of atoms in the core.
 
@@ -53,6 +53,8 @@ To get the geometry right, we want to have fewer atoms in the core, so try the m
 The way the 'geometry' strategy works, is by getting the scaffolds of the molecules, and enumerating all the ways that they fit onto each other to enumerate the 'symmetry'. This method of using the scaffolds allows us to spot rotatable aromatic rings or alternative orientations without hydrogens adding to the score making only one orientation preferable.
 
 These symmetry scaffold pairs are then used as restraints to find as many maps as possible --- look at the final two maps --- the whole molecule has been flipped around as the symmetry has identified the pattern where the molecule is inverted around the carbonyl. The ``geometry score`` is the sum of cartesian distances between mapped atoms. The best geometry score (of 9) is for the one that recapitulates the input best. The worst score (~111) where the whole molecule is flipped is very far from the binding pose, but could be an interesting experiment to run if we had no idea of the binding pose for ligand B.
+
+
 ..
   cdk2-example
 
