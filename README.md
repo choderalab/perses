@@ -32,4 +32,6 @@ have concluded.
 * Julie M. Behr
 * Hannah E. Bruce Macdonald
 * dominic a. rufa
+* Jaime Rodríguez-Guerra
+* Ivy Zhang
 * John D. Chodera
