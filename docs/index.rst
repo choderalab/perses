@@ -30,6 +30,20 @@ A Python framework for automated small molecule free energy driven design.
 
    installation
    changelog
+   examples
+
+Background
+----------
+
+Perses performs relative free energy calculations using a single topology method. Single topology methods are those where the two 'things' that are being compared are done so by generating a single object whose parameters are perturbed between a representation of thing A to thing B. Perses supports perturbations between small molecules (for relative binding or relative hydration free energy calculations) and protein residues (resistance mutations).
+
+Setting up and running a perses calculations involves three main stages.
+
+Determining the atom-mapping of ligand A onto ligand B to work out the 2D topology of the single-topology alchemical object. Herein, alchemical topologies, systems, geometries etc. will be referred to as *hybrid*. This is handled by a `ProposalEngine`.
+
+From this 2D hybrid topology, we then generate a 3D hybrid system. We use the input topology and coordinates for ligand A and the system and use RJMC to build in the atoms of ligand B. This is handled by a `GeometryEngine`.
+
+With the hybrid system and hybrid topology, it's possible to perform free energy calculations. Equilibrium methods such as REPEX and SAMS or non-equilibrium switching can be used. The method in which ligand A and ligand B are perturbed is handled by the `LambdaProtocol`, and sampled using samplers such as `HybridSAMSSampler` and `HybridRepexSampler`.
 
 Modules
 -------
@@ -41,8 +55,21 @@ Modules
   bias
   rjmc
   samplers
+  dispersed
   storage
   analysis
+  utils
+
+Developers
+----------
+
+* Patrick B. Grinaway
+* Julie M. Behr
+* Hannah E. Bruce Macdonald
+* dominic a. rufa
+* Jaime Rodríguez-Guerra
+* Ivy Zhang
+* John D. Chodera
 
 Indices and tables
 ==================
