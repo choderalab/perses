@@ -58,8 +58,27 @@ The way the 'geometry' strategy works, is by getting the scaffolds of the molecu
 These symmetry scaffold pairs are then used as restraints to find as many maps as possible --- look at the final two maps --- the whole molecule has been flipped around as the symmetry has identified the pattern where the molecule is inverted around the carbonyl. The ``geometry score`` is the sum of cartesian distances between mapped atoms. The best geometry score (of 9) is for the one that recapitulates the input best. The worst score (~111) where the whole molecule is flipped is very far from the binding pose, but could be an interesting experiment to run if we had no idea of the binding pose for ligand B.
 
 
-..
-  cdk2-example
+Sampler Example
+++++++++++++
+
+This folder contains an example setup for a protein-ligand relative free energy calculation for ligands bound to CDK2. The input files in this directory are from the Schrodinger JACS dataset (publication[#]_ and input files[#]_), with the protein pdb fixed using PDBFixer.
+
+This example demonstrates how the free energy can be calculated using different sampler methods: REPEX, SAMS and nonequilibrium switching. Notice that the ``fe_type`` in each of these differ.
+
+The ``.yaml`` files in each case contain input parameters for the simulations. Each of these contains a pair of ligand IDs that correspond to the molecule index in the ligand input file ``CDK2_ligands_shifted.sdf``.
+
+.. note:: The ligand input is zero-indexed.
+
+Look at the files and see which parameters are used for each free energy method type. The ``neq_splitting`` is only defined in ``cdk2_nonequilibrium.yaml``, as it's specific to non-equilibrium sampling.
+
+The example can be run by calling ``perses-relative cdk2_sams.yaml``. By default, the included yaml file directs the code to set up and run the complex, solvent and vacuum phase.
+
+The yaml file only sets up a pairwise comparison for two ligands. To run a range of ligands, change the ``ligand_pairs`` in run.py to those of interest. This will then copy the input yaml to make individual yaml files per pair.
+
+To submit the job on a LSF cluster, use ``submit-ligpairs.sh``, to change the jobarray so that it is the same length of the list of ligand pairs.
+
+Use ``bsub < submit-ligpairs.sh`` (if on LSF, or adapt as appropriate).
+
 
 ..
   freesolv
@@ -84,3 +103,15 @@ These symmetry scaffold pairs are then used as restraints to find as many maps a
 
 
 .. _Issue: https://github.com/choderalab/perses/issues/new
+Python_ is `my favourite
+programming language`__.
+.. _Python: http://www.python.org/
+
+References
+----------
+
+.. [#] `Accurate and Reliable Prediction of Relative Ligand Binding Potency in Prospective Drug Discovery by Way of a Modern Free-Energy Calculation Protocol and Force Field
+<http://doi.org/10.1021/ja512751q>`_. Lingle Wang et al. JACS 137:2695, 2017.
+
+
+.. [#] `Input files are here <https://drive.google.com/drive/u/1/folders/0BylmDElgu6QLTnJ2WGMzNXBENkk>`_.
