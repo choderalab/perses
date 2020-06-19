@@ -39,11 +39,11 @@ Perses performs relative free energy calculations using a single topology method
 
 Setting up and running a perses calculations involves three main stages.
 
-Determining the atom-mapping of ligand A onto ligand B to work out the 2D topology of the single-topology alchemical object. Herein, alchemical topologies, systems, geometries etc. will be referred to as *hybrid*. This is handled by a `ProposalEngine`.
+Determining the atom-mapping of ligand A onto ligand B to work out the 2D topology of the single-topology alchemical object. Herein, alchemical topologies, systems, geometries etc. will be referred to as *hybrid*. This is handled by a ``ProposalEngine``.
 
-From this 2D hybrid topology, we then generate a 3D hybrid system. We use the input topology and coordinates for ligand A and the system and use RJMC to build in the atoms of ligand B. This is handled by a `GeometryEngine`.
+From this 2D hybrid topology, we then generate a 3D hybrid system. We use the input topology and coordinates for ligand A and the system and use RJMC to build in the atoms of ligand B. This is handled by a ``GeometryEngine``.
 
-With the hybrid system and hybrid topology, it's possible to perform free energy calculations. Equilibrium methods such as REPEX and SAMS or non-equilibrium switching can be used. The method in which ligand A and ligand B are perturbed is handled by the `LambdaProtocol`, and sampled using samplers such as `HybridSAMSSampler` and `HybridRepexSampler`.
+With the hybrid system and hybrid topology, it's possible to perform free energy calculations. Equilibrium methods such as REPEX and SAMS or non-equilibrium switching can be used. The method in which ligand A and ligand B are perturbed is handled by the ``LambdaProtocol``, and sampled using samplers such as ``HybridSAMSSampler`` and ``HybridRepexSampler``.
 
 Modules
 -------
