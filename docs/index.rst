@@ -60,6 +60,14 @@ Modules
   analysis
   utils
 
+API Reference
+-------------
+
+.. toctree::
+   :maxdepth: 1
+
+   api/generated
+
 Developers
 ----------
 

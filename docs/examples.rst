@@ -59,7 +59,7 @@ These symmetry scaffold pairs are then used as restraints to find as many maps a
 
 
 Sampler Example
-++++++++++++
++++++++++++++++
 
 This folder contains an example setup for a protein-ligand relative free energy calculation for ligands bound to CDK2. The input files in this directory are from the Schrodinger JACS dataset (publication[#]_ and input files[#]_), with the protein pdb fixed using PDBFixer.
 
