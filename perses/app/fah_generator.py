@@ -154,6 +154,7 @@ def run_neq_fah_setup(ligand_file,
                       collision_rate_setup=90./unit.picoseconds,
                       constraint_tolerance=1e-6,
                       n_steps_per_move_application=250,
+                      globalVarFreq=250,
                       **kwargs):
     """
     main execution function that will:
@@ -317,7 +318,7 @@ def run_neq_fah_setup(ligand_file,
             'xtcAtoms' : 'solute',
             'precision' : 'mixed',
             'globalVarFilename' : 'globals.csv',
-            'globalVarFreq' : nsteps_per_ps,
+            'globalVarFreq' : 10*nsteps_per_ps,
         }
         # Serialize core.xml
         import dicttoxml
