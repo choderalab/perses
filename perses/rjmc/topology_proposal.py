@@ -288,6 +288,7 @@ class AtomMapper(object):
         bond requirement to consider two bonds as the same
     allow_ring_breaking : bool, default=True
         Wether or not to allow ring breaking in map
+    map_strategy : str, default = 'core'
 
     Attributes
     ----------
@@ -300,38 +301,79 @@ class AtomMapper(object):
     atom_expr
     bond_expr
     allow_ring_breaking
+    map_strategy
 
     """
 
+    def _score_maps(mol_A, mol_B, maps):
+        """ Gives a score for how well each map in a list
+        recapitulates the geometry of ligand B.
+        If the geometry of ligand B is known, it can identify the closest map,
+        if it's not known, it can still be helpful as maps with the same score
+        are redundant --- i.e. a flipped phenyl ring.
+
+
+        Parameters
+        ----------
+        mol_A : oechem.oemol
+            old molecule
+        mol_B : oechem.oemol
+            new molecule
+        maps : list(dict)
+            list of maps to score
+
+        Returns
+        -------
+        list
+            list of the distance scores
+
+        """
+        coords_A = np.zeros(shape=(mol_A.NumAtoms(), 3))
+        for i in mol_A.GetCoords():
+            coords_A[i] = mol_A.GetCoords()[i]
+        coords_B = np.zeros(shape=(mol_B.NumAtoms(), 3))
+        for i in mol_B.GetCoords():
+            coords_B[i] = mol_B.GetCoords()[i]
+        from scipy.spatial.distance import cdist
+
+        all_to_all = cdist(coords_A, coords_B, 'euclidean')
+
+        mol_B_H = {x.GetIdx(): x.IsHydrogen() for x in mol_B.GetAtoms()}
+        all_scores = []
+        for M in maps:
+            map_score = 0
+            for atom in M:
+                if not mol_B_H[atom]:  # skip H's - only look at heavy atoms
+                    map_score += all_to_all[M[atom], atom]
+            all_scores.append(map_score)
+        return all_scores
+
     @staticmethod
-    def _get_mol_atom_map(current_oemol,
-                          proposed_oemol,
+    def _get_mol_atom_map(molA,
+                          molB,
                           atom_expr=None,
                           bond_expr=None,
                           map_strength='default',
                           allow_ring_breaking=True,
-                          matching_criterion = 'index',
+                          matching_criterion='index',
                           external_inttypes=False,
-                          return_all_maps=False,
-                          geometry='weak'):
-        """
-        Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
+                          map_strategy='core'):
+        """Find a suitable atom map between two molecules, according
+        to the atom_expr, bond_expr or map_strength
 
-        Arguments
-        ---------
-        current_oemol : openeye.oechem.oemol object
-             The current molecule in the sampler
-        proposed_oemol : openeye.oechem.oemol object
-             The proposed new molecule
-        atom_expr : int
-            Integer referring to atom mapping expression.
-            See `perses.utils.generate_expression`
-        bond_expr : int
-            Integer referring to bond mapping expression.
-            See `perses.utils.generate_expression`
-        map_strength : str default='default'
-            string corresponding to pre-set atom map strengths
-            ['default','weak','strong']
+        Parameters
+        ----------
+        molA : oechem.oemol
+            old molecule
+        molB : oechem.oemol
+            new molecule
+        atom_expr : int, default=None
+            integer corresponding to atom matching, see `perses.openeye.generate_expression`
+        bond_expr : int, default=None
+            integer corresponding to bond matching, see `perses.openeye.generate_expression`
+        map_strength : str, default 'default'
+            pre-defined mapping strength that can be one of ['strong', 'default', 'weak']
+            this will be ignored if either atom_expr or bond_expr have been defined.
         allow_ring_breaking : bool, optional, default=True
              If False, will check to make sure rings are not being broken or formed.
         matching_criterion : str, default 'index'
@@ -344,22 +386,28 @@ class AtomMapper(object):
         external_inttypes : bool, default False
             If True, IntTypes already assigned to oemols will be used for mapping, if IntType is in the atom or bond expression.
             Otherwise, IntTypes will be overwritten such as to ensure rings of different sizes are not matched.
-        return_all_maps : bool, default False
-            will return a list of viable maps. This is for debugging purposes only
-            as a list being returned in the overall pipeline would break everything
-        geometry : str, default 'weak'
-            one of ['strong','weak' or None]
-            if strong -- atoms that are close in the geometries of ligand A and B are forced to map together
-            if weak -- if there are multiple mappings, the mapping that is closer to the geometry of ligand B is chosen
-            if None, all geometry information is ignored
+        map_strategy : str, default='core'
+            determines which map is considered the best and returned
+            can be one of ['geometry', 'matching_criterion', 'random', 'weighted-random', 'return-all']
+            - core will return the map with the largest number of atoms in the core. If there are multiple maps with the same highest score, then `matching_criterion` is used to tie break
+            - geometry uses the coordinates of the molB oemol to calculate the heavy atom distance between the proposed map and the actual geometry
+            this can be vital for getting the orientation of ortho- and meta- substituents correct in constrained (i.e. protein-like) environments.
+            this is ONLY useful if the positions of ligand B are known and/or correctly aligned.
+            - matching_criterion uses the `matching_criterion` flag to pick which of the maps best satisfies a 2D requirement.
+            - random will use a random map of those that are possible
+            - weighted-random uses a map chosen at random, proportional to how close it is in geometry to ligand B. The same as for 'geometry', this requires the coordinates of ligand B to be meaninful
+            - return-all BREAKS THE API as it returns a list of dicts, rather than list. This is intended for development code, not main pipeline.
         Returns
         -------
-        matches : list of match
-            list of the matches between the molecules, or None if no matches possible
+        dict
+            dictionary of scores (keys) and maps (dict)
 
         """
-        allowed_geometries = ['strong','weak',None]
-        assert geometry in allowed_geometries, f"geometry cannot be {geometry}, please use one of {allowed_geometries}"
+        allowed_map_strategy = ['core','geometry', 'matching_criterion', 'random', 'weighted-random', 'return-all']
+        assert map_strategy in allowed_map_strategy, f'map_strategy cannot be {map_strategy}, it must be one of the allowed options {allowed_map_strategy}.'
+        _logger.info(f'Using {map_strategy} to chose best atom map')
+
+
         map_strength_dict = {'default': [DEFAULT_ATOM_EXPRESSION, DEFAULT_BOND_EXPRESSION],
                              'weak': [WEAK_ATOM_EXPRESSION, WEAK_BOND_EXPRESSION],
                              'strong': [STRONG_ATOM_EXPRESSION, STRONG_BOND_EXPRESSION]}
@@ -373,106 +421,308 @@ class AtomMapper(object):
             _logger.debug(f'No bond expression defined, using map strength : {map_strength}')
             bond_expr = map_strength_dict[map_strength][1]
 
-        if return_all_maps:
-            _logger.warning('return_all_maps is TRUE - a list of maps will be returned')
-            _logger.warning('this will likely break when called from SmallMoleculeSetProposalEngine')
+
+        if not external_inttypes or allow_ring_breaking:
+            molA = AtomMapper._assign_ring_ids(molA)
+            molB = AtomMapper._assign_ring_ids(molB)
+
+        from perses.utils.openeye import get_scaffold
+        scaffoldA = get_scaffold(molA)
+        scaffoldB = get_scaffold(molB)
+
+        for atom in scaffoldA.GetAtoms():
+            atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
+        for atom in scaffoldB.GetAtoms():
+            atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
+
+
+        scaffold_maps = AtomMapper._get_all_maps(scaffoldA, scaffoldB,
+                                                 atom_expr=oechem.OEExprOpts_RingMember | oechem.OEExprOpts_IntType,
+                                                 bond_expr=oechem.OEExprOpts_RingMember,
+                                                 external_inttypes=True,
+                                                 unique=False)
+
+
+        _logger.info(f'Scaffold has symmetry of {len(scaffold_maps)}')
+
+        if len(scaffold_maps) == 0:
+            _logger.warning('Two molecules are not similar to have a common scaffold')
+            _logger.warning('Proceeding with direct mapping of molecules, but please check atom mapping and the geometry of the ligands.')
+
+            # if no commonality with the scaffold, don't use it.
+            all_molecule_maps = AtomMapper._get_all_maps(molA, molB,
+                                                     external_inttypes=external_inttypes,
+                                                     atom_expr=atom_expr,
+                                                     bond_expr=bond_expr)
+            _logger.info(f'len {all_molecule_maps}')
+            for x in all_molecule_maps:
+                _logger.info(x)
+
+        else:
+
+            max_mapped = max([len(m) for m in scaffold_maps])
+            _logger.info(f'There are {len(scaffold_maps)} before filtering')
+            scaffold_maps = [m for m in scaffold_maps if len(m) == max_mapped]
+            _logger.info(f'There are {len(scaffold_maps)} after filtering to remove maps with fewer matches than {max_mapped} atoms')
+
+            scaffold_A_maps = AtomMapper._get_all_maps(molA, scaffoldA,
+                                     atom_expr=oechem.OEExprOpts_AtomicNumber,
+                                     bond_expr=0)
+            _logger.info(f'{len(scaffold_A_maps)} scaffold maps for A')
+            scaffold_A_map = scaffold_A_maps[0]
+            _logger.info(f'Scaffold to molA: {scaffold_A_map}')
+            assert len(scaffold_A_map) == scaffoldA.NumAtoms(), f'Scaffold should be fully contained within the molecule it came from. {len(scaffold_A_map)} in map, and {scaffoldA.NumAtoms()} in scaffold'
+
+
+            scaffold_B_maps = AtomMapper._get_all_maps(molB, scaffoldB,
+                                     atom_expr=oechem.OEExprOpts_AtomicNumber,
+                                     bond_expr=0)
+            _logger.info(f'{len(scaffold_B_maps)} scaffold maps for B')
+            scaffold_B_map = scaffold_B_maps[0]
+            _logger.info(f'Scaffold to molB: {scaffold_B_map}')
+            assert len(scaffold_B_map) == scaffoldB.NumAtoms(), f'Scaffold should be fully contained within the molecule it came from. {len(scaffold_B_map)} in map, and {scaffoldB.NumAtoms()} in scaffold'
+
+            # now want to find all of the maps
+            # for all of the possible scaffold  symmetries
+            all_molecule_maps = []
+            for scaffold_map in scaffold_maps:
+                if external_inttypes is False and allow_ring_breaking is True:
+                    # reset the IntTypes
+                    for atom in molA.GetAtoms():
+                        atom.SetIntType(0)
+                    for atom in molB.GetAtoms():
+                        atom.SetIntType(0)
+
+                    index = 1
+                    for scaff_b_id, scaff_a_id in scaffold_map.items():
+                        for atom in molA.GetAtoms():
+                            if atom.GetIdx() == scaffold_A_map[scaff_a_id]:
+                                atom.SetIntType(index)
+                        for atom in molB.GetAtoms():
+                            if atom.GetIdx() == scaffold_B_map[scaff_b_id]:
+                                atom.SetIntType(index)
+                        index += 1
+                    for atom in molA.GetAtoms():
+                        if atom.GetIntType() == 0:
+                            atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
+                    for atom in molB.GetAtoms():
+                        if atom.GetIntType() == 0:
+                            atom.SetIntType(AtomMapper._assign_atom_ring_id(atom))
+
+                molecule_maps = AtomMapper._get_all_maps(molA, molB,
+                                                     external_inttypes=True,
+                                                     atom_expr=atom_expr,
+                                                     bond_expr=bond_expr)
+                all_molecule_maps.extend(molecule_maps)
+
+        if not allow_ring_breaking:
+            # Filter the matches to remove any that allow ring breaking
+            all_molecule_maps = [m for m in all_molecule_maps if AtomMapper.preserves_rings(m, molA, molB)]
+            _logger.info(f'Checking maps to see if they break rings')
+        if len(all_molecule_maps) == 0:
+            _logger.warning('No maps found. Try relaxing match criteria or setting allow_ring_breaking to True')
+            return None
+
+        if map_strategy == 'return-all':
+            _logger.warning('Returning a list of all maps, rather than a dictionary.')
+            return all_molecule_maps
+
+
+        #  TODO - there will be other options that we might want in future here
+        #  maybe _get_mol_atom_map  should return a list of maps and then we have
+        # a pick_map() function elsewhere?
+        # but this would break the API so I'm not doing it now
+        if len(all_molecule_maps) == 1:
+            _logger.info('Only one map so returning that one')
+            return all_molecule_maps[0] #  can this be done in a less ugly way??
+        if map_strategy == 'geometry':
+            molecule_maps_scores = AtomMapper._remove_redundant_maps(molA, molB, all_molecule_maps)
+            _logger.info(f'molecule_maps_scores: {molecule_maps_scores.keys()}')
+            _logger.info('Returning map with closest geometry satisfaction')
+            return molecule_maps_scores[min(molecule_maps_scores)]
+        elif map_strategy == 'core':
+            core_count = [len(m) for m in all_molecule_maps]
+            maximum_core_atoms = max(core_count)
+            if core_count.count(maximum_core_atoms) == 1:
+                _logger.info('Returning map with most atoms in core')
+                return all_molecule_maps[core_count.index(maximum_core_atoms)]
+            else:
+                best_maps = [m for c, m in zip(core_count, all_molecule_maps) if c == maximum_core_atoms]
+                best_map = AtomMapper._score_nongeometric(molA, molB, best_maps, matching_criterion)
+                _logger.info(f'{len(best_maps)} have {maximum_core_atoms} core atoms. Using matching_criterion {matching_criterion} to return the best of those')
+                return best_map
+        elif map_strategy == 'matching_criterion':
+            _logger.info('Returning map that best satisfies matching_criterion')
+            best_map = AtomMapper._score_nongeometric(molA, molB, list(all_molecule_maps, matching_criterion))
+            return best_map
+        elif map_strategy == 'random':
+            _logger.info('Returning map at random')
+            return np.random.choice(all_molecule_maps.values())
+        elif map_strategy == 'weighted-random':
+            molecule_maps_scores = AtomMapper._remove_redundant_maps(molA, molB, all_molecule_maps)
+            _logger.info(f'molecule_maps_scores: {molecule_maps_scores.keys()}')
+            _logger.info('Returning random map proportional to the geometic distance')
+            return np.random.choice(molecule_maps_scores.values(),
+                                    [x**-1 for x in molecule_maps_scores.keys()])
+
+    @staticmethod
+    def _remove_redundant_maps(molA, molB, all_molecule_maps):
+        """For a set of maps, it will filter out those that result in
+        the same geometries. From redundant maps, one is chosen randomly.
+
+        Parameters
+        ----------
+        molA : oechem.oemol
+            old molecule
+        molB : oechem.oemol
+            new molecule
+        all_molecule_maps : list(dict)
+            list of mappings to check for redundancies
+            where the maps are molB to molA
+
+        Returns
+        -------
+        dict
+            dictionary of scores (keys) and maps (dict of new-to-old atom indices)
+            where the score is the sum of the distances in cartesian space between atoms that have been mapped
+            this helps identify when two core atoms that have been assigned to eachother are actually far away.
+            maps are molB indices to molA indices.
+
+        """
+        scores = AtomMapper._score_maps(molA, molB, all_molecule_maps)
+        _logger.info(f'{len(scores)} maps are reduced to {len(set(scores))}')
+        clusters = {}
+        for s, mapping in zip(scores, all_molecule_maps):
+            if s not in clusters:
+                #  doesn't matter which one is chosen as all is equal
+                clusters[s] = mapping
+        return clusters
+
+    @staticmethod
+    def _get_all_maps(current_oemol,
+                      proposed_oemol,
+                      atom_expr=None,
+                      bond_expr=None,
+                      map_strength='default',
+                      allow_ring_breaking=True,
+                      external_inttypes=False,
+                      unique=True,
+                      matching_criterion='index'):
+        """Generate all  possible maps between two oemols
+
+        Parameters
+        ----------
+        current_oemol : oechem.oemol
+            old molecule
+        proposed_oemol : oechem.oemol
+            new molecule
+        atom_expr : int, default=None
+            integer corresponding to atom matching, see `perses.openeye.generate_expression`
+        bond_expr : int, default=None
+            integer corresponding to bond matching, see `perses.openeye.generate_expression`
+        map_strength : str, default 'default'
+            pre-defined mapping strength that can be one of ['strong', 'default', 'weak']
+            this will be ignored if either atom_expr or bond_expr have been defined.
+        allow_ring_breaking : bool, optional, default=True
+             If False, will check to make sure rings are not being broken or formed.
+        external_inttypes : bool, default False
+            If True, IntTypes already assigned to oemols will be used for mapping, if IntType is in the atom or bond expression.
+            Otherwise, IntTypes will be overwritten such as to ensure rings of different sizes are not matched.
+        unique : bool, default True
+            openeye kwarg which either returns all maps, or filters out redundant ones
+        Returns
+        -------
+        dict
+            dictionary of scores (keys) and maps (dict)
+
+        """
+        map_strength_dict = {'default': [DEFAULT_ATOM_EXPRESSION, DEFAULT_BOND_EXPRESSION],
+                             'weak': [WEAK_ATOM_EXPRESSION, WEAK_BOND_EXPRESSION],
+                             'strong': [STRONG_ATOM_EXPRESSION, STRONG_BOND_EXPRESSION]}
+        if map_strength is None:
+            map_strength = 'default'
+
+        if atom_expr is None:
+            _logger.debug(f'No atom expression defined, using map strength : {map_strength}')
+            atom_expr = map_strength_dict[map_strength][0]
+        if bond_expr is None:
+            _logger.debug(f'No bond expression defined, using map strength : {map_strength}')
+            bond_expr = map_strength_dict[map_strength][1]
+
         # this ensures that the hybridization of the oemols is done for correct atom mapping
         oechem.OEAssignHybridization(current_oemol)
         oechem.OEAssignHybridization(proposed_oemol)
         oegraphmol_current = oechem.OEGraphMol(current_oemol)  # pattern molecule
         oegraphmol_proposed = oechem.OEGraphMol(proposed_oemol)  # target molecule
 
-
-        # assigning ring membership to prevent ring breaking
-        if not external_inttypes:
-            if geometry == 'strong':
-                oegraphmol_current, oegraphmol_proposed = AtomMapper._assign_distance_ids(oegraphmol_current,oegraphmol_proposed)
-            else:
-                oegraphmol_current = AtomMapper._assign_ring_ids(oegraphmol_current)
-                oegraphmol_proposed = AtomMapper._assign_ring_ids(oegraphmol_proposed)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
         mcs.Init(oegraphmol_current, atom_expr, bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
-        unique = False
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
-        _logger.info([m.NumAtoms() for m in matches])
+        _logger.debug(f'all matches have atom counts of : {[m.NumAtoms() for m in matches]}')
 
-        if not allow_ring_breaking:
-            # Filter the matches to remove any that allow ring breaking
-            matches = [m for m in matches if AtomMapper.preserves_rings(m, current_oemol, proposed_oemol)]
+        all_mappings = []
+        for match in matches:
+            all_mappings.append(AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion))
+        return all_mappings
 
-        if not matches:
-            _logger.info('Cannot generate atom map without breaking rings, trying again with weaker mapping.')
-            mcs.SetMCSFunc(oechem.OEMCSMaxAtoms())
-            unique = False # try increase matches
-            matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
 
-            if allow_ring_breaking is False:
-                # Filter the matches to remove any that allow ring breaking
-                matches = [m for m in matches if AtomMapper.preserves_rings(m, current_oemol, proposed_oemol)]
-            if not matches:
-                return None
+    @staticmethod
+    def _score_nongeometric(molA, molB, maps,
+                            matching_criterion='index'):
+        """
+        Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
 
-        _logger.debug(f"ranking match degeneracy w.r.t. current oemol ({current_oemol}) and proposed oemol({proposed_oemol})")
-        try:
-            top_matches = AtomMapper.rank_degenerate_maps(matches, current_oemol, proposed_oemol) #remove the matches with the lower rank score (filter out bad degeneracies)
-        except Exception as e:
-            _logger.warning(f"\trank_degenerate_maps: {e}")
-            top_matches = matches
+        Arguments
+        ---------
+        molA : openeye.oemol
+            first molecule
+        molB : openeye.oemol
+            second molecule
+        maps :  list(dict)
+            list of maps with which to identify the best match given matching_criterion
+        matching_criterion : str, default 'index'
+             The best atom map is pulled based on some ranking criteria;
+             if 'index', the best atom map is chosen based on the map with the maximum number of atomic index matches;
+             if 'name', the best atom map is chosen based on the map with the maximum number of atom name matches
+             else: raise Exception.
+             NOTE : the matching criterion pulls patterns and target matches based on indices or names;
+                    if 'names' is chosen, it is first asserted that the current_oemol and the proposed_oemol have atoms that are uniquely named
+        Returns
+        -------
+        matches : list of match
+            list of the matches between the molecules, or None if no matches possible
 
-        max_num_atoms = max([match.NumAtoms() for match in top_matches])
-        _logger.debug(f"\tthere are {len(top_matches)} top matches with at most {max_num_atoms} before hydrogen exceptions")
-        _logger.debug(f"\tthe max number of atom matches is: {max_num_atoms}; there are {len([m for m in top_matches if m.NumAtoms() == max_num_atoms])} matches herein")
+        """
 
-        # check the most mapped is the same once hydrogen exceptions are handled
-        all_new_to_old_atom_maps = []
-        count_after_hydrogen_mapping = []
-        if return_all_maps:
-            list_of_dicts = []
-            for match in top_matches:
-                list_of_dicts.append(AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion))
-            return list_of_dicts
-
-        for i, match in enumerate(top_matches):
-            map_dict = AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion)
-            count_after_hydrogen_mapping.append(len(map_dict))
-            all_new_to_old_atom_maps.append(map_dict)
-            _logger.debug(f'index {i} = {map_dict}')
-
-        max_num_atoms = max(count_after_hydrogen_mapping)
-        _logger.info(f'Maximum atom matched after hydrogen exceptions: {max_num_atoms}')
-        _logger.info(f'Number of maps is {len(all_new_to_old_atom_maps)}')
-
-        if geometry is not None:
-            map = AtomMapper._find_closest_map(current_oemol, proposed_oemol, all_new_to_old_atom_maps)
-        else:
-            new_to_old_atom_maps = [map for count, map in zip(count_after_hydrogen_mapping, all_new_to_old_atom_maps) if count == max_num_atoms]
+        _logger.info(f'Finding best map using matching_criterion {matching_criterion}')
+        max_num_atoms = max([len(m) for m in maps])
+        _logger.debug(f"\tthere are {len(maps)} top matches with at most {max_num_atoms} before hydrogen exceptions")
 
         # now all else is equal; we will choose the map with the highest overlap of atom indices
-            index_overlap_numbers = []
-            if matching_criterion == 'index':
-                for map in new_to_old_atom_maps:
-                    hit_number = 0
-                    for key, value in map.items():
-                        if key == value:
-                            hit_number += 1
-                    index_overlap_numbers.append(hit_number)
-            elif matching_criterion == 'name':
-                for map in new_to_old_atom_maps:
-                    hit_number = 0
-                    map_tuples = list(map.items())
-                    atom_map = {atom_new: atom_old for atom_new, atom_old in zip(list(proposed_oemol.GetAtoms()), list(current_oemol.GetAtoms())) if (atom_new.GetIdx(), atom_old.GetIdx()) in map_tuples}
-                    for key, value in atom_map.items():
-                        if key.GetName() == value.GetName():
-                            hit_number += 1
-                    index_overlap_numbers.append(hit_number)
-            else:
-                raise Exception(f"the ranking criteria {matching_criterion} is not supported.")
+        index_overlap_numbers = []
+        if matching_criterion == 'index':
+            for map in maps:
+                hit_number = 0
+                for key, value in map.items():
+                    if key == value:
+                        hit_number += 1
+                index_overlap_numbers.append(hit_number)
+        elif matching_criterion == 'name':
+            for map in maps:
+                hit_number = 0
+                map_tuples = list(map.items())
+                atom_map = {atom_new: atom_old for atom_new, atom_old in zip(list(molB.GetAtoms()), list(molA.GetAtoms())) if (atom_new.GetIdx(), atom_old.GetIdx()) in map_tuples}
+                for key, value in atom_map.items():
+                    if key.GetName() == value.GetName():
+                        hit_number += 1
+                index_overlap_numbers.append(hit_number)
+        else:
+            raise Exception(f"the ranking criteria {matching_criterion} is not supported.")
 
-            max_index_overlap_number = max(index_overlap_numbers)
-            max_index = index_overlap_numbers.index(max_index_overlap_number)
-            _logger.debug(f"\tchose {new_to_old_atom_maps[max_index]} with {len(new_to_old_atom_maps[max_index])} mapped atoms")
-            map = new_to_old_atom_maps[max_index]
+        max_index_overlap_number = max(index_overlap_numbers)
+        max_index = index_overlap_numbers.index(max_index_overlap_number)
+        map = maps[max_index]
 
         return map
 
@@ -565,10 +815,13 @@ class AtomMapper(object):
         ---------
         old_mol : openeye.oechem.oemol object
         new_mol : openeye.oechem.oemol object
-        match : oechem.OEMCSSearch.Match iter
-        matching_criterion : str, default 'index'
-            whether the pattern to target map is chosen based on atom indices or names (which should be uniquely defined)
-            allowables: ['index', 'name']
+        match : openeye.oechem.OEMatchBase
+        matching_criterion : str, default
+
+        Returns
+        -------
+        new_to_old_atom_map : dict
+            map of new to old atom indices
         """
         new_to_old_atom_map = {}
         pattern_to_target_map = AtomMapper._create_pattern_to_target_map(old_mol, new_mol, match, matching_criterion)
@@ -585,6 +838,53 @@ class AtomMapper(object):
         return new_to_old_atom_map
 
     @staticmethod
+    def _assign_atom_ring_id(atom, max_ring_size=10):
+        """ Returns the int type based on the ring occupancy
+        of the atom
+
+        Parameters
+        ----------
+        atom : oechem.OEAtomBase
+            atom to compute integer of
+        max_ring_size : int, default = 10
+            Largest ring size that will be checked for
+
+        Returns
+        -------
+        ring_as_base_two : int
+            binary integer corresponding to the atoms ring membership
+        """
+        rings = ''
+        for i in range(3, max_ring_size+1): #  smallest feasible ring size is 3
+            rings += str(int(oechem.OEAtomIsInRingSize(atom, i)))
+        ring_as_base_two = int(rings, 2)
+        return ring_as_base_two
+
+    @staticmethod
+    def _assign_bond_ring_id(bond, max_ring_size=10):
+        """ Returns the int type based on the ring occupancy
+        of the bond
+
+        Parameters
+        ----------
+        bond : oechem.OEBondBase
+            atom to compute integer of
+        max_ring_size : int, default = 10
+            Largest ring size that will be checked for
+
+        Returns
+        -------
+        ring_as_base_two : int
+            binary integer corresponding to the bonds ring membership
+        """
+        rings = ''
+        for i in range(3, max_ring_size+1): #  smallest feasible ring size is 3
+            rings += str(int(oechem.OEBondIsInRingSize(bond, i)))
+        ring_as_base_two = int(rings, 2)
+        return ring_as_base_two
+
+
+    @staticmethod
     def _assign_ring_ids(molecule, max_ring_size=10):
         """ Sets the Int of each atom in the oemol to a number
         corresponding to the ring membership of that atom
@@ -599,20 +899,11 @@ class AtomMapper(object):
         Returns
         -------
         """
-        id_molecule = copy.deepcopy(molecule)
-        for atom in id_molecule.GetAtoms():
-            rings = ''
-            for i in range(3, max_ring_size+1): # smallest feasible ring size is 3
-                rings += str(int(oechem.OEAtomIsInRingSize(atom, i)))
-            ring_as_base_ten = int(rings, 2)
-            atom.SetIntType(ring_as_base_ten)
-        for bond in id_molecule.GetBonds():
-            rings = ''
-            for i in range(3, max_ring_size+1): # smallest feasible ring size is 3
-                rings += str(int(oechem.OEBondIsInRingSize(bond, i)))
-            ring_as_base_ten = int(rings, 2)
-            atom.SetIntType(ring_as_base_ten)
-        return id_molecule
+        for atom in molecule.GetAtoms():
+            atom.SetIntType(AtomMapper._assign_atom_ring_id(atom, max_ring_size=max_ring_size))
+        for bond in molecule.GetBonds():
+            bond.SetIntType(AtomMapper._assign_bond_ring_id(bond, max_ring_size=max_ring_size))
+        return molecule
 
     @staticmethod
     def _assign_distance_ids(old_mol, new_mol, distance=0.3):
@@ -637,38 +928,27 @@ class AtomMapper(object):
         """
         _logger.info(f'Using a distance of {distance} to force the mapping of close atoms')
         from scipy.spatial.distance import cdist
-        A = copy.deepcopy(old_mol)
-        B = copy.deepcopy(new_mol)
         unique_integer = 1
-        for atomA, coordsA in zip(A.GetAtoms(), A.GetCoords().values()):
-            for atomB, coordsB in zip(B.GetAtoms(), B.GetCoords().values()):
+        for atomA, coordsA in zip(old_mol.GetAtoms(), old_mol.GetCoords().values()):
+            for atomB, coordsB in zip(new_mol.GetAtoms(), new_mol.GetCoords().values()):
                 distances_ij = cdist([coordsA], [coordsB], 'euclidean')[0]
                 if distances_ij < distance:
                     atomA.SetIntType(unique_integer)
                     atomB.SetIntType(unique_integer)
                     unique_integer += 1
-        return A, B
+        return old_mol, new_mol
 
     @staticmethod
-    def preserves_rings(match, current, proposed):
+    def preserves_rings(new_to_old_map, current, proposed):
         """Returns True if the transformation allows ring
         systems to be broken or created."""
-        pattern_atoms = {atom.GetIdx(): atom for atom in current.GetAtoms()}
-        target_atoms = {atom.GetIdx(): atom for atom in proposed.GetAtoms()}
-        pattern_to_target_map = {pattern_atoms[matchpair.pattern.GetIdx()]:
-                                 target_atoms[matchpair.target.GetIdx()]
-                                 for matchpair in match.GetAtoms()}
-        if AtomMapper.breaks_rings_in_transformation(pattern_to_target_map,
+        if AtomMapper.breaks_rings_in_transformation(new_to_old_map,
+                                                     proposed):
+            return False
+        old_to_new_map = {i : j for j,i in new_to_old_map.items()}
+        if AtomMapper.breaks_rings_in_transformation(old_to_new_map,
                                                      current):
             return False
-
-        target_to_pattern_map = {target_atoms[matchpair.target.GetIdx()]:
-                                 pattern_atoms[matchpair.pattern.GetIdx()]
-                                 for matchpair in match.GetAtoms()}
-        if AtomMapper.breaks_rings_in_transformation(target_to_pattern_map,
-                                                     current):
-            return False
-
         return True
 
     @staticmethod
@@ -694,6 +974,7 @@ class AtomMapper(object):
         # _logger.warning(f"\t\t\told oemols: {pattern_atoms}")
         # _logger.warning(f"\t\t\tnew oemols: {target_atoms}")
         copied_new_to_old_atom_map = copy.deepcopy(new_to_old_atom_map)
+        _logger.info(new_to_old_atom_map)
 
         for new_index, old_index in new_to_old_atom_map.items():
 
@@ -759,28 +1040,20 @@ class AtomMapper(object):
             -------
             bool
             """
-            # not sure how this works if proposed isn't called??
             for cycle in AtomMapper.enumerate_cycle_basis(current):
                 cycle_size = len(cycle)
                 # first check that ALL of the ring is in the map or out
-                atoms_in_cycle = set([bond.GetBgn() for bond in cycle] + [bond.GetEnd() for bond in cycle])
+                atoms_in_cycle = set([bond.GetBgn().GetIdx() for bond in cycle] + [bond.GetEnd().GetIdx() for bond in cycle])
                 number_of_cycle_atoms_mapped = 0
                 for atom in atoms_in_cycle:
                     if atom in atom_map:
                         number_of_cycle_atoms_mapped += 1
+                _logger.info(number_of_cycle_atoms_mapped)
                 if number_of_cycle_atoms_mapped == 0:
                     # none of the ring is mapped - ALL unique, so continue
                     continue
                 if number_of_cycle_atoms_mapped != len(atoms_in_cycle):
                     return True # not all atoms in ring are mapped
-                # now we are sure the ring is either fully core or fully unique, check the same is true of the proposed
-                for bond in cycle:
-                    # then check that all of the new ring is in the map
-                    if ((bond.GetBgn() in atom_map) and (bond.GetEnd() in atom_map)):
-                        if not oechem.OEAtomIsInRingSize(atom_map[bond.GetBgn()], cycle_size):
-                            return True
-                        if not oechem.OEAtomIsInRingSize(atom_map[bond.GetEnd()], cycle_size):
-                            return True
             return False  # no rings in molecule1 are broken in molecule2
 
     @staticmethod
@@ -1874,10 +2147,12 @@ class PolymerProposalEngine(ProposalEngine):
                 except Exception as e:
                     raise Exception(f"failed to map the backbone separately: {e}")
 
+        current_oemol = copy.deepcopy(current_oemol)
+        proposed_oemol = copy.deepcopy(proposed_oemol)
 
         #now we can get the mol atom map of the sidechain
         #NOTE: since the sidechain oemols are NOT zero-indexed anymore, we need to match by name (since they are unique identifiers)
-        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength = 'default', matching_criterion = 'name',geometry=None)
+        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength = 'default', matching_criterion = 'name')
 
         #check the atom map thus far:
         _logger.debug(f"\t\t\tlocal atom map nonstereo sidechain: {local_atom_map_nonstereo_sidechain}")
@@ -2749,7 +3024,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 preserve_chirality = True,
                 current_metadata = None,
                 external_inttypes = False,
-                geometry='strong'):
+                map_strategy='matching_criterion'):
         """
         Propose the next state, given the current state
 
@@ -2787,7 +3062,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             self.proposed_mol_id = proposed_mol_id
         self.current_molecule = self.list_of_oemols[self.current_mol_id]
         self._external_inttypes = external_inttypes
-        self._geometry = geometry
         # Remove the small molecule from the current Topology object
         _logger.info(f"creating current receptor topology by removing small molecule from current topology...")
         current_receptor_topology = self._remove_small_molecule(current_topology)
@@ -2835,7 +3109,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         _logger.info(f"determining atom map between old and new molecules...")
         if atom_map is None:
             _logger.info(f"the atom map is not specified; proceeding to generate an atom map...")
-            mol_atom_map = AtomMapper._get_mol_atom_map(self.current_molecule, self.proposed_molecule, atom_expr=atom_expr, bond_expr=bond_expr, map_strength=map_strength, external_inttypes=self._external_inttypes,geometry=self._geometry)
+            mol_atom_map = AtomMapper._get_mol_atom_map(self.current_molecule, self.proposed_molecule, atom_expr=atom_expr, bond_expr=bond_expr, map_strength=map_strength, external_inttypes=self._external_inttypes)
         else:
             _logger.info(f"atom map is pre-determined as {atom_map}")
             mol_atom_map = atom_map

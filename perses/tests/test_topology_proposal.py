@@ -802,6 +802,40 @@ def test_molecular_atom_mapping():
             print(msg)
             #        raise Exception(msg)
 
+def test_map_strategy():
+    """
+    Test the creation of atom maps between pairs of molecules from the JACS benchmark set.
+
+    """
+    from openeye import oechem
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, AtomMapper
+    from itertools import combinations
+
+    # Test mappings for JACS dataset ligands
+    for dataset_name in ['Jnk1']: 
+        # Read molecules
+        dataset_path = 'data/schrodinger-jacs-datasets/%s_ligands.sdf' % dataset_name
+        mol2_filename = resource_filename('perses', dataset_path)
+        ifs = oechem.oemolistream(mol2_filename)
+        molecules = list()
+        for mol in ifs.GetOEGraphMols():
+            molecules.append(oechem.OEGraphMol(mol))
+
+        atom_expr = oechem.OEExprOpts_IntType
+        bond_expr = oechem.OEExprOpts_RingMember 
+
+        # the 0th and 1st Jnk1 ligand have meta substituents that face opposite eachother
+        # in the active site. Using `map_strategy=matching_criterion` should align these groups, and put them
+        # both in the core. Using `map_strategy=geometry` should see that the orientations differ and chose
+        # to unmap (i.e. put both these groups in core) such as to get the geometry right at the expense of
+        # mapping fewer atoms
+        new_to_old_atom_map = AtomMapper._get_mol_atom_map(molecules[0], molecules[1],atom_expr=atom_expr,bond_expr=bond_expr)
+        assert len(new_to_old_atom_map) == 37, 'Expected meta groups methyl C to map onto ethyl O'
+
+        new_to_old_atom_map = AtomMapper._get_mol_atom_map(molecules[0], molecules[1],atom_expr=atom_expr,bond_expr=bond_expr,map_strategy='geometry')
+        assert len(new_to_old_atom_map) == 35,  'Expected meta groups methyl C to NOT map onto ethyl O as they are distal in cartesian space'
+        
+
 def test_simple_heterocycle_mapping(iupac_pairs = [('benzene', 'pyridine')]):
     """
     Test the ability to map conjugated heterocycles (that preserves all rings).  Will assert that the number of ring members in both molecules is the same.

@@ -492,3 +492,64 @@ def generate_expression(list):
         total_expr = total_expr | expr
 
     return total_expr
+
+
+def get_scaffold(molecule, adjustHcount=False):
+    """
+    Takes an openeye.oechem.oemol and returns
+    an openeye.oechem.oemol of the scaffold
+
+    The scaffold is a molecule where all the atoms that are not in rings, and are not linkers between rings.
+    double bonded atoms exo to a ring are included as ring atoms
+
+    This function has been completely taken from openeye's extractscaffold.py script
+    https://docs.eyesopen.com/toolkits/python/oechemtk/oechem_examples/oechem_example_extractscaffold.html#section-example-oechem-extractscaffold
+    Parameters
+    ----------
+    mol : openeye.oechem.oemol
+        entire molecule to get the scaffold of
+    adjustHcount : bool, default=False
+        add/remove hydrogens to satisfy valence of scaffold
+
+
+    Returns
+    -------
+    openeye.oechem.oemol
+        scaffold oemol of the input mol. New oemol.
+    """
+    def TraverseForRing(visited, atom):
+        visited.add(atom.GetIdx())
+
+        for nbor in atom.GetAtoms():
+            if nbor.GetIdx() not in visited:
+                if nbor.IsInRing():
+                    return True
+
+                if TraverseForRing(visited, nbor):
+                    return True
+
+        return False
+
+    def DepthFirstSearchForRing(root, nbor):
+        visited = set()
+        visited.add(root.GetIdx())
+
+        return TraverseForRing(visited, nbor)
+
+    class IsInScaffold(oechem.OEUnaryAtomPred):
+        def __call__(self, atom):
+            if atom.IsInRing():
+                return True
+
+            count = 0
+            for nbor in atom.GetAtoms():
+                if DepthFirstSearchForRing(atom, nbor):
+                    count += 1
+
+            return count > 1
+
+    dst = oechem.OEMol()
+    pred = IsInScaffold()
+
+    oechem.OESubsetMol(dst, molecule, pred, adjustHcount)
+    return dst
