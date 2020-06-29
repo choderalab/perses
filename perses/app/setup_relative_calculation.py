@@ -79,6 +79,12 @@ def getSetupOptions(filename):
     if 'small_molecule_parameters_cache' not in setup_options:
         setup_options['small_molecule_parameters_cache'] = None
 
+    if setup_options['h_constraints'] in ['False','false']:
+        _logger.info('Turning off hydrogen constraints')
+        setup_options['h_constraints'] = False
+    elif 'h_constraints' not in setup_options:
+        setup_options['h_constraints'] = True
+
     if 'spectators' not in setup_options:
         _logger.info(f'No spectators')
         setup_options['spectators'] = None
@@ -401,7 +407,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                           atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
                                           trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'],
-                                          complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'])
+                                          complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'],h_constraints=setup_options['h_constraints'])
 
         _logger.info(f"\twriting pickle output...")
         if setup_pickle_file is not None:

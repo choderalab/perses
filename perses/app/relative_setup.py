@@ -73,6 +73,7 @@ class RelativeFEPSetup(object):
                  complex_box_dimensions=None,
                  solvent_box_dimensions=None,
                  map_strategy='geometry',
+                 h_constraints=True
                  ):
         """
         Initialize a NonequilibriumFEPSetup object
@@ -133,7 +134,8 @@ class RelativeFEPSetup(object):
             - random will use a random map of those that are possible
             - weighted-random uses a map chosen at random, proportional to how close it is in geometry to ligand B. The same as for 'geometry', this requires the coordinates of ligand B to be meaninful
             - return-all BREAKS THE API as it returns a list of dicts, rather than list. This is intended for development code, not main pipeline.
-
+        h_constraints : bool, default=True
+            if hydrogens should be constrained in the simulation
         """
         self._pressure = pressure
         self._temperature = temperature
@@ -151,6 +153,13 @@ class RelativeFEPSetup(object):
         self._complex_box_dimensions = complex_box_dimensions
         self._solvent_box_dimensions = solvent_box_dimensions
         self._map_strategy = map_strategy
+
+        if h_constraints is True:
+            self._h_constraints = app.HBonds
+        else:
+            _logger.info(f'Hydrogens will not be constrained. This may be problematic if using a larger timestep')
+            self._h_constraints = None
+
         try:
             self._nonbonded_method = getattr(app,nonbonded_method)
             _logger.info(f'Setting non bonded method to {nonbonded_method}')
@@ -317,7 +326,7 @@ class RelativeFEPSetup(object):
         # Create SystemGenerator
         from openmmforcefields.generators import SystemGenerator
         _logger.info(f'PME tolerance: {self._pme_tol}')
-        forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'constraints' : app.HBonds, 'hydrogenMass' : self._hmass}
+        forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'constraints' : self._h_constraints, 'hydrogenMass' : self._hmass}
         if small_molecule_forcefield is None or small_molecule_forcefield == 'None':
             self._system_generator = SystemGenerator(forcefields=forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
                                       periodic_forcefield_kwargs = {'nonbondedMethod': self._nonbonded_method})
