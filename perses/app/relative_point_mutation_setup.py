@@ -25,7 +25,6 @@ ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS']
 
 # Set up logger
 _logger = logging.getLogger()
-_logger.setLevel(logging.DEBUG)
 
 class PointMutationExecutor(object):
     """
