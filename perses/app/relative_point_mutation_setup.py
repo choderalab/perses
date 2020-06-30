@@ -21,8 +21,25 @@ ENERGY_THRESHOLD = 1e-2
 temperature = 300 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
+ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS']
 
 class PointMutationExecutor(object):
+    from perses.utils.openeye import *
+    from perses.annihilation.relative import HybridTopologyFactory
+    from perses.rjmc.topology_proposal import PointMutationEngine
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+
+    import simtk.openmm as openmm
+    import simtk.openmm.app as app
+    import simtk.unit as unit
+    import numpy as np
+    from openmoltools import forcefield_generators
+    import copy
+    import mdtraj as md
+    from openmmtools.constants import kB
+    from perses.tests.utils import validate_endstate_energies
+    from openforcefield.topology import Molecule
+    f
     """
     Simple, stripped-down class to create a protein-ligand system and allow a mutation of a protein.
     this will allow support for the creation of _two_ relative free energy calculations:
@@ -204,8 +221,14 @@ class PointMutationExecutor(object):
 
             topology_proposal = point_mutation_engine.propose(sys, top)
 
-            new_positions, logp_proposal = geometry_engine.propose(topology_proposal, pos, beta)
-            logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta)
+            # Only validate energy bookkeeping if the WT and proposed residues do not involve rings
+            old_res = [res for res in top.residues() if res.id == mutation_residue_id][0]
+            validate_bool = False if old_res in ring_amino_acids or proposed_residue in ring_amino_acids else True
+
+            new_positions, logp_proposal = geometry_engine.propose(topology_proposal, pos, beta,
+                                                                   validate_energy_bookkeeping=validate_bool)
+            logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta,
+                                                        validate_energy_bookkeeping=validate_bool)
 
             forward_htf = HybridTopologyFactory(topology_proposal=topology_proposal,
                                                  current_positions=pos,
