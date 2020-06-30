@@ -87,6 +87,8 @@ class PointMutationExecutor(object):
                  conduct_endstate_validation=True,
                  ligand_filename=None,
                  ligand_index=0,
+                 water_model='tip3p',
+                 ionic_strength=0.15 * unit.molar,
                  forcefield_files=['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
                  barostat=openmm.MonteCarloBarostat(1.0 * unit.atmosphere, temperature, 50),
                  forcefield_kwargs={'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus},
@@ -112,6 +114,12 @@ class PointMutationExecutor(object):
                 path to ligand of interest (i.e. small molecule or protein); .sdf or .pdb
             ligand_index : int, default 0
                 which ligand to use
+            water_model : str, default 'tip3p'
+                solvent model to use for solvation
+            ionic_strength : float * unit.molar, default 0.15 * unit.molar
+                the total concentration of ions (both positive and negative) to add using Modeller.
+                This does not include ions that are added to neutralize the system.
+                Note that only monovalent ions are currently supported.
             forcefield_files : list of str, default ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
                 forcefield files for proteins and solvent
             barostat : openmm.MonteCarloBarostat, default openmm.MonteCarloBarostat(1.0 * unit.atmosphere, 300 * unit.kelvin, 50)
@@ -174,10 +182,10 @@ class PointMutationExecutor(object):
                                                 cache=None)
 
         # Solvate apo and complex...
-        apo_input = list(self._solvate(protein_topology, protein_positions, 'tip3p', phase=phase))
+        apo_input = list(self._solvate(protein_topology, protein_positions, water_model=water_model, phase=phase, ionic_strength=ionic_strength))
         inputs = [apo_input]
         if ligand_filename:
-            inputs.append(self._solvate(complex_topology, complex_positions, 'tip3p', phase=phase))
+            inputs.append(self._solvate(complex_topology, complex_positions, water_model=water_model, phase=phase, ionic_strength=ionic_strength))
 
         geometry_engine = FFAllAngleGeometryEngine(metadata=None,
                                                 use_sterics=False,
@@ -270,8 +278,9 @@ class PointMutationExecutor(object):
     def _solvate(self,
                         topology,
                         positions,
-                        model,
-                        phase):
+                        water_model,
+                        phase,
+                        ionic_strength):
         """
         Generate a solvated topology, positions, and system for a given input topology and positions.
         For generating the system, the forcefield files provided in the constructor will be used.
@@ -284,8 +293,14 @@ class PointMutationExecutor(object):
             the positions of the unsolvated system
         forcefield : SystemGenerator.forcefield
             forcefield file of solvent to add
-        model : str, default 'tip3p'
+        water_model : str
             solvent model to use for solvation
+        phase : str
+            if phase == vacuum, then the complex will not be solvated with water; else, it will be solvated with tip3p
+        ionic_strength : float * unit.molar
+            the total concentration of ions (both positive and negative) to add using Modeller.
+            This does not include ions that are added to neutralize the system.
+            Note that only monovalent ions are currently supported.
 
         Returns
         -------
@@ -301,7 +316,7 @@ class PointMutationExecutor(object):
 
         # Now we have to add missing atoms
         if phase != 'vacuum':
-            modeller.addSolvent(self.system_generator.forcefield, model=model, padding=1.0 * unit.nanometers, ionicStrength=0.15*unit.molar)
+            modeller.addSolvent(self.system_generator.forcefield, model=water_model, padding=1.0 * unit.nanometers, ionicStrength=ionic_strength)
         else:
             pass
 
