@@ -23,6 +23,10 @@ kT = kB * temperature
 beta = 1.0/kT
 ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS']
 
+# Set up logger
+_logger = logging.getLogger()
+_logger.setLevel(logging.DEBUG)
+
 class PointMutationExecutor(object):
     """
     Simple, stripped-down class to create a protein-ligand system and allow a mutation of a protein.
@@ -182,10 +186,10 @@ class PointMutationExecutor(object):
                                                 cache=None)
 
         # Solvate apo and complex...
-        apo_input = list(self._solvate(protein_topology, protein_positions, water_model, phase=phase, ionic_strength=ionic_strength))
+        apo_input = list(self._solvate(protein_topology, protein_positions, water_model, phase, ionic_strength))
         inputs = [apo_input]
         if ligand_filename:
-            inputs.append(self._solvate(complex_topology, complex_positions, water_model, phase=phase, ionic_strength=ionic_strength))
+            inputs.append(self._solvate(complex_topology, complex_positions, water_model, phase, ionic_strength))
 
         geometry_engine = FFAllAngleGeometryEngine(metadata=None,
                                                 use_sterics=False,
@@ -313,9 +317,9 @@ class PointMutationExecutor(object):
         """
         modeller = app.Modeller(topology, positions)
 
-
         # Now we have to add missing atoms
         if phase != 'vacuum':
+            _logger.info(f"solvating at {ionic_strength} using {water_model}")
             modeller.addSolvent(self.system_generator.forcefield, model=water_model, padding=1.0 * unit.nanometers, ionicStrength=ionic_strength)
         else:
             pass
