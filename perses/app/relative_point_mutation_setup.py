@@ -99,7 +99,7 @@ class PointMutationExecutor(object):
                  nonperiodic_forcefield_kwargs=None,
                  small_molecule_forcefields='gaff-2.11',
                  old_system=None,
-                 new_system=None
+                 new_system=None,
                  **kwargs):
         """
         arguments
@@ -230,7 +230,7 @@ class PointMutationExecutor(object):
                                                                    validate_energy_bookkeeping=validate_bool)
             logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta,
                                                         validate_energy_bookkeeping=validate_bool)
-            
+
             if old_system is not None and new_system is not None:
                 topology_proposal.old_system = old_system
                 topology_proposal.new_system = new_system
