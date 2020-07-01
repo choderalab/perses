@@ -232,8 +232,8 @@ class PointMutationExecutor(object):
                                                         validate_energy_bookkeeping=validate_bool)
 
             if old_system is not None and new_system is not None:
-                topology_proposal.old_system = old_system
-                topology_proposal.new_system = new_system
+                topology_proposal._old_system = old_system
+                topology_proposal._new_system = new_system
 
             forward_htf = HybridTopologyFactory(topology_proposal=topology_proposal,
                                                  current_positions=pos,
