@@ -5,6 +5,9 @@ on:
   schedule:
     # nightly tests
     - cron: '0 0 * * *'
+  push:
+    branches:
+      - master
 
 jobs:
   test:
@@ -17,6 +20,7 @@ jobs:
         cfg:
           - {python-version: 3.6, openmm: "latest"}
           - {python-version: 3.7, openmm: "latest"}
+          - {python-version: 3.7, openmm: "rc"}
           - {python-version: 3.7, openmm: "nightly"} # Can we have this run only nightly?
           - {python-version: 3.7, openmm: "conda-forge"}
 
@@ -73,6 +77,9 @@ jobs:
           latest)
             echo "Using latest release OpenMM."
             conda install --quiet -c omnia openmm;;
+          rc)
+            echo "Using OpenMM rc"
+            conda install --quiet -c omnia/label/rc openmm;;
           beta)
             echo "Using OpenMM beta"
             conda install --quiet -c omnia/label/beta openmm;;
@@ -91,8 +98,8 @@ jobs:
         export OE_LICENSE="$HOME/oe_license.txt"
         export TRAVIS=true
         pushd .
-        nosetests ${PACKAGENAME} --with-coverage --verbosity=3 --with-timer -a '!advanced' 
-        popd   
+        nosetests ${PACKAGENAME} --with-coverage --verbosity=3 --with-timer -a '!advanced'
+        popd
     - name: Codecov
       uses: codecov/codecov-action@v1.0.5
       with:
@@ -100,7 +107,7 @@ jobs:
         name: perses
         # Repository upload token - get it from codecov.io
         token: 618f5706-686e-444a-86a6-b017e52708a9
-    
+
     - name: Deploy
       shell: bash
       if: false

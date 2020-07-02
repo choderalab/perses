@@ -188,12 +188,12 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         system_generators = dict()
 
         system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints })
+                                                        forcefield_kwargs = {'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints }, periodic_forcefield_kwargs={'nonbondedMethod' : app.CutoffPeriodic})
 # NOTE implicit solvent not supported by this SystemGenerator
 #        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
 #                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : constraints })
         system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : constraints })
+                                                        forcefield_kwargs = {'implicitSolvent' : None, 'constraints' : constraints }, nonperiodic_forcefield_kwargs={'nonbondedMethod' : app.NoCutoff})
 
 
         # Create peptide in solvent.
@@ -335,7 +335,7 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
         from pkg_resources import resource_filename
         valence_xml_filename = resource_filename('perses', 'data/amber99sbildn-valence-only.xml')
         system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
-                                                                forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : constraints })
+                                                                forcefield_kwargs = { 'implicitSolvent' : None, 'constraints' : constraints }, nonperiodic_forcefield_kwargs={'nonbondedMethod' : app.NoCutoff})
 
         # Create peptide in solvent.
         from openmmtools.testsystems import AlanineDipeptideExplicit, AlanineDipeptideImplicit, AlanineDipeptideVacuum
@@ -478,12 +478,12 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
         system_generators = dict()
 
         system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None})
+                                                        forcefield_kwargs = {'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None}, periodic_forcefield_kwargs={'nonbondedMethod' : app.CutoffPeriodic})
 # NOTE implicit solvent not supported by this SystemGenerator
 #        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
 #                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2})
         system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None})
+                                                        forcefield_kwargs = {'implicitSolvent' : None}, nonperiodic_forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff})
 
         system_generators['explicit-complex'] = system_generators['explicit']
         system_generators['explicit-receptor'] = system_generators['explicit']
@@ -691,12 +691,12 @@ class MybTestSystem(PersesTestSystem):
         system_generators = dict()
 
         system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None})
+                                                        forcefield_kwargs = {'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None}, periodic_forcefield_kwargs={'nonbondedMethod' : app.CutoffPeriodic})
 # NOTE implicit solvent not supported by this SystemGenerator
 #        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
 #                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2})
         system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None})
+                                                        forcefield_kwargs = {'implicitSolvent' : None}, nonperiodic_forcefield_kwargs={'nonbondedMethod' : app.NoCutoff})
 
         system_generators['explicit-complex'] = system_generators['explicit']
         system_generators['explicit-peptide'] = system_generators['explicit']
@@ -1510,7 +1510,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None},
+                                                        forcefield_kwargs = {'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None},periodic_forcefield_kwargs={'nonbondedMethod' : app.CutoffPeriodic},
                                                         molecules = [Molecule.from_openeye(molecule) for molecule in molecules], small_molecule_forcefield = small_molecule_forcefield)
 # NOTE implicit solvent not supported by this SystemGenerator
 #        system_generators['implicit'] = SystemGenerator(forcefields = forcefield_files,
@@ -1518,7 +1518,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
 #                                                        molecules = [Molecule.from_openeye(molecule) for molecule in molecules],
 #                                                        small_molecule_forcefield = small_molecule_forcefield)
         system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None},
+                                                        forcefield_kwargs = {'implicitSolvent' : None},nonperiodic_forcefield_kwargs={'nonbondedMethod' : app.NoCutoff},
                                                         molecules = [Molecule.from_openeye(molecule) for molecule in molecules],
                                                         small_molecule_forcefield = small_molecule_forcefield)
         # Copy system generators for all environments
@@ -1724,10 +1724,10 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators['explicit'] = SystemGenerator(forcefields = forcefield_files, barostat = barostat,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints': constraints},
+                                                        forcefield_kwargs = {'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints': constraints}, periodic_forcefield_kwargs={'nonbondedMethod' : app.CutoffPeriodic},
                                                         small_molecule_forcefield = small_molecule_forcefield)
         system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None},
+                                                        forcefield_kwargs = {'implicitSolvent' : None}, nonperiodic_forcefield_kwargs={'nonbondedMethod' : app.NoCutoff},
                                                         small_molecule_forcefield = small_molecule_forcefield)
 
         # Create topologies and positions
@@ -1965,7 +1965,7 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         from pkg_resources import resource_filename
         from perses.utils.openeye import smiles_to_oemol,extractPositionsFromOEMol
         system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
-                                                        forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None},
+                                                        forcefield_kwargs = {'implicitSolvent' : None}, nonperiodic_forcefield_kwargs={ 'nonbondedMethod':app.NoCutoff},
                                                         molecules = [Molecule.from_openeye(smiles_to_oemol(q)) for q in molecules],
                                                         small_molecule_forcefield = small_molecule_forcefield)
 

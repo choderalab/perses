@@ -309,10 +309,10 @@ def compute_potential_components(context, beta = beta, platform = DEFAULT_PLATFO
     """
     # Make a deep copy of the system.
     import copy
-    
+
     from perses.dispersed.utils import configure_platform
     platform = configure_platform(platform.getName(), fallback_platform_name='Reference', precision='double')
-    
+
     system = context.getSystem()
     system = copy.deepcopy(system)
     # Get positions.
@@ -502,10 +502,11 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         barostat = None
 
     forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
-    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': nonbonded_method, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+    periodic_forcefield_kwargs = {'nonbondedMethod': nonbonded_method}
     small_molecule_forcefield = 'gaff-2.11'
 
-    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs, periodic_forcefield_kwargs=periodic_forcefield_kwargs,
                                          small_molecule_forcefield = small_molecule_forcefield, molecules=[Molecule.from_openeye(mol) for mol in [old_oemol, new_oemol]], cache=None)
 
     proposal_engine = SmallMoleculeSetProposalEngine([old_oemol, new_oemol], system_generator, residue_name = 'MOL',atom_expr=atom_expr, bond_expr=bond_expr,allow_ring_breaking=True)
@@ -588,7 +589,7 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
 
     gaff_filename = get_data_filename('data/gaff.xml')
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False},nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff})
     geometry_engine = geometry.FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
         [current_mol, proposed_mol], system_generator, residue_name=current_mol_name,atom_expr=atom_expr,bond_expr=bond_expr)

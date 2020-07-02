@@ -145,7 +145,7 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
 
     gaff_filename = get_data_filename('data/gaff.xml')
 
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat, forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME})
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat, forcefield_kwargs={'removeCMMotion': False},periodic_forcefield_kwargs={'nonbondedMethod': app.PME})
     geometry_engine = geometry.FFAllAngleGeometryEngine()
     canonicalized_smiles_list = [SmallMoleculeSetProposalEngine.canonicalize_smiles(smiles) for smiles in [initial_smiles, final_smiles]]
     proposal_engine = SmallMoleculeSetProposalEngine(
@@ -280,9 +280,3 @@ if __name__=="__main__":
         results = run_rj_proposals(parms_to_run[0], parms_to_run[1], parms_to_run[2], parms_to_run[3], parms_to_run[4])
 
         np.save("ncmc_{}_{}_{}_{}.npy".format(parms_to_run[0].old_chemical_state_key, parms_to_run[0].new_chemical_state_key, parms_to_run[2], parms_to_run[3]), results)
-
-
-
-
-
-
