@@ -10,7 +10,6 @@ import simtk.openmm.app as app
 import simtk.unit as unit
 import numpy as np
 from openmoltools import forcefield_generators
-import copy
 import mdtraj as md
 from openmmtools.constants import kB
 from perses.tests.utils import validate_endstate_energies
@@ -24,6 +23,7 @@ beta = 1.0/kT
 ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS']
 
 # Set up logger
+import logging
 _logger = logging.getLogger()
 _logger.setLevel(logging.INFO)
 
@@ -168,6 +168,10 @@ class PointMutationExecutor(object):
                     ligand_pdb.topology)
                 ligand_n_atoms = ligand_md_topology.n_atoms
 
+            else:
+                _logger.warning(f'ligand filetype not recognised. Please provide a path to a .pdb or .sdf file')
+                return
+
             # Now create a complex
             complex_md_topology = protein_md_topology.join(ligand_md_topology)
             complex_topology = complex_md_topology.to_openmm()
@@ -176,7 +180,7 @@ class PointMutationExecutor(object):
             complex_positions[protein_n_atoms:, :] = ligand_positions
 
         # Now for a system_generator
-        self.system_generator = SystemGenerator(forcefields = forcefield_files,
+        self.system_generator = SystemGenerator(forcefields=forcefield_files,
                                                 barostat=barostat,
                                                 forcefield_kwargs=forcefield_kwargs,
                                                 periodic_forcefield_kwargs=periodic_forcefield_kwargs,
@@ -281,11 +285,11 @@ class PointMutationExecutor(object):
 
 
     def _solvate(self,
-                        topology,
-                        positions,
-                        water_model,
-                        phase,
-                        ionic_strength):
+               topology,
+               positions,
+               water_model,
+               phase,
+               ionic_strength):
         """
         Generate a solvated topology, positions, and system for a given input topology and positions.
         For generating the system, the forcefield files provided in the constructor will be used.
