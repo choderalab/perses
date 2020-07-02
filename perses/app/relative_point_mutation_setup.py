@@ -25,6 +25,7 @@ ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS']
 
 # Set up logger
 _logger = logging.getLogger()
+_logger.setLevel(logging.INFO)
 
 class PointMutationExecutor(object):
     """
@@ -98,8 +99,6 @@ class PointMutationExecutor(object):
                  periodic_forcefield_kwargs={'nonbondedMethod': app.PME},
                  nonperiodic_forcefield_kwargs=None,
                  small_molecule_forcefields='gaff-2.11',
-                 old_system=None,
-                 new_system=None,
                  **kwargs):
         """
         arguments
@@ -137,10 +136,6 @@ class PointMutationExecutor(object):
                 non-periodic forcefield kwargs for system parametrization
             small_molecule_forcefields : str, default 'gaff-2.11'
                 the forcefield string for small molecule parametrization
-            old_system: openmm.System, default None
-                pass old (non-alchemical) system directly into the topology proposal
-            new_system: openmm.System, default None
-                pass new (non-alchemical) system directly into the topology proposal
 
         TODO : allow argument for spectator ligands besides the 'ligand_filename'
 
@@ -230,10 +225,6 @@ class PointMutationExecutor(object):
                                                                    validate_energy_bookkeeping=validate_bool)
             logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta,
                                                         validate_energy_bookkeeping=validate_bool)
-
-            if old_system is not None and new_system is not None:
-                topology_proposal._old_system = old_system
-                topology_proposal._new_system = new_system
 
             forward_htf = HybridTopologyFactory(topology_proposal=topology_proposal,
                                                  current_positions=pos,
