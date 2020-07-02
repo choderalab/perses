@@ -182,6 +182,7 @@ class PointMutationExecutor(object):
                                                 periodic_forcefield_kwargs=periodic_forcefield_kwargs,
                                                 nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
                                                 small_molecule_forcefield=small_molecule_forcefields,
+
                                                 molecules=molecules,
                                                 cache=None)
 

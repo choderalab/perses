@@ -112,7 +112,7 @@ class ExpandedEnsembleSampler(object):
     >>> test = testsystems.AlanineDipeptideVacuum()
     >>> # Create a SystemGenerator and rebuild the System.
     >>> from perses.rjmc.topology_proposal import SystemGenerator
-    >>> system_generator = SystemGenerator(['amber99sbildn.xml'], forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None })
+    >>> system_generator = SystemGenerator(['amber99sbildn.xml'], forcefield_kwargs={'implicitSolvent' : None, 'constraints' : None }, nonperiodic_forcefield_kwargs={'nonbondedMethod' : app.NoCutoff})
     >>> test.system = system_generator.build_system(test.topology)
     >>> # Create a sampler state.
     >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
@@ -589,7 +589,7 @@ class SAMSSampler(object):
     >>> test = testsystems.AlanineDipeptideVacuum()
     >>> # Create a SystemGenerator and rebuild the System.
     >>> from perses.rjmc.topology_proposal import SystemGenerator
-    >>> system_generator = SystemGenerator(['amber99sbildn.xml'], forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None })
+    >>> system_generator = SystemGenerator(['amber99sbildn.xml'], forcefield_kwargs={'implicitSolvent' : None, 'constraints' : None }, nonperiodic_forcefield_kwargs={'nonbondedMethod' : app.NoCutoff})
     >>> test.system = system_generator.build_system(test.topology)
     >>> # Create a sampler state.
     >>> sampler_state = SamplerState(system=test.system, positions=test.positions)

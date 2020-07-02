@@ -114,6 +114,11 @@ def serialize(item, filename):
         with gzip.open(filename, 'wb') as outfile:
             serialized_thing = XmlSerializer.serialize(item)
             outfile.write(serialized_thing.encode())
+    if filename[-3:] == 'bz2':
+        import bz2
+        with bz2.open(filename, 'wb') as outfile:
+            serialized_thing = XmlSerializer.serialize(item)
+            outfile.write(serialized_thing.encode())
     else:
         with open(filename, 'w') as outfile:
             serialized_thing = XmlSerializer.serialize(item)

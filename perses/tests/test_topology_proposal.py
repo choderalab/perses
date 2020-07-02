@@ -30,7 +30,8 @@ from openmoltools.forcefield_generators import generateTopologyFromOEMol, genera
 #default arguments for SystemGenerators
 barostat = None
 forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
-forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff}
 small_molecule_forcefield = 'gaff-2.11'
 
 temperature = 300*unit.kelvin
@@ -52,7 +53,7 @@ def test_small_molecule_proposals():
         list_of_mols.append(mol)
     molecules = [Molecule.from_openeye(mol) for mol in list_of_mols]
     stats_dict = defaultdict(lambda: 0)
-    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs, nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
                                          small_molecule_forcefield = small_molecule_forcefield, molecules=molecules, cache=None)
     proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_mols, system_generator)
     initial_system, initial_positions, initial_topology,  = OEMol_to_omm_ff(list_of_mols[0], system_generator)
@@ -87,7 +88,7 @@ def test_mapping_strength_levels(pairs_of_smiles=[('Cc1ccccc1','c1ccc(cc1)N'),('
             initial_molecule = smiles_to_oemol(lig_a)
             proposed_molecule = smiles_to_oemol(lig_b)
             molecules = [Molecule.from_openeye(mol) for mol in [initial_molecule, proposed_molecule]]
-            system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+            system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
                                                  small_molecule_forcefield = 'gaff-1.81', molecules=molecules, cache=None)
             proposal_engine = SmallMoleculeSetProposalEngine([initial_molecule, proposed_molecule], system_generator)
             initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(initial_molecule, system_generator)
@@ -147,9 +148,10 @@ def create_simple_protein_system_generator():
     from openmmforcefields.generators import SystemGenerator
     barostat = None
     forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
-    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+    nonperiodic_forcefield_kwargs={'nonbondedMethod': app.NoCutoff}
 
-    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+    system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs, nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
                                          small_molecule_forcefield = 'gaff-2.11', molecules=None, cache=None)
     return system_generator
 
@@ -187,9 +189,9 @@ def generate_atp(phase = 'vacuum'):
                                        barostat = barostat,
                                        forcefield_kwargs = {'removeCMMotion': False,
                                                             'ewaldErrorTolerance': 1e-4,
-                                                            'nonbondedMethod': app.NoCutoff,
                                                             'constraints' : app.HBonds,
                                                             'hydrogenMass' : 4 * unit.amus},
+                                        nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff},
                                         small_molecule_forcefield = 'gaff-2.11', molecules = None, cache = None)
 
         atp.system = system_generator.create_system(atp.topology) #update the parametrization scheme to amberff14sb
@@ -799,6 +801,40 @@ def test_molecular_atom_mapping():
             msg += str(new_to_old_atom_map)
             print(msg)
             #        raise Exception(msg)
+
+def test_map_strategy():
+    """
+    Test the creation of atom maps between pairs of molecules from the JACS benchmark set.
+
+    """
+    from openeye import oechem
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, AtomMapper
+    from itertools import combinations
+
+    # Test mappings for JACS dataset ligands
+    for dataset_name in ['Jnk1']: 
+        # Read molecules
+        dataset_path = 'data/schrodinger-jacs-datasets/%s_ligands.sdf' % dataset_name
+        mol2_filename = resource_filename('perses', dataset_path)
+        ifs = oechem.oemolistream(mol2_filename)
+        molecules = list()
+        for mol in ifs.GetOEGraphMols():
+            molecules.append(oechem.OEGraphMol(mol))
+
+        atom_expr = oechem.OEExprOpts_IntType
+        bond_expr = oechem.OEExprOpts_RingMember 
+
+        # the 0th and 1st Jnk1 ligand have meta substituents that face opposite eachother
+        # in the active site. Using `map_strategy=matching_criterion` should align these groups, and put them
+        # both in the core. Using `map_strategy=geometry` should see that the orientations differ and chose
+        # to unmap (i.e. put both these groups in core) such as to get the geometry right at the expense of
+        # mapping fewer atoms
+        new_to_old_atom_map = AtomMapper._get_mol_atom_map(molecules[0], molecules[1],atom_expr=atom_expr,bond_expr=bond_expr)
+        assert len(new_to_old_atom_map) == 37, 'Expected meta groups methyl C to map onto ethyl O'
+
+        new_to_old_atom_map = AtomMapper._get_mol_atom_map(molecules[0], molecules[1],atom_expr=atom_expr,bond_expr=bond_expr,map_strategy='geometry')
+        assert len(new_to_old_atom_map) == 35,  'Expected meta groups methyl C to NOT map onto ethyl O as they are distal in cartesian space'
+        
 
 def test_simple_heterocycle_mapping(iupac_pairs = [('benzene', 'pyridine')]):
     """
