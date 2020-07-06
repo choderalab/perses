@@ -103,7 +103,7 @@ class PointMutationExecutor(object):
         """
         arguments
             protein_filename : str
-                path to protein (to mutate); .pdb
+                path to protonated protein (to mutate); .pdb
             mutation_chain_id : str
                 name of the chain to be mutated
             mutation_residue_id : str
@@ -115,7 +115,7 @@ class PointMutationExecutor(object):
             conduct_endstate_validation : bool, default True
                 whether to conduct an endstate validation of the hybrid topology factory
             ligand_filename : str, default None
-                path to ligand of interest (i.e. small molecule or protein); .sdf or .pdb
+                path to ligand of interest (i.e. small molecule or protonated protein); .sdf or .pdb
             ligand_index : int, default 0
                 which ligand to use
             water_model : str, default 'tip3p'
