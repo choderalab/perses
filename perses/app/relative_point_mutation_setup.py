@@ -99,6 +99,8 @@ class PointMutationExecutor(object):
                  periodic_forcefield_kwargs={'nonbondedMethod': app.PME},
                  nonperiodic_forcefield_kwargs=None,
                  small_molecule_forcefields='gaff-2.11',
+                 complex_box_dimensions = None,
+                 apo_box_dimensions = None,
                  **kwargs):
         """
         arguments
@@ -136,6 +138,12 @@ class PointMutationExecutor(object):
                 non-periodic forcefield kwargs for system parametrization
             small_molecule_forcefields : str, default 'gaff-2.11'
                 the forcefield string for small molecule parametrization
+            complex_box_dimensions : Vec3, default None
+                define box dimensions of complex phase;
+                if none, padding is 1nm
+            apo_box_dimensions :  Vec3, default None
+                define box dimensions of apo phase phase;
+                if None, padding is 1nm
 
         TODO : allow argument for spectator ligands besides the 'ligand_filename'
 
@@ -191,10 +199,10 @@ class PointMutationExecutor(object):
                                                 cache=None)
 
         # Solvate apo and complex...
-        apo_input = list(self._solvate(protein_topology, protein_positions, water_model, phase, ionic_strength))
+        apo_input = list(self._solvate(protein_topology, protein_positions, water_model, phase, ionic_strength, apo_box_dimensions))
         inputs = [apo_input]
         if ligand_filename:
-            inputs.append(self._solvate(complex_topology, complex_positions, water_model, phase, ionic_strength))
+            inputs.append(self._solvate(complex_topology, complex_positions, water_model, phase, ionic_strength, complex_box_dimensions))
 
         geometry_engine = FFAllAngleGeometryEngine(metadata=None,
                                                 use_sterics=False,
@@ -291,7 +299,8 @@ class PointMutationExecutor(object):
                positions,
                water_model,
                phase,
-               ionic_strength):
+               ionic_strength,
+               box_dimensions = None):
         """
         Generate a solvated topology, positions, and system for a given input topology and positions.
         For generating the system, the forcefield files provided in the constructor will be used.
@@ -327,11 +336,15 @@ class PointMutationExecutor(object):
         # Now we have to add missing atoms
         if phase != 'vacuum':
             _logger.info(f"solvating at {ionic_strength} using {water_model}")
-            modeller.addSolvent(self.system_generator.forcefield, model=water_model, padding=1.0 * unit.nanometers, ionicStrength=ionic_strength)
+            if not box_dimensions:
+                modeller.addSolvent(self.system_generator.forcefield, model=water_model, padding=1.0 * unit.nanometers, ionicStrength=ionic_strength)
+            else:
+                modeller.addSolvent(self.system_generator.forcefield, model=water_model, boxSize=box_dimensions, ionicStrength=ionic_strength)
         else:
             pass
 
         solvated_topology = modeller.getTopology()
+        solvated_topology.setUnitCellDimensions(box_dimensions)
         solvated_positions = modeller.getPositions()
 
         # Canonicalize the solvated positions: turn tuples into np.array
