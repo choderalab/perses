@@ -200,7 +200,7 @@ class PointMutationExecutor(object):
         # Solvate apo and complex...
         apo_input = list(self._solvate(protein_topology, protein_positions, water_model, phase, ionic_strength, apo_box_dimensions))
         inputs = [apo_input]
-        if ligand_filename:
+        if ligand_file:
             inputs.append(self._solvate(complex_topology, complex_positions, water_model, phase, ionic_strength, complex_box_dimensions))
 
         geometry_engine = FFAllAngleGeometryEngine(metadata=None,
