@@ -156,7 +156,7 @@ def run_neq_fah_setup(ligand_file,
                       constraint_tolerance=1e-6,
                       n_steps_per_move_application=250,
                       globalVarFreq=250,
-                      setup = run_setup,
+                      setup = 'small_molecule',
                       protein_kwargs = None,
                       **kwargs):
     """
@@ -243,9 +243,7 @@ def run_neq_fah_setup(ligand_file,
         n_steps_per_move_application : int default=250
             number of equilibrium steps to take per move
     """
-    from perses.app.setup_relative_calculation import run_setup
     from perses.utils import data
-    from perses.app.relative_point_mutation_setup.py import PointMutationExecutor
     #turn all of the args into a dict for passing to run_setup
     setup_options = locals()
     if 'kwargs' in setup_options.keys(): #update the setup options w.r.t. kwargs
@@ -256,7 +254,7 @@ def run_neq_fah_setup(ligand_file,
             setup_options['apo_box_dimensions'] = setup_options['complex_box_dimensions']
 
     #setups_allowed
-    setups_allowed = [run_setup, PointMutationExecutor]
+    setups_allowed = ['small_molecule', 'protein']
     assert setup in setups_allowed, f"setup {setup} not in setups_allowed: {setups_allowed}"
 
 
@@ -269,11 +267,13 @@ def run_neq_fah_setup(ligand_file,
 
     #run the run_setup to generate topology proposals and htfs
     _logger.info(f"spectators: {setup_options['spectators']}")
-    if setup == run_setup:
-        setup_dict = setup(setup_options, serialize_systems=False, build_samplers=False)
+    if setup == 'small_molecule':
+        from perses.app.setup_relative_calculation import run_setup
+        setup_dict = run_setup(setup_options, serialize_systems=False, build_samplers=False)
         topology_proposals = setup_dict['topology_proposals']
         htfs = setup_dict['hybrid_topology_factories']
-    elif setup == PointMutationExecutor:
+    elif setup == 'protein':
+        from perses.app.relative_point_mutation_setup import PointMutationExecutor
         setup_engine = PointMutationExecutor(**setup_options)
         topology_proposals = {'complex': setup_engine.get_complex_htf()._topology_proposal, 'apo': setup_engine.get_apo_htf()._topology_proposal}
         htfs = {'complex': setup_engine.get_complex_htf(), 'apo': setup_engine.get_apo_htf()}
@@ -382,6 +382,8 @@ def run(yaml_filename=None):
         os.makedirs(f"{setup_options['complex_projid']}/RUNS/")
     if not os.path.exists(f"{setup_options['solvent_projid']}"):
         os.makedirs(f"{setup_options['solvent_projid']}/RUNS/")
+    if not os.path.exists(f"{setup_options['apo_projid']}"):
+        os.makedirs(f"{setup_options['apo_projid']}/RUNS/")
     if not os.path.exists('VACUUM'):
         os.makedirs('VACUUM/RUNS/')
 
