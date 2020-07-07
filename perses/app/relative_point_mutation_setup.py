@@ -200,7 +200,7 @@ class PointMutationExecutor(object):
         # Solvate apo and complex...
         apo_input = list(self._solvate(protein_topology, protein_positions, water_model, phase, ionic_strength, apo_box_dimensions))
         inputs = [apo_input]
-        if ligand_file:
+        if ligand_filename:
             inputs.append(self._solvate(complex_topology, complex_positions, water_model, phase, ionic_strength, complex_box_dimensions))
 
         geometry_engine = FFAllAngleGeometryEngine(metadata=None,
@@ -273,9 +273,9 @@ class PointMutationExecutor(object):
 
             if conduct_endstate_validation:
                 zero_state_error, one_state_error = validate_endstate_energies(forward_htf._topology_proposal, forward_htf, added_valence_energy, subtracted_valence_energy, beta=beta, ENERGY_THRESHOLD=ENERGY_THRESHOLD)
-                if zero_state_error < ENERGY_THRESHOLD:
+                if zero_state_error > ENERGY_THRESHOLD:
                     _logger.warning(f"Reduced potential difference of the nonalchemical and alchemical Lambda = 0 state is above the threshold ({ENERGY_THRESHOLD}): {zero_state_error}")
-                if one_state_error < ENERGY_THRESHOLD:
+                if one_state_error > ENERGY_THRESHOLD:
                     _logger.warning(f"Reduced potential difference of the nonalchemical and alchemical Lambda = 1 state is above the threshold ({ENERGY_THRESHOLD}): {one_state_error}")
             else:
                 pass
