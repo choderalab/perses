@@ -99,8 +99,8 @@ class PointMutationExecutor(object):
                  periodic_forcefield_kwargs={'nonbondedMethod': app.PME},
                  nonperiodic_forcefield_kwargs=None,
                  small_molecule_forcefields='gaff-2.11',
-                 complex_box_dimensions = None,
-                 apo_box_dimensions = None,
+                 complex_box_dimensions=None,
+                 apo_box_dimensions=None,
                  **kwargs):
         """
         arguments
@@ -194,7 +194,6 @@ class PointMutationExecutor(object):
                                                 periodic_forcefield_kwargs=periodic_forcefield_kwargs,
                                                 nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
                                                 small_molecule_forcefield=small_molecule_forcefields,
-
                                                 molecules=molecules,
                                                 cache=None)
 
@@ -299,7 +298,7 @@ class PointMutationExecutor(object):
                water_model,
                phase,
                ionic_strength,
-               box_dimensions = None):
+               box_dimensions=None):
         """
         Generate a solvated topology, positions, and system for a given input topology and positions.
         For generating the system, the forcefield files provided in the constructor will be used.
@@ -343,7 +342,8 @@ class PointMutationExecutor(object):
             pass
 
         solvated_topology = modeller.getTopology()
-        solvated_topology.setUnitCellDimensions(box_dimensions)
+        if box_dimensions:
+            solvated_topology.setUnitCellDimensions(box_dimensions)
         solvated_positions = modeller.getPositions()
 
         # Canonicalize the solvated positions: turn tuples into np.array
