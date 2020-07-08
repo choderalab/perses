@@ -38,8 +38,8 @@ def find_package_data(data_root, package_root):
 
 
 # #########################
-VERSION = '0.7.1dev0'
-ISRELEASED = False 
+VERSION = '0.7.1'
+ISRELEASED = True 
 __version__ = VERSION
 # #########################
 

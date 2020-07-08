@@ -1,66 +1,69 @@
-#provide the full path of the protein PDB file
-protein_pdb: CDK2_fixed_nohet.pdb
+# Provide the full path of the protein PDB file
+protein_pdb: CDK2_protein.pdb
 
-#provide the path to the ligand file with coordinates
-ligand_file: CDK2_ligands.sdf
+# Provide the path to the ligand file with coordinates
+ligand_file: CDK2_ligands_shifted.sdf
 
-#The ligand file contains multiple ligands. Choose the indices of the ligands
-#between which we should compute a relative free energy
+# The ligand file contains multiple ligands. Choose the indices of the ligands
+# between which we should compute a relative free energy
 old_ligand_index: 14
 new_ligand_index: 15
 
-#Provide the list of forcefield files. Non-standard files should
-#be provided with a full path
 forcefield_files:
-    - gaff.xml
-    - amber14/protein.ff14SB.xml
-    - amber14/tip3p.xml
+    - amber/ff14SB.xml # ff14SB protein force field
+    - amber/tip3p_standard.xml # TIP3P and recommended monovalent ion parameters
+    - amber/tip3p_HFE_multivalent.xml # for divalent ions
+    - amber/phosaa10.xml # HANDLES THE TPO
 
-#the temperature and pressure of the simulation, as well as how much solvent paddding to add
-#units:
-#pressure: atm
-#temperature: Kelvin
-#padding: angstroms
+# Small molecule force field
+# We recommnd one of ['gaff-1.81', 'gaff-2.11', 'smirnoff99Frosst-1.1.0', 'openff-1.0.0']
+small_molecule_forcefield: openff-1.0.0
+
+# The temperature and pressure of the simulation, as well as how much solvent paddding to add
+# units:
+# pressure: atm
+# temperature: Kelvin
+# padding: angstroms
 pressure: 1.0
 temperature: 300.0
 solvent_padding: 9.0
 
-#number of equilibrium steps per move application
+# Number of equilibrium steps per move application
 n_steps_per_move_application: 500
 
-#The name of the pickle file where we will save the setup object
+# The name of the pickle file where we will save the setup object
 save_setup_pickle_as: fesetup_hbonds.pkl
 
-#the type of free energy calculation.
-#currently, this could be either nonequilibrium or sams
+# The type of free energy calculation.
+# Currently, this could be either nonequilibrium or sams
 fe_type: repex 
 
-#checkpoint interval in iterations:
+# Checkpoint interval in iterations:
 checkpoint_interval: 100
 
-#number of iterations
+# Number of iterations
 n_cycles: 5000 
 
-#The number of SAMS states
+# The number of states
 n_states: 14
 
-#the number of equilibration iterations:
+# The number of equilibration iterations:
 n_equilibration_iterations: 100
 
-#where to put the trajectories
-trajectory_directory: cdk2_sams_hbonds
+# Where to put the trajectories
+trajectory_directory: cdk2_repex_hbonds
 
-#how to prefix the trajectory files (project-specific name)
+# How to prefix the trajectory files (project-specific name)
 trajectory_prefix: cdk2
 
-#which atoms to save (MDTraj selection syntax)
+# Which atoms to save (MDTraj selection syntax)
 atom_selection: not water
 
-#which phases do we want to run (solvent, complex, or both solvent and complex in the list are acceptable):
+# Which phases do we want to run (solvent, complex, or both solvent and complex in the list are acceptable):
 phases:
     - complex
     - solvent
     - vacuum
 
-#timestep in fs
+# Timestep in fs
 timestep: 4.0
