@@ -3109,7 +3109,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         _logger.info(f"determining atom map between old and new molecules...")
         if atom_map is None:
             _logger.info(f"the atom map is not specified; proceeding to generate an atom map...")
-            mol_atom_map = AtomMapper._get_mol_atom_map(self.current_molecule, self.proposed_molecule, atom_expr=atom_expr, bond_expr=bond_expr, map_strength=map_strength, external_inttypes=self._external_inttypes)
+            mol_atom_map = AtomMapper._get_mol_atom_map(self.current_molecule, self.proposed_molecule, atom_expr=atom_expr, bond_expr=bond_expr, map_strength=map_strength, external_inttypes=self._external_inttypes, map_strategy=map_strategy)
         else:
             _logger.info(f"atom map is pre-determined as {atom_map}")
             mol_atom_map = atom_map
