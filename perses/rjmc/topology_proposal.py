@@ -553,7 +553,7 @@ class AtomMapper(object):
                 return best_map
         elif map_strategy == 'matching_criterion':
             _logger.info('Returning map that best satisfies matching_criterion')
-            best_map = AtomMapper._score_nongeometric(molA, molB, list(all_molecule_maps, matching_criterion))
+            best_map = AtomMapper._score_nongeometric(molA, molB, all_molecule_maps, matching_criterion)
             return best_map
         elif map_strategy == 'random':
             _logger.info('Returning map at random')
