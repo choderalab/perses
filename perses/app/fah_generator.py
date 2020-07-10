@@ -359,7 +359,14 @@ def run_neq_fah_setup(ligand_file,
 
         tp = topology_proposals
         from perses.utils.smallmolecules import render_atom_mapping
-        render_atom_mapping(f'{dir}/atom_map.png', tp['ligand_oemol_old'], tp['ligand_oemol_new'], tp['non_offset_new_to_old_atom_map'])
+        if setup=='protein':
+            old_ligand_oemol = htfs['apo']._topology_proposal._old_topology.residue_oemol
+            new_ligand_oemol = htfs['apo']._topology_proposal._new_topology.residue_oemol
+            _map = htfs['apo']._topology_proposal._new_to_old_atom_map
+        else:
+            old_ligand_oemol, new_ligand_oemol = tp['ligand_oemol_old'], tp['ligand_oemol_new']
+            _map = tp['non_offset_new_to_old_atom_map']
+        render_atom_mapping(f'{dir}/atom_map.png', old_ligand_oemol, new_ligand_oemol, _map)
 
 
 def run(yaml_filename=None):
