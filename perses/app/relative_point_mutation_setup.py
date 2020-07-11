@@ -231,8 +231,7 @@ class PointMutationExecutor(object):
 
             # Only validate energy bookkeeping if the WT and proposed residues do not involve rings
             old_res = [res for res in top.residues() if res.id == mutation_residue_id][0]
-            validate_bool = False if old_res in ring_amino_acids or proposed_residue in ring_amino_acids else True
-
+            validate_bool = False if old_res.name in ring_amino_acids or proposed_residue in ring_amino_acids else True
             new_positions, logp_proposal = geometry_engine.propose(topology_proposal, pos, beta,
                                                                    validate_energy_bookkeeping=validate_bool)
             logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta,
