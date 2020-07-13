@@ -2184,7 +2184,10 @@ class PolymerProposalEngine(ProposalEngine):
         #preserve chirality of the sidechain
         # _logger.warning(f"\t\t\told oemols: {[atom.GetIdx() for atom in self.current_molecule.GetAtoms()]}")
         # _logger.warning(f"\t\t\tnew oemols: {[atom.GetIdx() for atom in new_oemol_res.GetAtoms()]}")
-        local_atom_map_stereo_sidechain = AtomMapper.preserve_chirality(current_oemol, proposed_oemol, local_atom_map_nonstereo_sidechain)
+        if local_atom_map_nonstereo_sidechain is not None:
+            local_atom_map_stereo_sidechain = AtomMapper.preserve_chirality(current_oemol, proposed_oemol, local_atom_map_nonstereo_sidechain)
+        else:
+            local_atom_map_stereo_sidechain = {}
 
         _logger.debug(f"\t\t\tlocal atom map stereo sidechain: {local_atom_map_stereo_sidechain}")
 
