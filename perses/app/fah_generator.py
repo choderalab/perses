@@ -385,14 +385,18 @@ def run(yaml_filename=None):
 
     import os
     # make master directories
-    if not os.path.exists(f"{setup_options['complex_projid']}"):
-        os.makedirs(f"{setup_options['complex_projid']}/RUNS/")
-    if not os.path.exists(f"{setup_options['solvent_projid']}"):
-        os.makedirs(f"{setup_options['solvent_projid']}/RUNS/")
-    if not os.path.exists(f"{setup_options['apo_projid']}"):
-        os.makedirs(f"{setup_options['apo_projid']}/RUNS/")
-    if not os.path.exists('VACUUM'):
-        os.makedirs('VACUUM/RUNS/')
+    if setup == 'protein':
+        if not os.path.exists(f"{setup_options['complex_projid']}"):
+            os.makedirs(f"{setup_options['complex_projid']}/RUNS/")
+        if not os.path.exists(f"{setup_options['apo_projid']}"):
+            os.makedirs(f"{setup_options['apo_projid']}/RUNS/")
+    else:
+        if not os.path.exists(f"{setup_options['complex_projid']}"):
+            os.makedirs(f"{setup_options['complex_projid']}/RUNS/")
+        if not os.path.exists(f"{setup_options['solvent_projid']}"):
+            os.makedirs(f"{setup_options['solvent_projid']}/RUNS/")
+        if not os.path.exists('VACUUM'):
+            os.makedirs('VACUUM/RUNS/')
 
     # make run directories
     os.makedirs(f"{setup_options['complex_projid']}/RUNS/{setup_options['trajectory_directory']}")
