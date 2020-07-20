@@ -94,10 +94,8 @@ def test_openmm_dihedral():
     platform = openmm.Platform.getPlatformByName("Reference")
     context = openmm.Context(sys, integrator, platform)
     context.setPositions([atom_position, bond_position, angle_position, torsion_position])
-    openmm_phi = context.getState(getEnergy=True).getPotentialEnergy()/unit.kilojoule_per_mole # this system converts torsion radians -> kJ/mol
-    if np.abs(openmm_phi - phi) - 2*np.pi < TORSION_TOLERANCE:
-        
-    assert np.linalg.norm(openmm_phi - phi) < TORSION_TOLERANCE, '_cartesian_to_internal and OpenMM disagree on torsions'
+    openmm_phi = context.getState(getEnergy=True).getPotentialEnergy()/unit.kilojoule_per_mole # this system converts torsion radians -> kJ/mol        
+    assert np.linalg.norm(openmm_phi - phi) < TORSION_TOLERANCE or np.abs(np.linalg.norm(openmm_phi - phi))-2*np.pi < TORSION_TOLERANCE, '_cartesian_to_internal and OpenMM disagree on torsions'
 
     # Test _internal_to_cartesian by rotating around the torsion
     n_divisions = 100
