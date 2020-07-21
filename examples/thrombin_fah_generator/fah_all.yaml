@@ -12,3 +12,4 @@ bond_expression:
     - DefaultBonds
 complex_projid: 13412
 solvent_projid: 13413
+trajectory_directory: RUN0
