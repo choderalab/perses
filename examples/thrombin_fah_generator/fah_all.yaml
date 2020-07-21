@@ -9,4 +9,6 @@ forcefield_files:
 atom_expression:
     - IntType
 bond_expression:
-    - IntType
+    - DefaultBonds
+complex_projid: 13412
+solvent_projid: 13413
