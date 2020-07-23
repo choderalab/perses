@@ -95,7 +95,7 @@ class PointMutationExecutor(object):
                  ionic_strength=0.15 * unit.molar,
                  forcefield_files=['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
                  barostat=openmm.MonteCarloBarostat(1.0 * unit.atmosphere, temperature, 50),
-                 forcefield_kwargs={'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus},
+                 forcefield_kwargs={'removeCMMotion': False, 'ewaldErrorTolerance': 0.00025, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus},
                  periodic_forcefield_kwargs={'nonbondedMethod': app.PME},
                  nonperiodic_forcefield_kwargs=None,
                  small_molecule_forcefields='gaff-2.11',
