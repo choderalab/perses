@@ -10,6 +10,7 @@ import json
 import tqdm
 from openmmtools.constants import kB
 import random
+import joblib
 
 
 def _strip_outliers(w, n_devs=100):
@@ -39,6 +40,7 @@ def run(
     temperature_kelvin=300.0,
     n_bootstrap=100,
     plotting=True,
+    cache_dir=None,
 ):
 
     with bz2.BZ2File(work_file_path, "r") as infile:
@@ -55,6 +57,30 @@ def run(
 
     projects = {"complex": complex_project, "solvent": solvent_project}
 
+    def _bootstrap_BAR(run, phase, gen_id):
+        f_works, r_works = _get_works(work, RUN, projects[phase], GEN=f"GEN{gen_id}")
+        f_works = _strip_outliers(f_works)
+        r_works = _strip_outliers(r_works)
+        fes = []
+        errs = []
+
+        if len(f_works) > 10 and len(r_works) > 10:
+            for _ in range(n_bootstrap):
+                f = random.choices(f_works, k=len(f_works))
+                r = random.choices(r_works, k=len(r_works))
+                fe, err = BAR(np.asarray(f), np.asarray(r))
+                fes.append(fe)
+                errs.append(err)
+
+        return fes, errs, f_works, r_works
+
+    if cache_dir is not None:
+        # cache results in local directory
+        memory = joblib.Memory(backend="local", location=cache_dir, verbose=0)
+        bootstrap_BAR = memory.cache(_bootstrap_BAR)
+    else:
+        bootstrap_BAR = _bootstrap_BAR
+
     for d in tqdm.tqdm(details.values()):
         RUN = d["directory"]
         if plotting:
@@ -67,22 +93,9 @@ def run(
             all_reverse = []
             # There will be 6 gens for this project I think
             for gen_id in range(0, 7):
-                f_works, r_works = _get_works(
-                    work, RUN, projects[phase], GEN=f"GEN{gen_id}"
-                )
-                f_works = _strip_outliers(f_works)
-                r_works = _strip_outliers(r_works)
-                d[f"{phase}_fes_GEN{gen_id}"] = []
-                d[f"{phase}_dfes_GEN{gen_id}"] = []
-
-                if len(f_works) > 10 and len(r_works) > 10:
-                    for _ in range(n_bootstrap):
-                        f = random.choices(f_works, k=len(f_works))
-                        r = random.choices(r_works, k=len(r_works))
-                        fe, err = BAR(np.asarray(f), np.asarray(r))
-                        d[f"{phase}_fes_GEN{gen_id}"].append(fe)
-                        d[f"{phase}_dfes_GEN{gen_id}"].append(err)
-
+                fes, errs, f_works, r_works = bootstrap_BAR(RUN, phase, gen_id)
+                d[f"{phase}_fes_GEN{gen_id}"] = fes
+                d[f"{phase}_dfes_GEN{gen_id}"] = errs
                 all_forward.extend(f_works)
                 all_reverse.extend(r_works)
             #         print(all_forward)
@@ -201,4 +214,5 @@ def test_run():
         work_file_path="../data/work-13420.pkl.bz2",
         complex_project="PROJ13420",
         solvent_project="PROJ13421",
+        cache_dir="fe-cache",
     )
