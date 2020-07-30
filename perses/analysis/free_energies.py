@@ -79,7 +79,7 @@ def run(
                     for _ in range(n_bootstrap):
                         f = random.choices(f_works, k=len(f_works))
                         r = random.choices(r_works, k=len(r_works))
-                        fe, err = BAR(np.asarray(f), np.asarray(f))
+                        fe, err = BAR(np.asarray(f), np.asarray(r))
                         d[f"{phase}_fes_GEN{gen_id}"].append(fe)
                         d[f"{phase}_dfes_GEN{gen_id}"].append(err)
 
