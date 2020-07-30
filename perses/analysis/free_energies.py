@@ -141,7 +141,7 @@ def run(
             fig.subplots_adjust(top=0.9, wspace=0.15)
             axes[0].legend()
             axes[1].legend()
-            plt.show()
+            fig.savefig(f"{RUN}.png")
 
     ligand_result = {0: 0.0}
     ligand_result_uncertainty = {0: 0.0}
@@ -188,9 +188,12 @@ def run(
                     continue
             plt.show()
 
+
 if __name__ == "__main__":
     import fire
+
     fire.Fire(run)
+
 
 def test_run():
     run(
