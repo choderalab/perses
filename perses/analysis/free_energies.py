@@ -11,6 +11,7 @@ import tqdm
 from openmmtools.constants import kB
 import random
 import joblib
+from typing import Optional
 
 
 def _strip_outliers(w, n_devs=100):
@@ -32,16 +33,38 @@ def _get_works(df, run, project, GEN=None):
     return f, r
 
 
-def run(
-    details_file_path,
-    work_file_path,
-    complex_project,
-    solvent_project,
-    temperature_kelvin=300.0,
-    n_bootstrap=100,
-    plotting=True,
-    cache_dir=None,
+def free_energies(
+    details_file_path: str,
+    work_file_path: str,
+    complex_project: str,
+    solvent_project: str,
+    temperature_kelvin: float = 300.0,
+    n_bootstrap: int = 100,
+    show_plots: bool = True,
+    cache_dir: Optional[str] = None,
 ):
+    r"""Compute free energies from a set of runs.
+
+    Parameters
+    ----------
+    details_file_path : str
+        Path to json file containing run metadata.
+    work_file_path : str
+        Path to bz2-compressed pickle file containing work values from simulation
+    complex_project : str
+        Project identifier (of the form "PROJXXXXX") of the FAH project for complex simulation
+    solvent_project : str
+        Project identifier (of the form "PROJXXXXX") of the FAH project for solvent simulation
+    temperature_kelvin : float
+    n_bootstrap : int, optional
+        Number of bootstrap steps used for BAR free energy estimation
+    show_plots : bool, optional
+        If true, block to display plots interactively (using `plt.show()`).
+        If false, save plots as images in current directory (for batch usage).
+    cache_dir : str, optional
+        If given, local directory for caching BAR calculations. Results are cached by run, phase, and generation.
+        If None, no caching is performed.
+    """
 
     with bz2.BZ2File(work_file_path, "r") as infile:
         work = pickle.load(infile)
@@ -83,10 +106,10 @@ def run(
 
     for d in tqdm.tqdm(details.values()):
         RUN = d["directory"]
-        if plotting:
+        if show_plots:
             fig, axes = plt.subplots(ncols=2, nrows=1, figsize=(10, 5))
         for i, phase in enumerate(projects.keys()):
-            if plotting:
+            if show_plots:
                 axes[i].set_title(phase)
 
             all_forward = []
@@ -105,7 +128,7 @@ def run(
             if len(all_reverse) < 10:
                 print(f"Cant calculate {RUN} {phase}")
                 continue
-            if plotting:
+            if show_plots:
                 sns.kdeplot(all_forward, shade=True, color="cornflowerblue", ax=axes[i])
                 sns.rugplot(
                     all_forward,
@@ -146,7 +169,7 @@ def run(
                 )
         #             d[f'n_{phase}'] = len(all_forward) + len(all_reverse)
 
-        if plotting:
+        if show_plots:
             fig.suptitle(
                 f"{RUN}: {d['protein'].split('_')[0]} {d['start']}-{d['end']}",
                 fontsize=16,
@@ -205,14 +228,5 @@ def run(
 if __name__ == "__main__":
     import fire
 
-    fire.Fire(run)
+    fire.Fire(free_energies)
 
-
-def test_run():
-    run(
-        details_file_path="./2020-07-24.json",
-        work_file_path="../data/work-13420.pkl.bz2",
-        complex_project="PROJ13420",
-        solvent_project="PROJ13421",
-        cache_dir="fe-cache",
-    )
