@@ -39,6 +39,7 @@ temperature = 300*unit.kelvin
 kT = kB * temperature
 beta = 1.0 / kT
 ENERGY_THRESHOLD = 1e-6
+PROHIBITED_RESIDUES = ['CYS']
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
@@ -408,7 +409,7 @@ def test_propose_self():
 
     for chain in modeller.topology.chains():
         if chain.id == chain_id:
-            residues = chain._residues
+            residues = [res for res in chain._residues if res.name not in PROHIBITED_RESIDUES]
     mutant_res = np.random.choice(residues[1:-1])
     allowed_mutations = [(mutant_res.id,mutant_res.name)]
 
