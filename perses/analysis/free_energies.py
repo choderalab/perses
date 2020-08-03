@@ -40,7 +40,8 @@ def free_energies(
     solvent_project: str,
     temperature_kelvin: float = 300.0,
     n_bootstrap: int = 100,
-    show_plots: bool = True,
+    show_plots: bool = False,
+    plot_file_format: str = str,
     cache_dir: Optional[str] = None,
 ):
     r"""Compute free energies from a set of runs.
@@ -61,6 +62,8 @@ def free_energies(
     show_plots : bool, optional
         If true, block to display plots interactively (using `plt.show()`).
         If false, save plots as images in current directory (for batch usage).
+    plot_file_format : str, optional
+        Image file format for saving plots. Accepts any file extension supported by `plt.savefig()`
     cache_dir : str, optional
         If given, local directory for caching BAR calculations. Results are cached by run, phase, and generation.
         If None, no caching is performed.
@@ -79,6 +82,12 @@ def free_energies(
     kT = kB * temperature
 
     projects = {"complex": complex_project, "solvent": solvent_project}
+
+    def _produce_plot(name):
+        if show_plots:
+            plt.show()
+        else:
+            plt.savefig('.'.join([name, plot_file_format]))
 
     def _bootstrap_BAR(run, phase, gen_id):
         f_works, r_works = _get_works(work, RUN, projects[phase], GEN=f"GEN{gen_id}")
@@ -177,7 +186,7 @@ def free_energies(
             fig.subplots_adjust(top=0.9, wspace=0.15)
             axes[0].legend()
             axes[1].legend()
-            fig.savefig(f"{RUN}.png")
+            _produce_plot(f"{RUN}")
 
     ligand_result = {0: 0.0}
     ligand_result_uncertainty = {0: 0.0}
@@ -195,11 +204,12 @@ def free_energies(
 
     plt.hist(ligand_result.values(), bins=100)
     plt.xlabel("Relative free energy to ligand 0 / kcal/mol")
-    plt.show()
+    _produce_plot("rel_fe_lig0_hist")
 
     ### this will be useful for looking at looking at shift in relative FEs over GENS
 
     for d in details.values():
+        RUN = d["directory"]
         if "complex_fes" in d and "solvent_fes" in d:
             for i in range(0, 7):
                 try:
@@ -222,7 +232,7 @@ def free_energies(
                     plt.scatter(i, DDG)
                 except:
                     continue
-            plt.show()
+            _produce_plot(f"fe_delta_{RUN}")
 
 
 if __name__ == "__main__":
