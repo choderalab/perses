@@ -14,12 +14,9 @@ import joblib
 from typing import Optional
 
 
-def _strip_outliers(w, n_devs=100):
-    w = [x for x in w if np.abs(x) < 10 ** 4]
-    mean = np.mean(w)
-    std = np.std(w)
-    good_w = [x for x in w if np.abs(x - mean) < n_devs * std]
-    return np.asarray(good_w)
+def _strip_outliers(w, max_value=1e4, n_devs=100):
+    w = w[w.abs() < max_value]
+    return w[(w - w.mean()).abs() < n_devs * w.std()]
 
 
 def _get_works(df, run, project, GEN=None):
