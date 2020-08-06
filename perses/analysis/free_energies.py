@@ -20,7 +20,7 @@ def _strip_outliers(w, max_value=1e4, n_devs=100):
 
 
 def _get_works(df, run, project, GEN=None):
-    works = df[(df["RUN"] == run)]
+    works = df[df["RUN"] == run]
 
     if GEN:
         works = works[works["GEN"] == GEN]
