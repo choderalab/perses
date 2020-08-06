@@ -12,6 +12,7 @@ from tqdm.auto import tqdm
 from openmmtools.constants import kB
 import random
 import joblib
+import logging
 from typing import Optional
 
 
@@ -41,6 +42,7 @@ def free_energies(
     show_plots: bool = False,
     plot_file_format: str = "png",
     cache_dir: Optional[str] = None,
+    min_num_work_values: int = 10
 ):
     r"""Compute free energies from a set of runs.
 
@@ -65,6 +67,8 @@ def free_energies(
     cache_dir : str, optional
         If given, local directory for caching BAR calculations. Results are cached by run, phase, and generation.
         If None, no caching is performed.
+    min_num_work_values : int, optional
+        Minimum number of forward and reverse work values for valid calculation
     """
 
     with bz2.BZ2File(work_file_path, "r") as infile:
@@ -129,12 +133,16 @@ def free_energies(
                 all_forward.extend(f_works)
                 all_reverse.extend(r_works)
             #         print(all_forward)
-            if len(all_forward) < 10:
-                print(f"Cant calculate {RUN} {phase}")
+
+            try:
+                if len(all_forward) < min_num_work_values:
+                    raise ValueError(f"less than {min_num_work_values} forward work values")
+                if len(all_reverse) < min_num_work_values:
+                    raise ValueError(f"less than {min_num_work_values} reverse work values")
+            except ValueError as e:
+                logging.warn(f"Can't calculate {RUN} {phase}: {e}")
                 continue
-            if len(all_reverse) < 10:
-                print(f"Cant calculate {RUN} {phase}")
-                continue
+
             if show_plots:
                 sns.kdeplot(all_forward, shade=True, color="cornflowerblue", ax=axes[i])
                 sns.rugplot(
