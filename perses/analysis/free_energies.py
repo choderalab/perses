@@ -42,7 +42,7 @@ def free_energies(
     show_plots: bool = False,
     plot_file_format: str = "png",
     cache_dir: Optional[str] = None,
-    min_num_work_values: int = 10
+    min_num_work_values: int = 10,
 ):
     r"""Compute free energies from a set of runs.
 
@@ -77,7 +77,7 @@ def free_energies(
     with open(details_file_path, "r") as f:
         details = json.load(f)
 
-    with pd.option_context('mode.use_inf_as_na', True):
+    with pd.option_context("mode.use_inf_as_na", True):
         work = work.dropna()
 
     temperature = temperature_kelvin * unit.kelvin
@@ -89,7 +89,7 @@ def free_energies(
         if show_plots:
             plt.show()
         else:
-            plt.savefig('.'.join([name, plot_file_format]))
+            plt.savefig(".".join([name, plot_file_format]))
 
     def _bootstrap_BAR(run, phase, gen_id):
         f_works, r_works = _get_works(work, RUN, projects[phase], GEN=f"GEN{gen_id}")
@@ -135,9 +135,13 @@ def free_energies(
 
             try:
                 if len(all_forward) < min_num_work_values:
-                    raise ValueError(f"less than {min_num_work_values} forward work values")
+                    raise ValueError(
+                        f"less than {min_num_work_values} forward work values"
+                    )
                 if len(all_reverse) < min_num_work_values:
-                    raise ValueError(f"less than {min_num_work_values} reverse work values")
+                    raise ValueError(
+                        f"less than {min_num_work_values} reverse work values"
+                    )
             except ValueError as e:
                 logging.warn(f"Can't calculate {RUN} {phase}: {e}")
                 continue
@@ -238,4 +242,3 @@ if __name__ == "__main__":
     import fire
 
     fire.Fire(free_energies)
-
