@@ -39,6 +39,7 @@ temperature = 300*unit.kelvin
 kT = kB * temperature
 beta = 1.0 / kT
 ENERGY_THRESHOLD = 1e-6
+PROHIBITED_RESIDUES = ['CYS']
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
@@ -229,7 +230,8 @@ def generate_dipeptide_top_pos_sys(topology,
                                    positions,
                                    system_generator,
                                    conduct_geometry_prop = True,
-                                   conduct_htf_prop = False):
+                                   conduct_htf_prop = False,
+                                   validate_energy_bookkeeping=True):
     """generate point mutation engine, geometry_engine, and conduct topology proposal, geometry propsal, and hybrid factory generation"""
     from perses.tests.utils import validate_endstate_energies
     if conduct_htf_prop:
@@ -270,8 +272,8 @@ def generate_dipeptide_top_pos_sys(topology,
 
         #make a geometry proposal forward
         print(f"making geometry proposal from {list(topology.residues())[1].name} to {new_res}")
-        forward_new_positions, logp_proposal = geometry_engine.propose(topology_proposal, positions, beta)
-        logp_reverse = geometry_engine.logp_reverse(topology_proposal, forward_new_positions, positions, beta)
+        forward_new_positions, logp_proposal = geometry_engine.propose(topology_proposal, positions, beta, validate_energy_bookkeeping=validate_energy_bookkeeping)
+        logp_reverse = geometry_engine.logp_reverse(topology_proposal, forward_new_positions, positions, beta, validate_energy_bookkeeping=validate_energy_bookkeeping)
 
     if not conduct_htf_prop:
         return (topology_proposal, forward_new_positions, logp_proposal, logp_reverse)
@@ -407,7 +409,7 @@ def test_propose_self():
 
     for chain in modeller.topology.chains():
         if chain.id == chain_id:
-            residues = chain._residues
+            residues = [res for res in chain._residues if res.name not in PROHIBITED_RESIDUES]
     mutant_res = np.random.choice(residues[1:-1])
     allowed_mutations = [(mutant_res.id,mutant_res.name)]
 
@@ -812,7 +814,7 @@ def test_map_strategy():
     from itertools import combinations
 
     # Test mappings for JACS dataset ligands
-    for dataset_name in ['Jnk1']: 
+    for dataset_name in ['Jnk1']:
         # Read molecules
         dataset_path = 'data/schrodinger-jacs-datasets/%s_ligands.sdf' % dataset_name
         mol2_filename = resource_filename('perses', dataset_path)
@@ -822,7 +824,7 @@ def test_map_strategy():
             molecules.append(oechem.OEGraphMol(mol))
 
         atom_expr = oechem.OEExprOpts_IntType
-        bond_expr = oechem.OEExprOpts_RingMember 
+        bond_expr = oechem.OEExprOpts_RingMember
 
         # the 0th and 1st Jnk1 ligand have meta substituents that face opposite eachother
         # in the active site. Using `map_strategy=matching_criterion` should align these groups, and put them
@@ -834,7 +836,7 @@ def test_map_strategy():
 
         new_to_old_atom_map = AtomMapper._get_mol_atom_map(molecules[0], molecules[1],atom_expr=atom_expr,bond_expr=bond_expr,map_strategy='geometry')
         assert len(new_to_old_atom_map) == 35,  'Expected meta groups methyl C to NOT map onto ethyl O as they are distal in cartesian space'
-        
+
 
 def test_simple_heterocycle_mapping(iupac_pairs = [('benzene', 'pyridine')]):
     """

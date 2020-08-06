@@ -440,7 +440,8 @@ class AtomMapper(object):
                                                  atom_expr=oechem.OEExprOpts_RingMember | oechem.OEExprOpts_IntType,
                                                  bond_expr=oechem.OEExprOpts_RingMember,
                                                  external_inttypes=True,
-                                                 unique=False)
+                                                 unique=False,
+                                                 matching_criterion=matching_criterion)
 
 
         _logger.info(f'Scaffold has symmetry of {len(scaffold_maps)}')
@@ -450,10 +451,13 @@ class AtomMapper(object):
             _logger.warning('Proceeding with direct mapping of molecules, but please check atom mapping and the geometry of the ligands.')
 
             # if no commonality with the scaffold, don't use it.
+            # why weren't matching arguments carried to these mapping functions? is there an edge case that i am missing?
+            # it still doesn't fix the protein sidechain mapping problem
             all_molecule_maps = AtomMapper._get_all_maps(molA, molB,
                                                      external_inttypes=external_inttypes,
                                                      atom_expr=atom_expr,
-                                                     bond_expr=bond_expr)
+                                                     bond_expr=bond_expr,
+                                                     matching_criterion=matching_criterion)
             _logger.info(f'len {all_molecule_maps}')
             for x in all_molecule_maps:
                 _logger.info(x)
@@ -467,7 +471,8 @@ class AtomMapper(object):
 
             scaffold_A_maps = AtomMapper._get_all_maps(molA, scaffoldA,
                                      atom_expr=oechem.OEExprOpts_AtomicNumber,
-                                     bond_expr=0)
+                                     bond_expr=0,
+                                     matching_criterion=matching_criterion)
             _logger.info(f'{len(scaffold_A_maps)} scaffold maps for A')
             scaffold_A_map = scaffold_A_maps[0]
             _logger.info(f'Scaffold to molA: {scaffold_A_map}')
@@ -476,7 +481,8 @@ class AtomMapper(object):
 
             scaffold_B_maps = AtomMapper._get_all_maps(molB, scaffoldB,
                                      atom_expr=oechem.OEExprOpts_AtomicNumber,
-                                     bond_expr=0)
+                                     bond_expr=0,
+                                     matching_criterion=matching_criterion)
             _logger.info(f'{len(scaffold_B_maps)} scaffold maps for B')
             scaffold_B_map = scaffold_B_maps[0]
             _logger.info(f'Scaffold to molB: {scaffold_B_map}')
@@ -512,7 +518,8 @@ class AtomMapper(object):
                 molecule_maps = AtomMapper._get_all_maps(molA, molB,
                                                      external_inttypes=True,
                                                      atom_expr=atom_expr,
-                                                     bond_expr=bond_expr)
+                                                     bond_expr=bond_expr,
+                                                     matching_criterion=matching_criterion)
                 all_molecule_maps.extend(molecule_maps)
 
         if not allow_ring_breaking:
@@ -2077,8 +2084,11 @@ class PolymerProposalEngine(ProposalEngine):
         new_res = modified_residues[index]
         _logger.debug(f"\t\t\told res: {old_res.name}; new res: {new_res.name}")
 
-        _logger.debug(f"\t\t\told topology res names: {[(atom.index, atom.name) for atom in old_res.atoms()]}")
-        _logger.debug(f"\t\t\tnew topology res names: {[(atom.index, atom.name) for atom in new_res.atoms()]}")
+        new_res_index_to_name = {atom.index: atom.name for atom in new_res.atoms()}
+        old_res_index_to_name = {atom.index: atom.name for atom in old_res.atoms()}
+
+        _logger.debug(f"\t\t\told topology res names: {old_res_index_to_name}")
+        _logger.debug(f"\t\t\tnew topology res names: {new_res_index_to_name}")
 
         old_res_name = old_res.name
         new_res_name = new_res.name
@@ -2101,12 +2111,16 @@ class PolymerProposalEngine(ProposalEngine):
         old_oemol_res_copy = copy.deepcopy(current_oemol)
         new_oemol_res_copy = copy.deepcopy(proposed_oemol)
 
+
         _logger.debug(f"\t\t\told_oemol_res names: {[(atom.GetIdx(), atom.GetName()) for atom in current_oemol.GetAtoms()]}")
         _logger.debug(f"\t\t\tnew_oemol_res names: {[(atom.GetIdx(), atom.GetName()) for atom in proposed_oemol.GetAtoms()]}")
 
         #create bookkeeping dictionaries
         old_res_to_oemol_map = {atom.index: current_oemol.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx() for atom in old_res.atoms()}
         new_res_to_oemol_map = {atom.index: proposed_oemol.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx() for atom in new_res.atoms()}
+
+        old_oemol_name_idx = {atom.GetName(): atom.GetIdx() for atom in current_oemol.GetAtoms()}
+        new_oemol_name_idx = {atom.GetName(): atom.GetIdx() for atom in proposed_oemol.GetAtoms()}
 
         _logger.debug(f"\t\t\told_res_to_oemol_map: {old_res_to_oemol_map}")
         _logger.debug(f"\t\t\tnew_res_to_oemol_map: {new_res_to_oemol_map}")
@@ -2147,12 +2161,19 @@ class PolymerProposalEngine(ProposalEngine):
                 except Exception as e:
                     raise Exception(f"failed to map the backbone separately: {e}")
 
-        current_oemol = copy.deepcopy(current_oemol)
-        proposed_oemol = copy.deepcopy(proposed_oemol)
+
+        _logger.debug(f"\t\t\told_oemol_res names: {[(atom.GetIdx(), atom.GetName()) for atom in current_oemol.GetAtoms()]}")
+        _logger.debug(f"\t\t\tnew_oemol_res names: {[(atom.GetIdx(), atom.GetName()) for atom in proposed_oemol.GetAtoms()]}")
+
+        old_sidechain_oemol_indices_to_name = {atom.GetIdx(): atom.GetName() for atom in current_oemol.GetAtoms()}
+        new_sidechain_oemol_indices_to_name = {atom.GetIdx(): atom.GetName() for atom in proposed_oemol.GetAtoms()}
+
 
         #now we can get the mol atom map of the sidechain
         #NOTE: since the sidechain oemols are NOT zero-indexed anymore, we need to match by name (since they are unique identifiers)
-        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength = 'default', matching_criterion = 'name')
+        break_bool = False if old_res_name == 'TRP' or new_res_name == 'TRP' else True # Set allow_ring_breaking to be False if the transformation involves TRP
+        _logger.debug(f"\t\t\t allow ring breaking: {break_bool}")
+        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength='default', matching_criterion='name', map_strategy='matching_criterion', allow_ring_breaking=break_bool)
 
         #check the atom map thus far:
         _logger.debug(f"\t\t\tlocal atom map nonstereo sidechain: {local_atom_map_nonstereo_sidechain}")
@@ -2160,50 +2181,54 @@ class PolymerProposalEngine(ProposalEngine):
         #preserve chirality of the sidechain
         # _logger.warning(f"\t\t\told oemols: {[atom.GetIdx() for atom in self.current_molecule.GetAtoms()]}")
         # _logger.warning(f"\t\t\tnew oemols: {[atom.GetIdx() for atom in new_oemol_res.GetAtoms()]}")
-        local_atom_map_stereo_sidechain = AtomMapper.preserve_chirality(current_oemol, proposed_oemol, local_atom_map_nonstereo_sidechain)
+        if local_atom_map_nonstereo_sidechain is not None:
+            local_atom_map_stereo_sidechain = AtomMapper.preserve_chirality(current_oemol, proposed_oemol, local_atom_map_nonstereo_sidechain)
+        else:
+            local_atom_map_stereo_sidechain = {}
 
         _logger.debug(f"\t\t\tlocal atom map stereo sidechain: {local_atom_map_stereo_sidechain}")
+
+        #fix the sidechain indices w.r.t. full oemol
         sidechain_fixed_map = {}
-        for new_oemol_idx, old_oemol_idx in local_atom_map_stereo_sidechain.items():
-            sidechain_fixed_map[new_oemol_to_res_map[new_oemol_idx]] = old_oemol_to_res_map[old_oemol_idx]
-        _logger.debug(f"\t\t\tsidechain fixed map: {sidechain_fixed_map}")
+        mapped_names = []
+        for new_sidechain_idx, old_sidechain_idx in local_atom_map_stereo_sidechain.items():
+            new_name, old_name = new_sidechain_oemol_indices_to_name[new_sidechain_idx], old_sidechain_oemol_indices_to_name[old_sidechain_idx]
+            mapped_names.append((new_name, old_name))
+            new_full_oemol_idx, old_full_oemol_idx = new_oemol_name_idx[new_name], old_oemol_name_idx[old_name]
+            sidechain_fixed_map[new_full_oemol_idx] = old_full_oemol_idx
+
+        _logger.debug(f"\t\t\toemol sidechain fixed map: {sidechain_fixed_map}")
 
 
         #make sure that CB is mapped; otherwise the residue will not be contiguous
         found_CB = False
-        new_atoms = {atom.index: atom.name for atom in new_res.atoms()}
-        old_atoms = {atom.index: atom.name for atom in old_res.atoms()}
+        if any(item[0] == 'CB' and item[1] == 'CB' for item in mapped_names):
+            found_CB = True
 
-        for new_index, old_index in sidechain_fixed_map.items():
-            new_name, old_name = new_atoms[new_index], old_atoms[old_index]
-            if new_name == 'CB' and old_name == 'CB':
-                found_CB = True
         if not found_CB:
             _logger.debug(f"\t\t\tno 'CB' found!!!.  removing local atom map stereo sidechain...")
-            local_atom_map_stereo_sidechain = {}
+            sidechain_fixed_map = {}
 
         _logger.debug(f"\t\t\tthe local atom map (backbone) is {local_atom_map}")
         #update the local map
-        local_atom_map.update(local_atom_map_stereo_sidechain)
+        local_atom_map.update(sidechain_fixed_map)
         _logger.debug(f"\t\t\tthe local atom map (total) is {local_atom_map}")
 
         #correct the map
         #now we have to update the atom map indices
         _logger.debug(f"\t\t\tadjusting the atom map with topology indices...")
-        fixed_map = {}
+        topology_index_map = {}
         for new_oemol_idx, old_oemol_idx in local_atom_map.items():
-            fixed_map[new_oemol_to_res_map[new_oemol_idx]] = old_oemol_to_res_map[old_oemol_idx]
+            topology_index_map[new_oemol_to_res_map[new_oemol_idx]] = old_oemol_to_res_map[old_oemol_idx]
 
-        adjusted_atom_map = fixed_map
-        _logger.debug(f"\t\t\tadjusted_atom_map: {adjusted_atom_map}")
 
-        index_to_name_new = {atom.index: atom.name for atom in new_res.atoms()}
-        index_to_name_old = {atom.index: atom.name for atom in old_res.atoms()}
-        map_atom_names = [(index_to_name_new[new_idx], index_to_name_old[old_idx]) for new_idx, old_idx in adjusted_atom_map.items()]
-        _logger.debug(f"\t\t\tthe mapped atom names are: {map_atom_names}")
+        _logger.debug(f"\t\t\ttopology_atom_map: {topology_index_map}")
+
+        mapped_atoms = [(new_res_index_to_name[new_idx], old_res_index_to_name[old_idx]) for new_idx, old_idx in topology_index_map.items()]
+        _logger.debug(f"\t\t\tthe mapped atom names are: {mapped_atoms}")
 
             #and all of the environment atoms should already be handled
-        return adjusted_atom_map, old_res_to_oemol_map, new_res_to_oemol_map, local_atom_map_stereo_sidechain, current_oemol, proposed_oemol, old_oemol_res_copy, new_oemol_res_copy
+        return topology_index_map, old_res_to_oemol_map, new_res_to_oemol_map, local_atom_map, current_oemol, proposed_oemol, old_oemol_res_copy, new_oemol_res_copy
 
     def _get_mol_atom_matches(self, current_molecule, proposed_molecule, first_atom_index_old, first_atom_index_new):
         """
