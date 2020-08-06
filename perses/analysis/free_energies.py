@@ -8,7 +8,7 @@ import pickle
 from simtk.openmm import unit
 import bz2
 import json
-import tqdm
+from tqdm.auto import tqdm
 from openmmtools.constants import kB
 import random
 import joblib
@@ -111,7 +111,7 @@ def free_energies(
     else:
         bootstrap_BAR = _bootstrap_BAR
 
-    for d in tqdm.tqdm(details.values()):
+    for d in tqdm(details.values()):
         RUN = d["directory"]
         if show_plots:
             fig, axes = plt.subplots(ncols=2, nrows=1, figsize=(10, 5))
