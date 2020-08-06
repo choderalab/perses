@@ -38,7 +38,7 @@ def free_energies(
     temperature_kelvin: float = 300.0,
     n_bootstrap: int = 100,
     show_plots: bool = False,
-    plot_file_format: str = str,
+    plot_file_format: str = "png",
     cache_dir: Optional[str] = None,
 ):
     r"""Compute free energies from a set of runs.
