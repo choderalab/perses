@@ -13,6 +13,7 @@ from openmmtools.constants import kB
 import random
 import joblib
 import logging
+import os
 from typing import Optional
 
 
@@ -89,7 +90,9 @@ def free_energies(
         if show_plots:
             plt.show()
         else:
-            plt.savefig(".".join([name, plot_file_format]))
+            fname = os.extsep.join([name, plot_file_format])
+            logging.info(f"Writing {fname}")
+            plt.savefig(fname)
 
     def _bootstrap_BAR(run, phase, gen_id):
         f_works, r_works = _get_works(work, RUN, projects[phase], GEN=f"GEN{gen_id}")
@@ -121,11 +124,10 @@ def free_energies(
             raise ValueError(f"No work values found for {RUN}")
         return df["GEN"].str[3:].astype(int).max()
 
+    fig, axes = plt.subplots(ncols=2, nrows=1, figsize=(10, 5))
+
     def _process_run(RUN):
         def _process_phase(i, phase):
-            if show_plots:
-                axes[i].set_title(phase)
-
             all_forward = []
             all_reverse = []
             for gen_id in range(_max_gen(RUN)):
@@ -140,43 +142,40 @@ def free_energies(
             if len(all_reverse) < min_num_work_values:
                 raise ValueError(f"less than {min_num_work_values} reverse work values")
 
-            if show_plots:
-                sns.kdeplot(all_forward, shade=True, color="cornflowerblue", ax=axes[i])
-                sns.rugplot(
-                    all_forward,
-                    ax=axes[i],
-                    color="cornflowerblue",
-                    alpha=0.5,
-                    label=f"forward : N={len(f_works)}",
-                )
-                sns.rugplot(
-                    all_forward,
-                    ax=axes[i],
-                    color="darkblue",
-                    label=f"forward (gen0) : N={len(f_works)}",
-                )
-                sns.rugplot(
-                    [-x for x in all_reverse],
-                    ax=axes[i],
-                    color="mediumvioletred",
-                    label=f"reverse (gen0) : N={len(r_works)}",
-                )
-                sns.kdeplot(
-                    [-x for x in all_reverse], shade=True, color="hotpink", ax=axes[i]
-                )
-                sns.rugplot(
-                    [-x for x in all_reverse],
-                    ax=axes[i],
-                    color="hotpink",
-                    alpha=0.5,
-                    label=f"reverse : N={len(r_works)}",
-                )
+            sns.kdeplot(all_forward, shade=True, color="cornflowerblue", ax=axes[i])
+            sns.rugplot(
+                all_forward,
+                ax=axes[i],
+                color="cornflowerblue",
+                alpha=0.5,
+                label=f"forward : N={len(f_works)}",
+            )
+            sns.rugplot(
+                all_forward,
+                ax=axes[i],
+                color="darkblue",
+                label=f"forward (gen0) : N={len(f_works)}",
+            )
+            sns.rugplot(
+                [-x for x in all_reverse],
+                ax=axes[i],
+                color="mediumvioletred",
+                label=f"reverse (gen0) : N={len(r_works)}",
+            )
+            sns.kdeplot(
+                [-x for x in all_reverse], shade=True, color="hotpink", ax=axes[i]
+            )
+            sns.rugplot(
+                [-x for x in all_reverse],
+                ax=axes[i],
+                color="hotpink",
+                alpha=0.5,
+                label=f"reverse : N={len(r_works)}",
+            )
+            axes[i].set_title(phase)
 
             # TODO add bootstrapping here
             d[f"{phase}_fes"] = BAR(np.asarray(all_forward), np.asarray(all_reverse))
-
-        if show_plots:
-            fig, axes = plt.subplots(ncols=2, nrows=1, figsize=(10, 5))
 
         for i, phase in enumerate(projects.keys()):
             try:
@@ -185,15 +184,14 @@ def free_energies(
                 logging.warn(f"Can't calculate {RUN} {phase}: {e}")
                 continue
 
-        if show_plots:
-            fig.suptitle(
-                f"{RUN}: {d['protein'].split('_')[0]} {d['start']}-{d['end']}",
-                fontsize=16,
-            )
-            fig.subplots_adjust(top=0.9, wspace=0.15)
-            axes[0].legend()
-            axes[1].legend()
-            _produce_plot(f"{RUN}")
+        fig.suptitle(
+            f"{RUN}: {d['protein'].split('_')[0]} {d['start']}-{d['end']}",
+            fontsize=16,
+        )
+        fig.subplots_adjust(top=0.9, wspace=0.15)
+        axes[0].legend()
+        axes[1].legend()
+        _produce_plot(f"{RUN}")
 
     for d in tqdm(details.values()):
         RUN = d["directory"]
