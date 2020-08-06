@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import seaborn as sns
 from pymbar import BAR
 import matplotlib.pyplot as plt
@@ -72,8 +73,8 @@ def free_energies(
     with open(details_file_path, "r") as f:
         details = json.load(f)
 
-    work.replace([np.inf, -np.inf], np.nan)
-    work = work.dropna()
+    with pd.option_context('mode.use_inf_as_na', True):
+        work = work.dropna()
 
     temperature = temperature_kelvin * unit.kelvin
     kT = kB * temperature
