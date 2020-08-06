@@ -132,7 +132,6 @@ def free_energies(
                 d[f"{phase}_dfes_GEN{gen_id}"] = errs
                 all_forward.extend(f_works)
                 all_reverse.extend(r_works)
-            #         print(all_forward)
 
             try:
                 if len(all_forward) < min_num_work_values:
@@ -177,7 +176,6 @@ def free_energies(
 
             # TODO add bootstrapping here
             d[f"{phase}_fes"] = BAR(np.asarray(all_forward), np.asarray(all_reverse))
-        #         d[f'n_{phase}'] = len(all_forward) + len(all_reverse)
 
         if show_plots:
             fig.suptitle(
