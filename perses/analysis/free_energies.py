@@ -175,14 +175,9 @@ def free_energies(
                     label=f"reverse : N={len(r_works)}",
                 )
 
-            if any([True for x in [all_reverse, all_forward] if len(x) < 20]):
-                print(f"Cant calculate {RUN} {phase}")
-            else:
-                # TODO add bootstrapping here
-                d[f"{phase}_fes"] = BAR(
-                    np.asarray(all_forward), np.asarray(all_reverse)
-                )
-        #             d[f'n_{phase}'] = len(all_forward) + len(all_reverse)
+            # TODO add bootstrapping here
+            d[f"{phase}_fes"] = BAR(np.asarray(all_forward), np.asarray(all_reverse))
+        #         d[f'n_{phase}'] = len(all_forward) + len(all_reverse)
 
         if show_plots:
             fig.suptitle(
