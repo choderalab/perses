@@ -441,8 +441,7 @@ class AtomMapper(object):
                                                  bond_expr=oechem.OEExprOpts_RingMember,
                                                  external_inttypes=True,
                                                  unique=False,
-                                                 allow_ring_breaking = allow_ring_breaking,
-                                                 matching_criterion = matching_criterion)
+                                                 matching_criterion=matching_criterion)
 
 
         _logger.info(f'Scaffold has symmetry of {len(scaffold_maps)}')
@@ -458,7 +457,6 @@ class AtomMapper(object):
                                                      external_inttypes=external_inttypes,
                                                      atom_expr=atom_expr,
                                                      bond_expr=bond_expr,
-                                                     allow_ring_breaking=allow_ring_breaking,
                                                      matching_criterion=matching_criterion)
             _logger.info(f'len {all_molecule_maps}')
             for x in all_molecule_maps:
@@ -474,7 +472,6 @@ class AtomMapper(object):
             scaffold_A_maps = AtomMapper._get_all_maps(molA, scaffoldA,
                                      atom_expr=oechem.OEExprOpts_AtomicNumber,
                                      bond_expr=0,
-                                     allow_ring_breaking=allow_ring_breaking,
                                      matching_criterion=matching_criterion)
             _logger.info(f'{len(scaffold_A_maps)} scaffold maps for A')
             scaffold_A_map = scaffold_A_maps[0]
@@ -485,7 +482,6 @@ class AtomMapper(object):
             scaffold_B_maps = AtomMapper._get_all_maps(molB, scaffoldB,
                                      atom_expr=oechem.OEExprOpts_AtomicNumber,
                                      bond_expr=0,
-                                     allow_ring_breaking=allow_ring_breaking,
                                      matching_criterion=matching_criterion)
             _logger.info(f'{len(scaffold_B_maps)} scaffold maps for B')
             scaffold_B_map = scaffold_B_maps[0]
@@ -523,7 +519,6 @@ class AtomMapper(object):
                                                      external_inttypes=True,
                                                      atom_expr=atom_expr,
                                                      bond_expr=bond_expr,
-                                                     allow_ring_breaking=allow_ring_breaking,
                                                      matching_criterion=matching_criterion)
                 all_molecule_maps.extend(molecule_maps)
 
@@ -2178,7 +2173,7 @@ class PolymerProposalEngine(ProposalEngine):
         #NOTE: since the sidechain oemols are NOT zero-indexed anymore, we need to match by name (since they are unique identifiers)
         break_bool = False if old_res_name == 'TRP' or new_res_name == 'TRP' else True # Set allow_ring_breaking to be False if the transformation involves TRP
         _logger.debug(f"\t\t\t allow ring breaking: {break_bool}")
-        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength = 'default', matching_criterion = 'name', map_strategy = 'matching_criterion', allow_ring_breaking=break_bool)
+        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength='default', matching_criterion='name', map_strategy='matching_criterion', allow_ring_breaking=break_bool)
 
         #check the atom map thus far:
         _logger.debug(f"\t\t\tlocal atom map nonstereo sidechain: {local_atom_map_nonstereo_sidechain}")
