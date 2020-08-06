@@ -115,6 +115,9 @@ def free_energies(
     else:
         bootstrap_BAR = _bootstrap_BAR
 
+    def _get_n_gens_run(run):
+        return work[work["RUN"] == run]["GEN"].str[3:].astype(int).max()
+
     for d in tqdm(details.values()):
         RUN = d["directory"]
         if show_plots:
@@ -125,8 +128,7 @@ def free_energies(
 
             all_forward = []
             all_reverse = []
-            # There will be 6 gens for this project I think
-            for gen_id in range(0, 7):
+            for gen_id in range(_get_n_gens_run(RUN)):
                 fes, errs, f_works, r_works = bootstrap_BAR(RUN, phase, gen_id)
                 d[f"{phase}_fes_GEN{gen_id}"] = fes
                 d[f"{phase}_dfes_GEN{gen_id}"] = errs
@@ -214,7 +216,7 @@ def free_energies(
     for d in details.values():
         RUN = d["directory"]
         if "complex_fes" in d and "solvent_fes" in d:
-            for i in range(0, 7):
+            for i in range(0, _get_n_gens_run(RUN)):
                 try:
                     DDG = (
                         (
