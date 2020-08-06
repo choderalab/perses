@@ -100,8 +100,8 @@ def free_energies(
 
         if len(f_works) > 10 and len(r_works) > 10:
             for _ in range(n_bootstrap):
-                f = random.choices(f_works, k=len(f_works))
-                r = random.choices(r_works, k=len(r_works))
+                f = random.choices(f_works.values, k=len(f_works))
+                r = random.choices(r_works.values, k=len(r_works))
                 fe, err = BAR(np.asarray(f), np.asarray(r))
                 fes.append(fe)
                 errs.append(err)
@@ -115,14 +115,14 @@ def free_energies(
     else:
         bootstrap_BAR = _bootstrap_BAR
 
-    def _max_gen(run):
-        return work[work["RUN"] == run]["GEN"].str[3:].astype(int).max()
+    def _max_gen(RUN):
+        df = work[work["RUN"] == RUN]
+        if df.empty:
+            raise ValueError(f"No work values found for {RUN}")
+        return df["GEN"].str[3:].astype(int).max()
 
-    for d in tqdm(details.values()):
-        RUN = d["directory"]
-        if show_plots:
-            fig, axes = plt.subplots(ncols=2, nrows=1, figsize=(10, 5))
-        for i, phase in enumerate(projects.keys()):
+    def _process_run(RUN):
+        def _process_phase(i, phase):
             if show_plots:
                 axes[i].set_title(phase)
 
@@ -135,18 +135,10 @@ def free_energies(
                 all_forward.extend(f_works)
                 all_reverse.extend(r_works)
 
-            try:
-                if len(all_forward) < min_num_work_values:
-                    raise ValueError(
-                        f"less than {min_num_work_values} forward work values"
-                    )
-                if len(all_reverse) < min_num_work_values:
-                    raise ValueError(
-                        f"less than {min_num_work_values} reverse work values"
-                    )
-            except ValueError as e:
-                logging.warn(f"Can't calculate {RUN} {phase}: {e}")
-                continue
+            if len(all_forward) < min_num_work_values:
+                raise ValueError(f"less than {min_num_work_values} forward work values")
+            if len(all_reverse) < min_num_work_values:
+                raise ValueError(f"less than {min_num_work_values} reverse work values")
 
             if show_plots:
                 sns.kdeplot(all_forward, shade=True, color="cornflowerblue", ax=axes[i])
@@ -184,6 +176,16 @@ def free_energies(
             d[f"{phase}_fes"] = BAR(np.asarray(all_forward), np.asarray(all_reverse))
 
         if show_plots:
+            fig, axes = plt.subplots(ncols=2, nrows=1, figsize=(10, 5))
+
+        for i, phase in enumerate(projects.keys()):
+            try:
+                _process_phase(i, phase)
+            except ValueError as e:
+                logging.warn(f"Can't calculate {RUN} {phase}: {e}")
+                continue
+
+        if show_plots:
             fig.suptitle(
                 f"{RUN}: {d['protein'].split('_')[0]} {d['start']}-{d['end']}",
                 fontsize=16,
@@ -192,6 +194,14 @@ def free_energies(
             axes[0].legend()
             axes[1].legend()
             _produce_plot(f"{RUN}")
+
+    for d in tqdm(details.values()):
+        RUN = d["directory"]
+        try:
+            _process_run(RUN)
+        except ValueError as e:
+            logging.warn(f"Can't calculate {RUN}: {e}")
+            continue
 
     ligand_result = {0: 0.0}
     ligand_result_uncertainty = {0: 0.0}
