@@ -72,8 +72,7 @@ def free_energies(
         Minimum number of forward and reverse work values for valid calculation
     """
 
-    with bz2.BZ2File(work_file_path, "r") as infile:
-        work = pickle.load(infile)
+    work = pd.read_pickle(work_file_path)
 
     with open(details_file_path, "r") as f:
         details = json.load(f)
