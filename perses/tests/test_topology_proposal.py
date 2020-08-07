@@ -437,10 +437,14 @@ def test_run_point_mutation_propose():
     max_point_mutants = 1
     chain_id = 'A'
 
+    #pull the allowable mutatable residues..
+    _chain = [chain for chain in modeller.topology.chains() if chain.id == chain_id][0]
+    residue_ids = [residue.id for residue in _chain.residues() if residue.name != 'CYS'][1:-1]
+
     system_generator = create_simple_protein_system_generator()
     system = system_generator.create_system(modeller.topology)
 
-    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, max_point_mutants=max_point_mutants)
+    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, max_point_mutants=max_point_mutants, residues_allowed_to_mutate=residue_ids)
     pm_top_proposal = pm_top_engine.propose(system, modeller.topology)
 
 #@attr('advanced')
