@@ -17,12 +17,48 @@ import os
 from typing import Optional
 
 
-def _strip_outliers(w, max_value=1e4, n_devs=100):
+def _strip_outliers(w, max_value=1e4, n_devs=5):
+    """Removes work values that are more than 5 (n_devs) standard deviations from the mean or larger than 1E4 (max_value).
+
+    Parameters
+    ----------
+    w : list(float)
+        List of works
+    max_value : int, default=1E4
+        Work values larger than this will be discarded
+    n_devs : int, default=5
+        Number of standard deviations from mean to be returned
+
+    Returns
+    -------
+    list(float)
+        Tidied list of work values
+
+    """
     w = w[w.abs() < max_value]
     return w[(w - w.mean()).abs() < n_devs * w.std()]
 
 
 def _get_works(df, run, project, GEN=None):
+    """ Get set of work values from a dataframe
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Information generated from folding at home
+    run : str
+        run to collect data for (i.e. 'RUN0')
+    project : str
+        project to collect data for (i.e. 'PROJ13420')
+    GEN : str, optional default=None
+        if provided, will only return work values from a given run, (i.e. 'GEN0'), otherwise all generations are returned
+
+    Returns
+    -------
+    list, list
+        Returns lists for forwards and backwards works
+
+    """
     works = df[df["RUN"] == run]
 
     if GEN:
@@ -34,14 +70,14 @@ def _get_works(df, run, project, GEN=None):
 
 
 def free_energies(
-    details_file_path: str,
+    details_file_path: list,
     work_file_path: str,
     complex_project: str,
     solvent_project: str,
     temperature_kelvin: float = 300.0,
     n_bootstrap: int = 100,
     show_plots: bool = False,
-    plot_file_format: str = "png",
+    plot_file_format: str = "pdf",
     cache_dir: Optional[str] = None,
     min_num_work_values: int = 10,
 ):
@@ -49,8 +85,8 @@ def free_energies(
 
     Parameters
     ----------
-    details_file_path : str
-        Path to json file containing run metadata.
+    details_file_path : list
+        Path or list of paths to json file containing run metadata.
     work_file_path : str
         Path to bz2-compressed pickle file containing work values from simulation
     complex_project : str
@@ -72,11 +108,20 @@ def free_energies(
         Minimum number of forward and reverse work values for valid calculation
     """
 
+    # load pandas dataframe from FAH
     work = pd.read_pickle(work_file_path)
 
-    with open(details_file_path, "r") as f:
-        details = json.load(f)
+    # load the json that contains the information as to what has been computed in each run
+    if isinstance(details_file_path, str):
+        details_file_path = [details_file_path]
 
+    details = {}
+    for path in details_file_path:
+        with open(path, 'r') as f:
+            new = json.load(f)
+            details = {**details, **new}
+
+    # remove any unuseable values
     with pd.option_context("mode.use_inf_as_na", True):
         work = work.dropna()
 
