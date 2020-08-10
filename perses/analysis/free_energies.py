@@ -138,7 +138,7 @@ def free_energies(
             logging.info(f"Writing {fname}")
             plt.savefig(fname)
 
-    def _bootstrap_BAR(run, phase, gen_id):
+    def _bootstrap_BAR(run, phase, gen_id, n_bootstrap):
         f_works, r_works = _get_works(work, RUN, projects[phase], GEN=f"GEN{gen_id}")
         f_works = _strip_outliers(f_works)
         r_works = _strip_outliers(r_works)
@@ -248,6 +248,8 @@ def free_energies(
     ligand_result = {0: 0.0}
     ligand_result_uncertainty = {0: 0.0}
 
+
+    # TODO -- this assumes that everything is star-shaped, linked to ligand 0. If it's not, the values in ligand_result and ligand_result_uncertainty won't be correct.
     for d in details.values():
         if "complex_fes" in d and "solvent_fes" in d:
             DDG = ((d["complex_fes"][0] - d["solvent_fes"][0]) * kT).value_in_unit(
@@ -259,9 +261,23 @@ def free_energies(
             ligand_result[d["end"]] = DDG
             ligand_result_uncertainty[d["end"]] = DDG
 
-    plt.hist(ligand_result.values(), bins=100)
-    plt.xlabel("Relative free energy to ligand 0 / kcal/mol")
-    _produce_plot("rel_fe_lig0_hist")
+
+    _plot_relative_distribution(livand_result.values())
+    def _plot_relative_distribution(relative_fes, bins=100):
+        """ Plots the distribution of relative free energies
+
+        Parameters
+        ----------
+        relative_fes : list
+            Relative free energies in kcal/mol
+        bins : int, default=100
+            Number of bins for histogramming
+
+
+        """
+        plt.hist(relative_fes, bins=bins)
+        plt.xlabel("Relative free energy to ligand 0 / kcal/mol")
+        _produce_plot("rel_fe_lig0_hist")
 
     ### this will be useful for looking at looking at shift in relative FEs over GENS
 
