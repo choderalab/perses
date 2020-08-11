@@ -153,6 +153,7 @@ def free_energies(
                 fes.append(fe)
                 errs.append(err)
 
+        # TODO - I think we can just return the mean of the fes and the stderrs, rather than passing n_bootstrap values around
         return fes, errs, f_works, r_works
 
     if cache_dir is not None:
@@ -168,7 +169,7 @@ def free_energies(
             raise ValueError(f"No work values found for {RUN}")
         return df["GEN"].str[3:].astype(int).max()
 
-    fig, axes = plt.subplots(ncols=2, nrows=1, figsize=(10, 5))
+    fig, axes = plt.subplots(ncols=2, nrows=1, figsize=(7.5,3.25))
 
     def _process_run(RUN):
         def _process_phase(i, phase):
@@ -261,8 +262,6 @@ def free_energies(
             ligand_result[d["end"]] = DDG
             ligand_result_uncertainty[d["end"]] = DDG
 
-
-    _plot_relative_distribution(livand_result.values())
     def _plot_relative_distribution(relative_fes, bins=100):
         """ Plots the distribution of relative free energies
 
@@ -279,33 +278,36 @@ def free_energies(
         plt.xlabel("Relative free energy to ligand 0 / kcal/mol")
         _produce_plot("rel_fe_lig0_hist")
 
-    ### this will be useful for looking at looking at shift in relative FEs over GENS
+    _plot_relative_distribution(ligand_result.values())
 
-    for d in details.values():
-        RUN = d["directory"]
-        if "complex_fes" in d and "solvent_fes" in d:
-            for i in range(_max_gen(RUN)):
-                try:
-                    DDG = (
-                        (
-                            np.mean(d[f"complex_fes_GEN{i}"])
-                            - np.mean(d[f"solvent_fes_GEN{i}"])
-                        )
-                        * kT
-                    ).value_in_unit(unit.kilocalories_per_mole)
-                    dDDG = (
-                        (
-                            np.mean(d[f"complex_dfes_GEN{i}"]) ** 2
-                            + np.mean(d[f"solvent_dfes_GEN{i}"]) ** 2
-                        )
-                        ** 0.5
-                        * kT
-                    ).value_in_unit(unit.kilocalories_per_mole)
-                    plt.errorbar(i, DDG, yerr=dDDG)
-                    plt.scatter(i, DDG)
-                except:
-                    continue
-            _produce_plot(f"fe_delta_{RUN}")
+    ### this will be useful for looking at looking at shift in relative FEs over GENS
+    def _plot_convergence(details):
+        # TODO add plotting of complex and solvent legs independently (shifted to zero) as there might be more repetitions of one than the other
+        for d in details.values():
+            RUN = d["directory"]
+            if "complex_fes" in d and "solvent_fes" in d:
+                for i in range(_max_gen(RUN)):
+                    try:
+                        DDG = (
+                            (
+                                np.mean(d[f"complex_fes_GEN{i}"])
+                                - np.mean(d[f"solvent_fes_GEN{i}"])
+                            )
+                            * kT
+                        ).value_in_unit(unit.kilocalories_per_mole)
+                        dDDG = (
+                            (
+                                np.mean(d[f"complex_dfes_GEN{i}"]) ** 2
+                                + np.mean(d[f"solvent_dfes_GEN{i}"]) ** 2
+                            )
+                            ** 0.5
+                            * kT
+                        ).value_in_unit(unit.kilocalories_per_mole)
+                        plt.errorbar(i, DDG, yerr=dDDG)
+                        plt.scatter(i, DDG)
+                    except:
+                        continue
+                _produce_plot(f"fe_delta_{RUN}")
 
 
 if __name__ == "__main__":
