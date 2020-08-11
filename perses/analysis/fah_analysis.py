@@ -256,7 +256,7 @@ def free_energies(
                 unit.kilocalories_per_mole
             )
             dDDG = (
-                (d["solvent_fes"][1] ** 0.5 + d["complex_fes"][1] ** 0.5) ** 2 * kT
+                (d["solvent_fes"][1] ** 2 + d["complex_fes"][1] ** 2) ** 0.5 * kT
             ).value_in_unit(unit.kilocalories_per_mole)
             ligand_result[d["end"]] = DDG
             ligand_result_uncertainty[d["end"]] = DDG
@@ -295,10 +295,10 @@ def free_energies(
                     ).value_in_unit(unit.kilocalories_per_mole)
                     dDDG = (
                         (
-                            np.mean(d[f"complex_dfes_GEN{i}"]) ** 0.5
-                            + np.mean(d[f"solvent_dfes_GEN{i}"]) ** 0.5
+                            np.mean(d[f"complex_dfes_GEN{i}"]) ** 2
+                            + np.mean(d[f"solvent_dfes_GEN{i}"]) ** 2
                         )
-                        ** 2
+                        ** 0.5
                         * kT
                     ).value_in_unit(unit.kilocalories_per_mole)
                     plt.errorbar(i, DDG, yerr=dDDG)
