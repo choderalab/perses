@@ -15,6 +15,7 @@ import joblib
 import logging
 import os
 from typing import Optional
+from perses.analysis.resample import bootstrap_uncorrelated
 
 
 def _strip_outliers(w, max_value=1e4, n_devs=5):
@@ -111,6 +112,15 @@ def free_energies(
     # load pandas dataframe from FAH
     work = pd.read_pickle(work_file_path)
 
+    # convert columns to numeric
+    for c in [
+        "forward_work",
+        "reverse_work",
+        "forward_final_potential",
+        "reverse_final_potential",
+    ]:
+        work[c] = pd.to_numeric(work[c])
+
     # load the json that contains the information as to what has been computed in each run
     if isinstance(details_file_path, str):
         details_file_path = [details_file_path]
@@ -142,18 +152,17 @@ def free_energies(
         f_works, r_works = _get_works(work, RUN, projects[phase], GEN=f"GEN{gen_id}")
         f_works = _strip_outliers(f_works)
         r_works = _strip_outliers(r_works)
-        fes = []
-        errs = []
 
-        if len(f_works) > 10 and len(r_works) > 10:
-            for _ in range(n_bootstrap):
-                f = random.choices(f_works.values, k=len(f_works))
-                r = random.choices(r_works.values, k=len(r_works))
-                fe, err = BAR(np.asarray(f), np.asarray(r))
-                fes.append(fe)
-                errs.append(err)
+        if len(f_works) < min_num_work_values:
+            raise ValueError(f"less than {min_num_work_values} forward work values")
+        if len(r_works) < min_num_work_values:
+            raise ValueError(f"less than {min_num_work_values} reverse work values")
 
-        return fes, errs, f_works, r_works
+        fe, err = bootstrap_uncorrelated(BAR, n_iters=n_bootstrap)(
+            f_works.values, r_works.values
+        )
+
+        return fe, err, f_works, r_works
 
     if cache_dir is not None:
         # cache results in local directory
@@ -175,16 +184,13 @@ def free_energies(
             all_forward = []
             all_reverse = []
             for gen_id in range(_max_gen(RUN)):
-                fes, errs, f_works, r_works = bootstrap_BAR(RUN, phase, gen_id)
-                d[f"{phase}_fes_GEN{gen_id}"] = fes
-                d[f"{phase}_dfes_GEN{gen_id}"] = errs
+                fe, err, f_works, r_works = bootstrap_BAR(
+                    RUN, phase, gen_id, n_bootstrap
+                )
+                d[f"{phase}_fe_GEN{gen_id}"] = fe
+                d[f"{phase}_dfe_GEN{gen_id}"] = err
                 all_forward.extend(f_works)
                 all_reverse.extend(r_works)
-
-            if len(all_forward) < min_num_work_values:
-                raise ValueError(f"less than {min_num_work_values} forward work values")
-            if len(all_reverse) < min_num_work_values:
-                raise ValueError(f"less than {min_num_work_values} reverse work values")
 
             sns.kdeplot(all_forward, shade=True, color="cornflowerblue", ax=axes[i])
             sns.rugplot(
@@ -287,16 +293,12 @@ def free_energies(
             for i in range(_max_gen(RUN)):
                 try:
                     DDG = (
-                        (
-                            np.mean(d[f"complex_fes_GEN{i}"])
-                            - np.mean(d[f"solvent_fes_GEN{i}"])
-                        )
-                        * kT
+                        (d[f"complex_fe_GEN{i}"] - d[f"solvent_fe_GEN{i}"]) * kT
                     ).value_in_unit(unit.kilocalories_per_mole)
                     dDDG = (
                         (
-                            np.mean(d[f"complex_dfes_GEN{i}"]) ** 0.5
-                            + np.mean(d[f"solvent_dfes_GEN{i}"]) ** 0.5
+                            d[f"complex_dfe_GEN{i}"] ** 0.5
+                            + d[f"solvent_dfe_GEN{i}"] ** 0.5
                         )
                         ** 2
                         * kT
