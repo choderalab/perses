@@ -13,6 +13,7 @@ from openmmtools.constants import kB
 import random
 import joblib
 import logging
+from fah_analysis import *
 import os
 from typing import Optional
 
@@ -130,13 +131,6 @@ def free_energies(
 
     projects = {"complex": complex_project, "solvent": solvent_project}
 
-    def _produce_plot(name):
-        if show_plots:
-            plt.show()
-        else:
-            fname = os.extsep.join([name, plot_file_format])
-            logging.info(f"Writing {fname}")
-            plt.savefig(fname)
 
     def _bootstrap_BAR(run, phase, gen_id, n_bootstrap):
         f_works, r_works = _get_works(work, RUN, projects[phase], GEN=f"GEN{gen_id}")
@@ -169,8 +163,6 @@ def free_energies(
             raise ValueError(f"No work values found for {RUN}")
         return df["GEN"].str[3:].astype(int).max()
 
-    fig, axes = plt.subplots(ncols=2, nrows=1, figsize=(7.5,3.25))
-
     def _process_run(RUN):
         def _process_phase(i, phase):
             all_forward = []
@@ -187,38 +179,6 @@ def free_energies(
             if len(all_reverse) < min_num_work_values:
                 raise ValueError(f"less than {min_num_work_values} reverse work values")
 
-            sns.kdeplot(all_forward, shade=True, color="cornflowerblue", ax=axes[i])
-            sns.rugplot(
-                all_forward,
-                ax=axes[i],
-                color="cornflowerblue",
-                alpha=0.5,
-                label=f"forward : N={len(f_works)}",
-            )
-            sns.rugplot(
-                all_forward,
-                ax=axes[i],
-                color="darkblue",
-                label=f"forward (gen0) : N={len(f_works)}",
-            )
-            sns.rugplot(
-                [-x for x in all_reverse],
-                ax=axes[i],
-                color="mediumvioletred",
-                label=f"reverse (gen0) : N={len(r_works)}",
-            )
-            sns.kdeplot(
-                [-x for x in all_reverse], shade=True, color="hotpink", ax=axes[i]
-            )
-            sns.rugplot(
-                [-x for x in all_reverse],
-                ax=axes[i],
-                color="hotpink",
-                alpha=0.5,
-                label=f"reverse : N={len(r_works)}",
-            )
-            axes[i].set_title(phase)
-
             # TODO add bootstrapping here
             d[f"{phase}_fes"] = BAR(np.asarray(all_forward), np.asarray(all_reverse))
 
@@ -229,14 +189,8 @@ def free_energies(
                 logging.warn(f"Can't calculate {RUN} {phase}: {e}")
                 continue
 
-        fig.suptitle(
-            f"{RUN}: {d['protein'].split('_')[0]} {d['start']}-{d['end']}",
-            fontsize=16,
-        )
-        fig.subplots_adjust(top=0.9, wspace=0.15)
-        axes[0].legend()
-        axes[1].legend()
-        _produce_plot(f"{RUN}")
+        title = f"{RUN}: {d['protein'].split('_')[0]} {d['start']}-{d['end']}"
+        plot_two_work_distribution(title=title)
 
     for d in tqdm(details.values()):
         RUN = d["directory"]
@@ -248,7 +202,6 @@ def free_energies(
 
     ligand_result = {0: 0.0}
     ligand_result_uncertainty = {0: 0.0}
-
 
     # TODO -- this assumes that everything is star-shaped, linked to ligand 0. If it's not, the values in ligand_result and ligand_result_uncertainty won't be correct.
     for d in details.values():
@@ -262,52 +215,7 @@ def free_energies(
             ligand_result[d["end"]] = DDG
             ligand_result_uncertainty[d["end"]] = DDG
 
-    def _plot_relative_distribution(relative_fes, bins=100):
-        """ Plots the distribution of relative free energies
-
-        Parameters
-        ----------
-        relative_fes : list
-            Relative free energies in kcal/mol
-        bins : int, default=100
-            Number of bins for histogramming
-
-
-        """
-        plt.hist(relative_fes, bins=bins)
-        plt.xlabel("Relative free energy to ligand 0 / kcal/mol")
-        _produce_plot("rel_fe_lig0_hist")
-
     _plot_relative_distribution(ligand_result.values())
-
-    ### this will be useful for looking at looking at shift in relative FEs over GENS
-    def _plot_convergence(details):
-        # TODO add plotting of complex and solvent legs independently (shifted to zero) as there might be more repetitions of one than the other
-        for d in details.values():
-            RUN = d["directory"]
-            if "complex_fes" in d and "solvent_fes" in d:
-                for i in range(_max_gen(RUN)):
-                    try:
-                        DDG = (
-                            (
-                                np.mean(d[f"complex_fes_GEN{i}"])
-                                - np.mean(d[f"solvent_fes_GEN{i}"])
-                            )
-                            * kT
-                        ).value_in_unit(unit.kilocalories_per_mole)
-                        dDDG = (
-                            (
-                                np.mean(d[f"complex_dfes_GEN{i}"]) ** 2
-                                + np.mean(d[f"solvent_dfes_GEN{i}"]) ** 2
-                            )
-                            ** 0.5
-                            * kT
-                        ).value_in_unit(unit.kilocalories_per_mole)
-                        plt.errorbar(i, DDG, yerr=dDDG)
-                        plt.scatter(i, DDG)
-                    except:
-                        continue
-                _produce_plot(f"fe_delta_{RUN}")
 
 
 if __name__ == "__main__":
