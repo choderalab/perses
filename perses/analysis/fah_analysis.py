@@ -269,7 +269,7 @@ def free_energies(
             ligand_result[d["end"]] = DDG
             ligand_result_uncertainty[d["end"]] = DDG
 
-    _plot_relative_distribution(livand_result.values())
+    _plot_relative_distribution(ligand_result.values())
 
     def _plot_relative_distribution(relative_fes, bins=100):
         """ Plots the distribution of relative free energies
