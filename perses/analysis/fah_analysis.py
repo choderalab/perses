@@ -235,7 +235,7 @@ def free_energies(
             try:
                 _process_phase(i, phase)
             except ValueError as e:
-                logging.warn(f"Can't calculate {RUN} {phase}: {e}")
+                logging.warning(f"Can't calculate {RUN} {phase}: {e}")
                 continue
 
         fig.suptitle(
@@ -251,7 +251,7 @@ def free_energies(
         try:
             _process_run(RUN)
         except ValueError as e:
-            logging.warn(f"Can't calculate {RUN}: {e}")
+            logging.warning(f"Can't calculate {RUN}: {e}")
             continue
 
     ligand_result = {0: 0.0}
