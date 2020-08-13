@@ -46,22 +46,21 @@ def bootstrap(f, n_iters=100, seed=None):
     """
     Transforms a function that computes a sample statistic to a
     function that estimates the corresponding population statistic and
-    uncertainty estimate via bootstrap resampling.
+    uncertainty via bootstrap.
 
     In this version, the positional arguments to the function are
     assumed to be equal-length arrays, with the ith index of the jth
     array representing quantity j measured at observation i; the data
-    are assumed to be correlated across quantities at a fixed
-    observation, and uncorrelated across observations at a fixed
-    quantity.
+    are assumed correlated across quantities at a fixed observation,
+    and uncorrelated across observations of a fixed quantity.
 
     Parameters
     ----------
     f : callable
         Function of one or more arrays returning a scalar. The
-        positional arguments are assumed to be 1-d arrays to be
-        resampled at each iteration. Keyword arguments are passed
-        through but are not resampled.
+        positional arguments are assumed to be 1-d arrays of
+        consistent length to be resampled at each iteration. Keyword
+        arguments are passed through but are not resampled.
 
     n_iter : int
         Number of bootstrap iterations
@@ -73,7 +72,7 @@ def bootstrap(f, n_iters=100, seed=None):
     -------
     callable
         Function with the same input signature as `f`, returning a
-        pair of (bootstrap estimate, uncertainty)
+        pair of scalars: bootstrap estimate, uncertainty
 
     """
 
@@ -97,13 +96,13 @@ def bootstrap_uncorrelated(f, n_iters=100):
     """
     Transforms a function that computes a sample statistic to a
     function that estimates the corresponding population statistic and
-    uncertainty estimate via bootstrap resampling.
+    uncertainty via bootstrap.
 
     In this version, the positional arguments to the function are
-    arrays of arbitrary length (not necessarily consistent), with
-    the ith index of the jth array representing the ith observation
-    in the jth experiment; the data are assumed to be uncorrelated
-    across both observations and experiements.
+    arrays of arbitrary length (not necessarily consistent), with the
+    ith index of the jth array representing the ith observation of the
+    jth independent experiment; the data are assumed to be
+    uncorrelated across both observations and experiements.
 
     Parameters
     ----------
