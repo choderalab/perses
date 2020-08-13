@@ -127,7 +127,7 @@ def free_energies(
 
     details = {}
     for path in details_file_path:
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             new = json.load(f)
             details = {**details, **new}
 
@@ -239,8 +239,7 @@ def free_energies(
                 continue
 
         fig.suptitle(
-            f"{RUN}: {d['protein'].split('_')[0]} {d['start']}-{d['end']}",
-            fontsize=16,
+            f"{RUN}: {d['protein'].split('_')[0]} {d['start']}-{d['end']}", fontsize=16,
         )
         fig.subplots_adjust(top=0.9, wspace=0.15)
         axes[0].legend()
@@ -258,7 +257,6 @@ def free_energies(
     ligand_result = {0: 0.0}
     ligand_result_uncertainty = {0: 0.0}
 
-
     # TODO -- this assumes that everything is star-shaped, linked to ligand 0. If it's not, the values in ligand_result and ligand_result_uncertainty won't be correct.
     for d in details.values():
         if "complex_fes" in d and "solvent_fes" in d:
@@ -271,8 +269,8 @@ def free_energies(
             ligand_result[d["end"]] = DDG
             ligand_result_uncertainty[d["end"]] = DDG
 
-
     _plot_relative_distribution(livand_result.values())
+
     def _plot_relative_distribution(relative_fes, bins=100):
         """ Plots the distribution of relative free energies
 
