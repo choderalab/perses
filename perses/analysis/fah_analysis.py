@@ -13,9 +13,13 @@ from openmmtools.constants import kB
 import random
 import joblib
 import logging
-from fah_analysis import *
+from perses.analysis.fah_plotting import *
 import os
 from typing import Optional
+
+
+_logger = logging.getLogger()
+_logger.setLevel(logging.INFO)
 
 
 def _strip_outliers(w, max_value=1e4, n_devs=5):
@@ -23,8 +27,8 @@ def _strip_outliers(w, max_value=1e4, n_devs=5):
 
     Parameters
     ----------
-    w : list(float)
-        List of works
+    w : np.array
+        array of works
     max_value : int, default=1E4
         Work values larger than this will be discarded
     n_devs : int, default=5
@@ -36,8 +40,8 @@ def _strip_outliers(w, max_value=1e4, n_devs=5):
         Tidied list of work values
 
     """
-    w = w[w.abs() < max_value]
-    return w[(w - w.mean()).abs() < n_devs * w.std()]
+    w = w[np.abs(w) < max_value]
+    return np.asarray(w[np.abs((w - np.mean(w))) < n_devs * np.std(w)])
 
 
 def _get_works(df, run, project, GEN=None):
@@ -110,15 +114,19 @@ def free_energies(
     """
 
     # load pandas dataframe from FAH
+    _logger.info(f'Loading FAH output from {work_file_path}')
     work = pd.read_pickle(work_file_path)
+    _logger.info(f'{work.size} switches loaded')
 
     # load the json that contains the information as to what has been computed in each run
     if isinstance(details_file_path, str):
         details_file_path = [details_file_path]
 
+    _logger.info('Loading simulation parameters from...')
     details = {}
     for path in details_file_path:
         with open(path, 'r') as f:
+            _logger.info(f'\t {path}')
             new = json.load(f)
             details = {**details, **new}
 
@@ -131,24 +139,23 @@ def free_energies(
 
     projects = {"complex": complex_project, "solvent": solvent_project}
 
-
-    def _bootstrap_BAR(run, phase, gen_id, n_bootstrap):
-        f_works, r_works = _get_works(work, RUN, projects[phase], GEN=f"GEN{gen_id}")
+    def _bootstrap_BAR(f_works, r_works, n_bootstrap):
+        if isinstance(f_works, list):
+            f_works = np.array(f_works)
+        if isinstance(r_works, list):
+            r_works = np.array(r_works)
         f_works = _strip_outliers(f_works)
         r_works = _strip_outliers(r_works)
         fes = []
-        errs = []
 
         if len(f_works) > 10 and len(r_works) > 10:
             for _ in range(n_bootstrap):
-                f = random.choices(f_works.values, k=len(f_works))
-                r = random.choices(r_works.values, k=len(r_works))
-                fe, err = BAR(np.asarray(f), np.asarray(r))
+                f = random.choices(f_works, k=len(f_works))
+                r = random.choices(r_works, k=len(r_works))
+                fe, _ = BAR(np.asarray(f), np.asarray(r))
                 fes.append(fe)
-                errs.append(err)
 
-        # TODO - I think we can just return the mean of the fes and the stderrs, rather than passing n_bootstrap values around
-        return fes, errs, f_works, r_works
+        return fes
 
     if cache_dir is not None:
         # cache results in local directory
@@ -168,19 +175,30 @@ def free_energies(
             all_forward = []
             all_reverse = []
             for gen_id in range(_max_gen(RUN)):
-                fes, errs, f_works, r_works = bootstrap_BAR(RUN, phase, gen_id)
-                d[f"{phase}_fes_GEN{gen_id}"] = fes
-                d[f"{phase}_dfes_GEN{gen_id}"] = errs
-                all_forward.extend(f_works)
-                all_reverse.extend(r_works)
+                f_works, r_works = _get_works(work, RUN, projects[phase], GEN=f"GEN{gen_id}")
+                if len(f_works) > min_num_work_values and len(r_works) > min_num_work_values:
+                    fes = bootstrap_BAR(f_works, r_works, n_bootstrap)
+                    low, high = _CI(fes)
+                    d[f"{phase}_fes_GEN{gen_id}"] = (np.mean(fes), low, high)
+                    d[f"{phase}_dfes_GEN{gen_id}"] = np.std(fes)
+                    all_forward.extend(f_works)
+                    all_reverse.extend(r_works)
 
             if len(all_forward) < min_num_work_values:
-                raise ValueError(f"less than {min_num_work_values} forward work values")
+                raise ValueError(f"fewer than {min_num_work_values} forward work values")
             if len(all_reverse) < min_num_work_values:
-                raise ValueError(f"less than {min_num_work_values} reverse work values")
+                raise ValueError(f"fewer than {min_num_work_values} reverse work values")
 
             # TODO add bootstrapping here
-            d[f"{phase}_fes"] = BAR(np.asarray(all_forward), np.asarray(all_reverse))
+            d[f"{phase}_fes"] = bootstrap_BAR(all_forward, all_reverse, n_bootstrap)
+
+        def _CI(values, ci=0.95):
+            values = np.sort(values)
+            low_frac = (1.0-ci)/2.0
+            high_frac = 1.0 - low_frac
+            low = values[int(np.floor(len(values)*low_frac))]
+            high = values[int(np.ceil(len(values)*high_frac))]
+            return low, high
 
         for i, phase in enumerate(projects.keys()):
             try:
@@ -189,8 +207,23 @@ def free_energies(
                 logging.warn(f"Can't calculate {RUN} {phase}: {e}")
                 continue
 
-        title = f"{RUN}: {d['protein'].split('_')[0]} {d['start']}-{d['end']}"
-        plot_two_work_distribution(title=title)
+            try:
+                binding = np.asarray(d[f"solvent_fes"]) - np.asarray(d[f"complex_fes"])
+                low_binding, high_binding = _CI(binding)
+                d['binding_fe'] = (np.mean(binding), low_binding, high_binding)
+                d['binding_dfe'] = np.std(binding)
+                low_sol, high_sol = _CI(d[f"solvent_fes"])
+                d[f"solvent_fes"] = (np.mean(d[f"solvent_fes"]), low_sol, high_sol)
+                d[f"solvent_dfes"] = np.std(d[f"solvent_fes"])
+                low_com, high_com = _CI(d[f"complex_fes"])
+                d[f"complex_fes"] = (np.mean(d[f"complex_fes"]), low_com, high_com)
+                d[f"complex_dfes"] = np.std(d[f"complex_fes"])
+
+            except KeyError:
+                continue
+
+        # title = f"{RUN}: {d['protein'].split('_')[0]} {d['start']}-{d['end']}"
+        # plot_two_work_distribution(title=title)
 
     for d in tqdm(details.values()):
         RUN = d["directory"]
@@ -200,22 +233,53 @@ def free_energies(
             logging.warn(f"Can't calculate {RUN}: {e}")
             continue
 
-    ligand_result = {0: 0.0}
-    ligand_result_uncertainty = {0: 0.0}
+    #
+    # # TODO I think this belongs somewhere else, but not sure where
+    # ligand_result = {0: 0.0}
+    # ligand_result_uncertainty = {0: 0.0}
+    #
+    # # TODO -- this assumes that everything is star-shaped, linked to ligand 0. If it's not, the values in ligand_result and ligand_result_uncertainty won't be correct.
+    # for d in details.values():
+    #     if "complex_fes" in d and "solvent_fes" in d:
+    #         DDG = ((d["complex_fes"][0] - d["solvent_fes"][0]) * kT).value_in_unit(
+    #             unit.kilocalories_per_mole
+    #         )
+    #         dDDG = (
+    #             (d["solvent_fes"][1] ** 2 + d["complex_fes"][1] ** 2) ** 0.5 * kT
+    #         ).value_in_unit(unit.kilocalories_per_mole)
+    #         ligand_result[d["end"]] = DDG
+    #         ligand_result_uncertainty[d["end"]] = DDG
 
-    # TODO -- this assumes that everything is star-shaped, linked to ligand 0. If it's not, the values in ligand_result and ligand_result_uncertainty won't be correct.
-    for d in details.values():
-        if "complex_fes" in d and "solvent_fes" in d:
-            DDG = ((d["complex_fes"][0] - d["solvent_fes"][0]) * kT).value_in_unit(
-                unit.kilocalories_per_mole
-            )
-            dDDG = (
-                (d["solvent_fes"][1] ** 2 + d["complex_fes"][1] ** 2) ** 0.5 * kT
-            ).value_in_unit(unit.kilocalories_per_mole)
-            ligand_result[d["end"]] = DDG
-            ligand_result_uncertainty[d["end"]] = DDG
+    #plot_relative_distribution(ligand_result.values())
 
-    _plot_relative_distribution(ligand_result.values())
+    return details
+
+
+def store_json(contents, filename='analysed.json'):
+    """ Allows jsons with numpy arrays to be stored
+
+    Parameters
+    ----------
+    contents : dict
+        Thing to save to json
+    filename : string, default='analysed.json'
+        filename or path for storage
+
+
+    """
+    import json
+
+    class NumpyArrayEncoder(json.JSONEncoder):
+        def default(self, obj):
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            return json.JSONEncoder.default(self, obj)
+
+    if 'json' not in filename:
+        filename += '.json'
+    with open(filename, 'w') as f:
+        json.dump(contents, f, cls=NumpyArrayEncoder)
+        _logger.info(f'json file saved at {filename}')
 
 
 if __name__ == "__main__":

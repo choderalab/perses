@@ -11,7 +11,7 @@ temperature = temperature_kelvin * unit.kelvin
 kT = kB * temperature
 
 
-def _produce_plot(name, show_plots=False, plot_file_format = "pdf"):
+def _produce_plot(name, show_plots=False, plot_file_format="pdf"):
     if show_plots:
         plt.show()
     else:
@@ -63,7 +63,7 @@ def plot_two_work_distribution(f1, r1, f2, r2, phases=(None, None), title=None):
     _produce_plot('title')
 
 
-def _plot_relative_distribution(relative_fes, bins=100):
+def plot_relative_distribution(relative_fes, bins=100, title="rel_fe_hist"):
     """ Plots the distribution of relative free energies
 
     Parameters
@@ -75,35 +75,68 @@ def _plot_relative_distribution(relative_fes, bins=100):
 
 
     """
-    plt.hist(relative_fes, bins=bins)
+    sns.kdeplot(
+        relative_fes, shade=True, color="hotpink")
+    sns.rugplot(
+        relative_fes,
+        color="hotpink",
+        alpha=0.5,
+        label=f"N={len(relative_fes)}",
+    )
     plt.xlabel("Relative free energy to ligand 0 / kcal/mol")
-    _produce_plot("rel_fe_lig0_hist")
+    _produce_plot(title)
 
 
-### this will be useful for looking at looking at shift in relative FEs over GENS
-def _plot_convergence(results, n_gens=3, title=None):
-    # TODO add plotting of complex and solvent legs independently (shifted to zero) as there might be more repetitions of one than the other
+def plot_convergence(results, n_gens=3, title=None):
     if "complex_fes" in results and "solvent_fes" in results:
+        max_gen = 0
         for i in range(n_gens):
             try:
-                DDG = (
-                    (
-                        np.mean(results[f"complex_fes_GEN{i}"])
-                        - np.mean(results[f"solvent_fes_GEN{i}"])
-                    )
-                    * kT
-                ).value_in_unit(unit.kilocalories_per_mole)
-                dDDG = (
-                    (
-                        np.mean(results[f"complex_dfes_GEN{i}"]) ** 2
-                        + np.mean(results[f"solvent_dfes_GEN{i}"]) ** 2
-                    )
-                    ** 0.5
-                    * kT
-                ).value_in_unit(unit.kilocalories_per_mole)
-                plt.errorbar(i, DDG, yerr=dDDG)
-                plt.scatter(i, DDG)
+                DDG = ((results[f"solvent_fes_GEN{i}"][0]- results[f"complex_fes_GEN{i}"][0])* kT).value_in_unit(unit.kilocalories_per_mole)
+                low = ((results[f"solvent_fes_GEN{i}"][1]- results[f"complex_fes_GEN{i}"][2])* kT).value_in_unit(unit.kilocalories_per_mole)
+                high = ((results[f"solvent_fes_GEN{i}"][2]- results[f"complex_fes_GEN{i}"][1])* kT).value_in_unit(unit.kilocalories_per_mole)
+                plt.scatter(i, DDG, color='green')
+                plt.vlines(i,low,high,color='green')
+                if i > max_gen:
+                    max_gen = i
             except KeyError:
                 continue
-        # TODO add axis labels
-        _produce_plot(f"fe_delta_{title}")
+
+        colors = {'solvent': 'blue', 'complex': 'red'}
+        for phase in ['solvent', 'complex']:
+            y = []
+            low = []
+            high = []
+            for i in range(n_gens):
+                try:
+                    y.append((results[f"{phase}_fes_GEN{i}"][0] * kT)
+                             .value_in_unit(unit.kilocalories_per_mole))
+                    low.append((results[f"{phase}_fes_GEN{i}"][1] * kT)
+                             .value_in_unit(unit.kilocalories_per_mole))
+                    high.append((results[f"{phase}_fes_GEN{i}"][2] * kT)
+                             .value_in_unit(unit.kilocalories_per_mole))
+                    if i > max_gen:
+                        max_gen = i
+                except KeyError:
+                    continue
+            shift = np.mean(y)
+            y = y - shift
+            low = low - shift
+            high = high - shift
+            plt.scatter([i for i in range(0, max_gen+1)],  y,
+                        color=colors[phase],label=phase)
+            for i,_ in enumerate(y):
+                plt.vlines(i,low[i],high[i],color=colors[phase])
+
+        plt.xlabel('GEN')
+        plt.ylabel('Relative free energy /'+r' kcal mol${^-1}$')
+        plt.plot([0, max_gen],
+                 [(results['binding_fe'][0]* kT).value_in_unit(unit.kilocalories_per_mole), (results['binding_fe'][0]* kT).value_in_unit(unit.kilocalories_per_mole)],
+                 color='green', linestyle=":", label='free energy (all GENS)')
+        plt.fill_between([0, max_gen],
+                         (results['binding_fe'][1]* kT).value_in_unit(unit.kilocalories_per_mole),
+                         (results['binding_fe'][2]* kT).value_in_unit(unit.kilocalories_per_mole),
+                         alpha=0.2, color='green')
+        plt.xticks([i for i in range(0, max_gen+1)])
+        plt.legend()
+        _produce_plot(f"fe_convergence_{title}")
