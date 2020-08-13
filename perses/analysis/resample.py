@@ -135,7 +135,7 @@ def bootstrap_uncorrelated(f, n_iters=100, seed=None):
                 for sample_args in islice(
                     zip(
                         *[
-                            [x for (x,) in samples_with_replacement([array], seed=seed)]
+                            (x for (x,) in samples_with_replacement([array], seed=seed))
                             for array in arrays
                         ]
                     ),
