@@ -154,9 +154,13 @@ def free_energies(
         r_works = _strip_outliers(r_works)
 
         if len(f_works) < min_num_work_values:
-            raise ValueError(f"less than {min_num_work_values} forward work values")
+            raise ValueError(
+                f"less than {min_num_work_values} forward work values (got {len(f_works)})"
+            )
         if len(r_works) < min_num_work_values:
-            raise ValueError(f"less than {min_num_work_values} reverse work values")
+            raise ValueError(
+                f"less than {min_num_work_values} reverse work values (got {len(r_works)})"
+            )
 
         fe, err = bootstrap_uncorrelated(BAR, n_iters=n_bootstrap)(
             f_works.values, r_works.values
