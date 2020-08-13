@@ -92,7 +92,7 @@ def bootstrap(f, n_iters=100, seed=None):
     return inner
 
 
-def bootstrap_uncorrelated(f, n_iters=100):
+def bootstrap_uncorrelated(f, n_iters=100, seed=None):
     """
     Transforms a function that computes a sample statistic to a
     function that estimates the corresponding population statistic and
@@ -135,7 +135,7 @@ def bootstrap_uncorrelated(f, n_iters=100):
                 for sample_args in islice(
                     zip(
                         *[
-                            [x for (x,) in samples_with_replacement([array])]
+                            [x for (x,) in samples_with_replacement([array], seed=seed)]
                             for array in arrays
                         ]
                     ),
