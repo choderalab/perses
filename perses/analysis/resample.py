@@ -3,14 +3,22 @@ from functools import wraps
 from itertools import islice
 
 
-def samples_with_replacement(arrays, seed=None):
+def samples_correlated(arrays, seed=None):
     """
-    Resample from a dataset with replacement.
+    Returns an iterator over datasets sampled with replacement from
+    the input, each having the same length as the input.
+
+    For each iteration, the set of rows sampled from each input array
+    is the same. This is useful when the input arrays have the same
+    length and represent correlated measurements.
 
     Parameters
     ----------
     arrays : list of array
         1-d arrays with consistent length
+
+    seed : int, optional
+        Random seed
 
     Returns
     -------
@@ -42,7 +50,71 @@ def samples_with_replacement(arrays, seed=None):
         yield tuple(array[indices] for array in arrays)
 
 
-def bootstrap(f, n_iters=100, seed=None):
+def samples_uncorrelated(arrays, seed=None):
+    """
+    Returns an iterator over datasets sampled with replacement from
+    the input, each having the same length as the input.
+
+    For each iteration, the set of rows sampled from each input array
+    is different. This is useful when the input arrays may have
+    differing lengths and represent uncorrelated measurements.
+
+    Parameters
+    ----------
+    arrays : list of array
+        1-d arrays with consistent length
+
+    seed : int, optional
+        Random seed
+
+    Returns
+    -------
+    iterator of tuple of array
+        Resampled arrays, each with same length as the corresponding input
+    """
+
+    random_state = (
+        np.random.mtrand._rand if seed is None else np.random.RandomState(seed)
+    )
+
+    for i, array in enumerate(arrays):
+        if array.ndim > 1:
+            raise ValueError(
+                f"Arguments must have dimension 1, but argument {i} has "
+                f"dimension {array.ndim}."
+            )
+
+    while True:
+        yield tuple(
+            random_state.choice(array, replace=True, size=len(array))
+            for array in arrays
+        )
+
+
+def _bootstrap(get_samples, f, n_iters, seed):
+    @wraps(f)
+    def inner(*arrays, **kwargs):
+
+        args_samples = get_samples(arrays, seed=seed)
+        check_args = next(iter(args_samples))
+        check_result = f(*check_args, **kwargs)
+
+        if not np.isscalar(check_result):
+            raise ValueError(
+                f"Function passed to bootstrap should return a scalar, "
+                f"but got a {np.ndim(check_result)}-dimensional array"
+            )
+
+        samples = np.array(
+            [f(*args_sample, **kwargs) for args_sample in islice(args_samples, n_iters)]
+        )
+
+        return samples.mean(), samples.std()
+
+    return inner
+
+
+def bootstrap_correlated(f, n_iters=100, seed=None):
     """
     Transforms a function that computes a sample statistic to a
     function that estimates the corresponding population statistic and
@@ -65,7 +137,7 @@ def bootstrap(f, n_iters=100, seed=None):
     n_iter : int
         Number of bootstrap iterations
 
-    seed : int
+    seed : int, optional
         Random seed
 
     Returns
@@ -76,20 +148,7 @@ def bootstrap(f, n_iters=100, seed=None):
 
     """
 
-    @wraps(f)
-    def inner(*arrays, **kwargs):
-
-        samples = np.array(
-            [
-                f(*sample_args, **kwargs)
-                for sample_args in islice(
-                    samples_with_replacement(arrays, seed=seed), n_iters
-                )
-            ]
-        )
-        return samples.mean(), samples.std()
-
-    return inner
+    return _bootstrap(samples_correlated, f, n_iters, seed)
 
 
 def bootstrap_uncorrelated(f, n_iters=100, seed=None):
@@ -102,7 +161,7 @@ def bootstrap_uncorrelated(f, n_iters=100, seed=None):
     arrays of arbitrary length (not necessarily consistent), with the
     ith index of the jth array representing the ith observation of the
     jth independent experiment; the data are assumed to be
-    uncorrelated across both observations and experiements.
+    uncorrelated across both observations and experiments.
 
     Parameters
     ----------
@@ -115,7 +174,7 @@ def bootstrap_uncorrelated(f, n_iters=100, seed=None):
     n_iter : int
         Number of bootstrap iterations
 
-    seed : int
+    seed : int, optional
         Random seed
 
     Returns
@@ -126,23 +185,4 @@ def bootstrap_uncorrelated(f, n_iters=100, seed=None):
 
     """
 
-    @wraps(f)
-    def inner(*arrays, **kwargs):
-
-        samples = np.array(
-            [
-                f(*sample_args, **kwargs)
-                for sample_args in islice(
-                    zip(
-                        *[
-                            (x for (x,) in samples_with_replacement([array], seed=seed))
-                            for array in arrays
-                        ]
-                    ),
-                    n_iters,
-                )
-            ]
-        )
-        return samples.mean(), samples.std()
-
-    return inner
+    return _bootstrap(samples_uncorrelated, f, n_iters, seed)
