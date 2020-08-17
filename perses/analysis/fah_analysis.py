@@ -75,6 +75,13 @@ def _get_works(df, run, project, GEN=None):
     return f, r
 
 
+def _ci(values, ci=0.95):
+    low_frac = (1.0 - ci) / 2.0
+    high_frac = 1.0 - low_frac
+    low, high = np.percentile(values, [low_frac, high_frac])
+    return low, high
+
+
 def free_energies(
     details_file_path: list,
     work_file_path: str,
@@ -186,7 +193,7 @@ def free_energies(
             all_reverse = []
             for gen_id in range(_max_gen(RUN)):
                 fes, f_works, r_works = bootstrap_BAR(f_works, r_works, n_bootstrap)
-                low, high = _CI(fes)
+                low, high = _ci(fes)
                 d[f"{phase}_fes_GEN{gen_id}"] = (np.mean(fes), low, high)
                 d[f"{phase}_dfes_GEN{gen_id}"] = np.std(fes)
                 all_forward.extend(f_works)
@@ -198,15 +205,7 @@ def free_energies(
                 raise ValueError(f"fewer than {min_num_work_values} reverse work values")
 
             # TODO add bootstrapping here
-            d[f"{phase}_fes"] = bootstrap_BAR(all_forward, all_reverse, n_bootstrap)
-
-        def _CI(values, ci=0.95):
-            values = np.sort(values)
-            low_frac = (1.0-ci)/2.0
-            high_frac = 1.0 - low_frac
-            low = values[int(np.floor(len(values)*low_frac))]
-            high = values[int(np.ceil(len(values)*high_frac))]
-            return low, high
+            d[f"{phase}_fes"], _, _ = bootstrap_BAR(all_forward, all_reverse, n_bootstrap)
 
         for i, phase in enumerate(projects.keys()):
             try:
@@ -217,13 +216,13 @@ def free_energies(
 
             try:
                 binding = np.asarray(d[f"solvent_fes"]) - np.asarray(d[f"complex_fes"])
-                low_binding, high_binding = _CI(binding)
+                low_binding, high_binding = _ci(binding)
                 d['binding_fe'] = (np.mean(binding), low_binding, high_binding)
                 d['binding_dfe'] = np.std(binding)
-                low_sol, high_sol = _CI(d[f"solvent_fes"])
+                low_sol, high_sol = _ci(d[f"solvent_fes"])
                 d[f"solvent_fes"] = (np.mean(d[f"solvent_fes"]), low_sol, high_sol)
                 d[f"solvent_dfes"] = np.std(d[f"solvent_fes"])
-                low_com, high_com = _CI(d[f"complex_fes"])
+                low_com, high_com = _ci(d[f"complex_fes"])
                 d[f"complex_fes"] = (np.mean(d[f"complex_fes"]), low_com, high_com)
                 d[f"complex_dfes"] = np.std(d[f"complex_fes"])
 
