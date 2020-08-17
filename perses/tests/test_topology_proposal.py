@@ -211,7 +211,7 @@ def generate_atp(phase = 'vacuum'):
 
     if phase == 'solvent':
         modeller = app.Modeller(atp.topology, atp.positions)
-        modeller.addSolvent(system_generator._forcefield, model='tip3p', padding=9*unit.angstroms, ionicStrength=0.15*unit.molar)
+        modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9*unit.angstroms, ionicStrength=0.15*unit.molar)
         solvated_topology = modeller.getTopology()
         solvated_positions = modeller.getPositions()
 
