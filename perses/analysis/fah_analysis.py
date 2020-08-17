@@ -16,6 +16,7 @@ import logging
 from perses.analysis.fah_plotting import *
 import os
 from typing import Optional
+from perses.analysis.resample import bootstrap_uncorrelated
 
 
 _logger = logging.getLogger()
@@ -118,6 +119,15 @@ def free_energies(
     work = pd.read_pickle(work_file_path)
     _logger.info(f'{work.size} switches loaded')
 
+    # convert columns to numeric
+    for c in [
+        "forward_work",
+        "reverse_work",
+        "forward_final_potential",
+        "reverse_final_potential",
+    ]:
+        work[c] = pd.to_numeric(work[c])
+
     # load the json that contains the information as to what has been computed in each run
     if isinstance(details_file_path, str):
         details_file_path = [details_file_path]
@@ -204,7 +214,7 @@ def free_energies(
             try:
                 _process_phase(i, phase)
             except ValueError as e:
-                logging.warn(f"Can't calculate {RUN} {phase}: {e}")
+                logging.warning(f"Can't calculate {RUN} {phase}: {e}")
                 continue
 
             try:
@@ -230,7 +240,7 @@ def free_energies(
         try:
             _process_run(RUN)
         except ValueError as e:
-            logging.warn(f"Can't calculate {RUN}: {e}")
+            logging.warning(f"Can't calculate {RUN}: {e}")
             continue
 
     #
