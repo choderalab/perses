@@ -149,23 +149,23 @@ def free_energies(
 
     projects = {"complex": complex_project, "solvent": solvent_project}
 
-    def _bootstrap_BAR(f_works, r_works, n_bootstrap):
-        if isinstance(f_works, list):
-            f_works = np.array(f_works)
-        if isinstance(r_works, list):
-            r_works = np.array(r_works)
+    def _bootstrap_BAR(run, phase, gen_id, n_bootstrap):
+        f_works, r_works = _get_works(work, RUN, projects[phase], GEN=f"GEN{gen_id}")
         f_works = _strip_outliers(f_works)
         r_works = _strip_outliers(r_works)
-        fes = []
 
-        if len(f_works) > 10 and len(r_works) > 10:
-            for _ in range(n_bootstrap):
-                f = random.choices(f_works, k=len(f_works))
-                r = random.choices(r_works, k=len(r_works))
-                fe, _ = BAR(np.asarray(f), np.asarray(r))
-                fes.append(fe)
+        if len(f_works) < min_num_work_values:
+            raise ValueError(
+                f"less than {min_num_work_values} forward work values (got {len(f_works)})"
+            )
+        if len(r_works) < min_num_work_values:
+            raise ValueError(
+                f"less than {min_num_work_values} reverse work values (got {len(r_works)})"
+            )
 
-        return fes
+        fes = islice(samples_uncorrelated(f_works.values, r_works.values), n_bootstrap)
+
+        return fes, f_works, r_works
 
     if cache_dir is not None:
         # cache results in local directory
@@ -185,14 +185,12 @@ def free_energies(
             all_forward = []
             all_reverse = []
             for gen_id in range(_max_gen(RUN)):
-                f_works, r_works = _get_works(work, RUN, projects[phase], GEN=f"GEN{gen_id}")
-                if len(f_works) > min_num_work_values and len(r_works) > min_num_work_values:
-                    fes = bootstrap_BAR(f_works, r_works, n_bootstrap)
-                    low, high = _CI(fes)
-                    d[f"{phase}_fes_GEN{gen_id}"] = (np.mean(fes), low, high)
-                    d[f"{phase}_dfes_GEN{gen_id}"] = np.std(fes)
-                    all_forward.extend(f_works)
-                    all_reverse.extend(r_works)
+                fes, f_works, r_works = bootstrap_BAR(f_works, r_works, n_bootstrap)
+                low, high = _CI(fes)
+                d[f"{phase}_fes_GEN{gen_id}"] = (np.mean(fes), low, high)
+                d[f"{phase}_dfes_GEN{gen_id}"] = np.std(fes)
+                all_forward.extend(f_works)
+                all_reverse.extend(r_works)
 
             if len(all_forward) < min_num_work_values:
                 raise ValueError(f"fewer than {min_num_work_values} forward work values")
