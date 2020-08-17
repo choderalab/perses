@@ -144,7 +144,7 @@ def bootstrap_correlated(f, n_iters=100, seed=None):
     -------
     callable
         Function with the same input signature as `f`, returning a
-        pair of scalars: bootstrap estimate, uncertainty
+        pair of scalars: (estimate, error)
 
     """
 
@@ -181,7 +181,7 @@ def bootstrap_uncorrelated(f, n_iters=100, seed=None):
     -------
     callable
         Function with the same input signature as `f`, returning a
-        pair of (bootstrap estimate, uncertainty)
+        pair of scalars: (estimate, error)
 
     """
 
