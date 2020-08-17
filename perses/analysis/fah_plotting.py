@@ -140,3 +140,50 @@ def plot_convergence(results, n_gens=3, title=None):
         plt.xticks([i for i in range(0, max_gen+1)])
         plt.legend()
         _produce_plot(f"fe_convergence_{title}")
+
+
+def plot_cumulative_distributions(results, max=5, cmap='PiYG', n_bins=100,
+                                  markers=[-2, -1, 0, 1, 2],
+                                  title='Cumulative distribution'):
+    """Plots cumulative distribution of ligand affinities
+
+    Parameters
+    ----------
+    results : list(float)
+        List of affinities to plot
+    max : int, default=5
+        Maximum affinity to plot, saves plotting boring plateaus
+    cmap : str, default='PiYG'
+        string name of colormap to use
+    n_bins : int, default=100
+        Number of bins to use
+    markers : list(float), default=range(-2,3)
+        Affinity values at which to label
+    title : str, default='Cumulative distribution'
+        Title to label plot
+
+    """
+    results = [x for x in results if x < max]
+
+    # the colormap could be a kwarg
+    cm = plt.cm.get_cmap(cmap)
+
+    # Get the histogramp
+    Y, X = np.histogram(list(results), n_bins)
+    Y = np.cumsum(Y)
+    x_span = X.max()-X.min()
+    C = [cm(((X.max()-x)/x_span)) for x in X]
+
+    plt.bar(X[:-1], Y, color=C, width=X[1]-X[0], edgecolor='k')
+
+    for v in markers:
+        plt.vlines(-v, 0, max(Y), 'grey', linestyles='dashed')
+        plt.text(v-0.5, 0.8*max(Y),
+                 f"$N$ = {len([x for x in results if x < v])}",
+                 rotation=90,
+                 verticalalignment='center',
+                 color='green')
+    plt.xlabel('Affinity relative to ligand 0 / '+r'kcal mol$^{-1}$')
+    plt.ylabel('Cumulative $N$ ligands')
+    plt.title(title)
+    _produce_plot(f"cumulative_{title}")
