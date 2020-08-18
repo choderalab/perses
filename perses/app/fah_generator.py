@@ -287,7 +287,7 @@ def run_neq_fah_setup(ligand_file,
         if phase == 'complex':
             phase_dir = f"{setup_options['complex_projid']}/RUNS"
         if phase == 'vacuum':
-            phase_dir = 'VACUUM/RUNS'
+             phase_dir = f"{setup_options['vacuum_projid']}/RUNS"
         if phase == 'apo':
             phase_dir = f"{setup_options['apo_projid']}/RUNS"
         dir = os.path.join(os.getcwd(), phase_dir, trajectory_directory)
@@ -384,19 +384,22 @@ def run(yaml_filename=None):
     yaml_file.close()
 
     import os
-    # make master directories
-    if not os.path.exists(f"{setup_options['complex_projid']}"):
-        os.makedirs(f"{setup_options['complex_projid']}/RUNS/")
-    if not os.path.exists(f"{setup_options['solvent_projid']}"):
-        os.makedirs(f"{setup_options['solvent_projid']}/RUNS/")
-    if not os.path.exists(f"{setup_options['apo_projid']}"):
-        os.makedirs(f"{setup_options['apo_projid']}/RUNS/")
-    if not os.path.exists('VACUUM'):
-        os.makedirs('VACUUM/RUNS/')
-
-    # make run directories
-    os.makedirs(f"{setup_options['complex_projid']}/RUNS/{setup_options['trajectory_directory']}")
-    os.makedirs(f"{setup_options['solvent_projid']}/RUNS/{setup_options['trajectory_directory']}")
-    os.makedirs(f"VACUUM/RUNS/{setup_options['trajectory_directory']}")
+    # make master and run directories
+    if 'complex_projid' in setup_options:
+        if not os.path.exists(f"{setup_options['complex_projid']}"):
+            os.makedirs(f"{setup_options['complex_projid']}/RUNS/")
+            os.makedirs(f"{setup_options['complex_projid']}/RUNS/{setup_options['trajectory_directory']}")
+    if 'solvent_projid' in setup_options:
+        if not os.path.exists(f"{setup_options['solvent_projid']}"):
+            os.makedirs(f"{setup_options['solvent_projid']}/RUNS/")
+            os.makedirs(f"{setup_options['solvent_projid']}/RUNS/{setup_options['trajectory_directory']}")
+    if 'apo_projid' in setup_options:
+        if not os.path.exists(f"{setup_options['apo_projid']}"):
+            os.makedirs(f"{setup_options['apo_projid']}/RUNS/")
+            os.makedirs(f"{setup_options['apo_projid']}/RUNS/{setup_options['trajectory_directory']}")
+    if 'vacuum_projid' in setup_options:
+        if not os.path.exists(f"{setup_options['vacuum_projid']}"):
+            os.makedirs(f"{setup_options['vacuum_projid']}/RUNS/")
+            os.makedirs(f"{setup_options['vacuum_projid']}/RUNS/{setup_options['trajectory_directory']}")
 
     run_neq_fah_setup(**setup_options)
