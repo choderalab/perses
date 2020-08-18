@@ -46,8 +46,8 @@ class Visualization(object):
     v.load()
     v.format(zoom_distance=3, rotate_x_angle=270, rotate_y_angle=180, rotate_z_angle=270)
     v.save_frames(outfile_prefix="output/frame")
-    # frames = ["output/frame-%05d.png" % (i) for i in range(200)] # Create list of file paths for the pngs
-    # v.save_mp4(frames)
+    frames = ["output/frame-%05d.png" % (i) for i in range(200)] # Create list of file paths for the pngs
+    v.save_mp4(frames)
 
     # Small molecule transformation example:
     v = Visualization("old.pdb", new.pdb", "C", traj_type="dcd")
@@ -66,7 +66,6 @@ class Visualization(object):
                         mutated_residue=None,
                         ligand_chain=None,):
         """
-        Load trajectory.
         Note: the pdb and trajectory names should be the same, only differing in file extension.
 
         Parameters
