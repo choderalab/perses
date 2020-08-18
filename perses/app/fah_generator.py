@@ -287,7 +287,7 @@ def run_neq_fah_setup(ligand_file,
         if phase == 'complex':
             phase_dir = f"{setup_options['complex_projid']}/RUNS"
         if phase == 'vacuum':
-             phase_dir = f"{setup_options['vacuum_projid']}/RUNS"
+            phase_dir = f"{setup_options['vacuum_projid']}/RUNS"
         if phase == 'apo':
             phase_dir = f"{setup_options['apo_projid']}/RUNS"
         dir = os.path.join(os.getcwd(), phase_dir, trajectory_directory)
