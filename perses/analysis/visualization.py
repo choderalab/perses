@@ -1,5 +1,7 @@
 """
 Visualization tools for perses (protein mutations or small molecule transformations).
+Requires PDB and trajectory (.dcd or .xtc) files for old and new atoms.
+Note: Not tested on small molecules yet
 
 Pre-requisites:
 conda install -c schrodinger pymol (+ PyMOL license)
@@ -7,8 +9,7 @@ conda install -c conda-forge moviepy
 
 TODO
 ----
-* Add test for protein mutations traj
-* Add test for small molecule transformation
+* Test small molecule transformation
 
 """
 
@@ -51,7 +52,7 @@ class Visualization(object):
     Visualization tools for perses non-equilibrium switching.
 
     # Protein mutation example:
-    v = Visualization("old.pdb", "new.pdb", "A", traj_type="dcd", mutated_residue="667", ligand_chain="C")
+    v = Visualization("old.pdb", "new.pdb", "dcd", "A", mutated_residue="667", ligand_chain="C")
     v.load()
     v.format(zoom_distance=3, rotate_x_angle=270, rotate_y_angle=180, rotate_z_angle=270)
     v.save_frames(outfile_prefix="output/frame")
@@ -59,7 +60,7 @@ class Visualization(object):
     v.save_mp4(frames)
 
     # Small molecule transformation example:
-    v = Visualization("old.pdb", new.pdb", "C", traj_type="dcd")
+    v = Visualization("old.pdb", "new.pdb", "dcd", "C")
     v.load()
     v.format(zoom_distance=3, rotate_x_angle=90)
     v.save_frames(outfile_prefix="output/frame")
@@ -69,8 +70,8 @@ class Visualization(object):
     """
     def __init__(self, old_pdb,
                         new_pdb,
+                        traj_type,
                         mutated_chain,
-                        traj_type=None,
                         is_protein=True,
                         mutated_residue=None,
                         ligand_chain=None,):
@@ -83,11 +84,11 @@ class Visualization(object):
             Path to pdb file for old system. Used only to load the topology into PyMOL if traj_type is provided.
         new_pdb : str
             Path to pdb file for new system. Used only to load the topology into PyMOL if traj_type is provided.
+        traj_type : str
+            Trajectory type. Can be "xtc" or "dcd". Note PDB trajectory files are not supported, as read/write
+            times are VERY slow.
         mutated_chain : str
             One letter string representing the chain id that contains the mutation/chemical transformation.
-        traj_type : str, default None
-            Trajectory type. Can be "xtc" or "dcd". Note it is recommended that you use an xtc or dcd, as reading/writing
-            from PDB trajectory files is very slow.
         is_protein : bool, default True
             If True, indicates that the trajectory involves a protein mutation.
             If False, indicates that the trajectory involves a small molecule transformation.
@@ -101,8 +102,8 @@ class Visualization(object):
         """
         self._old_pdb = old_pdb
         self._new_pdb = new_pdb
-        self._old_traj = f"{os.path.splitext(old_pdb)[0]}.{traj_type.lower()}" if traj_type else None
-        self._new_traj = f"{os.path.splitext(new_pdb)[0]}.{traj_type.lower()}" if traj_type else None
+        self._old_traj = f"{os.path.splitext(old_pdb)[0]}.{traj_type.lower()}"
+        self._new_traj = f"{os.path.splitext(new_pdb)[0]}.{traj_type.lower()}"
         self._is_protein = is_protein
         self._mutated_chain = mutated_chain
         self._mutated_residue = mutated_residue
@@ -169,16 +170,26 @@ class Visualization(object):
         cmd.bg_color(background_color)
 
         # Get PyMOL indices of unique old and new atoms as strings
+        _logger.info("Getting unique old and new atom indices...")
         old = app.PDBFile(self._old_pdb)
         new = app.PDBFile(self._new_pdb)
 
-        old_atoms = [atom for residue in old.topology.residues()
+        if self._is_protein:
+            old_atoms = [atom for residue in old.topology.residues()
              if residue.id == self._mutated_residue and residue.chain.id == self._mutated_chain
              for atom in residue.atoms()]
 
-        new_atoms = [atom for residue in new.topology.residues()
-             if residue.id == self._mutated_residue and residue.chain.id == self._mutated_chain
-             for atom in residue.atoms()]
+            new_atoms = [atom for residue in new.topology.residues()
+                 if residue.id == self._mutated_residue and residue.chain.id == self._mutated_chain
+                 for atom in residue.atoms()]
+        else:
+            old_atoms = [atom for residue in old.topology.residues()
+                         if residue.chain.id == self._mutated_chain
+                         for atom in residue.atoms()]
+
+            new_atoms = [atom for residue in new.topology.residues()
+                         if residue.chain.id == self._mutated_chain
+                         for atom in residue.atoms()]
 
         core = []
         for new_atom in new_atoms:
@@ -323,19 +334,17 @@ class Visualization(object):
         for step in range(states):
             cmd.frame(step)
             if step <= equilibration_frames:
-                _logger.info("Setting transparency so that only old atoms are on...")
                 self._set_transparency(0, 1, self._old_selection, self._new_selection)
             elif step >= (states - equilibration_frames):
-                _logger.info("Setting transparency so that only new atoms are on...")
                 self._set_transparency(1, 0, self._old_selection, self._new_selection)
             else:
-                _logger.info("Setting transparency so that it fades from old to new...")
                 lam = (step - equilibration_frames) / (states - 2*(equilibration_frames))
                 self._set_transparency(lam, 1-lam, self._unique_old, self._unique_new)
 
             cmd.set("ray_opaque_background", 1)
             cmd.refresh()
             cmd.png(f"{outfile_prefix}-{step:05d}.png", width=f"{width}cm", dpi=dpi)
+            _logger.info(f"Saved frame {step}...")
 
     @staticmethod
     def save_mp4(frames, outfile="movie.mp4", fps=25):
