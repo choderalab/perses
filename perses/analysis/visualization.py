@@ -33,6 +33,16 @@ except:
     raise Exception("moviepy is required for this module. Please `conda install -c conda-forge moviepy` or `pip install moviepy`.")
 
 ################################################################################
+# LOGGER
+################################################################################
+
+import logging
+logging.basicConfig(level=logging.NOTSET)
+
+_logger = logging.getLogger("visualization")
+_logger.setLevel(logging.INFO)
+
+################################################################################
 # VISUALIZATION
 ################################################################################
 
@@ -124,6 +134,7 @@ class Visualization(object):
         background_color : str, default "white"
             Color to set the background.
         """
+        _logger.info("Loading trajectory...")
 
         # Launch pymol session
         pymol.pymol_argv = ["pymol", "-qc"] + sys.argv[1:]
@@ -146,11 +157,13 @@ class Visualization(object):
             raise Exception(f"The old and new trajectories are not the same length! old: {old_states}, new: {new_states}")
 
         # Remove solvent
+        _logger.info("Removing solvent...")
         cmd.remove("resn hoh")
         cmd.remove("resn na")
         cmd.remove("resn cl")
 
         # Format overall appearance
+        _logger.info("Formatting overall appearance, color, and background color...")
         cmd.space("cmyk")
         cmd.color(f"{color_complex}")
         cmd.bg_color(background_color)
@@ -226,29 +239,36 @@ class Visualization(object):
                          "purple": cmd.util.cbap,
                          "pink": cmd.util.cbak}
 
+        _logger.info("Aligning the mutated residue/ligand...")
         cmd.align(self._old_selection, self._new_selection)
 
         # Format color and shape of mutated residue
+        _logger.info("Coloring the mutated residue/ligand...")
         color_dict[color_residue](self._both_selection)
 
         # Format spheres and sticks of mutated residue
+        _logger.info("Showing spheres...")
         cmd.show("spheres", self._old_selection)
         cmd.set("sphere_scale", sphere_radius)
         cmd.set("sphere_transparency", 1, self._new_selection)
 
         # Format small molecule
+        _logger.info("Coloring the small molecule...")
         color_dict[color_ligand](f"chain {self._ligand_chain}")
 
         # Fade out the protein and small molecule
+        _logger.info("Fading out the protein...")
         cmd.select("not " + self._both_selection)
         cmd.set("cartoon_transparency", 0.8, "sele")
         if self._is_protein:
+            _logger.info("Fading out the small molecule...")
             cmd.set("stick_transparency", 0.8, "sele")
             # Remove duplicate small molecule
             cmd.select(f"new and chain {self._ligand_chain}")
             cmd.remove("sele")
 
         # Set the desired view for the movie
+        _logger.info("Setting the view...")
         cmd.rotate("x", rotate_x_angle, "all", 0)
         cmd.rotate("y", rotate_y_angle, "all", 0)
         cmd.rotate("z", rotate_z_angle, "all", 0)
@@ -303,10 +323,13 @@ class Visualization(object):
         for step in range(states):
             cmd.frame(step)
             if step <= equilibration_frames:
+                _logger.info("Setting transparency so that only old atoms are on...")
                 self._set_transparency(0, 1, self._old_selection, self._new_selection)
             elif step >= (states - equilibration_frames):
+                _logger.info("Setting transparency so that only new atoms are on...")
                 self._set_transparency(1, 0, self._old_selection, self._new_selection)
             else:
+                _logger.info("Setting transparency so that it fades from old to new...")
                 lam = (step - equilibration_frames) / (states - 2*(equilibration_frames))
                 self._set_transparency(lam, 1-lam, self._unique_old, self._unique_new)
 
@@ -328,6 +351,6 @@ class Visualization(object):
         fps : int, default 25
             Frames per second
         """
-
+        _logger.info("Generating mp4 file...")
         image_clip = mpy.ImageSequenceClip(frames, fps=fps)
         image_clip.write_videofile(outfile, fps=fps, codec='mpeg4')
