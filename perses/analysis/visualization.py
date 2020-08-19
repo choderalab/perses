@@ -300,7 +300,7 @@ class Visualization(object):
 
         states = int(cmd.count_states("old"))
 
-        for step in range(1, states):
+        for step in range(states):
             cmd.frame(step)
             if step <= equilibration_frames:
                 self._set_transparency(0, 1, self._old_selection, self._new_selection)
