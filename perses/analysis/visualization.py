@@ -8,7 +8,6 @@ conda install -c conda-forge moviepy
 TODO
 ----
 * Add test for protein mutations traj
-* Test on xtc and PDB trajectories
 * Add test for small molecule transformation
 
 """
@@ -77,7 +76,8 @@ class Visualization(object):
         mutated_chain : str
             One letter string representing the chain id that contains the mutation/chemical transformation.
         traj_type : str, default None
-            Trajectory type. Can be "xtc" or "dcd"
+            Trajectory type. Can be "xtc" or "dcd". Note it is recommended that you use an xtc or dcd, as reading/writing
+            from PDB trajectory files is very slow.
         is_protein : bool, default True
             If True, indicates that the trajectory involves a protein mutation.
             If False, indicates that the trajectory involves a small molecule transformation.
@@ -91,8 +91,8 @@ class Visualization(object):
         """
         self._old_pdb = old_pdb
         self._new_pdb = new_pdb
-        self._old_traj = f"{os.path.splitext(old_pdb)[0]}.{traj_type.lower()}"
-        self._new_traj = f"{os.path.splitext(new_pdb)[0]}.{traj_type.lower()}"
+        self._old_traj = f"{os.path.splitext(old_pdb)[0]}.{traj_type.lower()}" if traj_type else None
+        self._new_traj = f"{os.path.splitext(new_pdb)[0]}.{traj_type.lower()}" if traj_type else None
         self._is_protein = is_protein
         self._mutated_chain = mutated_chain
         self._mutated_residue = mutated_residue
