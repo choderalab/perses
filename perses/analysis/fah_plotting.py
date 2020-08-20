@@ -142,7 +142,7 @@ def plot_convergence(results, n_gens=3, title=None):
         _produce_plot(f"fe_convergence_{title}")
 
 
-def plot_cumulative_distributions(results, max=5, cmap='PiYG', n_bins=100,
+def plot_cumulative_distributions(results, minimum=None, maximum=5, cmap='PiYG', n_bins=100,
                                   markers=[-2, -1, 0, 1, 2],
                                   title='Cumulative distribution'):
     """Plots cumulative distribution of ligand affinities
@@ -151,7 +151,7 @@ def plot_cumulative_distributions(results, max=5, cmap='PiYG', n_bins=100,
     ----------
     results : list(float)
         List of affinities to plot
-    max : int, default=5
+    maximum : int, default=5
         Maximum affinity to plot, saves plotting boring plateaus
     cmap : str, default='PiYG'
         string name of colormap to use
@@ -163,7 +163,10 @@ def plot_cumulative_distributions(results, max=5, cmap='PiYG', n_bins=100,
         Title to label plot
 
     """
-    results = [x for x in results if x < max]
+    if minimum is None:
+        results = [x for x in results if x < maximum]
+    else:
+        results = [x for x in results if minimum < x < maximum]
 
     # the colormap could be a kwarg
     cm = plt.cm.get_cmap(cmap)
@@ -177,8 +180,8 @@ def plot_cumulative_distributions(results, max=5, cmap='PiYG', n_bins=100,
     plt.bar(X[:-1], Y, color=C, width=X[1]-X[0], edgecolor='k')
 
     for v in markers:
-        plt.vlines(-v, 0, max(Y), 'grey', linestyles='dashed')
-        plt.text(v-0.5, 0.8*max(Y),
+        plt.vlines(-v, 0, Y.max(), 'grey', linestyles='dashed')
+        plt.text(v-0.5, 0.8*Y.max(),
                  f"$N$ = {len([x for x in results if x < v])}",
                  rotation=90,
                  verticalalignment='center',

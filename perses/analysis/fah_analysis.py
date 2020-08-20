@@ -253,7 +253,11 @@ def free_energies(
     #plot_relative_distribution(ligand_result.values())
 
     return details
+# collating the works (making the big dataframe)
+# - repeating/overwriting itself
 
+# analysis is slow
+# - parellised a bit?
 
 def store_json(contents, filename='analysed.json'):
     """ Allows jsons with numpy arrays to be stored
