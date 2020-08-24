@@ -250,12 +250,8 @@ def run_neq_fah_setup(ligand_file,
         setup_options.update(setup_options['kwargs'])
     if protein_kwargs is not None: #update the setup options w.r.t. the protein kwargs
         setup_options.update(setup_options['protein_kwargs'])
-        if 'apo_box_dimensions' not in setup_options:
+        if 'apo_box_dimensions' not in list(setup_options.keys()):
             setup_options['apo_box_dimensions'] = setup_options['complex_box_dimensions']
-        if 'hbond_constraints' in setup_options:
-            if setup_options['hbond_constraints'] == False:
-                setup_options['forcefield_kwargs'] = {'removeCMMotion': False, 'ewaldErrorTolerance': 0.00025, 'hydrogenMass' : 4 * unit.amus}
-                del setup_options['hbond_constraints']
 
     #setups_allowed
     setups_allowed = ['small_molecule', 'protein']
