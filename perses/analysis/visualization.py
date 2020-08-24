@@ -22,17 +22,6 @@ __author__ = 'Ivy Zhang'
 import sys, os
 from simtk.openmm import app
 
-try:
-    import pymol
-    from pymol import cmd
-except:
-    raise Exception("PyMOL is required for this module. Please `conda install -c schrodinger pymol`.")
-
-try:
-    import moviepy.editor as mpy
-except:
-    raise Exception("moviepy is required for this module. Please `conda install -c conda-forge moviepy` or `pip install moviepy`.")
-
 ################################################################################
 # LOGGER
 ################################################################################
@@ -68,6 +57,18 @@ class Visualization(object):
     v.save_mp4(frames)
 
     """
+    try:
+        import pymol
+        from pymol import cmd
+    except:
+        raise Exception("PyMOL is required for this module. Please `conda install -c schrodinger pymol`.")
+
+    try:
+        import moviepy.editor as mpy
+    except:
+        raise Exception(
+            "moviepy is required for this module. Please `conda install -c conda-forge moviepy` or `pip install moviepy`.")
+
     def __init__(self, old_pdb,
                         new_pdb,
                         traj_type,
