@@ -16,6 +16,7 @@ import os
 import simtk.unit as unit
 from simtk import openmm
 import logging
+from perses.app.setup_relative_calculation import run_setup
 _logger = logging.getLogger()
 _logger.setLevel(logging.INFO)
 
@@ -155,6 +156,8 @@ def run_neq_fah_setup(ligand_file,
                       constraint_tolerance=1e-6,
                       n_steps_per_move_application=250,
                       globalVarFreq=250,
+                      setup = 'small_molecule',
+                      protein_kwargs = None,
                       **kwargs):
     """
     main execution function that will:
@@ -179,9 +182,9 @@ def run_neq_fah_setup(ligand_file,
         trajectory_directory : str
             RUNXXX for FAH deployment
         complex_box_dimensions : Vec3, default=(9.8, 9.8, 9.8)
-            define box dimensions of complex phase
+            define box dimensions of complex phase (in nm)
         solvent_box_dimensions : Vec3, default=(3.5, 3.5, 3.5)
-            define box dimensions of solvent phase
+            define box dimensions of solvent phase (in nm)
         timestep : simtk.unit.Quantity, default=4.*unit.femtosecond
             step size of nonequilibrium integration
         eq_splitting : str, default = 'V R O R V'
@@ -240,12 +243,20 @@ def run_neq_fah_setup(ligand_file,
         n_steps_per_move_application : int default=250
             number of equilibrium steps to take per move
     """
-    from perses.app.setup_relative_calculation import run_setup
     from perses.utils import data
     #turn all of the args into a dict for passing to run_setup
     setup_options = locals()
-    if 'kwargs' in setup_options.keys():
+    if 'kwargs' in setup_options.keys(): #update the setup options w.r.t. kwargs
         setup_options.update(setup_options['kwargs'])
+    if protein_kwargs is not None: #update the setup options w.r.t. the protein kwargs
+        setup_options.update(setup_options['protein_kwargs'])
+        if 'apo_box_dimensions' not in list(setup_options.keys()):
+            setup_options['apo_box_dimensions'] = setup_options['complex_box_dimensions']
+
+    #setups_allowed
+    setups_allowed = ['small_molecule', 'protein']
+    assert setup in setups_allowed, f"setup {setup} not in setups_allowed: {setups_allowed}"
+
 
     #some modification for fah-specific functionality:
     setup_options['trajectory_prefix']=None
@@ -256,9 +267,16 @@ def run_neq_fah_setup(ligand_file,
 
     #run the run_setup to generate topology proposals and htfs
     _logger.info(f"spectators: {setup_options['spectators']}")
-    setup_dict = run_setup(setup_options, serialize_systems=False, build_samplers=False)
-    topology_proposals = setup_dict['topology_proposals']
-    htfs = setup_dict['hybrid_topology_factories']
+    if setup == 'small_molecule':
+        from perses.app.setup_relative_calculation import run_setup
+        setup_dict = run_setup(setup_options, serialize_systems=False, build_samplers=False)
+        topology_proposals = setup_dict['topology_proposals']
+        htfs = setup_dict['hybrid_topology_factories']
+    elif setup == 'protein':
+        from perses.app.relative_point_mutation_setup import PointMutationExecutor
+        setup_engine = PointMutationExecutor(**setup_options)
+        topology_proposals = {'complex': setup_engine.get_complex_htf()._topology_proposal, 'apo': setup_engine.get_apo_htf()._topology_proposal}
+        htfs = {'complex': setup_engine.get_complex_htf(), 'apo': setup_engine.get_apo_htf()}
 
     #create solvent and complex directories
     for phase in htfs.keys():
@@ -270,6 +288,8 @@ def run_neq_fah_setup(ligand_file,
             phase_dir = f"{setup_options['complex_projid']}/RUNS"
         if phase == 'vacuum':
             phase_dir = 'VACUUM/RUNS'
+        if phase == 'apo':
+            phase_dir = f"{setup_options['apo_projid']}/RUNS"
         dir = os.path.join(os.getcwd(), phase_dir, trajectory_directory)
         if not os.path.exists(dir):
             os.mkdir(dir)
@@ -339,7 +359,14 @@ def run_neq_fah_setup(ligand_file,
 
         tp = topology_proposals
         from perses.utils.smallmolecules import render_atom_mapping
-        render_atom_mapping(f'{dir}/atom_map.png', tp['ligand_oemol_old'], tp['ligand_oemol_new'], tp['non_offset_new_to_old_atom_map'])
+        atom_map_filename = f'{dir}/atom_map.png'
+        if setup=='protein':
+            from perses.utils.smallmolecules import  render_protein_residue_atom_mapping
+            render_protein_residue_atom_mapping(tp['apo'], atom_map_filename)
+        else:
+            old_ligand_oemol, new_ligand_oemol = tp['ligand_oemol_old'], tp['ligand_oemol_new']
+            _map = tp['non_offset_new_to_old_atom_map']
+            render_atom_mapping(atom_map_filename, old_ligand_oemol, new_ligand_oemol, _map)
 
 
 def run(yaml_filename=None):
@@ -362,6 +389,8 @@ def run(yaml_filename=None):
         os.makedirs(f"{setup_options['complex_projid']}/RUNS/")
     if not os.path.exists(f"{setup_options['solvent_projid']}"):
         os.makedirs(f"{setup_options['solvent_projid']}/RUNS/")
+    if not os.path.exists(f"{setup_options['apo_projid']}"):
+        os.makedirs(f"{setup_options['apo_projid']}/RUNS/")
     if not os.path.exists('VACUUM'):
         os.makedirs('VACUUM/RUNS/')
 
