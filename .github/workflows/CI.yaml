@@ -53,7 +53,7 @@ jobs:
     - name: Decrypt OpenEye license
       shell: bash
       env:
-        ENC_OE_LICENSE: ${{ secrets.ENC_OE_LICENSE }}
+        ENC_OE_LICENSE: ${{ secrets.OE_LICENSE }}
       run: |
         echo "${ENC_OE_LICENSE}" > $HOME/oe_license.txt
 

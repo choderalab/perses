@@ -271,6 +271,33 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     ofs.close()
 
 
+def render_protein_residue_atom_mapping(topology_proposal, filename, width = 1200, height=600):
+    """
+    wrap the `render_atom_mapping` method around protein point mutation topologies.
+    TODO : make modification to `render_atom_mapping` so that the backbone atoms are not written in the output.
+
+    arguments
+        topology_proposal : perses.rjmc.topology_proposal.TopologyProposal object
+            topology proposal of protein mutation
+        filename : str
+            filename to write the map
+        width : int
+            width of image
+        height : int
+            height of image 
+    """
+    from perses.utils.smallmolecules import render_atom_mapping
+    oe_res_maps = {}
+    for omm_new_idx, omm_old_idx in topology_proposal._new_to_old_atom_map.items():
+        if omm_new_idx in topology_proposal._new_topology.residue_to_oemol_map.keys():
+            try:
+                oe_res_maps[topology_proposal._new_topology.residue_to_oemol_map[omm_new_idx]] = topology_proposal._old_topology.residue_to_oemol_map[omm_old_idx]
+            except:
+                pass
+
+    render_atom_mapping(filename, topology_proposal._old_topology.residue_oemol, topology_proposal._new_topology.residue_oemol, oe_res_maps)
+
+
 def generate_ligands_figure(molecules,figsize=None,filename='ligands.png'):
     """ Plot an image with all of the ligands passed in
 
