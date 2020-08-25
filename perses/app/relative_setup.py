@@ -57,6 +57,7 @@ class RelativeFEPSetup(object):
                  pressure=1.0 * unit.atmosphere,
                  temperature=300.0 * unit.kelvin,
                  solvent_padding=9.0 * unit.angstroms,
+                 ionic_strength=0.15 * unit.molar,
                  atom_map=None,
                  hmass=4*unit.amus,
                  neglect_angles=False,
@@ -96,6 +97,9 @@ class RelativeFEPSetup(object):
             Temperature to use for the Langevin integrator
         solvent_padding : Quantity, units of length
             The amount of padding to use when adding solvent
+        
+        : Quantity, units of concentration
+            Concentration of solvent ions to be used when solvating the system
         neglect_angles : bool
             Whether to neglect certain angle terms for the purpose of minimizing work variance in the RJMC protocol.
         anneal_14s : bool, default False
@@ -140,6 +144,7 @@ class RelativeFEPSetup(object):
         self._barostat_period = 50
         self._pme_tol = 2.5e-04
         self._padding = solvent_padding
+        self._ionic_strength = ionic_strength
         self._hmass = hmass
         _logger.info(f"\t\t\t_hmass: {hmass}.\n")
         self._proposal_phase = None
@@ -340,7 +345,7 @@ class RelativeFEPSetup(object):
             _logger.info(f"setting up complex phase...")
             self._setup_complex_phase(protein_pdb_filename,receptor_mol2_filename,mol_list)
             self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(
-            self._complex_topology_old, self._complex_positions_old,phase='complex',box_dimensions=self._complex_box_dimensions)
+            self._complex_topology_old, self._complex_positions_old,phase='complex',box_dimensions=self._complex_box_dimensions, ionic_strength=self._ionic_strength)
             _logger.info(f"successfully generated complex topology, positions, system")
 
             self._complex_md_topology_old_solvated = md.Topology.from_openmm(self._complex_topology_old_solvated)
@@ -385,7 +390,7 @@ class RelativeFEPSetup(object):
                 _logger.info(f"no complex detected in phases...generating unique topology/geometry proposals...")
                 _logger.info(f"solvating ligand...")
                 self._ligand_topology_old_solvated, self._ligand_positions_old_solvated, self._ligand_system_old_solvated = self._solvate_system(
-                self._ligand_topology_old, self._ligand_positions_old,phase='solvent',box_dimensions=self._solvent_box_dimensions)
+                self._ligand_topology_old, self._ligand_positions_old,phase='solvent',box_dimensions=self._solvent_box_dimensions,ionic_strength=self._ionic_strength)
                 self._ligand_md_topology_old_solvated = md.Topology.from_openmm(self._ligand_topology_old_solvated)
 
                 _logger.info(f"creating TopologyProposal")
@@ -689,7 +694,7 @@ class RelativeFEPSetup(object):
 
         return ligand_topology_proposal, old_ligand_positions
 
-    def _solvate_system(self, topology, positions, model='tip3p',phase='complex', box_dimensions=None):
+    def _solvate_system(self, topology, positions, model='tip3p',phase='complex', box_dimensions=None,ionic_strength=self._ionic_strength):
         """
         Generate a solvated topology, positions, and system for a given input topology and positions.
         For generating the system, the forcefield files provided in the constructor will be used.
@@ -738,9 +743,9 @@ class RelativeFEPSetup(object):
         if run_solvate:
             _logger.info(f"\tpreparing to add solvent")
             if box_dimensions is None:
-                modeller.addSolvent(self._system_generator.forcefield, model=model, padding=self._padding, ionicStrength=0.15*unit.molar)
+                modeller.addSolvent(self._system_generator.forcefield, model=model, padding=self._padding, ionicStrength=ionic_strength)
             else:
-                modeller.addSolvent(self._system_generator.forcefield, model=model, ionicStrength=0.15*unit.molar, boxSize=box_dimensions)
+                modeller.addSolvent(self._system_generator.forcefield, model=model, ionicStrength=ionic_strength, boxSize=box_dimensions)
         solvated_topology = modeller.getTopology()
         if phase == 'complex' and self._padding._value == 0. and box_dimensions is not None:
             _logger.info(f'Complex phase, where padding is set to 0. and box dimensions are provided so setting unit cell dimensions')
