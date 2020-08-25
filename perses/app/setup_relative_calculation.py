@@ -73,6 +73,16 @@ def getSetupOptions(filename):
         setup_options['protocol-type'] = 'default'
 
 
+    if 'temperature' not in setup_options:
+        setup_options['temperature'] = 300.
+    if 'pressure' not in setup_options:
+        setup_options['pressure'] = 1.
+    if 'solvent_padding' not in setup_options:
+        setup_options['solvent_padding'] = 9.
+    if 'ionic_strength' not in setup_options:
+        setup_options['ionic_strength'] = 0.15
+
+
     if 'small_molecule_forcefield' not in setup_options:
         setup_options['small_molecule_forcefield'] = None
 
@@ -373,9 +383,11 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     pressure = setup_options['pressure'] * unit.atmosphere
     temperature = setup_options['temperature'] * unit.kelvin
     solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
+    ionic_strength = setup_options['ionic_strength'] * unit.molar
     _logger.info(f"\tsetting pressure: {pressure}.")
     _logger.info(f"\tsetting temperature: {temperature}.")
     _logger.info(f"\tsetting solvent padding: {solvent_padding_angstroms}A.")
+    _logger.info(f"\tsetting ionic strength: {ionic_strength}M.")
 
     setup_pickle_file = setup_options['save_setup_pickle_as'] if 'save_setup_pickle_as' in list(setup_options) else None
     _logger.info(f"\tsetup pickle file: {setup_pickle_file}")
@@ -407,7 +419,9 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                           atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
                                           trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'],
-                                          complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'],h_constraints=setup_options['h_constraints'])
+
+                                          complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'], ionic_strength=ionic_strength,h_constraints=setup_options['h_constraints'])
+
 
         _logger.info(f"\twriting pickle output...")
         if setup_pickle_file is not None:
