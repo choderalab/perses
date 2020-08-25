@@ -74,7 +74,7 @@ class RelativeFEPSetup(object):
                  complex_box_dimensions=None,
                  solvent_box_dimensions=None,
                  map_strategy='geometry',
-                 h_constraints=True
+                 remove_constraints=False
                  ):
         """
         Initialize a NonequilibriumFEPSetup object
@@ -98,7 +98,7 @@ class RelativeFEPSetup(object):
             Temperature to use for the Langevin integrator
         solvent_padding : Quantity, units of length
             The amount of padding to use when adding solvent
-        
+
         : Quantity, units of concentration
             Concentration of solvent ions to be used when solvating the system
         neglect_angles : bool
@@ -138,8 +138,9 @@ class RelativeFEPSetup(object):
             - random will use a random map of those that are possible
             - weighted-random uses a map chosen at random, proportional to how close it is in geometry to ligand B. The same as for 'geometry', this requires the coordinates of ligand B to be meaninful
             - return-all BREAKS THE API as it returns a list of dicts, rather than list. This is intended for development code, not main pipeline.
-        h_constraints : bool, default=True
-            if hydrogens should be constrained in the simulation
+        remove_constraints : bool, default=False
+            if hydrogen constraints should be constrained in the simulation
+            default is False, so no constraints removed, but 'all' or 'not water' can be used to remove constraints.
         """
         self._pressure = pressure
         self._temperature = temperature
@@ -159,11 +160,19 @@ class RelativeFEPSetup(object):
         self._solvent_box_dimensions = solvent_box_dimensions
         self._map_strategy = map_strategy
 
-        if h_constraints is True:
+        if remove_constraints is False:
             self._h_constraints = app.HBonds
-        else:
+            self._rigid_water = True
+        elif remove_constraints == 'all':
             _logger.info(f'Hydrogens will not be constrained. This may be problematic if using a larger timestep')
             self._h_constraints = None
+            self._rigid_water = False
+        elif remove_constraints == 'not water':
+            _logger.info(f'Hydrogens will not be constrained for non-water molecules. This may be problematic if using a larger timestep')
+            self._h_constraints = None
+            self._rigid_water = True
+        else:
+            _logger.warning(f"remove_constraints value of {remove_constraints}. Allowed values are False 'all' or 'not water'")
 
         try:
             self._nonbonded_method = getattr(app,nonbonded_method)

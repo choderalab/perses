@@ -89,23 +89,25 @@ def getSetupOptions(filename):
     if 'small_molecule_parameters_cache' not in setup_options:
         setup_options['small_molecule_parameters_cache'] = None
 
-    if setup_options['h_constraints'] in ['False','false']:
-        _logger.info('Turning off hydrogen constraints')
-        setup_options['h_constraints'] = False
-    elif 'h_constraints' not in setup_options:
-        setup_options['h_constraints'] = True
+    # remove_constraints can be 'all' or 'not water'
+    if setup_options['remove_constraints'] not in ['all', 'not water']:
+        _logger.warning("remove_constraints value of {setup_options['remove_constraints']} not understood. 'all', 'none' or 'not water' are valid options. NOT REMOVING ANY CONSTRAINTS")
+        setup_options['remove_constraints'] = False
+    elif 'remove_constraints' not in setup_options:
+        setup_options['remove_constraints'] = False
+        _logger.info('No constraints will be removed')
 
     if 'spectators' not in setup_options:
         _logger.info(f'No spectators')
         setup_options['spectators'] = None
-    
+
     if 'complex_box_dimensions' not in setup_options:
-        setup_options['complex_box_dimensions'] = None 
+        setup_options['complex_box_dimensions'] = None
     else:
-        setup_options['complex_box_dimensions'] = tuple([float(x) for x in setup_options['complex_box_dimensions']]) 
+        setup_options['complex_box_dimensions'] = tuple([float(x) for x in setup_options['complex_box_dimensions']])
 
     if 'solvent_box_dimensions' not in setup_options:
-        setup_options['solvent_box_dimensions'] = None 
+        setup_options['solvent_box_dimensions'] = None
 
     # Not sure why these are needed
     # TODO: Revisit these?
@@ -420,7 +422,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
                                           trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'],
 
-                                          complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'], ionic_strength=ionic_strength,h_constraints=setup_options['h_constraints'])
+                                          complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'], ionic_strength=ionic_strength, remove_constraints=setup_options['remove_constraints'])
 
 
         _logger.info(f"\twriting pickle output...")
