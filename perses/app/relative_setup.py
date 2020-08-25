@@ -97,7 +97,8 @@ class RelativeFEPSetup(object):
             Temperature to use for the Langevin integrator
         solvent_padding : Quantity, units of length
             The amount of padding to use when adding solvent
-        ionic_strength : Quantity, units of concentration
+        
+        : Quantity, units of concentration
             Concentration of solvent ions to be used when solvating the system
         neglect_angles : bool
             Whether to neglect certain angle terms for the purpose of minimizing work variance in the RJMC protocol.
@@ -693,7 +694,7 @@ class RelativeFEPSetup(object):
 
         return ligand_topology_proposal, old_ligand_positions
 
-    def _solvate_system(self, topology, positions, model='tip3p',phase='complex', box_dimensions=None,ionic_strength=0.15*unit.molar):
+    def _solvate_system(self, topology, positions, model='tip3p',phase='complex', box_dimensions=None,ionic_strength=self._ionic_strength):
         """
         Generate a solvated topology, positions, and system for a given input topology and positions.
         For generating the system, the forcefield files provided in the constructor will be used.
