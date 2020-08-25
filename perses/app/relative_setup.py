@@ -340,7 +340,7 @@ class RelativeFEPSetup(object):
         # Create SystemGenerator
         from openmmforcefields.generators import SystemGenerator
         _logger.info(f'PME tolerance: {self._pme_tol}')
-        forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'constraints' : self._h_constraints, 'hydrogenMass' : self._hmass}
+        forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'constraints' : self._h_constraints, 'rigidWater': self._rigid_water, 'hydrogenMass' : self._hmass}
         if small_molecule_forcefield is None or small_molecule_forcefield == 'None':
             self._system_generator = SystemGenerator(forcefields=forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
                                       periodic_forcefield_kwargs = {'nonbondedMethod': self._nonbonded_method})
@@ -712,7 +712,7 @@ class RelativeFEPSetup(object):
 
         return ligand_topology_proposal, old_ligand_positions
 
-    def _solvate_system(self, topology, positions, model='tip3p',phase='complex', box_dimensions=None,ionic_strength=self._ionic_strength):
+    def _solvate_system(self, topology, positions, model='tip3p',phase='complex', box_dimensions=None,ionic_strength=0.15 * unit.molar):
         """
         Generate a solvated topology, positions, and system for a given input topology and positions.
         For generating the system, the forcefield files provided in the constructor will be used.
