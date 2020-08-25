@@ -223,8 +223,8 @@ class RelativeFEPSetup(object):
 
             elif self._ligand_input[-3:] == 'sdf' or self._ligand_input[-4:] == 'mol2': #
                 _logger.info(f"Detected .sdf format.  Proceeding...") #TODO: write checkpoints for sdf format
-                self._ligand_oemol_old = createOEMolFromSDF(self._ligand_input, index=self._old_ligand_index)
-                self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input, index=self._new_ligand_index)
+                self._ligand_oemol_old = createOEMolFromSDF(self._ligand_input, index=self._old_ligand_index, allow_undefined_stereo=True)
+                self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input, index=self._new_ligand_index, allow_undefined_stereo=True)
                 self._ligand_oemol_old = generate_unique_atom_names(self._ligand_oemol_old)
                 self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
 
@@ -299,7 +299,7 @@ class RelativeFEPSetup(object):
 
         # Create openforcefield Molecule objects for old and new molecules
         from openforcefield.topology import Molecule
-        molecules = [ Molecule.from_openeye(oemol) for oemol in [self._ligand_oemol_old, self._ligand_oemol_new] ]
+        molecules = [ Molecule.from_openeye(oemol,allow_undefined_stereo=True) for oemol in [self._ligand_oemol_old, self._ligand_oemol_new] ]
 
         # Handle spectator molecules
         if self._spectator_filenames is not None:
