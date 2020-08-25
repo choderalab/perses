@@ -712,7 +712,11 @@ class RelativeFEPSetup(object):
 
         return ligand_topology_proposal, old_ligand_positions
 
+<<<<<<< HEAD
     def _solvate_system(self, topology, positions, model='tip3p',phase='complex', box_dimensions=None,ionic_strength=0.15 * unit.molar):
+=======
+    def _solvate_system(self, topology, positions, model='tip3p',phase='complex', box_dimensions=None,ionic_strength=ionic_strength):
+>>>>>>> 5ad633c69cc2b9b08803daeef9b9e942701239ad
         """
         Generate a solvated topology, positions, and system for a given input topology and positions.
         For generating the system, the forcefield files provided in the constructor will be used.
