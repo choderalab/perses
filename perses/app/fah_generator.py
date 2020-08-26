@@ -81,6 +81,53 @@ def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R 
     integrator = PeriodicNonequilibriumIntegrator(alchemical_functions, nsteps_eq, nsteps_neq, neq_splitting, timestep=timestep)
     return integrator
 
+
+def make_core_file(numSteps,
+                   xtcFreq,
+                   globalVarFreq,
+                   xtcAtoms='solute',
+                   precision='mixed',
+                   globalVarFilename='globals.csv',
+                   directory='.'):
+    """ Makes core.xml file for simulating on folding at home
+
+    Parameters
+    ----------
+    numSteps : int
+        Number of steps to perform
+    xtcFreq : int
+        Frequency to save configuration to disk
+    globalVarFreq : int
+        Frequency to save variables to globalVarFilename
+    xtcAtoms : str, default='solute'
+        Which atoms to save
+    precision : str, default='mixed'
+        Precision of simulation
+    globalVarFilename : str, default='globals.csv'
+        Filename to store global simulation results
+    directory : str, default='.'
+        Location on disk to save core.xml file
+
+    # TODO - unhardcode 'core.xml' or would it always be this?
+    """
+    core_parameters = {
+        'numSteps': numSteps,
+        'xtcFreq': xtcFreq, # once per ns
+        'xtcAtoms': xtcAtoms,
+        'precision': precision,
+        'globalVarFilename': globalVarFilename,
+        'globalVarFreq': globalVarFreq,
+    }
+    # Serialize core.xml
+    import dicttoxml
+    with open(f'{directory}/core.xml', 'wt') as outfile:
+        #core_parameters = create_core_parameters(phase)
+        xml = dicttoxml.dicttoxml(core_parameters, custom_root='config', attr_type=False)
+        from xml.dom.minidom import parseString
+        dom = parseString(xml)
+        outfile.write(dom.toprettyxml())
+
+
 def relax_structure(temperature, system, positions, nequil=1000, n_steps_per_iteration=250,platform_name='OpenCL',timestep=2.*unit.femtosecond,collision_rate=90./unit.picosecond):
     """
     arguments
@@ -285,15 +332,12 @@ def run_neq_fah_setup(ligand_file,
     setups_allowed = ['small_molecule', 'protein']
     assert setup in setups_allowed, f"setup {setup} not in setups_allowed: {setups_allowed}"
 
-
-    if phase_project_ids is None:
-        raise
     # check there is a project_id for each phase
     for phase in phases:
         assert (phase in phase_project_ids), f"Phase {phase} requested, but not in phase_project_ids {phase_project_ids.keys()}"
 
     #some modification for fah-specific functionality:
-    setup_options['trajectory_prefix']=None
+    setup_options['trajectory_prefix'] = None
     setup_options['anneal_1,4s'] = False
     from perses.utils.openeye import generate_expression
     setup_options['atom_expr'] = generate_expression(setup_options['atom_expression'])
@@ -356,27 +400,17 @@ def run_neq_fah_setup(ligand_file,
         traj.save(f'{dir}/hybrid_{phase}.pdb')
 
         #lastly, make a core.xml
+###
         nsteps_per_cycle = 2*nsteps_eq + 2*nsteps_neq
         ncycles = 1
         nsteps_per_ps = 250
-        core_parameters = {
-            'numSteps': ncycles * nsteps_per_cycle,
-            'xtcFreq': 1000*nsteps_per_ps, # once per ns
-            'xtcAtoms': 'solute',
-            'precision': 'mixed',
-            'globalVarFilename': 'globals.csv',
-            'globalVarFreq': 10*nsteps_per_ps,
-        }
-        # Serialize core.xml
-        import dicttoxml
-        with open(f'{dir}/core.xml', 'wt') as outfile:
-            #core_parameters = create_core_parameters(phase)
-            xml = dicttoxml.dicttoxml(core_parameters, custom_root='config', attr_type=False)
-            from xml.dom.minidom import parseString
-            dom = parseString(xml)
-            outfile.write(dom.toprettyxml())
+        nsteps = ncycles * nsteps_per_cycle
+        make_core_file(numSteps=nsteps,
+                       xtcFreq=1000*nsteps_per_ps,
+                       globalVarFreq=10*nsteps_per_ps,
+                       directory=dir)
 
-        #create a logger for reference
+     #create a logger for reference
         # TODO - add more details to this
         references = {'start_ligand': old_ligand_index,
                       'end_ligand': new_ligand_index,
