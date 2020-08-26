@@ -362,7 +362,7 @@ def run_neq_fah_setup(ligand_file,
         phase_dir = f"{phase_project_ids[phase]}/RUNS"
         dir = os.path.join(os.getcwd(), phase_dir, trajectory_directory)
         if not os.path.exists(dir):
-            os.mkdirs(dir)
+            os.makedirs(dir)
 
         # TODO - replace this with actually saving the importand part of the HTF
         np.savez_compressed(f'{dir}/htf',htfs[phase])
