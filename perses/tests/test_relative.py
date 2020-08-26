@@ -14,10 +14,7 @@ except ImportError:
 
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
-from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
 from perses.tests import utils
-import openeye.oechem as oechem
-from openmmtools import alchemy
 from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
 import openmmtools.mcmc as mcmc
 import openmmtools.cache as cache
@@ -25,7 +22,6 @@ from unittest import skipIf
 
 import pymbar.timeseries as timeseries
 
-import copy
 import pymbar
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
