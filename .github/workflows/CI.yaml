@@ -98,15 +98,17 @@ jobs:
         export OE_LICENSE="$HOME/oe_license.txt"
         export TRAVIS=true
         pushd .
-        nosetests ${PACKAGENAME} --with-coverage --verbosity=3 --with-timer -a '!advanced'
+        nosetests ${PACKAGENAME} --with-coverage --verbosity=3 --with-timer -a '!advanced' --cover-xml --cover-xml-file=./coverage.xml
         popd
     - name: Codecov
-      uses: codecov/codecov-action@v1.0.5
+      uses: codecov/codecov-action@v1.0.13
       with:
         # User defined upload name. Visible in Codecov UI
         name: perses
         # Repository upload token - get it from codecov.io
         token: 618f5706-686e-444a-86a6-b017e52708a9
+        fail_ci_if_error: false
+        path_to_write_report: ./codecov_report.gz
 
     - name: Deploy
       shell: bash
