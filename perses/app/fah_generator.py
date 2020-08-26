@@ -191,6 +191,9 @@ def run_neq_fah_setup(ligand_file,
         - create/serialize a state associated with the relaxed structures
         - create/serialize a `core.xml` object for all phases
 
+
+    >>> run_neq_fah_setup('ligand.sdf', 0, 1,['amber/ff14SB.xml','amber/tip3p_standard.xml','amber/tip3p_HFE_multivalent.xml'],'RUN0',protein_pdb='protein.pdb', phases=['complex','solvent','vacuum'],phase_project_ids={'complex':14320,'solvent':14321,'vacuum':'vacuum'})
+
     arguments
         ligand_file : str
             .sdf (or any openeye-readable) file containing ligand labeled indices and structures
@@ -311,7 +314,7 @@ def run_neq_fah_setup(ligand_file,
         phase_dir = f"{phase_project_ids[phase]}/RUNS"
         dir = os.path.join(os.getcwd(), phase_dir, trajectory_directory)
         if not os.path.exists(dir):
-            os.mkdir(dir)
+            os.mkdirs(dir)
 
         # TODO - replace this with actually saving the importand part of the HTF
         np.savez_compressed(f'{dir}/htf',htfs[phase])
