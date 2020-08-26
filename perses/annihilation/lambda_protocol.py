@@ -2,7 +2,6 @@ from __future__ import print_function
 import numpy as np
 import logging
 import copy
-import traceback
 from openmmtools.alchemy import AlchemicalState
 
 logging.basicConfig(level=logging.NOTSET)

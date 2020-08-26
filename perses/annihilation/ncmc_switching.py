@@ -2,12 +2,9 @@ from __future__ import print_function
 import numpy as np
 import copy
 import logging
-import traceback
-from simtk import openmm, unit
-from perses.dispersed.feptasks import Particle, compute_reduced_potential
+from perses.dispersed.feptasks import compute_reduced_potential
 from perses.storage import NetCDFStorageView
 from perses.annihilation.relative import HybridTopologyFactory
-from perses.tests.utils import quantity_is_finite
 from openmmtools.constants import kB
 from openmmtools.cache import LRUCache, global_context_cache
 from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState

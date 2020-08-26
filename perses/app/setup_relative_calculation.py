@@ -4,16 +4,15 @@ import pickle
 import os
 import sys
 import simtk.unit as unit
-from simtk import openmm
 import logging
 
 from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
 from perses.annihilation.relative import HybridTopologyFactory
-from perses.app.relative_setup import NonequilibriumSwitchingFEP, RelativeFEPSetup
+from perses.app.relative_setup import RelativeFEPSetup
 from perses.annihilation.lambda_protocol import LambdaProtocol
 
-from openmmtools import mcmc, utils
-from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
+from openmmtools import mcmc
+from openmmtools.multistate import MultiStateReporter
 from perses.utils.smallmolecules import render_atom_mapping
 from perses.tests.utils import validate_endstate_energies
 from perses.dispersed.smc import SequentialMonteCarlo
@@ -385,7 +384,10 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     pressure = setup_options['pressure'] * unit.atmosphere
     temperature = setup_options['temperature'] * unit.kelvin
     solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
-    ionic_strength = setup_options['ionic_strength'] * unit.molar
+    if isinstance(setup_options['ionic_strength'], float):
+        ionic_strength = setup_options['ionic_strength'] * unit.molar
+    else:
+        ionic_strength = setup_options['ionic_strength']
     _logger.info(f"\tsetting pressure: {pressure}.")
     _logger.info(f"\tsetting temperature: {temperature}.")
     _logger.info(f"\tsetting solvent padding: {solvent_padding_angstroms}A.")

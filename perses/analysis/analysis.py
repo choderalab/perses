@@ -13,22 +13,15 @@ __author__ = 'John D. Chodera'
 # IMPORTS
 ################################################################################
 
-import os, os.path
-import sys, math
 import numpy as np
-import copy
-import time
-import netCDF4 as netcdf
 from openeye import oeiupac, oechem
-import pickle
-import json
 import itertools
 import pymbar
 from perses import storage
+import seaborn as sns
 
 import matplotlib as mpl
 mpl.use('Agg')
-import seaborn as sns
 
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt

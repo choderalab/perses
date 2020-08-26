@@ -5,13 +5,9 @@ for each additional atom that must be added.
 from simtk import unit
 
 import numpy as np
-import collections
-import functools
 import networkx as nx
-from simtk import unit
-import operator
 
-from perses.storage import NetCDFStorage, NetCDFStorageView
+from perses.storage import NetCDFStorageView
 from openeye import oechem, oeomega
 
 ################################################################################
@@ -451,7 +447,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         if self._storage:
             self._storage.write_object("{}_proposal_order".format(direction), proposal_order_tool, iteration=self.nproposed)
-        
+
         platform_name = 'CUDA'
 
         # Create an OpenMM context

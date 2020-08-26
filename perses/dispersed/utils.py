@@ -1,34 +1,22 @@
 import simtk.openmm as openmm
-from typing import List, Tuple, Union, NamedTuple
 import os
 import copy
 
 import openmmtools.mcmc as mcmc
 import openmmtools.integrators as integrators
 import openmmtools.states as states
-from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
+from openmmtools.states import ThermodynamicState
 import numpy as np
 import mdtraj as md
-from perses.annihilation.relative import HybridTopologyFactory
 import mdtraj.utils as mdtrajutils
-import pickle
 import simtk.unit as unit
 import tqdm
-from perses.tests.utils import compute_potential_components
 from openmmtools.constants import kB
-import pdb
 import logging
-import tqdm
-from sys import getsizeof
 import time
 from collections import namedtuple
 from perses.annihilation.lambda_protocol import LambdaProtocol
-from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
-import random
-import pymbar
 import dask.distributed as distributed
-import tqdm
-import time
 from scipy.special import logsumexp
 import openmmtools.cache as cache
 from openmmtools import utils
