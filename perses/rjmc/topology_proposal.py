@@ -363,21 +363,6 @@ class AtomMapper(object):
 
         Parameters
         ----------
-<<<<<<< HEAD
-        current_oemol : openeye.oechem.oemol object
-             The current molecule in the sampler
-        proposed_oemol : openeye.oechem.oemol object
-             The proposed new molecule
-        atom_expr : int
-            Integer referring to atom mapping expression.
-            See `perses.utils.generate_expression`
-        bond_expr : int
-            Integer referring to bond mapping expression.
-            See `perses.utils.generate_expression`
-        map_strength : str default='default'
-            string corresponding to pre-set atom map strengths
-            ['default','weak','strong']
-=======
         molA : oechem.oemol
             old molecule
         molB : oechem.oemol
@@ -389,7 +374,6 @@ class AtomMapper(object):
         map_strength : str, default 'default'
             pre-defined mapping strength that can be one of ['strong', 'default', 'weak']
             this will be ignored if either atom_expr or bond_expr have been defined.
->>>>>>> master
         allow_ring_breaking : bool, optional, default=True
              If False, will check to make sure rings are not being broken or formed.
         matching_criterion : str, default 'index'
@@ -684,50 +668,6 @@ class AtomMapper(object):
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
         _logger.debug(f'all matches have atom counts of : {[m.NumAtoms() for m in matches]}')
 
-<<<<<<< HEAD
-        if not allow_ring_breaking:
-            # Filter the matches to remove any that allow ring breaking
-            matches = [m for m in matches if AtomMapper.preserves_rings(m, current_oemol, proposed_oemol)]
-
-        if not matches:
-            _logger.info('Cannot generate atom map without breaking rings, trying again with weaker mapping.')
-            mcs.SetMCSFunc(oechem.OEMCSMaxAtoms())
-            unique = False
-            matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
-
-            if allow_ring_breaking is False:
-                # Filter the matches to remove any that allow ring breaking
-                matches = [m for m in matches if AtomMapper.preserves_rings(m, current_oemol, proposed_oemol)]
-            if not matches:
-                return None
-
-        #_logger.debug(f"matches before degeneracy ranking: {matches}")
-        _logger.debug(f"ranking match degeneracy w.r.t. current oemol ({current_oemol}) and proposed oemol({proposed_oemol})")
-        try:
-            top_matches = AtomMapper.rank_degenerate_maps(matches, current_oemol, proposed_oemol) #remove the matches with the lower rank score (filter out bad degeneracies)
-        except Exception as e:
-            _logger.warning(f"\trank_degenerate_maps: {e}")
-            top_matches = matches
-
-        max_num_atoms = max([match.NumAtoms() for match in top_matches])
-        _logger.debug(f"\tthere are {len(top_matches)} top matches with at most {max_num_atoms} before hydrogen exceptions")
-        _logger.debug(f"\tthe max number of atom matches is: {max_num_atoms}; there are {len([m for m in top_matches if m.NumAtoms() == max_num_atoms])} matches herein")
-
-        # check the most mapped is the same once hydrogen exceptions are handled
-        all_new_to_old_atom_maps = []
-        count_after_hydrogen_mapping = []
-        for match in top_matches:
-            map_dict = AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion)
-            count_after_hydrogen_mapping.append(len(map_dict))
-            all_new_to_old_atom_maps.append(map_dict)
-
-        max_num_atoms = max(count_after_hydrogen_mapping)
-        _logger.info(f'Maximum atom matched after hydrogen exceptions: {max_num_atoms}')
-        new_to_old_atom_maps = [map for count, map in zip(count_after_hydrogen_mapping,all_new_to_old_atom_maps) if count == max_num_atoms]
-
-
-        #now all else is equal; we will choose the map with the highest overlap of atom indices
-=======
         all_mappings = []
         for match in matches:
             all_mappings.append(AtomMapper.hydrogen_mapping_exceptions(current_oemol, proposed_oemol, match, matching_criterion))
@@ -767,7 +707,6 @@ class AtomMapper(object):
         _logger.debug(f"\tthere are {len(maps)} top matches with at most {max_num_atoms} before hydrogen exceptions")
 
         # now all else is equal; we will choose the map with the highest overlap of atom indices
->>>>>>> master
         index_overlap_numbers = []
         if matching_criterion == 'index':
             for map in maps:
