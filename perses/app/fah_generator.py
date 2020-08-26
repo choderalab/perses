@@ -384,7 +384,7 @@ def run_neq_fah_setup(ligand_file,
 
             data.serialize(state, f"{dir}/state.xml.bz2")
         except Exception as e:
-            print(e)
+            _logger.warning(e)
             passed = False
         else:
             passed = True
