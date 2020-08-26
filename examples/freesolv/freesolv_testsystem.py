@@ -34,18 +34,16 @@ class HydrationPersesRun(object):
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'tip3p.xml'],
-                                                        forcefield_kwargs={'nonbondedMethod': app.PME,
-                                                                           'nonbondedCutoff': 9.0 * unit.angstrom,
+                                                        forcefield_kwargs={'nonbondedCutoff': 9.0 * unit.angstrom,
                                                                            'implicitSolvent': None,
                                                                            'constraints': constraints,
                                                                            'ewaldErrorTolerance': 1e-5,
-                                                                           'hydrogenMass': 3.0*unit.amu},
+                                                                           'hydrogenMass': 3.0*unit.amu}, periodic_forcefield_kwargs = {'nonbondedMethod': app.PME}
                                                         barostat=barostat)
         system_generators['vacuum'] = SystemGenerator([gaff_xml_filename],
-                                                      forcefield_kwargs={'nonbondedMethod': app.NoCutoff,
-                                                                         'implicitSolvent': None,
+                                                      forcefield_kwargs={'implicitSolvent': None,
                                                                          'constraints': constraints,
-                                                                         'hydrogenMass': 3.0*unit.amu})
+                                                                         'hydrogenMass': 3.0*unit.amu}, nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff})
 
         #
         # Create topologies and positions

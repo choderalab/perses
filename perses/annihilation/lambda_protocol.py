@@ -125,11 +125,13 @@ class LambdaProtocol(object):
                                   'lambda_electrostatics_delete':
                                    lambda x: (2*x)**2 if x < 0.5 else 1.0
                                  }
+            elif self.type == 'user-defined':
+                self.functions = functions
             else:
                 _logger.warning(f"""LambdaProtocol type : {self.type} not
                                   recognised. Allowed values are 'default',
-                                  'namd' and 'quarters'. Setting LambdaProtocol
-                                  functions to default. """)
+                                  'namd' and 'quarters' and 'user-defined'. 
+                                  Setting LambdaProtocol functions to default. """)
                 self.functions = LambdaProtocol.default_functions
 
         self._validate_functions()

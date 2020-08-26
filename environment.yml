@@ -8,6 +8,8 @@ channels:
 dependencies:
   - python >=3.6
   - setuptools
+  - fire
+  - joblib
   - numpy >=1.14
   - scipy
   - numexpr

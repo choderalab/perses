@@ -8,10 +8,18 @@ on:
     branches:
       - "master"
   schedule:
+<<<<<<< HEAD
     # Nightly tests run on master by default:
     #   Scheduled workflows run on the latest commit on the default or base branch.
     #   (from https://help.github.com/en/actions/reference/events-that-trigger-workflows#scheduled-events-schedule)
     - cron: "0 0 * * *"
+=======
+    # nightly tests
+    - cron: '0 0 * * *'
+  push:
+    branches:
+      - master
+>>>>>>> master
 
 jobs:
   test:
@@ -21,18 +29,27 @@ jobs:
       fail-fast: false
       matrix:
         cfg:
+<<<<<<< HEAD
           # - { os: macOS-latest, python-version: 3.7, openmm: latest }
           # - { os: windows-latest, python-version: 3.7, openmm: latest }
           - { os: ubuntu-latest, python-version: 3.7, openmm: latest }
           - { os: ubuntu-latest, python-version: 3.8, openmm: latest }
           - { os: ubuntu-latest, python-version: 3.7, openmm: nightly }
           - { os: ubuntu-latest, python-version: 3.7, openmm: conda-forge }
+=======
+          - {python-version: 3.6, openmm: "latest"}
+          - {python-version: 3.7, openmm: "latest"}
+          - {python-version: 3.7, openmm: "rc"}
+          - {python-version: 3.7, openmm: "nightly"} # Can we have this run only nightly?
+          - {python-version: 3.7, openmm: "conda-forge"}
+>>>>>>> master
 
     env:
       OPENMM: ${{ matrix.cfg.openmm }}
       OE_LICENSE: ${{ github.workspace }}/oe_license.txt
 
     steps:
+<<<<<<< HEAD
       - uses: actions/checkout@v1
 
       - name: Additional info about the build
@@ -143,3 +160,86 @@ jobs:
         run: |
           cd docs
           make html SPHINXOPTS="-W --keep-going -n"
+=======
+    - uses: actions/checkout@v1
+    - name: Additional info about the build
+      shell: bash
+      run: |
+        uname -a
+        df -h
+        ulimit -a
+    - name: Configure conda
+      shell: bash
+      run: |
+        . devtools/scripts/initialize_conda.sh
+        conda activate
+        conda config --set always_yes True
+        conda config --add channels omnia --add channels conda-forge --add channels openeye
+        conda update --quiet --all
+        conda install --quiet conda conda-build jinja2 anaconda-client
+        conda info
+        conda list
+    - name: Decrypt OpenEye license
+      shell: bash
+      env:
+        ENC_OE_LICENSE: ${{ secrets.OE_LICENSE }}
+      run: |
+        echo "${ENC_OE_LICENSE}" > $HOME/oe_license.txt
+
+    - name: Build recipe
+      shell: bash
+      run: |
+        . devtools/scripts/initialize_conda.sh
+        conda activate
+        conda build --quiet --python=${{ matrix.cfg.python-version }} devtools/conda-recipe
+    - name: Prepare test environment
+      shell: bash
+      run: |
+        . devtools/scripts/initialize_conda.sh
+        conda activate
+        conda create --quiet -n test -c local ${PACKAGENAME}-dev nose nose-timer
+        conda activate test
+        # Install openmm-forcefields via pip (until available via omnia)
+        conda install --yes tinydb "openforcefield>=0.6.0" "openforcefields>=1.0.0"
+        pip install git+https://github.com/openmm/openmm-forcefields.git
+        case ${{ matrix.cfg.openmm }} in
+          latest)
+            echo "Using latest release OpenMM."
+            conda install --quiet -c omnia openmm;;
+          rc)
+            echo "Using OpenMM rc"
+            conda install --quiet -c omnia/label/rc openmm;;
+          beta)
+            echo "Using OpenMM beta"
+            conda install --quiet -c omnia/label/beta openmm;;
+          nightly)
+            echo "Using OpenMM nightly dev build."
+            conda install --quiet -c omnia-dev openmm;;
+          conda-forge)
+            echo "Using OpenMM conda-forge testing build."
+            conda install --quiet -c conda-forge/label/testing openmm;;
+        esac
+    - name: Test the package
+      shell: bash
+      run: |
+        . devtools/scripts/initialize_conda.sh
+        conda activate test
+        export OE_LICENSE="$HOME/oe_license.txt"
+        export TRAVIS=true
+        pushd .
+        nosetests ${PACKAGENAME} --with-coverage --verbosity=3 --with-timer -a '!advanced'
+        popd
+    - name: Codecov
+      uses: codecov/codecov-action@v1.0.5
+      with:
+        # User defined upload name. Visible in Codecov UI
+        name: perses
+        # Repository upload token - get it from codecov.io
+        token: 618f5706-686e-444a-86a6-b017e52708a9
+
+    - name: Deploy
+      shell: bash
+      if: false
+      run: |
+        echo "Deployment has not been implemented yet"
+>>>>>>> master

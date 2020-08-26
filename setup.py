@@ -38,8 +38,8 @@ def find_package_data(data_root, package_root):
 
 
 # #########################
-VERSION = '0.6.0dev0'
-ISRELEASED = False 
+VERSION = '0.8.1dev0'
+ISRELEASED = False
 __version__ = VERSION
 # #########################
 
@@ -80,7 +80,7 @@ setup(name='perses',
       zip_safe=False,
       entry_points={
        'openmm.forcefielddir' : ['perses=perses:get_datadir'],
-       'console_scripts' : ['perses-relative = perses.app.setup_relative_calculation:run']
+       'console_scripts' : ['perses-relative = perses.app.setup_relative_calculation:run','perses-fah = perses.app.fah_generator:run']
       },
       ext_modules=extensions,
       install_requires=[],

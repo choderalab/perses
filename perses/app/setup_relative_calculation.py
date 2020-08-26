@@ -75,14 +75,41 @@ def getSetupOptions(filename):
         setup_options['protocol-type'] = 'default'
 
 
+    if 'temperature' not in setup_options:
+        setup_options['temperature'] = 300.
+    if 'pressure' not in setup_options:
+        setup_options['pressure'] = 1.
+    if 'solvent_padding' not in setup_options:
+        setup_options['solvent_padding'] = 9.
+    if 'ionic_strength' not in setup_options:
+        setup_options['ionic_strength'] = 0.15
+
+
     if 'small_molecule_forcefield' not in setup_options:
-        setup_options['small_molecule_forcefield'] = 'gaff-2.11'
+        setup_options['small_molecule_forcefield'] = None
 
     if 'small_molecule_parameters_cache' not in setup_options:
         setup_options['small_molecule_parameters_cache'] = None
 
+    # remove_constraints can be 'all' or 'not water'
+    if setup_options['remove_constraints'] not in ['all', 'not water']:
+        _logger.warning("remove_constraints value of {setup_options['remove_constraints']} not understood. 'all', 'none' or 'not water' are valid options. NOT REMOVING ANY CONSTRAINTS")
+        setup_options['remove_constraints'] = False
+    elif 'remove_constraints' not in setup_options:
+        setup_options['remove_constraints'] = False
+        _logger.info('No constraints will be removed')
+
     if 'spectators' not in setup_options:
+        _logger.info(f'No spectators')
         setup_options['spectators'] = None
+
+    if 'complex_box_dimensions' not in setup_options:
+        setup_options['complex_box_dimensions'] = None
+    else:
+        setup_options['complex_box_dimensions'] = tuple([float(x) for x in setup_options['complex_box_dimensions']])
+
+    if 'solvent_box_dimensions' not in setup_options:
+        setup_options['solvent_box_dimensions'] = None
 
     # Not sure why these are needed
     # TODO: Revisit these?
@@ -93,6 +120,12 @@ def getSetupOptions(filename):
 
     if 'nonbonded_method' not in setup_options:
         setup_options['nonbonded_method'] = 'PME'
+
+    if 'render_atom_map' not in setup_options:
+        setup_options['render_atom_map'] = True
+
+    if 'n_steps_per_move_application' not in setup_options:
+        setup_options['n_steps_per_move_application'] = 1
 
     if 'run_type' not in setup_options:
         _logger.info(f"\t\t\trun_type is not specified; default to None")
@@ -272,7 +305,7 @@ def getSetupOptions(filename):
 
     return setup_options
 
-def run_setup(setup_options):
+def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     """
     Run the setup pipeline and return the relevant setup objects based on a yaml input file.
     Parameters
@@ -295,10 +328,12 @@ def run_setup(setup_options):
         # We'll need the protein PDB file (without missing atoms)
         try:
             protein_pdb_filename = setup_options['protein_pdb']
+            assert protein_pdb_filename is not None
             receptor_mol2 = None
         except KeyError:
             try:
                 receptor_mol2 = setup_options['receptor_mol2']
+                assert receptor_mol2 is not None
                 protein_pdb_filename = None
             except KeyError as e:
                 print("Either protein_pdb or receptor_mol2 must be specified if running a complex simulation")
@@ -352,11 +387,13 @@ def run_setup(setup_options):
     pressure = setup_options['pressure'] * unit.atmosphere
     temperature = setup_options['temperature'] * unit.kelvin
     solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
+    ionic_strength = setup_options['ionic_strength'] * unit.molar
     _logger.info(f"\tsetting pressure: {pressure}.")
     _logger.info(f"\tsetting temperature: {temperature}.")
     _logger.info(f"\tsetting solvent padding: {solvent_padding_angstroms}A.")
+    _logger.info(f"\tsetting ionic strength: {ionic_strength}M.")
 
-    setup_pickle_file = setup_options['save_setup_pickle_as']
+    setup_pickle_file = setup_options['save_setup_pickle_as'] if 'save_setup_pickle_as' in list(setup_options) else None
     _logger.info(f"\tsetup pickle file: {setup_pickle_file}")
     trajectory_directory = setup_options['trajectory_directory']
     _logger.info(f"\ttrajectory directory: {trajectory_directory}")
@@ -369,8 +406,14 @@ def run_setup(setup_options):
         atom_map=None
         _logger.info(f"\tno atom map specified: default to None.")
 
-    if 'topology_proposal' not in setup_options:
+    if 'topology_proposal' not in list(setup_options.keys()) or setup_options['topology_proposal'] is None:
         _logger.info(f"\tno topology_proposal specified; proceeding to RelativeFEPSetup...\n\n\n")
+        if 'set_solvent_box_dims_to_complex' in list(setup_options.keys()) and setup_options['set_solvent_box_dims_to_complex']:
+            set_solvent_box_dims_to_complex=True
+        else:
+            set_solvent_box_dims_to_complex=False
+
+        _logger.info(f'Box dimensions: {setup_options["complex_box_dimensions"]} and {setup_options["solvent_box_dimensions"]}')
         fe_setup = RelativeFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files,phases=phases,
                                           protein_pdb_filename=protein_pdb_filename,
                                           receptor_mol2_filename=receptor_mol2, pressure=pressure,
@@ -379,18 +422,24 @@ def run_setup(setup_options):
                                           atom_expr=setup_options['atom_expr'], bond_expr=setup_options['bond_expr'],
                                           atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
-                                          trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'])
+                                          trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'],
+
+                                          complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'], ionic_strength=ionic_strength, remove_constraints=setup_options['remove_constraints'])
+
 
         _logger.info(f"\twriting pickle output...")
-        with open(os.path.join(os.getcwd(), trajectory_directory, setup_pickle_file), 'wb') as f:
-            try:
-                pickle.dump(fe_setup, f)
-                _logger.info(f"\tsuccessfully dumped pickle.")
-            except Exception as e:
-                print(e)
-                print("\tUnable to save setup object as a pickle")
+        if setup_pickle_file is not None:
+            with open(os.path.join(os.getcwd(), trajectory_directory, setup_pickle_file), 'wb') as f:
+                try:
+                    pickle.dump(fe_setup, f)
+                    _logger.info(f"\tsuccessfully dumped pickle.")
+                except Exception as e:
+                    print(e)
+                    print("\tUnable to save setup object as a pickle")
 
-        _logger.info(f"\tsetup is complete.  Writing proposals and positions for each phase to top_prop dict...")
+            _logger.info(f"\tsetup is complete.  Writing proposals and positions for each phase to top_prop dict...")
+        else:
+            _logger.info(f"\tsetup is complete.  Omitted writing proposals and positions for each phase to top_prop dict...")
 
         top_prop = dict()
         for phase in phases:
@@ -405,9 +454,14 @@ def run_setup(setup_options):
             top_prop[f'{phase}_forward_neglected_angles'] = getattr(fe_setup, f'_{phase}_forward_neglected_angles')
             top_prop[f'{phase}_reverse_neglected_angles'] = getattr(fe_setup, f'_{phase}_reverse_neglected_angles')
 
+        top_prop['ligand_oemol_old'] = fe_setup._ligand_oemol_old
+        top_prop['ligand_oemol_new'] = fe_setup._ligand_oemol_new
+        top_prop['non_offset_new_to_old_atom_map'] = fe_setup.non_offset_new_to_old_atom_map
         _logger.info(f"\twriting atom_mapping.png")
         atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'atom_mapping.png')
-        render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
+
+        if 'render_atom_map' in list(setup_options.keys()) and setup_options['render_atom_map']:
+            render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
 
     else:
         _logger.info(f"\tloading topology proposal from yaml setup options...")
@@ -449,18 +503,19 @@ def run_setup(setup_options):
                                                softcore_LJ_v2 = setup_options['softcore_v2'],
                                                interpolate_old_and_new_14s = setup_options['anneal_1,4s'])
 
-            ne_fep[phase] = SequentialMonteCarlo(factory = hybrid_factory,
-                                                 lambda_protocol = setup_options['lambda_protocol'],
-                                                 temperature = temperature,
-                                                 trajectory_directory = trajectory_directory,
-                                                 trajectory_prefix = f"{trajectory_prefix}_{phase}",
-                                                 atom_selection = atom_selection,
-                                                 timestep = timestep,
-                                                 eq_splitting_string = eq_splitting,
-                                                 neq_splitting_string = neq_splitting,
-                                                 collision_rate = setup_options['ncmc_collision_rate_ps'],
-                                                 ncmc_save_interval = ncmc_save_interval,
-                                                 internal_parallelism = _internal_parallelism)
+            if build_samplers:
+                ne_fep[phase] = SequentialMonteCarlo(factory = hybrid_factory,
+                                                     lambda_protocol = setup_options['lambda_protocol'],
+                                                     temperature = temperature,
+                                                     trajectory_directory = trajectory_directory,
+                                                     trajectory_prefix = f"{trajectory_prefix}_{phase}",
+                                                     atom_selection = atom_selection,
+                                                     timestep = timestep,
+                                                     eq_splitting_string = eq_splitting,
+                                                     neq_splitting_string = neq_splitting,
+                                                     collision_rate = setup_options['ncmc_collision_rate_ps'],
+                                                     ncmc_save_interval = ncmc_save_interval,
+                                                     internal_parallelism = _internal_parallelism)
 
         print("Nonequilibrium switching driver class constructed")
 
@@ -468,15 +523,6 @@ def run_setup(setup_options):
 
     else:
         _logger.info(f"\tno nonequilibrium detected.")
-        n_states = setup_options['n_states']
-        _logger.info(f"\tn_states: {n_states}")
-        if 'n_replicas' not in setup_options:
-            n_replicas = n_states
-        else:
-            n_replicas = setup_options['n_replicas']
-        _logger.info(f"\tn_replicas: {n_replicas}")
-        checkpoint_interval = setup_options['checkpoint_interval']
-        _logger.info(f"\tcheckpoint_interval: {checkpoint_interval}")
         htf = dict()
         hss = dict()
         _logger.info(f"\tcataloging HybridTopologyFactories...")
@@ -500,68 +546,86 @@ def run_setup(setup_options):
             _forward_added_valence_energy = top_prop['%s_added_valence_energy' % phase]
             _reverse_subtracted_valence_energy = top_prop['%s_subtracted_valence_energy' % phase]
 
-            xml_directory = f'{setup_options["trajectory_directory"]}/xml/'
-            if not os.path.exists(xml_directory):
-                os.makedirs(xml_directory)
-
-            zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, trajectory_directory=f'{xml_directory}{phase}')
+            zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD)#, trajectory_directory=f'{xml_directory}{phase}')
             _logger.info(f"\t\terror in zero state: {zero_state_error}")
             _logger.info(f"\t\terror in one state: {one_state_error}")
 
-            # generating lambda protocol
-            lambda_protocol = LambdaProtocol(functions=setup_options['protocol-type'])
-            _logger.info(f'Using lambda protocol : {setup_options["protocol-type"]}')
-
-
-            if atom_selection:
-                selection_indices = htf[phase].hybrid_topology.select(atom_selection)
-            else:
-                selection_indices = None
-
-            storage_name = str(trajectory_directory)+'/'+str(trajectory_prefix)+'-'+str(phase)+'.nc'
-            _logger.info(f'\tstorage_name: {storage_name}')
-            _logger.info(f'\tselection_indices {selection_indices}')
-            _logger.info(f'\tcheckpoint interval {checkpoint_interval}')
-            reporter = MultiStateReporter(storage_name, analysis_particle_indices=selection_indices,
-                                          checkpoint_interval=checkpoint_interval)
-
-            if phase == 'vacuum':
-                endstates = False
-            else:
-                endstates = True
             #TODO expose more of these options in input
-            if setup_options['fe_type'] == 'sams':
-                hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
-                                                                                    collision_rate=1.0 / unit.picosecond,
-                                                                                    n_steps=n_steps_per_move_application,
-                                                                                    reassign_velocities=False,
-                                                                                    n_restart_attempts=20,constraint_tolerance=1e-06),
-                                               hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
-                                               online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
-                                               gamma0=setup_options['gamma0'])
-                hss[phase].setup(n_states=n_states, n_replicas=n_replicas, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
-            elif setup_options['fe_type'] == 'repex':
-                hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
-                                                                                     collision_rate=1.0 / unit.picosecond,
-                                                                                     n_steps=n_steps_per_move_application,
-                                                                                     reassign_velocities=False,
-                                                                                     n_restart_attempts=20,constraint_tolerance=1e-06),
-                                                                                     hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
-                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
+            if build_samplers:
 
-            # save the systems and the states
-            from simtk.openmm import XmlSerializer
-            from perses.tests.utils import generate_endpoint_thermodynamic_states
+                n_states = setup_options['n_states']
+                _logger.info(f"\tn_states: {n_states}")
+                if 'n_replicas' not in setup_options:
+                    n_replicas = n_states
+                else:
+                    n_replicas = setup_options['n_replicas']
 
-            _logger.info('WRITING OUT XML FILES')
-            #old_thermodynamic_state, new_thermodynamic_state, hybrid_thermodynamic_state, _ = generate_endpoint_thermodynamic_states(htf[phase].hybrid_system, _top_prop)
+                checkpoint_interval = setup_options['checkpoint_interval']
+
+                # generating lambda protocol
+                lambda_protocol = LambdaProtocol(functions=setup_options['protocol-type'])
+                _logger.info(f'Using lambda protocol : {setup_options["protocol-type"]}')
 
 
-            from perses.utils import data
-            _logger.info(f'Saving the hybrid, old and new system to disk')
-            data.serialize(htf[phase].hybrid_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-hybrid-system.gz')
-            data.serialize(htf[phase]._old_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-old-system.gz')
-            data.serialize(htf[phase]._new_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-new-system.gz')
+                if atom_selection:
+                    selection_indices = htf[phase].hybrid_topology.select(atom_selection)
+                else:
+                    selection_indices = None
+
+                storage_name = str(trajectory_directory)+'/'+str(trajectory_prefix)+'-'+str(phase)+'.nc'
+                _logger.info(f'\tstorage_name: {storage_name}')
+                _logger.info(f'\tselection_indices {selection_indices}')
+                _logger.info(f'\tcheckpoint interval {checkpoint_interval}')
+                reporter = MultiStateReporter(storage_name, analysis_particle_indices=selection_indices,
+                                              checkpoint_interval=checkpoint_interval)
+
+                if phase == 'vacuum':
+                    endstates = False
+                else:
+                    endstates = True
+
+                if setup_options['fe_type'] == 'fah':
+                    _logger.info('SETUP FOR FAH DONE')
+                    return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf}
+
+                if setup_options['fe_type'] == 'sams':
+                    hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
+                                                                                        collision_rate=1.0 / unit.picosecond,
+                                                                                        n_steps=n_steps_per_move_application,
+                                                                                        reassign_velocities=False,
+                                                                                        n_restart_attempts=20,constraint_tolerance=1e-06),
+                                                   hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
+                                                   online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
+                                                   gamma0=setup_options['gamma0'])
+                    hss[phase].setup(n_states=n_states, n_replicas=n_replicas, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
+                elif setup_options['fe_type'] == 'repex':
+                    hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
+                                                                                         collision_rate=1.0 / unit.picosecond,
+                                                                                         n_steps=n_steps_per_move_application,
+                                                                                         reassign_velocities=False,
+                                                                                         n_restart_attempts=20,constraint_tolerance=1e-06),
+                                                                                         hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
+                    hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
+            else:
+                _logger.info(f"omitting sampler construction")
+
+            if serialize_systems:
+                # save the systems and the states
+                from simtk.openmm import XmlSerializer
+                from perses.tests.utils import generate_endpoint_thermodynamic_states
+
+                _logger.info('WRITING OUT XML FILES')
+                #old_thermodynamic_state, new_thermodynamic_state, hybrid_thermodynamic_state, _ = generate_endpoint_thermodynamic_states(htf[phase].hybrid_system, _top_prop)
+
+                xml_directory = f'{setup_options["trajectory_directory"]}/xml/'
+                if not os.path.exists(xml_directory):
+                    os.makedirs(xml_directory)
+                from perses.utils import data
+                _logger.info('WRITING OUT XML FILES')
+                _logger.info(f'Saving the hybrid, old and new system to disk')
+                data.serialize(htf[phase].hybrid_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-hybrid-system.gz')
+                data.serialize(htf[phase]._old_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-old-system.gz')
+                data.serialize(htf[phase]._new_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-new-system.gz')
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 
@@ -618,7 +682,7 @@ def run(yaml_filename=None):
             except Exception as e:
                 print(e)
                 print("Unable to save run object as a pickle; saving as npy")
-                np.save(os.path.join(trajectory_directory, "%s_%s_fep.neq.npy" % (out_trajectory_prefix, phase)), ne_fep_run)
+                np.savez(os.path.join(trajectory_directory, "%s_%s_fep.neq.npy" % (out_trajectory_prefix, phase)), ne_fep_run)
 
     else:
         _logger.info(f"Running setup...")
@@ -635,7 +699,7 @@ def run(yaml_filename=None):
         except Exception as e:
             print(e)
             _logger.info("Unable to save run object as a pickle; saving as npy")
-            np.save(os.path.join(trajectory_directory, "%s_topology_proposals.npy" % (trajectory_prefix)), setup_dict['topology_proposals'])
+            np.savez(os.path.join(trajectory_directory, "%s_topology_proposals.npy" % (trajectory_prefix)), setup_dict['topology_proposals'])
 
         n_equilibration_iterations = setup_options['n_equilibration_iterations'] #set this to 1 for neq_fep
         _logger.info(f"Equilibration iterations: {n_equilibration_iterations}.")
@@ -716,12 +780,12 @@ def run(yaml_filename=None):
                     except Exception as e:
                         print(e)
                         print("Unable to save run object as a pickle; saving as npy")
-                        np.save(os.path.join(trajectory_directory, "%s_%s_fep.neq.npy" % (trajectory_prefix, phase)), ne_fep_run)
+                        np.savez(os.path.join(trajectory_directory, "%s_%s_fep.neq.npy" % (trajectory_prefix, phase)), ne_fep_run)
 
         elif setup_options['fe_type'] == 'sams':
             _logger.info(f"Detecting sams as fe_type...")
             _logger.info(f"Writing hybrid factory {trajectory_prefix}hybrid_factory.npy to {trajectory_directory}...")
-            np.save(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
+            np.savez(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
                     setup_dict['hybrid_topology_factories'])
 
             hss = setup_dict['hybrid_samplers']
@@ -751,7 +815,7 @@ def run(yaml_filename=None):
         elif setup_options['fe_type'] == 'repex':
             _logger.info(f"Detecting repex as fe_type...")
             _logger.info(f"Writing hybrid factory {trajectory_prefix}hybrid_factory.npy to {trajectory_directory}...")
-            np.save(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
+            np.savez(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
                     setup_dict['hybrid_topology_factories'])
 
             hss = setup_dict['hybrid_samplers']
