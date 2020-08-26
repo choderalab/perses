@@ -676,7 +676,7 @@ class HybridTopologyFactory(object):
         energy_expression += 'U1 = K1*(1+cos(periodicity1*theta-phase1));'
         energy_expression += 'U2 = K2*(1+cos(periodicity2*theta-phase2));'
         if self._repartition:
-            energy_expression += 'lambda_mixer = select(delta(1 - core_term), lambda_intergroup, lambda_ingroup)'
+            energy_expression += "lambda_mixer = lambda_ingroup*delta(1-core_term) + lambda_intergroup*delta(core_term) + delta(1 + core_term)"
         else:
             energy_expression += 'lambda_mixer = 1'
 
@@ -1409,7 +1409,7 @@ class HybridTopologyFactory(object):
             elif set(hybrid_index_list).intersection(self._atom_classes['core_atoms']) != set():
                 self._hybrid_system_forces['custom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters + [0.])
             elif set(hybrid_index_list).issubset(self._atom_classes['environment_atoms']):
-                self._hybrid_system_forces['custom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters + [0.])
+                self._hybrid_system_forces['custom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters + [-1.])
             else:
                  for atom in terms:
                     if atom in self._atom_classes['unique_old_atoms']:
