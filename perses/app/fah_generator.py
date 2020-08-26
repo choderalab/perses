@@ -159,6 +159,7 @@ def run_neq_fah_setup(ligand_file,
                       setup='small_molecule',
                       protein_kwargs=None,
                       ionic_strength=0.15,
+                      remove_constraints='not water',
                       **kwargs):
     """
     main execution function that will:
