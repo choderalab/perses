@@ -30,7 +30,6 @@ class TimeFilter(logging.Filter):
         return True
 
 fmt = logging.Formatter(fmt="%(asctime)s:(%(relative)ss):%(name)s:%(message)s")
-#logging.basicConfig(level = logging.NOTSET)
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(message)s',
     level=logging.INFO,
@@ -150,6 +149,7 @@ def run_neq_fah_setup(ligand_file,
                       temperature=300,
                       solvent_padding=9*unit.angstroms,
                       phases=['complex','solvent','vacuum'],
+                      phase_project_ids=None,
                       protein_pdb=None,
                       receptor_mol2=None,
                       small_molecule_forcefield='openff-1.2.0',
@@ -218,8 +218,9 @@ def run_neq_fah_setup(ligand_file,
             pressure in atms for simulation
         temperature: float, default=300.,
             temperature in K for simulation
-        phases: list, default = ['complex','solvent','vacuum']
-            phases to run, where allowed phases are 'complex','solvent','vacuum'
+        phases: list, default = ['complex','solvent','vacuum','apo']
+            phases to run, where allowed phases are:
+            'complex','solvent','vacuum','apo'
         protein_pdb : str, default=None
             name of protein file
         receptor_mol2 : str, default=None
@@ -266,6 +267,8 @@ def run_neq_fah_setup(ligand_file,
     """
     from perses.utils import data
     #turn all of the args into a dict for passing to run_setup
+    # HBM - this doesn't feel particularly safe
+    # Also, this means that the function can't run without being called by run(), as we are requiring things that aren't arguments to this function, like 'solvent_projid'...etc
     setup_options = locals()
     if 'kwargs' in setup_options.keys(): #update the setup options w.r.t. kwargs
         setup_options.update(setup_options['kwargs'])
@@ -278,6 +281,9 @@ def run_neq_fah_setup(ligand_file,
     setups_allowed = ['small_molecule', 'protein']
     assert setup in setups_allowed, f"setup {setup} not in setups_allowed: {setups_allowed}"
 
+    # check there is a project_id for each phase
+    for phase in phases:
+        assert (phase in phase_project_ids), f"Phase {phase} requested, but not in phase_project_ids {phase_project_ids.keys()}"
 
     #some modification for fah-specific functionality:
     setup_options['trajectory_prefix']=None
@@ -301,20 +307,13 @@ def run_neq_fah_setup(ligand_file,
 
     #create solvent and complex directories
     for phase in htfs.keys():
-        _logger.info(f'PHASE RUNNING: {phase}')
         _logger.info(f'Setting up phase {phase}')
-        if phase == 'solvent':
-            phase_dir = f"{setup_options['solvent_projid']}/RUNS"
-        if phase == 'complex':
-            phase_dir = f"{setup_options['complex_projid']}/RUNS"
-        if phase == 'vacuum':
-            phase_dir = f"{setup_options['vacuum_projid']}/RUNS"
-        if phase == 'apo':
-            phase_dir = f"{setup_options['apo_projid']}/RUNS"
+        phase_dir = f"{phase_project_ids[phase]}/RUNS"
         dir = os.path.join(os.getcwd(), phase_dir, trajectory_directory)
         if not os.path.exists(dir):
             os.mkdir(dir)
 
+        # TODO - replace this with actually saving the importand part of the HTF
         np.savez_compressed(f'{dir}/htf',htfs[phase])
 
         #serialize the hybrid_system
@@ -335,9 +334,9 @@ def run_neq_fah_setup(ligand_file,
             data.serialize(state, f"{dir}/state.xml.bz2")
         except Exception as e:
             print(e)
-            passed=False
+            passed = False
         else:
-            passed=True
+            passed = True
 
         pos = state.getPositions(asNumpy=True)
         pos = np.asarray(pos)
@@ -346,7 +345,7 @@ def run_neq_fah_setup(ligand_file,
         top = htfs[phase].hybrid_topology
         np.save(f'{dir}/hybrid_topology', top)
         traj = md.Trajectory(pos, top)
-        traj.remove_solvent(exclude=['CL','NA'],inplace=True)
+        traj.remove_solvent(exclude=['CL', 'NA'], inplace=True)
         traj.save(f'{dir}/hybrid_{phase}.pdb')
 
         #lastly, make a core.xml
@@ -354,12 +353,12 @@ def run_neq_fah_setup(ligand_file,
         ncycles = 1
         nsteps_per_ps = 250
         core_parameters = {
-            'numSteps' : ncycles * nsteps_per_cycle,
-            'xtcFreq' : 1000*nsteps_per_ps, # once per ns
-            'xtcAtoms' : 'solute',
-            'precision' : 'mixed',
-            'globalVarFilename' : 'globals.csv',
-            'globalVarFreq' : 10*nsteps_per_ps,
+            'numSteps': ncycles * nsteps_per_cycle,
+            'xtcFreq': 1000*nsteps_per_ps, # once per ns
+            'xtcAtoms': 'solute',
+            'precision': 'mixed',
+            'globalVarFilename': 'globals.csv',
+            'globalVarFreq': 10*nsteps_per_ps,
         }
         # Serialize core.xml
         import dicttoxml
@@ -371,6 +370,7 @@ def run_neq_fah_setup(ligand_file,
             outfile.write(dom.toprettyxml())
 
         #create a logger for reference
+        # TODO - add more details to this
         references = {'start_ligand': old_ligand_index,
                       'end_ligand': new_ligand_index,
                       'protein_pdb': protein_pdb,
@@ -397,8 +397,10 @@ def run(yaml_filename=None):
             yaml_filename = sys.argv[1]
             _logger.info(f"Detected yaml file: {yaml_filename}")
         except IndexError as e:
-            _logger.critical(f"You must specify the setup yaml file as an  argument to the script.")
-    from perses.app.setup_relative_calculation import getSetupOptions
+            _logger.critical(f"{e}: You must specify the setup yaml file as an  argument to the script.")
+
+    # this is imported, but not used --- why?
+    # from perses.app.setup_relative_calculation import getSetupOptions
     import yaml
     yaml_file = open(yaml_filename, 'r')
     setup_options = yaml.load(yaml_file, Loader=yaml.FullLoader)
