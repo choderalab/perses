@@ -1,15 +1,10 @@
 ###########################################
 # IMPORTS
 ###########################################
-from simtk.openmm import app
-from simtk import unit, openmm
 import numpy as np
 import os
 from nose.tools import nottest
 from unittest import skipIf
-
-import copy
-import pymbar
 
 ###
 from perses.dispersed import parallel

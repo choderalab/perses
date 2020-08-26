@@ -1,9 +1,5 @@
-from simtk import openmm, unit
-from simtk.openmm import app
-import os
-import os.path
+from simtk import unit
 import sys
-import math
 import numpy as np
 if sys.version_info >= (3, 0):
     from io import StringIO

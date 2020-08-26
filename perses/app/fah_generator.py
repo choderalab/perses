@@ -134,6 +134,7 @@ def relax_structure(temperature, system, positions, nequil=1000, n_steps_per_ite
     del context, integrator
     return state
 
+
 def run_neq_fah_setup(ligand_file,
                       old_ligand_index,
                       new_ligand_index,
@@ -284,6 +285,9 @@ def run_neq_fah_setup(ligand_file,
     setups_allowed = ['small_molecule', 'protein']
     assert setup in setups_allowed, f"setup {setup} not in setups_allowed: {setups_allowed}"
 
+
+    if phase_project_ids is None:
+        raise
     # check there is a project_id for each phase
     for phase in phases:
         assert (phase in phase_project_ids), f"Phase {phase} requested, but not in phase_project_ids {phase_project_ids.keys()}"

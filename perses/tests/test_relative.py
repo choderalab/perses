@@ -15,7 +15,7 @@ except ImportError:
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 from perses.tests import utils
-from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
+from openmmtools.states import SamplerState
 import openmmtools.mcmc as mcmc
 import openmmtools.cache as cache
 from unittest import skipIf

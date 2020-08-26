@@ -9,24 +9,13 @@ __author__ = 'John D. Chodera'
 # IMPORTS
 ################################################################################
 
-from simtk import openmm, unit
-from simtk.openmm import app
-import os, os.path
-import sys, math
-import numpy as np
-import logging
+import os
+import os.path
 import tempfile
 from functools import partial
-import pickle
-import json
 
 from perses.storage import NetCDFStorage, NetCDFStorageView
-import perses.tests.testsystems
 
-import perses.rjmc.topology_proposal as topology_proposal
-import perses.bias.bias_engine as bias_engine
-import perses.rjmc.geometry as geometry
-import perses.annihilation.ncmc_switching as ncmc_switching
 from unittest import skipIf
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 

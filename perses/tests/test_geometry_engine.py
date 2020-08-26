@@ -3,8 +3,6 @@ __author__ = 'Patrick B. Grinaway'
 import simtk.openmm as openmm
 import openeye.oechem as oechem
 import openmoltools
-import openeye.oeiupac as oeiupac
-import openeye.oeomega as oeomega
 import simtk.openmm.app as app
 import simtk.unit as unit
 import logging
@@ -13,7 +11,6 @@ import parmed
 from collections import namedtuple, OrderedDict
 import copy
 from unittest import skipIf
-from pkg_resources import resource_filename
 try:
     from urllib.request import urlopen
     from io import StringIO
@@ -30,11 +27,9 @@ from openmmtools.constants import kB
 from perses.rjmc import coordinate_numba
 
 from perses.rjmc.geometry import check_dimensionality
-from perses.utils.data import get_data_filename
 from perses.utils.openeye import smiles_to_oemol, OEMol_to_omm_ff
 from openmmforcefields.generators import SystemGenerator
 from openforcefield.topology import Molecule
-from simtk.openmm import app
 
 #global variables
 forcefield_files = ['amber14/protein.ff14SB.xml', 'amber/tip3p_standard.xml']
