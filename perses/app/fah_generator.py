@@ -16,10 +16,17 @@ import os
 import simtk.unit as unit
 from simtk import openmm
 import logging
-from perses.app.setup_relative_calculation import run_setup
+
+fmt = logging.Formatter(fmt="%(asctime)s:(%(relative)ss):%(name)s:%(message)s")
+#logging.basicConfig(level = logging.NOTSET)
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S')
 _logger = logging.getLogger()
 _logger.setLevel(logging.INFO)
-
+[hndl.addFilter(TimeFilter()) for hndl in _logger.handlers]
+[hndl.setFormatter(fmt) for hndl in _logger.handlers]
 
 #let's make a default lambda protocol
 x = 'lambda'
