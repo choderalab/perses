@@ -1408,8 +1408,19 @@ class HybridTopologyFactory(object):
                 self._hybrid_system_forces['custom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters + [1.])
             elif set(hybrid_index_list).intersection(self._atom_classes['core_atoms']) != set():
                 self._hybrid_system_forces['custom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters + [0.])
+            elif set(hybrid_index_list).issubset(self._atom_classes['environment_atoms']):
+                self._hybrid_system_forces['custom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters + [0.])
             else:
-                raise Exception(f"There is a torsion that is being mishandled with hybrid information: {terms}")
+                 for atom in terms:
+                    if atom in self._atom_classes['unique_old_atoms']:
+                        print("unique old ", atom)
+                    elif atom in self._atom_classes['unique_new_atoms']:
+                        print("unique new ", atom)
+                    elif atom in self._atom_classes['core_atoms']:
+                        print("core ", atom)
+                    elif atom in self._atom_classes['environment_atoms']:
+                        print("environment ", atom)
+                 raise Exception(f"There is a torsion that is being mishandled with hybrid information: {terms}")
 
     def handle_nonbonded(self):
         """
