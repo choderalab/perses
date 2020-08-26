@@ -12,18 +12,9 @@ __author__ = 'John D. Chodera'
 # IMPORTS
 ################################################################################
 
-from simtk import openmm, unit
-from simtk.openmm import app
-import os, os.path
-import sys, math
-import numpy as np
-import logging
+import os
+import os.path
 import tempfile
-from functools import partial
-import json
-
-from perses.storage import NetCDFStorage, NetCDFStorageView
-import perses.tests.testsystems
 from perses.analysis.analysis import Analysis
 from unittest import skipIf
 
