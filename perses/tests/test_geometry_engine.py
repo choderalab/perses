@@ -1004,7 +1004,7 @@ def run_proposals(proposal_list):
 
     """
     import logging
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     import time
     start_time = time.time()
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
@@ -1130,7 +1130,7 @@ def run_geometry_engine(index=0):
     without exceptions. Convert n-pentane to 2-methylpentane
     """
     import logging
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     import copy
     from perses.utils.openeye import iupac_to_oemol
     molecule_name_1 = 'benzene'
