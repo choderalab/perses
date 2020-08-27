@@ -54,8 +54,11 @@ class HybridTopologyFactory(object):
 
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
 
-    default_minimal_chargeprod = 1e-6 * unit.elementary_charge**2
-    default_minimal_epsilon = 1e-6 * unit.kilojoules_per_mole
+    # default_minimal_chargeprod = 1e-6 * unit.elementary_charge**2
+    # default_minimal_epsilon = 1e-6 * unit.kilojoules_per_mole
+
+    default_minimal_chargeprod = 0.0 * unit.elementary_charge**2
+    default_minimal_epsilon = 0.0 * unit.kilojoules_per_mole
 
     def __init__(self,
                  topology_proposal,
@@ -822,6 +825,8 @@ class HybridTopologyFactory(object):
             electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_electrostatics_insert", 0.0)
             electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_electrostatics_delete", 0.0)
             electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_electrostatics_core", 0.0)
+            electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_ingroup", 1.0)
+            electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_intergroup", 1.0)
 
 
 
@@ -913,8 +918,8 @@ class HybridTopologyFactory(object):
 
         expression = f"U_electrostatics; U_electrostatics = {ONE_4PI_EPS0}*chargeprod*lambda_ingroup/r;"
         expression += "chargeprod = charge_one*charge_two;"
-        expression += "charge_one = lambda_electrostatics_insert*(q_new1)*delta(1-is_unique_new1) + (1 - lambda_electrostatics_delete)*(q_old1)*delta(1-is_unique_old1) + (q_old1 + lambda_electrostatics_core*(q_new1 - q_old1))*delta(is_unique_old1 + is_unique_new1);"
-        expression += "charge_two = lambda_electrostatics_insert*(q_new2)*delta(1-is_unique_new2) + (1 - lambda_electrostatics_delete)*(q_old2)*delta(1-is_unique_old2) + (q_old2 + lambda_electrostatics_core*(q_new2 - q_old2))*delta(is_unique_old2 + is_unique_new2);"
+        expression += "charge_one = lambda_electrostatics_insert*(q_new1)*delta(1-unique_new1) + (1 - lambda_electrostatics_delete)*(q_old1)*delta(1-unique_old1) + (q_old1 + lambda_electrostatics_core*(q_new1 - q_old1))*delta(unique_old1 + unique_new1);"
+        expression += "charge_two = lambda_electrostatics_insert*(q_new2)*delta(1-unique_new2) + (1 - lambda_electrostatics_delete)*(q_old2)*delta(1-unique_old2) + (q_old2 + lambda_electrostatics_core*(q_new2 - q_old2))*delta(unique_old2 + unique_new2);"
         return expression
 
     def _nonbonded_custom_mixing_rules(self):
@@ -1684,6 +1689,7 @@ class HybridTopologyFactory(object):
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
 
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
+                self._hybrid_system_forces['core_electrostatics_force'].addExclusion(atom_pair[0], atom_pair[1])
 
 
             #check if the pair is in the reverse order and use that if so
@@ -1698,6 +1704,7 @@ class HybridTopologyFactory(object):
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0, replace=True)
 
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
+                self._hybrid_system_forces['core_electrostatics_force'].addExclusion(atom_pair[0], atom_pair[1])
 
             #If it's not handled by an exception in the original system, we just add the regular parameters as an exception
             # TODO: this implies that the old-old nonbonded interactions (those which are not exceptions) are always self-interacting throughout lambda protocol...
@@ -1729,6 +1736,7 @@ class HybridTopologyFactory(object):
 
 
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1])
+                self._hybrid_system_forces['core_electrostatics_force'].addExclusion(atom_pair[0], atom_pair[1])
 
 
 
@@ -1744,6 +1752,7 @@ class HybridTopologyFactory(object):
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0, replace=True)
 
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1])
+                self._hybrid_system_forces['core_electrostatics_force'].addExclusion(atom_pair[0], atom_pair[1])
 
 
             #If it's not handled by an exception in the original system, we just add the regular parameters as an exception
@@ -1787,6 +1796,7 @@ class HybridTopologyFactory(object):
                 _logger.debug(f"\t\thandle_nonbonded: _handle_original_exceptions: {exception_pair} is an environment exception pair")
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
             #we have already handled unique old - unique old exceptions
             elif len(index_set.intersection(self._atom_classes['unique_old_atoms'])) == 2:
@@ -1806,6 +1816,7 @@ class HybridTopologyFactory(object):
 
 
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
             #If the exception particles are neither solely old unique, solely environment, nor contain any unique old atoms, they are either core/environment or core/core
             #In this case, we need to get the parameters from the exception in the other (new) system, and interpolate between the two
@@ -1838,6 +1849,7 @@ class HybridTopologyFactory(object):
                 # self._hybrid_system_forces['standard_nonbonded_force'].addExceptionParameterOffset('lambda_electrostatics_core', exception_index, (chargeProd_new - chargeProd_old), 0, 0)
                 # self._hybrid_system_forces['standard_nonbonded_force'].addExceptionParameterOffset('lambda_sterics_core', exception_index, 0, (sigma_new - sigma_old), (epsilon_new - epsilon_old))
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
         #now, loop through the new system to collect remaining interactions. The only that remain here are
         #uniquenew-uniquenew, uniquenew-core, and uniquenew-environment. There might also be core-core, since not all
@@ -1873,6 +1885,7 @@ class HybridTopologyFactory(object):
 
 
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
             #however, there may be a core exception that exists in one system but not the other (ring closure)
             elif index_set.issubset(self._atom_classes['core_atoms']):
@@ -1917,6 +1930,7 @@ class HybridTopologyFactory(object):
                     #                                                                                    (epsilon_new - epsilon_old))
 
                     self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                    self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
     def handle_old_new_exceptions(self):
         """
@@ -1941,7 +1955,7 @@ class HybridTopologyFactory(object):
             old_new_nonbonded_exceptions += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
             old_new_nonbonded_exceptions += "lambda_alpha = new_interaction*(1-lambda_sterics_insert) + old_interaction*lambda_sterics_delete + core_interaction*lambda_sterics_core;"
 
-        old_new_nonbonded_exceptions += "U_electrostatics = ONE_4PI_EPS0*mod_chargeProd/r;"
+        old_new_nonbonded_exceptions += "U_electrostatics = ONE_4PI_EPS0*mod_chargeprod/r;"
         old_new_nonbonded_exceptions += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0
         old_new_nonbonded_exceptions += "mod_chargeprod = core_interaction*(new_chargeProd*lambda_electrostatics_core + old_chargeProd*(1 - lambda_electrostatics_core)) + new_interaction*lambda_electrostatics_insert*new_chargeProd + old_interaction*(1 - lambda_electrostatics_delete)*old_chargeProd;"
 
@@ -1949,7 +1963,7 @@ class HybridTopologyFactory(object):
         old_new_nonbonded_exceptions += "sigma = (1-lambda_sterics)*sigmaA + lambda_sterics*sigmaB;"
 
         old_new_nonbonded_exceptions += "lambda_sterics = new_interaction*lambda_sterics_insert + old_interaction*lambda_sterics_delete + core_interaction*lambda_sterics_core;"
-        old_new_nonbonded_exceptions += "new_interaction = delta(1-unique_new); old_interaction = delta(1-unique_old); core_interaction = delta(1 - core) + delta(1 - core_env)"
+        old_new_nonbonded_exceptions += "new_interaction = delta(1-unique_new); old_interaction = delta(1-unique_old); core_interaction = delta(1 - core) + delta(1 - core_env);"
 
         #lambda_mixer
         old_new_nonbonded_exceptions += "lambda_mixer = delta(1 - unique_new)*lambda_ingroup + delta(1 - unique_old)*lambda_ingroup + delta(1 - core)*lambda_ingroup + delta(1-core_env)*lambda_intergroup;"
