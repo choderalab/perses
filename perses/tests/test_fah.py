@@ -77,15 +77,15 @@ def test_pipeline_small_molecule_solvent():
 def test_pipeline_protein():
     from pkg_resources import resource_filename
     from perses.app.fah_generator import run_neq_fah_setup
-    yaml_filename = resource_filename('perses', 'data/barnase-mutation/mutant.yaml')
+    yaml_filename = resource_filename('perses', 'data/barstar-mutation/mutant.yaml')
 
     import yaml
     yaml_file = open(yaml_filename, 'r')
     setup_options = yaml.load(yaml_file, Loader=yaml.FullLoader)
     yaml_file.close()
 
-    ligand_file = resource_filename('perses', 'data/barnase-mutation/mmc2_barnase.pdb')
-    protein_file = resource_filename('perses', 'data/barnase-mutation/mmc2_barstar.pdb')
+    ligand_file = resource_filename('perses', 'data/barstar-mutation/mmc2_barnase.pdb')
+    protein_file = resource_filename('perses', 'data/barstar-mutation/mmc2_barstar.pdb')
     # need to replace ligand and protein location in file
 
     setup_options['phase_project_ids'] = {'complex':'temp-complex','apo':'temp-apo'}
