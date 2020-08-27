@@ -194,7 +194,7 @@ def run_neq_fah_setup(ligand_file,
                       neq_splitting='V R H O R V',
                       measure_shadow_work=False,
                       pressure=1.0,
-                      temperature=300,
+                      temperature=300. * unit.kelvin,
                       solvent_padding=9*unit.angstroms,
                       phases=['complex','solvent','vacuum'],
                       phase_project_ids=None,
@@ -267,7 +267,7 @@ def run_neq_fah_setup(ligand_file,
             True/False to measure shadow work
         pressure: float, default=1.
             pressure in atms for simulation
-        temperature: float, default=300.,
+        temperature: simtk.unit.Quantity, default=300.*unit.kelvin,
             temperature in K for simulation
         phases: list, default = ['complex','solvent','vacuum','apo']
             phases to run, where allowed phases are:
@@ -317,6 +317,15 @@ def run_neq_fah_setup(ligand_file,
             number of equilibrium steps to take per move
     """
     from perses.utils import data
+    if isinstance(temperature,float) or isinstance(temperature,int):
+        temperature = temperature * unit.kelvin
+
+    if isinstance(timestep,float) or isinstance(timestep,int):
+        timestep = timestep* unit.femtosecond
+
+    if isinstance(pressure, float) or isinstance(pressure, int):
+        pressure = pressure  * unit.atmosphere
+
     #turn all of the args into a dict for passing to run_setup
     # HBM - this doesn't feel particularly safe
     # Also, this means that the function can't run without being called by run(), as we are requiring things that aren't arguments to this function, like 'solvent_projid'...etc
@@ -335,9 +344,6 @@ def run_neq_fah_setup(ligand_file,
     # check there is a project_id for each phase
     for phase in phases:
         assert (phase in phase_project_ids), f"Phase {phase} requested, but not in phase_project_ids {phase_project_ids.keys()}"
-
-    if isinstance(setup_options['temperature'],float):
-        setup_options['temperature'] = setup_options['temperature'] * unit.kelvin
 
     #some modification for fah-specific functionality:
     setup_options['trajectory_prefix'] = None
