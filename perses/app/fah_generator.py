@@ -336,8 +336,8 @@ def run_neq_fah_setup(ligand_file,
     for phase in phases:
         assert (phase in phase_project_ids), f"Phase {phase} requested, but not in phase_project_ids {phase_project_ids.keys()}"
 
-    if isinstance(setups_allowed['temperature'],float):
-        setups_allowed['temperature'] = setups_allowed['temperature'] * unit.kelvin
+    if isinstance(setup_options['temperature'],float):
+        setup_options['temperature'] = setup_options['temperature'] * unit.kelvin
 
     #some modification for fah-specific functionality:
     setup_options['trajectory_prefix'] = None
