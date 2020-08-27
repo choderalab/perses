@@ -316,7 +316,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         - 'topology_proposals':
     """
     phases = setup_options['phases']
-    known_phases = ['complex','solvent','vacuum']
+    known_phases = ['complex', 'solvent', 'vacuum']
     for phase in phases:
         assert (phase in known_phases), f"Unknown phase, {phase} provided. run_setup() can be used with {known_phases}"
 
@@ -352,7 +352,10 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     forcefield_files = setup_options['forcefield_files']
 
     if "timestep" in setup_options:
-        timestep = setup_options['timestep'] * unit.femtoseconds
+        if isinstance(timestep, float):
+            timestep = setup_options['timestep'] * unit.femtoseconds
+        else:
+            timestep = setup_options['timestep']
         _logger.info(f"\ttimestep: {timestep}.")
     else:
         timestep = 1.0 * unit.femtoseconds
