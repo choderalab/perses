@@ -352,7 +352,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     forcefield_files = setup_options['forcefield_files']
 
     if "timestep" in setup_options:
-        if isinstance(timestep, float):
+        if isinstance(setup_options['timestep'], float):
             timestep = setup_options['timestep'] * unit.femtoseconds
         else:
             timestep = setup_options['timestep']
