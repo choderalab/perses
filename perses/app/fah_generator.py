@@ -189,7 +189,7 @@ def run_neq_fah_setup(ligand_file,
                       trajectory_directory,
                       complex_box_dimensions=(9.8, 9.8, 9.8),
                       solvent_box_dimensions=(3.5, 3.5, 3.5),
-                      timestep=4.0 * unit.femtosecond,
+                      timestep=4.0,
                       eq_splitting='V R O R V',
                       neq_splitting='V R H O R V',
                       measure_shadow_work=False,
@@ -257,7 +257,7 @@ def run_neq_fah_setup(ligand_file,
             define box dimensions of complex phase (in nm)
         solvent_box_dimensions : Vec3, default=(3.5, 3.5, 3.5)
             define box dimensions of solvent phase (in nm)
-        timestep : simtk.unit.Quantity, default=4.*unit.femtosecond
+        timestep : float, default=4.
             step size of nonequilibrium integration
         eq_splitting : str, default = 'V R O R V'
             splitting string of relaxation dynamics

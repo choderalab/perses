@@ -316,7 +316,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         - 'topology_proposals':
     """
     phases = setup_options['phases']
-    known_phases = ['complex','solvent','vacuum']
+    known_phases = ['complex', 'solvent', 'vacuum']
     for phase in phases:
         assert (phase in known_phases), f"Unknown phase, {phase} provided. run_setup() can be used with {known_phases}"
 
@@ -352,7 +352,10 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     forcefield_files = setup_options['forcefield_files']
 
     if "timestep" in setup_options:
-        timestep = setup_options['timestep'] * unit.femtoseconds
+        if isinstance(setup_options['timestep'], float):
+            timestep = setup_options['timestep'] * unit.femtoseconds
+        else:
+            timestep = setup_options['timestep']
         _logger.info(f"\ttimestep: {timestep}.")
     else:
         timestep = 1.0 * unit.femtoseconds
@@ -380,10 +383,18 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     else:
         measure_shadow_work = False
         _logger.info(f"\tno measure_shadow_work specified: defaulting to False.")
-
-    pressure = setup_options['pressure'] * unit.atmosphere
-    temperature = setup_options['temperature'] * unit.kelvin
-    solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
+    if isinstance(setup_options['pressure'],float):
+        pressure = setup_options['pressure'] * unit.atmosphere
+    else:
+        pressure = setup_options['pressure']
+    if isinstance(setup_options['temperature'], float):
+        temperature = setup_options['temperature'] * unit.kelvin
+    else:
+        temperature = setup_options['temperature']
+    if isinstance(setup_options['solvent_padding'], float):
+        solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
+    else:
+        solvent_padding_angstroms = setup_options['solvent_padding']
     if isinstance(setup_options['ionic_strength'], float):
         ionic_strength = setup_options['ionic_strength'] * unit.molar
     else:
