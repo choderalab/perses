@@ -380,7 +380,7 @@ def run_neq_fah_setup(ligand_file,
                             system = htfs[phase].hybrid_system,
                             positions = htfs[phase].hybrid_positions,
                             nequil = num_equilibration_iterations,
-                            n_steps_per_iteration=num_equilibration_steps_per_iteration, collision_rate=collision_rate_setup)
+                            n_steps_per_iteration=num_equilibration_steps_per_iteration, collision_rate=collision_rate_setup, **kwargs)
 
             data.serialize(state, f"{dir}/state.xml.bz2")
         except Exception as e:
