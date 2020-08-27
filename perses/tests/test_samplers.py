@@ -15,21 +15,11 @@ __author__ = 'John D. Chodera'
 
 from nose.plugins.attrib import attr
 
-from simtk import openmm, unit
-from simtk.openmm import app
-import os, os.path
-import sys, math
-import numpy as np
-import logging
+import os
+import os.path
 from functools import partial
 from unittest import skipIf
 
-import perses.tests.testsystems
-
-import perses.rjmc.topology_proposal as topology_proposal
-import perses.bias.bias_engine as bias_engine
-import perses.rjmc.geometry as geometry
-import perses.annihilation.ncmc_switching as ncmc_switching
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 

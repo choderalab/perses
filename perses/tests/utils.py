@@ -11,14 +11,10 @@ __author__ = 'John D. Chodera'
 import copy
 from simtk import openmm, unit
 from simtk.openmm import app
-import os, os.path
-import sys, math
+import sys
 import numpy as np
-from functools import partial
-from pkg_resources import resource_filename
 from perses.rjmc import geometry
 from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine
-from openforcefield.topology import Molecule
 from openeye import oechem
 if sys.version_info >= (3, 0):
     from io import StringIO

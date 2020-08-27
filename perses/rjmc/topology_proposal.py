@@ -2,32 +2,17 @@
 This file contains the base classes for topology proposals
 """
 
-from simtk import unit
-
-from simtk import openmm
 from simtk.openmm import app
 
-from collections import namedtuple
 import copy
-import warnings
 import logging
 import itertools
-import json
 import os
 import openeye.oechem as oechem
 import numpy as np
-import openeye.oeomega as oeomega
-import tempfile
 import networkx as nx
-import openeye.oegraphsim as oegraphsim
-from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import openmoltools.forcefield_generators as forcefield_generators
 from perses.storage import NetCDFStorageView
-from io import StringIO
-import openmoltools
-import base64
-import progressbar
-from typing import List, Dict
 from perses.rjmc.geometry import NoTorsionError
 from functools import partial
 try:

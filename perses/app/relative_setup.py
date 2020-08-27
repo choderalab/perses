@@ -3,7 +3,6 @@ from __future__ import absolute_import
 from perses.dispersed import feptasks
 from perses.utils.openeye import *
 from perses.utils.data import load_smi
-from perses.annihilation.relative import HybridTopologyFactory
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
 from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine

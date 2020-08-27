@@ -1,14 +1,9 @@
-import sys
 import simtk.openmm as openmm
-import simtk.openmm.app as app
 import simtk.unit as unit
 import mdtraj as md
 import numpy as np
 import copy
 import enum
-from io import StringIO
-import lxml.etree as etree
-from openmmtools.constants import ONE_4PI_EPS0
 
 InteractionGroup = enum.Enum("InteractionGroup", ['unique_old', 'unique_new', 'core', 'environment'])
 

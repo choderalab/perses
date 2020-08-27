@@ -6,9 +6,10 @@ Test util functions
 __author__ = 'John D. Chodera'
 
 import os
-running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 from perses.utils.openeye import smiles_to_oemol
 from unittest import skipIf
+
+running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
 
 # functions testing perses.utils.data

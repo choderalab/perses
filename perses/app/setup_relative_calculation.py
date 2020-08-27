@@ -4,16 +4,15 @@ import pickle
 import os
 import sys
 import simtk.unit as unit
-from simtk import openmm
 import logging
 
 from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
 from perses.annihilation.relative import HybridTopologyFactory
-from perses.app.relative_setup import NonequilibriumSwitchingFEP, RelativeFEPSetup
+from perses.app.relative_setup import RelativeFEPSetup
 from perses.annihilation.lambda_protocol import LambdaProtocol
 
-from openmmtools import mcmc, utils
-from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
+from openmmtools import mcmc
+from openmmtools.multistate import MultiStateReporter
 from perses.utils.smallmolecules import render_atom_mapping
 from perses.tests.utils import validate_endstate_energies
 from perses.dispersed.smc import SequentialMonteCarlo
@@ -317,7 +316,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         - 'topology_proposals':
     """
     phases = setup_options['phases']
-    known_phases = ['complex','solvent','vacuum']
+    known_phases = ['complex', 'solvent', 'vacuum']
     for phase in phases:
         assert (phase in known_phases), f"Unknown phase, {phase} provided. run_setup() can be used with {known_phases}"
 
@@ -353,7 +352,10 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     forcefield_files = setup_options['forcefield_files']
 
     if "timestep" in setup_options:
-        timestep = setup_options['timestep'] * unit.femtoseconds
+        if isinstance(setup_options['timestep'], float):
+            timestep = setup_options['timestep'] * unit.femtoseconds
+        else:
+            timestep = setup_options['timestep']
         _logger.info(f"\ttimestep: {timestep}.")
     else:
         timestep = 1.0 * unit.femtoseconds
@@ -381,11 +383,22 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     else:
         measure_shadow_work = False
         _logger.info(f"\tno measure_shadow_work specified: defaulting to False.")
-
-    pressure = setup_options['pressure'] * unit.atmosphere
-    temperature = setup_options['temperature'] * unit.kelvin
-    solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
-    ionic_strength = setup_options['ionic_strength'] * unit.molar
+    if isinstance(setup_options['pressure'],float):
+        pressure = setup_options['pressure'] * unit.atmosphere
+    else:
+        pressure = setup_options['pressure']
+    if isinstance(setup_options['temperature'], float):
+        temperature = setup_options['temperature'] * unit.kelvin
+    else:
+        temperature = setup_options['temperature']
+    if isinstance(setup_options['solvent_padding'], float):
+        solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
+    else:
+        solvent_padding_angstroms = setup_options['solvent_padding']
+    if isinstance(setup_options['ionic_strength'], float):
+        ionic_strength = setup_options['ionic_strength'] * unit.molar
+    else:
+        ionic_strength = setup_options['ionic_strength']
     _logger.info(f"\tsetting pressure: {pressure}.")
     _logger.info(f"\tsetting temperature: {temperature}.")
     _logger.info(f"\tsetting solvent padding: {solvent_padding_angstroms}A.")

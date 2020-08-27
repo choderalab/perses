@@ -1,8 +1,7 @@
 ###########################################
 # IMPORTS
 ###########################################
-from perses.annihilation.lambda_protocol import *
-from unittest import skipIf
+from perses.annihilation.lambda_protocol import LambdaProtocol
 from nose.tools import raises
 import os
 
@@ -20,7 +19,7 @@ def test_lambda_protocol():
     """
 
     # check that it's possible to instantiate a LambdaProtocol for all the default types
-    for protocol in ['default','namd','quarters']:
+    for protocol in ['default', 'namd', 'quarters']:
         lp = LambdaProtocol(functions=protocol)
 
     # check that if we give an incomplete set of parameters it will add in the missing terms

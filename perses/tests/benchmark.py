@@ -1,12 +1,6 @@
-from simtk import openmm, unit
-from simtk.openmm import app
-import os, os.path
-import sys, math
-from unittest import skipIf
+from simtk import unit
+import sys
 import numpy as np
-from functools import partial
-from pkg_resources import resource_filename
-from openeye import oechem
 if sys.version_info >= (3, 0):
     from io import StringIO
     from subprocess import getstatusoutput
