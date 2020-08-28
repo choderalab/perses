@@ -79,7 +79,9 @@ class HybridTopologyFactory(object):
                  softcore_electrostatics_alpha = 0.3,
                  softcore_sigma_Q = 1.0,
                  interpolate_old_and_new_14s = False,
-                 omitted_terms = None):
+                 omitted_terms = None,
+                 default_minimal_chargeprod = 0.0 * unit.elementary_charge**2,
+                 default_minimal_epsilon = 0.0 * unit.kilojoules_per_mole):
         """
         Initialize the Hybrid topology factory.
 
@@ -1571,8 +1573,12 @@ class HybridTopologyFactory(object):
         in_groups = list(self._atom_classes['unique_old_atoms']) + list(self._atom_classes['unique_new_atoms']) + list(self._atom_classes['core_atoms'])
         combos = combinations(in_groups, 2)
         for i,j in combos:
-            if not set([i,j]).issubset(unique_old_atoms.union(unique_new_atoms)):
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(i,j, self.default_minimal_chargeprod, 1.0 * unit.nanometers, self.default_minimal_epsilon)
+            #if not set([i,j]).issubset(unique_old_atoms.union(unique_new_atoms)):
+            self._hybrid_system_forces['standard_nonbonded_force'].addException(i,j, self.default_minimal_chargeprod, 1.0 * unit.nanometers, self.default_minimal_epsilon, replace=True)
+
+        # for particle_offset_idx in range(self._hybrid_system_forces['standard_nonbonded_force'].getNumParticleParameterOffsets()):
+        #     idx, global_param, particle_idx, chargescale, sigmascale, epsilonscale = self._hybrid_system_forces['standard_nonbonded_force'].getNumParticleParameterOffset(particle_offset_idx)
+
 
         _logger.info("\thandle_nonbonded: Handling Interaction Groups...")
         self._handle_interaction_groups()
@@ -1685,8 +1691,9 @@ class HybridTopologyFactory(object):
                     #self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
                     pass
                 else:
-                    self._custom_exception_force_terms.append([*atom_pair, [chargeProd, sigma, epsilon, chargeProd, sigma, epsilon, 0,0,1,0]])
-                    self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
+                    if chargeProd.value_in_unit_system(unit.md_unit_system) != 0.0 or epsilon.value_in_unit_system(unit.md_unit_system) != 0.0:
+                        self._custom_exception_force_terms.append([*atom_pair, [chargeProd, sigma, epsilon, chargeProd, sigma, epsilon, 0,0,1,0]])
+                    self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0, replace=True)
 
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
                 self._hybrid_system_forces['core_electrostatics_force'].addExclusion(atom_pair[0], atom_pair[1])
@@ -1700,7 +1707,8 @@ class HybridTopologyFactory(object):
                     #self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
                     pass
                 else:
-                    self._custom_exception_force_terms.append([*atom_pair, [chargeProd, sigma, epsilon, chargeProd, sigma, epsilon, 0,0,1,0]])
+                    if chargeProd.value_in_unit_system(unit.md_unit_system) != 0.0 or epsilon.value_in_unit_system(unit.md_unit_system) != 0.0:
+                        self._custom_exception_force_terms.append([*atom_pair, [chargeProd, sigma, epsilon, chargeProd, sigma, epsilon, 0,0,1,0]])
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0, replace=True)
 
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
@@ -1731,7 +1739,8 @@ class HybridTopologyFactory(object):
                     #self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
                     pass
                 else:
-                    self._custom_exception_force_terms.append([*atom_pair, [chargeProd, sigma, epsilon, chargeProd, sigma, epsilon, 0,0,1,0]])
+                    if chargeProd.value_in_unit_system(unit.md_unit_system) != 0.0 or epsilon.value_in_unit_system(unit.md_unit_system) != 0.0:
+                        self._custom_exception_force_terms.append([*atom_pair, [chargeProd, sigma, epsilon, chargeProd, sigma, epsilon, 0,0,1,0]])
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0, replace=True)
 
 
@@ -1746,9 +1755,11 @@ class HybridTopologyFactory(object):
                 [chargeProd, sigma, epsilon] = self._new_system_exceptions[new_index_atom_pair[::-1]]
                 if self._interpolate_14s:
                     #self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
+                    raise Exception(f"interpolate_1,4s is not supported")
                     pass
                 else:
-                    self._custom_exception_force_terms.append([*atom_pair, [chargeProd, sigma, epsilon, chargeProd, sigma, epsilon, 0,0,1,0]])
+                    if chargeProd.value_in_unit_system(unit.md_unit_system) != 0.0 or epsilon.value_in_unit_system(unit.md_unit_system) != 0.0:
+                        self._custom_exception_force_terms.append([*atom_pair, [chargeProd, sigma, epsilon, chargeProd, sigma, epsilon, 0,0,1,0]])
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0, replace=True)
 
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1])
@@ -1770,6 +1781,7 @@ class HybridTopologyFactory(object):
         """
         This method ensures that exceptions present in the original systems are present in the hybrid appropriately.
         """
+        self._old_env_exceptions = []
         #get what we need to find the exceptions from the new and old systems:
         old_system_nonbonded_force = self._old_system_forces['NonbondedForce']
         new_system_nonbonded_force = self._new_system_forces['NonbondedForce']
@@ -1794,6 +1806,7 @@ class HybridTopologyFactory(object):
             #in the unique-old case, it is handled elsewhere due to internal peculiarities regarding exceptions
             if index_set.issubset(self._atom_classes['environment_atoms']):
                 _logger.debug(f"\t\thandle_nonbonded: _handle_original_exceptions: {exception_pair} is an environment exception pair")
+                self._old_env_exceptions.append([index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old])
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
                 self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
@@ -1811,7 +1824,8 @@ class HybridTopologyFactory(object):
                     pass
                 else:
                     assert index_set.issubset(self._atom_classes['unique_old_atoms'].union(self._atom_classes['core_atoms']))
-                    self._custom_exception_force_terms.append([index1_hybrid, index2_hybrid, [chargeProd_old, sigma_old, epsilon_old, chargeProd_old, sigma_old, epsilon_old, 0,0,1,0]])
+                    if chargeProd_old.value_in_unit_system(unit.md_unit_system) != 0.0 or epsilon_old.value_in_unit_system(unit.md_unit_system) != 0.0:
+                        self._custom_exception_force_terms.append([index1_hybrid, index2_hybrid, [chargeProd_old, sigma_old, epsilon_old, chargeProd_old, sigma_old, epsilon_old, 0,0,1,0]])
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old*0.0, sigma_old, epsilon_old*0.0, replace=True)
 
 
@@ -1845,7 +1859,9 @@ class HybridTopologyFactory(object):
                 in_group = True if set([index1_hybrid, index2_hybrid]).issubset(self._atom_classes['core_atoms']) else False
                 if not in_group: assert set([index1_hybrid, index2_hybrid]).issubset(self._atom_classes['core_atoms'].union(self._atom_classes['environment_atoms']))
                 delimiter = [0,0,1,0] if in_group else [0,0,0,1]
-                self._custom_exception_force_terms.append([index1_hybrid, index2_hybrid, [chargeProd_old, sigma_old, epsilon_old, chargeProd_new, sigma_new, epsilon_new]+delimiter])
+
+                if chargeProd_old.value_in_unit_system(unit.md_unit_system) != 0.0 or chargeProd_new.value_in_unit_system(unit.md_unit_system) != 0.0 or epsilon_old.value_in_unit_system(unit.md_unit_system) != 0.0 or epsilon_new.value_in_unit_system(unit.md_unit_system) != 0.0:
+                    self._custom_exception_force_terms.append([index1_hybrid, index2_hybrid, [chargeProd_old, sigma_old, epsilon_old, chargeProd_new, sigma_new, epsilon_new]+delimiter])
                 # self._hybrid_system_forces['standard_nonbonded_force'].addExceptionParameterOffset('lambda_electrostatics_core', exception_index, (chargeProd_new - chargeProd_old), 0, 0)
                 # self._hybrid_system_forces['standard_nonbonded_force'].addExceptionParameterOffset('lambda_sterics_core', exception_index, 0, (sigma_new - sigma_old), (epsilon_new - epsilon_old))
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
@@ -1880,7 +1896,8 @@ class HybridTopologyFactory(object):
                     pass
                 else:
                     assert index_set.issubset(self._atom_classes['unique_new_atoms'].union(self._atom_classes['core_atoms']))
-                    self._custom_exception_force_terms.append([index1_hybrid, index2_hybrid, [chargeProd_new, sigma_new, epsilon_new, chargeProd_new, sigma_new, epsilon_new, 0,0,1,0]])
+                    if chargeProd_new.value_in_unit_system(unit.md_unit_system) != 0.0 or epsilon_new.value_in_unit_system(unit.md_unit_system) != 0.0:
+                        self._custom_exception_force_terms.append([index1_hybrid, index2_hybrid, [chargeProd_new, sigma_new, epsilon_new, chargeProd_new, sigma_new, epsilon_new, 0,0,1,0]])
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_new*0.0, sigma_new, epsilon_new*0.0, replace=True)
 
 
@@ -1918,7 +1935,8 @@ class HybridTopologyFactory(object):
                     # in_group = True if set([index1_hybrid, index2_hybrid]).issubset(self._atom_classes['core_atoms']) else False
                     # if not in_group: assert set([index1_hybrid, index2_hybrid]).issubset(self._atom_classes['core_atoms'].union(self._atom_classes['environment_atoms']))
                     delimiter = [0,0,1,0] #if in_group else [0,0,0,1]
-                    self._custom_exception_force_terms.append([index1_hybrid, index2_hybrid, [chargeProd_old, sigma_old, epsilon_old, chargeProd_new, sigma_new, epsilon_new]+delimiter])
+                    if chargeProd_old.value_in_unit_system(unit.md_unit_system) != 0.0 or chargeProd_new.value_in_unit_system(unit.md_unit_system) != 0.0 or epsilon_old.value_in_unit_system(unit.md_unit_system) != 0.0 or epsilon_new.value_in_unit_system(unit.md_unit_system) != 0.0:
+                        self._custom_exception_force_terms.append([index1_hybrid, index2_hybrid, [chargeProd_old, sigma_old, epsilon_old, chargeProd_new, sigma_new, epsilon_new]+delimiter])
 
 
                     # self._hybrid_system_forces['standard_nonbonded_force'].addExceptionParameterOffset(
@@ -1931,6 +1949,13 @@ class HybridTopologyFactory(object):
 
                     self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
                     self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
+            else:
+                assert index_set.issubset(self._atom_classes['environment_atoms'].union(self._atom_classes['core_atoms']))
+                is_env = True if index_set.issubset(self._atom_classes['environment_atoms']) else False
+                if is_env:
+                    if not [index1_hybrid, index2_hybrid, chargeProd_new, sigma_new, epsilon_new] in self._old_env_exceptions and [index2_hybrid, index1_hybrid, chargeProd_new, sigma_new, epsilon_new] in self._old_env_exceptions:
+                        raise Exception(f"boop")
+
 
     def handle_old_new_exceptions(self):
         """
@@ -1942,18 +1967,18 @@ class HybridTopologyFactory(object):
         old_new_nonbonded_exceptions = "lambda_mixer*(U_electrostatics + U_sterics);"
 
         if self._softcore_LJ_v2:
-            old_new_nonbonded_exceptions += "U_sterics = select(step(r - r_LJ), 4*epsilon*x*(x-1.0), U_sterics_quad);"
+            old_new_nonbonded_exceptions += "U_sterics = select(epsilonA*epsilonB, 4*epsilon*x*(x-1.0), select(step(r - r_LJ), 4*epsilon*x*(x-1.0), U_sterics_quad));"
             old_new_nonbonded_exceptions += f"U_sterics_quad = Force*(((r - r_LJ)^2)/2 - (r - r_LJ)) + U_sterics_cut;"
             old_new_nonbonded_exceptions += f"U_sterics_cut = 4*epsilon*((sigma/r_LJ)^6)*(((sigma/r_LJ)^6) - 1.0);"
             old_new_nonbonded_exceptions += f"Force = -4*epsilon*((-12*sigma^12)/(r_LJ^13) + (6*sigma^6)/(r_LJ^7));"
             old_new_nonbonded_exceptions += f"x = (sigma/r)^6;"
             old_new_nonbonded_exceptions += f"r_LJ = softcore_alpha*((26/7)*(sigma^6)*lambda_sterics_deprecated)^(1/6);"
-            old_new_nonbonded_exceptions += f"lambda_sterics_deprecated = new_interaction*(1.0 - lambda_sterics_insert) + old_interaction*lambda_sterics_delete + core_interaction*lambda_sterics_core;"
+            old_new_nonbonded_exceptions += f"lambda_sterics_deprecated = new_interaction*(1.0 - lambda_sterics_insert) + old_interaction*lambda_sterics_delete;"
         else:
             old_new_nonbonded_exceptions += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
             old_new_nonbonded_exceptions += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);"
             old_new_nonbonded_exceptions += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
-            old_new_nonbonded_exceptions += "lambda_alpha = new_interaction*(1-lambda_sterics_insert) + old_interaction*lambda_sterics_delete + core_interaction*lambda_sterics_core;"
+            old_new_nonbonded_exceptions += "lambda_alpha = new_interaction*(1-lambda_sterics_insert) + old_interaction*lambda_sterics_delete;"
 
         old_new_nonbonded_exceptions += "U_electrostatics = ONE_4PI_EPS0*mod_chargeprod/r;"
         old_new_nonbonded_exceptions += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0
