@@ -88,13 +88,13 @@ def getSetupOptions(filename):
     if 'small_molecule_parameters_cache' not in setup_options:
         setup_options['small_molecule_parameters_cache'] = None
 
-    # remove_constraints can be 'all' or 'not water'
-    if setup_options['remove_constraints'] not in ['all', 'not water']:
-        _logger.warning("remove_constraints value of {setup_options['remove_constraints']} not understood. 'all', 'none' or 'not water' are valid options. NOT REMOVING ANY CONSTRAINTS")
-        setup_options['remove_constraints'] = False
-    elif 'remove_constraints' not in setup_options:
+    if 'remove_constraints' not in setup_options:
         setup_options['remove_constraints'] = False
         _logger.info('No constraints will be removed')
+    # remove_constraints can be 'all' or 'not water'
+    elif setup_options['remove_constraints'] not in ['all', 'not water', False]:
+        _logger.warning("remove_constraints value of {setup_options['remove_constraints']} not understood. 'all', 'none' or 'not water' are valid options. NOT REMOVING ANY CONSTRAINTS")
+        setup_options['remove_constraints'] = False
 
     if 'spectators' not in setup_options:
         _logger.info(f'No spectators')
