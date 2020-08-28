@@ -410,7 +410,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
     This function will generate a topology proposal, old positions, and new positions with a geometry proposal (either vacuum or solvated) given a set of input iupacs or smiles.
     The function will (by default) read the iupac names first.  If they are set to None, then it will attempt to read a set of current and new smiles.
     An atom mapping pdf will be generated if specified.
-    Arguments
+    Parameters
     ----------
     current_mol_name : str, optional
         name of the first molecule
@@ -600,7 +600,7 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
 
 def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_iterations = 10, md_steps = 250, compute_timeseries = False, md_system = None, prespecified_conformers = None):
     """
-    Arguments
+    Parameters
     ----------
     top_prop : perses.rjmc.topology_proposal.TopologyProposal object
         topology_proposal

@@ -18,16 +18,16 @@ Nonequilibrium switching
 Relative alchemical transformations
 -----------------------------------
 
-.. currentmodule:: perses.annihilation
+.. currentmodule:: perses.annihilation.relative
 .. autosummary::
     :nosignatures:
     :toctree: api/generated/
 
     HybridTopologyFactory
-    
+
 Principle of HybridTopologyFactory
 ----------------------------------
-    
+
 HybridTopologyFactory is a class that automates the construction of so-called hybrid topologies and systems. In short, this amounts to using an atom map to merge
 two initial systems into a new system that contains a union of the former systems' degrees of freedom, along with a ``lambda`` parameter to control the degree to which the hybrid represents the old or new system. The process of creating this system happens in several steps, detailed below. Before proceeding, there are several important caveats:
 
@@ -37,7 +37,7 @@ two initial systems into a new system that contains a union of the former system
 
 - Systems:
     - Only ``HarmonicBondForce``, ``HarmonicAngleForce``, ``PeriodicTorsionForce``, ``NonbondedForce``, and ``MonteCarloBarostat`` are supported. The presence of other forces will raise an exception.
-    
+
 Basic Terminology
 ^^^^^^^^^^^^^^^^^
 Throughout the rest of this document, the following terms will be referenced:
@@ -48,7 +48,7 @@ Throughout the rest of this document, the following terms will be referenced:
 
 - New system: We use this to refer to the endpoint represented by ``lambda=1``.
 
-    
+
 Assignment of Particles to Appropriate Groups
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -59,13 +59,13 @@ In order to properly assign parameters to the particles in the hybrid system, th
 
 - Core: These atoms are mapped between the new and old system, but are part of a residue that differs between new and old systems. As such, they may need to change parameters.
     - Example: The carbon atoms in a benzene that is being transformed to a chlorobenzene.
-    
+
 - Unique old: These atoms are not in the map, and are present only in the old system
     - Example: an extraneous hydrogen atom in a cyclohexane being transformed into a benzene
-    
+
 - Unique new: These atoms are not in the map, and are present only in the new system
     - Example: The chlorine atom that appears when a benzene is transformed into a chlorobenzene.
-    
+
 Treatment of different interaction groups
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -87,7 +87,7 @@ For each supported force, we have to create at least one custom force, as well a
 Force terms
 ^^^^^^^^^^^
 
-Given the above division of atoms into different groups, the assignment of interactions to different force classes is straightforward. 
+Given the above division of atoms into different groups, the assignment of interactions to different force classes is straightforward.
 
 
 Bonds
@@ -193,21 +193,21 @@ Example script
 Below is a very simple example script that constructs a :py:class:`HybridTopologyFactory` object that can transform a benzene into catechol in vacuum.
 
 .. code-block:: python
-    
+
     #import needed functionality
     from topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
     from perses.annihilation.relative import HybridTopologyFactory
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
-    
+
     #these are utility functions to rapidly create test systems.
     from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC
     from perses.utils.data import get_data_filename
-    
+
     #We'll generate the systems by IUPAC name
     mol_name = "benzene"
     ref_mol_name = "catechol"
-    
+
     #create the benzene molecule and system, as well as a molecule of catechol
     m, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(mol_name)
     refmol = iupac_to_oemol(ref_mol_name)
@@ -219,20 +219,20 @@ Below is a very simple example script that constructs a :py:class:`HybridTopolog
     #set up the SystemGenerator
     gaff_xml_filename = get_data_filename("data/gaff.xml")
     system_generator = SystemGenerator([gaff_filename])
-    
+
     #The GeometryEngine will be useful for generating new positions
     geometry_engine = FFAllAngleGeometryEngine()
-    
+
     #Instantiate the proposal engine, which will generate the TopologyProposal.
     proposal_engine = SmallMoleculeSetProposalEngine(
         [initial_smiles, final_smiles], system_generator, residue_name=mol_name)
 
     #generate a TopologyProposal with the SmallMoleculeSetProposalEngine
     topology_proposal = proposal_engine.propose(solvated_system, solvated_topology)
-    
+
     #Generate new positions with the GeometryEngine--note that the second return value (logp) is ignored for this purpose
     new_positions, _ = geometry_engine.propose(topology_proposal, solvated_positions, beta)
-    
+
     #instantiate the HybridTopologyFactory
     factory = HybridTopologyFactory(topology_proposal, old_positions, new_positions)
 

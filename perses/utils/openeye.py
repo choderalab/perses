@@ -30,8 +30,8 @@ def system_generator_wrapper(oemols,
     """
     make a system generator (vacuum) for a small molecule
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     oemols : list of openeye.oechem.OEMol
         oemols
     barostat : openmm.MonteCarloBarostat, default None
@@ -209,8 +209,8 @@ def OEMol_to_omm_ff(molecule, system_generator):
         input molecule to convert
     system_generator : openmmforcefields.generators.SystemGenerator
 
-    Return
-    ------
+    Returns
+    -------
     system : openmm.system
     positions : openmm.positions
     topology : openmm.topology

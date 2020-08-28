@@ -18,8 +18,8 @@ class BiasEngine(object):
     """
     Generates the bias for expanded ensemble simulations
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     metadata : dict
         Dictionary containing metadata relevant to the implementation
     """
@@ -31,8 +31,8 @@ class BiasEngine(object):
         """
         Generate a biasing weight g_k for the state indicated.
 
-        Arguments
-        --------
+        Parameters
+        ----------
         molecule_smiles : string
             SMILES string of molecule to calculate bias
 
@@ -48,8 +48,8 @@ class MinimizedPotentialBias(BiasEngine):
     This class calculates the bias potential for expanded ensemble simulations,
     using a minimized potential energy as the bias.
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     smiles_list : list of str
         list of smiles strings corresponding to molecules
     implicit_solvent : simtk.openmm.app implicit solvent model, optional, default=OBC2
@@ -94,13 +94,13 @@ class MinimizedPotentialBias(BiasEngine):
         Take a list of oemols, and generate openmm systems
         and positions for each.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         mol : oemol
             oemol to be turned into system, positions
 
         Returns
-        --------
+        -------
         system : simtk.openmm.System
             openmm system corresponding to molecule
         positions : np.array, Quantity nm
@@ -121,8 +121,8 @@ class MinimizedPotentialBias(BiasEngine):
         """
         Retrieve or compute the g_k for the given molecule
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         molecule_smiles : string
             SMILES representation of the molecule
 
@@ -152,7 +152,7 @@ class MinimizedPotentialBias(BiasEngine):
         and return them as a {smiles : g_k} dict
 
         Returns
-        ------
+        -------
         gks : dict of type {string : float}
             dict of {smiles : g_k}
         """

@@ -71,8 +71,8 @@ class GeometryEngine(object):
     """
     This is the base class for the geometry engine.
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     metadata : dict
         GeometryEngine-related metadata as a dict
     """
@@ -85,7 +85,7 @@ class GeometryEngine(object):
         """
         Make a geometry proposal for the appropriate atoms.
 
-        Arguments
+        Parameters
         ----------
         top_proposal : TopologyProposal object
             Object containing the relevant results of a topology proposal
@@ -103,7 +103,7 @@ class GeometryEngine(object):
         """
         Calculate the logp for the given geometry proposal
 
-        Arguments
+        Parameters
         ----------
         top_proposal : TopologyProposal object
             Object containing the relevant results of a topology proposal
@@ -195,7 +195,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         Make a geometry proposal for the appropriate atoms.
 
-        Arguments
+        Parameters
         ----------
         top_proposal : TopologyProposal object
             Object containing the relevant results of a topology proposal
@@ -250,7 +250,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         Calculate the logp for the given geometry proposal
 
-        Arguments
+        Parameters
         ----------
         top_proposal : TopologyProposal object
             Object containing the relevant results of a topology proposal
@@ -1183,8 +1183,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             p(r; \beta, K_r, r_0) \propto r^2 e^{-\frac{\beta K_r}{2} (r - r_0)^2 }
 
-        Prameters
-        ---------
+        Parameters
+        ----------
         bond : parmed.Structure.Bond modified to use simtk.unit.Quantity
             Valence bond parameters
         beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
@@ -1251,8 +1251,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             r \sim p(r; \beta, K_r, r_0) \propto r^2 e^{-\frac{\beta K_r}{2} (r - r_0)^2 }
 
-        Prameters
-        ---------
+        Parameters
+        ----------
         r : float
             bond length, implicitly in nanometers
         bond : parmed.Structure.Bond modified to use simtk.unit.Quantity
@@ -1293,8 +1293,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             r \sim p(r; \beta, K_r, r_0) \propto r^2 e^{-\frac{\beta K_r}{2} (r - r_0)^2 }
 
-        Prameters
-        ---------
+        Parameters
+        ----------
         bond : parmed.Structure.Bond modified to use simtk.unit.Quantity
             Valence bond parameters
         beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
@@ -1337,8 +1337,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             p(\theta; \beta, K_\theta, \theta_0) \propto \sin(\theta) e^{-\frac{\beta K_\theta}{2} (\theta - \theta_0)^2 }
 
-        Prameters
-        ---------
+        Parameters
+        ----------
         angle : parmed.Structure.Angle modified to use simtk.unit.Quantity
             Valence bond parameters
         beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
@@ -1407,8 +1407,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             p(\theta; \beta, K_\theta, \theta_0) \propto \sin(\theta) e^{-\frac{\beta K_\theta}{2} (\theta - \theta_0)^2 }
 
-        Prameters
-        ---------
+        Parameters
+        ----------
         theta : float
             angle, implicitly in radians
         angle : parmed.Structure.Angle modified to use simtk.unit.Quantity
@@ -1449,8 +1449,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             \theta \sim p(\theta; \beta, K_\theta, \theta_0) \propto \sin(\theta) e^{-\frac{\beta K_\theta}{2} (\theta - \theta_0)^2 }
 
-        Prameters
-        ---------
+        Parameters
+        ----------
         angle : parmed.Structure.Angle modified to use simtk.unit.Quantity
             Valence angle parameters
         beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
@@ -2340,13 +2340,13 @@ class GeometrySystemGenerator(object):
         """
         Utility function to adjust the phase properly
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         phase : float
             phase angle
 
-        Return
-        ------
+        Returns
+        -------
         adjusted_phase : float * unit.radians
             adjusted phase with convention
         """

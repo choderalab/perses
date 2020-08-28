@@ -46,10 +46,12 @@ from openmmtools.constants import kB
 def getSetupOptions(filename):
     """
     Reads input yaml file, makes output directory and returns setup options
-    Parameter
-    ---------
+
+    Parameters
+    ----------
     filename : str
         .yaml file containing simulation parameters
+
     Returns
     -------
     setup_options :

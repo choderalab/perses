@@ -54,8 +54,8 @@ def run_parallelism(_parallel, data):
     """
     helper function to run through the parallelism tests
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     _parallel : perses.dispersed.parallelism.Parallelism
         parallelism object to run tests on
     data : np.array
