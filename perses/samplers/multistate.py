@@ -33,10 +33,37 @@ class HybridCompatibilityMixin(object):
 
     def setup(self, n_states, temperature, storage_file, minimisation_steps=100,
               n_replicas=None, lambda_schedule=None,
-              lambda_protocol=LambdaProtocol(), endstates=True):
+              lambda_protocol=LambdaProtocol(), endstates=True, high_temperature = None, lambda_endstate = 0.):
+        """
+        Args:
+            n_states : int
+                number of alchemical states
+            temperature : simtk.unit.Quantity() compatible with unit.kelvin
+                target temperature
+            storage_file : str
+                storage file that will be written to
+            minimisation_steps : int
+                number of minimization steps for each replica
+            n_replicas : int
+                number of replicas that will be simulated
+            lambda_schedule : iterable, default None
+                the schedule of the master lambda; if None, use np.linspace(0,1,n_states)
+            lambda_protocol : perses.annihilation.lambda_protocol.LambdaProtocol
+                the schedule of the enslaved lambdas in the alchemical transformation
+            endstates : bool, default True
+                whether to compute unsampled endstate MBAR contributions
+            high_temperature : simtk.unit.Quantity() compatible with unit.kelvin, default None
+                the maximum temperature for REST implementation;
+                if not None, then REST2 is implemented at the `lambda_endstate` value with n_states _without_ the lambda_schedule
+            lambda_endstate : float, default 0.
+                the lambda endstate at which REST2 will be implemented;
+                if high_temperature is None, this is not use.
+        """
 
 
         from perses.dispersed import feptasks
+        if render_full_protocol:
+            raise Exception(f"coupling the full alchemical protocol to the temperature protocol is not supported at the moment")
 
         hybrid_system = self._factory.hybrid_system
 
@@ -58,15 +85,23 @@ class HybridCompatibilityMixin(object):
             _logger.warning(f'More sampler states: {n_replicas} requested greater than number of states: {n_states}. Setting n_replicas to n_states: {n_states}')
             n_replicas = n_states
 
-        # TODO this feels like it should be somewhere else... just not sure where. Maybe into lambda_protocol
-        if lambda_schedule is None:
-            lambda_schedule = np.linspace(0.,1.,n_states)
+        if high_temperature is not None:
+            _logger.info(f"conducting REST2")
+            assert lambda_endstate is not None
+            assert high_temperature > temperature
+            assert n_replicas == n_states
+            temperature_schedule = [temperature + (high_temperature - temperature)*np.exp(float(i)/float(n_states-1)) for i in range(n_states)]
+            lambda_schedule = np.array([lambda_endstate]*n_states)
         else:
-            assert (len(lambda_schedule) == n_states) , 'length of lambda_schedule must match the number of states, n_states'
-            assert (lambda_schedule[0] == 0.), 'lambda_schedule must start at 0.'
-            assert (lambda_schedule[-1] == 1.), 'lambda_schedule must end at 1.'
-            difference = np.diff(lambda_schedule)
-            assert ( all(i >= 0. for i in difference ) ), 'lambda_schedule must be monotonicly increasing'
+            # TODO this feels like it should be somewhere else... just not sure where. Maybe into lambda_protocol
+            if lambda_schedule is None:
+                lambda_schedule = np.linspace(0.,1.,n_states)
+            else:
+                assert (len(lambda_schedule) == n_states) , 'length of lambda_schedule must match the number of states, n_states'
+                assert (lambda_schedule[0] == 0.), 'lambda_schedule must start at 0.'
+                assert (lambda_schedule[-1] == 1.), 'lambda_schedule must end at 1.'
+                difference = np.diff(lambda_schedule)
+                assert ( all(i >= 0. for i in difference ) ), 'lambda_schedule must be monotonicly increasing'
 
         #starting with the initial positions generated py geometry.py
         sampler_state =  SamplerState(positions, box_vectors=hybrid_system.getDefaultPeriodicBoxVectors())

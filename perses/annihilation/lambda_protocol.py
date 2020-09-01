@@ -49,16 +49,16 @@ class LambdaProtocol(object):
         default : ele and LJ terms of the old system are turned off between 0.0 -> 0.5
         ele and LJ terms of the new system are turned on between 0.5 -> 1.0
         core terms treated linearly
-        
+
         quarters : 0.25 of the protocol is used in turn to individually change the
         (a) off old ele, (b) off old sterics, (c) on new sterics (d) on new ele
         core terms treated linearly
-        
+
         namd : follows the protocol outlined here: https://pubs.acs.org/doi/full/10.1021/acs.jcim.9b00362#
-        Jiang, Wei, Christophe Chipot, and Benoît Roux. "Computing Relative Binding Affinity of Ligands 
-        to Receptor: An Effective Hybrid Single-Dual-Topology Free-Energy Perturbation Approach in NAMD." 
+        Jiang, Wei, Christophe Chipot, and Benoît Roux. "Computing Relative Binding Affinity of Ligands
+        to Receptor: An Effective Hybrid Single-Dual-Topology Free-Energy Perturbation Approach in NAMD."
         Journal of chemical information and modeling 59.9 (2019): 3794-3802.
-        
+
         ele-scaled : all terms are treated as in default, except for the old and new ele
         these are scaled with lambda^0.5, so as to be linear in energy, rather than lambda
 
@@ -120,9 +120,9 @@ class LambdaProtocol(object):
                                   'lambda_torsions':
                                   lambda x: x}
             elif self.type == 'ele-scaled':
-                self.functions = {'lambda_electrostatics_insert': 
+                self.functions = {'lambda_electrostatics_insert':
                                    lambda x: 0.0 if x < 0.5 else ((2*(x-0.5))**0.5),
-                                  'lambda_electrostatics_delete': 
+                                  'lambda_electrostatics_delete':
                                    lambda x: (2*x)**2 if x < 0.5 else 1.0
                                  }
             elif self.type == 'user-defined':
@@ -130,7 +130,7 @@ class LambdaProtocol(object):
             else:
                 _logger.warning(f"""LambdaProtocol type : {self.type} not
                                   recognised. Allowed values are 'default',
-                                  'namd' and 'quarters' and 'user-defined'. 
+                                  'namd' and 'quarters' and 'user-defined'.
                                   Setting LambdaProtocol functions to default. """)
                 self.functions = LambdaProtocol.default_functions
 
@@ -255,3 +255,36 @@ class RelativeAlchemicalState(AlchemicalState):
        for parameter_name in lambda_protocol.functions:
            lambda_value = lambda_protocol.functions[parameter_name](global_lambda)
            setattr(self, parameter_name, lambda_value)
+
+
+class RepartitionedLambdaProtocol(RelativeAlchemicalState):
+    """
+    Subclass of RelativeAlchemicalState that supports scaling of additional 'group' parameters
+    """
+    class _LambdaParameter(AlchemicalState._LambdaParameter):
+        pass
+
+    lambda_ingroup = _LambdaParameter('lambda_ingroup')
+    lambda_intergroup = _LambdaParameter('lambda_intergroup')
+    lambda_intergroup_offset_mixer = _LambdaParameter('lambda_intergroup_offset_mixer')
+
+    def set_alchemical_parameters(self, global_lambda, T_0, T_m, lambda_protocol = LambdaProtocol(), ):
+        """
+        Subclass of RelativeAlchemicalState that additionally supports scaling of ingroup and intergroup alchemical parameters for other alchemical transformation schemes
+        """
+        super().set_alchemical_parameters(global_lambda, lambda_protocol)
+        for key, val in kwargs.items():
+            setattr(self, key, val)
+
+    def compute_group_lambdas(self, T_0, T_m):
+        """
+        """
+        from openmmtools.constants import kB
+        beta_0 = 1.0 / (kB * T_0)
+        beta_m = 1.0 / (kB * T_m)
+
+        #lambda_ingroup
+        lambda_ingroup = beta_m / beta_0
+        lambda_intergroup = np.sqrt(lambda_ingroup)
+
+        #lambda intergroup offset mixer is special
