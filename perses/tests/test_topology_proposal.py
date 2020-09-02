@@ -281,7 +281,7 @@ def generate_dipeptide_top_pos_sys(topology,
 
     if conduct_htf_prop:
         #create a hybrid topology factory
-        from perses.annihilation.relative import HybridTopologyFactory
+        from perses.annihilation.relative_WIP import HybridTopologyFactory
         forward_htf = HybridTopologyFactory(topology_proposal = topology_proposal,
                      current_positions =  positions,
                      new_positions = forward_new_positions,

@@ -816,7 +816,8 @@ class HybridTopologyFactory(object):
             electrostatics_custom_nonbonded_force.addPerParticleParameter("q_new")
             electrostatics_custom_nonbonded_force.addPerParticleParameter("unique_old") # 1 = hybrid old atom, 0 otherwise
             electrostatics_custom_nonbonded_force.addPerParticleParameter("unique_new") # 1 = hybrid new atom, 0 otherwise
-            electrostatics_custom_nonbonded_force.addPerParticleParameter("is_ingroup")
+            electrostatics_custom_nonbonded_force.addPerParticleParameter(f"core")
+            electrostatics_custom_nonbonded_force.addPerParticleParameter(f"environment")
 
         if self._has_functions:
             sterics_custom_nonbonded_force.addGlobalParameter('lambda', 0.0)
@@ -927,13 +928,15 @@ class HybridTopologyFactory(object):
         """
         from openmmtools.constants import ONE_4PI_EPS0
 
-        expression = f"lambda_mixer*U_electrostatics; U_electrostatics = {ONE_4PI_EPS0}*chargeprod/r;"
+        expression = f"(1 - both_environment)*lambda_mixer*U_electrostatics; U_electrostatics = {ONE_4PI_EPS0}*chargeprod/r;"
         expression += "chargeprod = core_interaction*(new_chargeProd*lambda_electrostatics_core + old_chargeProd*(1 - lambda_electrostatics_core)) + new_interaction*lambda_electrostatics_insert*new_chargeProd + old_interaction*(1 - lambda_electrostatics_delete)*old_chargeProd;"
         expression += "old_chargeProd = q_old1*q_old2; new_chargeProd = q_new1*q_new2;"
         # expression += "charge_one = lambda_electrostatics_insert*(q_new1)*delta(1-unique_new1) + (1 - lambda_electrostatics_delete)*(q_old1)*delta(1-unique_old1) + (q_old1 + lambda_electrostatics_core*(q_new1 - q_old1))*delta(unique_old1 + unique_new1);"
         # expression += "charge_two = lambda_electrostatics_insert*(q_new2)*delta(1-unique_new2) + (1 - lambda_electrostatics_delete)*(q_old2)*delta(1-unique_old2) + (q_old2 + lambda_electrostatics_core*(q_new2 - q_old2))*delta(unique_old2 + unique_new2);"
-        expression += "core_interaction = select(new_interaction+old_interaction, 0, 1); new_interaction = delta(q_old1*q_old2); old_interaction = delta(q_new1*q_new2);"
+        expression += "core_interaction = select(new_interaction+old_interaction, 0, 1); new_interaction = delta(step(0.9 - unique_new1 - unique_new2)); old_interaction = delta(step(0.9 - unique_old1 - unique_old2));"
         expression += f"lambda_mixer = select(1 - is_ingroup1*is_ingroup2, lambda_intergroup, lambda_ingroup);"
+        expression += "is_ingroup1 = delta(step(0.9 - core1 - unique_old1 - unique_old1)); is_ingroup2 = delta(step(0.9 - core2 - unique_old2 - unique_new2));"
+        expression += "both_environment = environment1*environment2;"
         return expression
 
     def _nonbonded_custom_mixing_rules(self):
@@ -1550,7 +1553,7 @@ class HybridTopologyFactory(object):
 
                 if self._repartition:
                     # Add particle to the regular nonbonded force, but Lennard-Jones will be handled by CustomNonbondedForce
-                    check_index = self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge, 0.0 * unit.elementary_charge, 1, 0, 1]) #add charge to standard_nonbonded force
+                    check_index = self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge, 0.0 * unit.elementary_charge, 1, 0, 0, 0]) #add charge to standard_nonbonded force
                     assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
                 #add particle to the custom electrostatic force
@@ -1574,7 +1577,7 @@ class HybridTopologyFactory(object):
 
                 # Add particle to the regular nonbonded force, but Lennard-Jones will be handled by CustomNonbondedForce
                 if self._repartition:
-                    check_index = self._hybrid_system_forces['core_electrostatics_force'].addParticle([0.0 * unit.elementary_charge, charge, 0, 1, 1]) #add charge to standard_nonbonded force
+                    check_index = self._hybrid_system_forces['core_electrostatics_force'].addParticle([0.0 * unit.elementary_charge, charge, 0,1,0,0]) #add charge to standard_nonbonded force
                     assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
                 # Add particle to the regular nonbonded force, but Lennard-Jones will be handled by CustomNonbondedForce
@@ -1599,7 +1602,7 @@ class HybridTopologyFactory(object):
 
                 # Add particle to the regular nonbonded force, but Lennard-Jones will be handled by CustomNonbondedForce
                 if self._repartition:
-                    check_index = self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge_old, charge_new, 0, 0, 1]) #add charge to standard_nonbonded force
+                    check_index = self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge_old, charge_new, 0,0,1,0]) #add charge to standard_nonbonded force
                     assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
                 #still add the particle to the regular nonbonded force, but with zeroed out parameters; add old charge to standard_nonbonded and zero sterics
@@ -1621,7 +1624,7 @@ class HybridTopologyFactory(object):
 
                 # Add particle to the regular nonbonded force, but Lennard-Jones will be handled by CustomNonbondedForce
                 if self._repartition:
-                    check_index = self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge, charge, 0, 0, 0]) #add charge to standard_nonbonded force
+                    check_index = self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge, charge, 0,0,0,1]) #add charge to standard_nonbonded force
                     assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
                 #add the particle to the hybrid custom sterics, but they dont change; electrostatics are ignored
@@ -1732,16 +1735,16 @@ class HybridTopologyFactory(object):
 
         sterics_custom_force.addInteractionGroup(unique_old_atoms, unique_old_atoms)
 
-        if self._repartition:
-            elec_custom_force = self._hybrid_system_forces['core_electrostatics_force']
-            elec_custom_force.addInteractionGroup(unique_old_atoms, core_atoms)
-            elec_custom_force.addInteractionGroup(unique_old_atoms, environment_atoms)
-            elec_custom_force.addInteractionGroup(unique_new_atoms, core_atoms)
-            elec_custom_force.addInteractionGroup(unique_new_atoms, environment_atoms)
-            elec_custom_force.addInteractionGroup(core_atoms, environment_atoms)
-            elec_custom_force.addInteractionGroup(core_atoms, core_atoms)
-            elec_custom_force.addInteractionGroup(unique_new_atoms, unique_new_atoms)
-            elec_custom_force.addInteractionGroup(unique_old_atoms, unique_old_atoms)
+        # if self._repartition:
+        #     elec_custom_force = self._hybrid_system_forces['core_electrostatics_force']
+        #     elec_custom_force.addInteractionGroup(unique_old_atoms, core_atoms)
+        #     elec_custom_force.addInteractionGroup(unique_old_atoms, environment_atoms)
+        #     elec_custom_force.addInteractionGroup(unique_new_atoms, core_atoms)
+        #     elec_custom_force.addInteractionGroup(unique_new_atoms, environment_atoms)
+        #     elec_custom_force.addInteractionGroup(core_atoms, environment_atoms)
+        #     elec_custom_force.addInteractionGroup(core_atoms, core_atoms)
+        #     elec_custom_force.addInteractionGroup(unique_new_atoms, unique_new_atoms)
+        #     elec_custom_force.addInteractionGroup(unique_old_atoms, unique_old_atoms)
 
     def _handle_hybrid_exceptions(self):
         """
