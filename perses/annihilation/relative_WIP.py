@@ -935,7 +935,7 @@ class HybridTopologyFactory(object):
         # expression += "charge_two = lambda_electrostatics_insert*(q_new2)*delta(1-unique_new2) + (1 - lambda_electrostatics_delete)*(q_old2)*delta(1-unique_old2) + (q_old2 + lambda_electrostatics_core*(q_new2 - q_old2))*delta(unique_old2 + unique_new2);"
         expression += "core_interaction = select(new_interaction+old_interaction, 0, 1); new_interaction = delta(step(0.9 - unique_new1 - unique_new2)); old_interaction = delta(step(0.9 - unique_old1 - unique_old2));"
         expression += f"lambda_mixer = select(1 - is_ingroup1*is_ingroup2, lambda_intergroup, lambda_ingroup);"
-        expression += "is_ingroup1 = delta(step(0.9 - core1 - unique_old1 - unique_old1)); is_ingroup2 = delta(step(0.9 - core2 - unique_old2 - unique_new2));"
+        expression += "is_ingroup1 = delta(step(0.9 - core1 - unique_old1 - unique_new1)); is_ingroup2 = delta(step(0.9 - core2 - unique_old2 - unique_new2));"
         expression += "both_environment = environment1*environment2;"
         return expression
 
