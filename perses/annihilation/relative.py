@@ -2077,3 +2077,202 @@ class HybridTopologyFactory(object):
         hybrid_topology : simtk.openmm.app.Topology
         """
         return md.Topology.to_openmm(self._hybrid_topology)
+
+class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
+    """
+    subclass of the HybridTopologyFactory to allow for more expansive alchemical regions and controllability
+    """
+    def __init__(self,
+                 topology_proposal: TopologyProposal,
+                 current_positions: simtk.unit.Quantity,
+                 new_positions: simtk.unit.Quantity,
+                 endstate: int,
+                 alchemical_region: list = None,
+                 **kwargs):
+        """
+        arguments
+            topology_proposal : TopologyProposal
+                topology proposal of the region of interest
+            current_positions : simtk.unit.Quantity
+                positions of old system
+            new_positions : simtk.unit.Quantity
+                positions of new system
+            alchemical_region : list, default None
+                list of atoms comprising the alchemical region; if None, core_atoms + unique_new_atoms + unique_old_atoms are alchemical region
+            endstate : int
+                the lambda endstate to parameterize
+        """
+        from itertools import chain
+
+        self._topology_proposal = topology_proposal
+        self._old_system = copy.deepcopy(topology_proposal.old_system)
+        self._new_system = copy.deepcopy(topology_proposal.new_system)
+        self._old_to_hybrid_map = {}
+        self._new_to_hybrid_map = {}
+        self._hybrid_system_forces = dict()
+        self._old_positions = current_positions
+        self._new_positions = new_positions
+        self._endstate = endstate
+
+        #prepare dicts of forces, which will be useful later
+        # TODO: Store this as self._system_forces[name], name in ('old', 'new', 'hybrid') for compactness
+        self._old_system_forces = {type(force).__name__ : force for force in self._old_system.getForces()}
+        self._new_system_forces = {type(force).__name__ : force for force in self._new_system.getForces()}
+        _logger.info(f"Old system forces: {self._old_system_forces.keys()}")
+        _logger.info(f"New system forces: {self._new_system_forces.keys()}")
+
+        #check that there are no unknown forces in the new and old systems:
+        for system_name in ('old', 'new'):
+            force_names = getattr(self, '_{}_system_forces'.format(system_name)).keys()
+            unknown_forces = set(force_names) - set(self._known_forces)
+            if len(unknown_forces) > 0:
+                raise ValueError("Unkown forces {} encountered in {} system" % (unknown_forces, system_name))
+        _logger.info("No unknown forces.")
+
+        #get and store the nonbonded method from the system:
+        self._nonbonded_method = self._old_system_forces['NonbondedForce'].getNonbondedMethod()
+        _logger.info(f"Nonbonded method to be used (i.e. from old system): {self._nonbonded_method}")
+
+        #start by creating an empty system. This will become the hybrid system.
+        self._hybrid_system = openmm.System()
+
+        #begin by copying all particles in the old system to the hybrid system. Note that this does not copy the
+        #interactions. It does, however, copy the particle masses. In general, hybrid index and old index should be
+        #the same.
+        # TODO: Refactor this into self._add_particles()
+        _logger.info("Adding and mapping old atoms to hybrid system...")
+        for particle_idx in range(self._topology_proposal.n_atoms_old):
+            particle_mass = self._old_system.getParticleMass(particle_idx)
+            hybrid_idx = self._hybrid_system.addParticle(particle_mass)
+            self._old_to_hybrid_map[particle_idx] = hybrid_idx
+
+            #If the particle index in question is mapped, make sure to add it to the new to hybrid map as well.
+            if particle_idx in self._topology_proposal.old_to_new_atom_map.keys():
+                particle_index_in_new_system = self._topology_proposal.old_to_new_atom_map[particle_idx]
+                self._new_to_hybrid_map[particle_index_in_new_system] = hybrid_idx
+
+        #Next, add the remaining unique atoms from the new system to the hybrid system and map accordingly.
+        #As before, this does not copy interactions, only particle indices and masses.
+        _logger.info("Adding and mapping new atoms to hybrid system...")
+        for particle_idx in self._topology_proposal.unique_new_atoms:
+            particle_mass = self._new_system.getParticleMass(particle_idx)
+            hybrid_idx = self._hybrid_system.addParticle(particle_mass)
+            self._new_to_hybrid_map[particle_idx] = hybrid_idx
+
+        #check that if there is a barostat in the original system, it is added to the hybrid.
+        #We copy the barostat from the old system.
+        if "MonteCarloBarostat" in self._old_system_forces.keys():
+            barostat = copy.deepcopy(self._old_system_forces["MonteCarloBarostat"])
+            self._hybrid_system.addForce(barostat)
+            _logger.info("Added MonteCarloBarostat.")
+        else:
+            _logger.info("No MonteCarloBarostat added.")
+
+        #Copy over the box vectors:
+        box_vectors = self._old_system.getDefaultPeriodicBoxVectors()
+        self._hybrid_system.setDefaultPeriodicBoxVectors(*box_vectors)
+        _logger.info(f"getDefaultPeriodicBoxVectors added to hybrid: {box_vectors}")
+
+        #create the opposite atom maps for use in nonbonded force processing; let's omit this from logger
+        self._hybrid_to_old_map = {value : key for key, value in self._old_to_hybrid_map.items()}
+        self._hybrid_to_new_map = {value : key for key, value in self._new_to_hybrid_map.items()}
+
+        #assign atoms to one of the classes described in the class docstring
+        self._atom_classes = self._determine_atom_classes()
+        _logger.info("Determined atom classes.")
+
+        #construct dictionary of exceptions in old and new systems
+        _logger.info("Generating old system exceptions dict...")
+        self._old_system_exceptions = self._generate_dict_from_exceptions(self._old_system_forces['NonbondedForce'])
+        _logger.info("Generating new system exceptions dict...")
+        self._new_system_exceptions = self._generate_dict_from_exceptions(self._new_system_forces['NonbondedForce'])
+
+        self._validate_disjoint_sets()
+
+        #copy constraints, checking to make sure they are not changing
+        _logger.info("Handling constraints...")
+        self._handle_constraints()
+
+        #copy over relevant virtual sites
+        _logger.info("Handling virtual sites...")
+        self._handle_virtual_sites()
+
+        #combine alchemical regions
+        default_alchemical_region = set(chain(self._atom_classes['core_atoms'], self._atom_classes['unique_new_atoms'], self._atom_classes['unique_old_atoms']))
+        if alchemical_region is None:
+            self._alchemical_region = default_alchemical_region
+        else:
+            assert default_alchemical_region.issubset(set(alchemical_region)), f"the given alchemical region must include _all_ atoms in the default alchemical region"
+            self._alchemical_region = set(alchemical_region).union(default_alchemical_region)
+
+        #first thing to do is to copy over all of the standard valence force objects into the hybrid system
+        self._handle_bonds()
+        self._handle_angles()
+        self._handle_torsions()
+
+        #then add the nonbonded force (this is _slightly_ trickier)
+        self._handle_nonbonded()
+
+        #the last thing to do is call the alchemical factory on the _hybrid_system
+        self._alchemify()
+
+    def _handle_bonds(self):
+        """
+        copy over the appropriate bonds from the old or new system to the hybrid system;
+        if the endstate is old, then we copy all of the old system forces to the hybrid system and then iterate through the new system,
+        copying over all of the force terms that contain a unique new atom; do the opposite if at the new endstate
+        """
+        #define the force we are going to write to
+        self._hybrid_system_forces['HarmonicBondForce'] = openmm.HarmonicBondForce()
+        to_force = self._hybrid_system_forces['HarmonicBondForce']
+
+        #define the template force and the auxiliary force
+        if self._endstate == 0:
+            template_force = self._old_system_forces['HarmonicBondForce']
+            aux_force = self._new_system_forces['HarmonicBondForce']
+            target_index_set = self._atom_classes['unique_new_atoms']
+        elif self._endstate == 1:
+            template_force = self._new_system_forces['HarmonicBondForce']
+            aux_force = self._old_system_forces['HarmonicBondForce']
+            target_index_set = self._atom_classes['unique_old_atoms']
+        else:
+            raise Exception(f"endstate must be 0 or 1")
+
+        #copy over the template force...
+        for idx in range(template_force.getNumBonds()):
+            p1, p2, length, k = template_force.getBondParameters(idx)
+            to_force.addBond(p1, p2, length, k)
+
+        #query the auxiliary force to extract and copy over the 'special' terms that don't exist in the template force
+        for idx in range(aux_force.getNumBonds()):
+            p1, p2, length, k = aux_force.getBondParameters(idx)
+            if set([p1, p2]).intersection(target_index_set) != set():
+                #if there is a target atom in the auxiliary term, write it to the hybrid force
+                to_force.addBond(p1, p2, length, k)
+
+        #then add the to_force to the hybrid_system
+        self._hybrid_system.addForce(to_force)
+
+    def _handle_angles(self):
+        """
+        same as `_handle_bonds`
+        """
+        #TODO: add this, ivy
+
+    def _handle_torsions(self):
+        """
+        same as `_handle_bonds`
+        """
+        #TODO: add this, ivy
+
+    def _handle_nonbonded(self):
+        """
+        transcribe nonbonded forces
+        """
+        #TODO: dominic
+
+    def _alchemify(self):
+        """
+        generate an AlchemicalFactory with an appropriate Alchemical region and 'alchemify' the hybrid system
+        """
+        #TODO: dominic
