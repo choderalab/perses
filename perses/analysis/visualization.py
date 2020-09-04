@@ -236,7 +236,8 @@ class Visualization(object):
                zoom_distance=None,
                rotate_x_angle=0,
                rotate_y_angle=0,
-               rotate_z_angle=0
+               rotate_z_angle=0,
+               smooth=True
                ):
 
         """
@@ -264,6 +265,8 @@ class Visualization(object):
         rotate_z_angle : int, default 0
             The angle in degrees for which to rotate the complex in the z direction.
             The frames will be saved based on this view.
+        smooth : bool, default True
+            Whether to perform smoothing on the trajectory to reduce high frequency vibrations.
         """
         color_dict = {"yellow": cmd.util.cbay,
                          "green": cmd.util.cbag,
@@ -313,6 +316,10 @@ class Visualization(object):
             cmd.select(f"old within {zoom_distance} of {self._both_selection}")
             cmd.zoom("sele")
             cmd.deselect()
+
+        # Format the speed and smoothness of the trajectory
+        if smooth:
+            cmd.smooth()
 
     def _set_transparency(self, old_sphere, new_sphere, old_selection, new_selection):
         """
@@ -385,7 +392,7 @@ class Visualization(object):
         outfile : str, default "movie.mp4"
             Path to save output mp4 file
         fps : int, default 25
-            Frames per second
+            Frames per second to be used by moviepy
         """
         _logger.info("Generating mp4 file...")
         image_clip = mpy.ImageSequenceClip(frames, fps=fps)
