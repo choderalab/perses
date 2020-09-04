@@ -22,6 +22,35 @@ __author__ = 'Ivy Zhang'
 import sys, os
 from simtk.openmm import app
 
+try:
+    import pymol
+    from pymol import cmd
+    _FOUND_PYMOL = True
+except:
+    _FOUND_PYMOL = False
+
+try:
+    import moviepy.editor as mpy
+    _FOUND_MPY = True
+except:
+    _FOUND_MPY = False
+
+def _check_pymol():
+    """Check whether pymol was imported, if not raise exception. """
+    if _FOUND_PYMOL:
+        return
+    else:
+        raise ImportError("PyMOL is required for this module. Please `conda install -c schrodinger pymol`.")
+
+def _check_mpy():
+    """Check whether moviepy was imported, if not raise exception. """
+    if _FOUND_MPY:
+        return
+    else:
+        raise ImportError(
+            "moviepy is required for this module. Please `conda install -c conda-forge moviepy` or `pip install moviepy`.")
+
+
 ################################################################################
 # LOGGER
 ################################################################################
@@ -40,6 +69,8 @@ class Visualization(object):
     """
     Visualization tools for perses non-equilibrium switching.
 
+    from perses.analysis.visualization import Visualization
+
     # Protein mutation example:
     v = Visualization("old.pdb", "new.pdb", "dcd", "A", mutated_residue="667", ligand_chain="C")
     v.load()
@@ -57,17 +88,6 @@ class Visualization(object):
     v.save_mp4(frames)
 
     """
-    try:
-        import pymol
-        from pymol import cmd
-    except:
-        raise Exception("PyMOL is required for this module. Please `conda install -c schrodinger pymol`.")
-
-    try:
-        import moviepy.editor as mpy
-    except:
-        raise Exception(
-            "moviepy is required for this module. Please `conda install -c conda-forge moviepy` or `pip install moviepy`.")
 
     def __init__(self, old_pdb,
                         new_pdb,
@@ -101,6 +121,9 @@ class Visualization(object):
             Leave as None if the trajectory involves a small molecule transformation.
 
         """
+        _check_pymol()
+        _check_mpy()
+
         self._old_pdb = old_pdb
         self._new_pdb = new_pdb
         self._old_traj = f"{os.path.splitext(old_pdb)[0]}.{traj_type.lower()}"
@@ -147,10 +170,12 @@ class Visualization(object):
         cmd.load(self._old_pdb)
         cmd.load(self._new_pdb)
         if self._old_traj is not None and self._new_traj is not None:
-            cmd.load(self._old_traj)
-            cmd.load(self._new_traj)
+            cmd.load_traj(self._old_traj, state=1)
+            cmd.load_traj(self._new_traj, state=1)
         cmd.set_name(os.path.splitext(os.path.basename(self._old_pdb))[0], "old")
         cmd.set_name(os.path.splitext(os.path.basename(self._new_pdb))[0], "new")
+        cmd.intra_fit("old")
+        cmd.intra_fit("new")
 
         # Check that the trajectories are the same length
         old_states = cmd.count_states("old")
@@ -208,7 +233,7 @@ class Visualization(object):
                color_residue="yellow",
                color_ligand="green",
                sphere_radius=1,
-               zoom_distance=2,
+               zoom_distance=None,
                rotate_x_angle=0,
                rotate_y_angle=0,
                rotate_z_angle=0
@@ -227,7 +252,7 @@ class Visualization(object):
         sphere_radius : int, default 0.5
             Radius of the spheres shown for the mutated residue (if trajectory contains protein mutation)
             and small molecule.
-        zoom_distance : int, default 2
+        zoom_distance : int, default None
             The distance in angstroms around the mutated residue (or altered ligand) on which to zoom.
             The frames will be saved based on this view.
         rotate_x_angle : int, default 0
@@ -284,9 +309,10 @@ class Visualization(object):
         cmd.rotate("x", rotate_x_angle, "all", 0)
         cmd.rotate("y", rotate_y_angle, "all", 0)
         cmd.rotate("z", rotate_z_angle, "all", 0)
-        cmd.select(f"old within {zoom_distance} of {self._both_selection}")
-        cmd.zoom("sele")
-        cmd.deselect()
+        if zoom_distance:
+            cmd.select(f"old within {zoom_distance} of {self._both_selection}")
+            cmd.zoom("sele")
+            cmd.deselect()
 
     def _set_transparency(self, old_sphere, new_sphere, old_selection, new_selection):
         """
