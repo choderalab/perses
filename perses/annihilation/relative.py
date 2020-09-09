@@ -2218,15 +2218,16 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
 
     def _handle_bonds(self):
         """
-        copy over the appropriate bonds from the old or new system to the hybrid system;
-        if the endstate is old, then we copy all of the old system forces to the hybrid system and then iterate through the new system,
-        copying over all of the force terms that contain a unique new atom; do the opposite if at the new endstate
+        Copy over the appropriate bonds from the old or new system to the hybrid system;
+        If the endstate is old, then we copy all of the old system force terms to the hybrid system and then iterate through
+        the new system, copying over all of the force terms that contain a unique new atom;
+        Do the opposite if at the new endstate
         """
-        #define the force we are going to write to
+        # Define the force we are going to write to
         self._hybrid_system_forces['HarmonicBondForce'] = openmm.HarmonicBondForce()
         to_force = self._hybrid_system_forces['HarmonicBondForce']
 
-        #define the template force and the auxiliary force
+        # Define the template force and the auxiliary force
         if self._endstate == 0:
             template_force = self._old_system_forces['HarmonicBondForce']
             aux_force = self._new_system_forces['HarmonicBondForce']
@@ -2238,26 +2239,58 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
         else:
             raise Exception(f"endstate must be 0 or 1")
 
-        #copy over the template force...
+        # Copy over the template force...
         for idx in range(template_force.getNumBonds()):
             p1, p2, length, k = template_force.getBondParameters(idx)
             to_force.addBond(p1, p2, length, k)
 
-        #query the auxiliary force to extract and copy over the 'special' terms that don't exist in the template force
+        # Query the auxiliary force to extract and copy over the 'special' terms that don't exist in the template force
         for idx in range(aux_force.getNumBonds()):
             p1, p2, length, k = aux_force.getBondParameters(idx)
             if set([p1, p2]).intersection(target_index_set) != set():
                 #if there is a target atom in the auxiliary term, write it to the hybrid force
                 to_force.addBond(p1, p2, length, k)
 
-        #then add the to_force to the hybrid_system
+        # Then add the to_force to the hybrid_system
         self._hybrid_system.addForce(to_force)
 
     def _handle_angles(self):
         """
-        same as `_handle_bonds`
+        Copy over the appropriate angles from the old or new system to the hybrid system;
+        If the endstate is old, then we copy all of the old system force terms to the hybrid system and then iterate through
+        the new system, copying over all of the force terms that contain a unique new atom;
+        Do the opposite if at the new endstate
         """
-        #TODO: add this, ivy
+        # Define the force we are going to write to
+        self._hybrid_system_forces['HarmonicAngleForce'] = openmm.HarmonicAngleForce()
+        to_force = self._hybrid_system_forces['HarmonicAngleForce']
+
+        # Define the template force and the auxiliary force
+        if self._endstate == 0:
+            template_force = self._old_system_forces['HarmonicAngleForce']
+            aux_force = self._new_system_forces['HarmonicAngleForce']
+            target_index_set = self._atom_classes['unique_new_atoms']
+        elif self._endstate == 1:
+            template_force = self._new_system_forces['HarmonicAngleForce']
+            aux_force = self._old_system_forces['HarmonicAngleForce']
+            target_index_set = self._atom_classes['unique_old_atoms']
+        else:
+            raise Exception(f"endstate must be 0 or 1")
+
+        # Copy over the template force...
+        for idx in range(template_force.getNumAngles()):
+            p1, p2, p3, angle, k = template_force.getAngleParameters(idx)
+            to_force.addAngle(p1, p2, p3, angle, k)
+
+        # Query the auxiliary force to extract and copy over the 'special' terms that don't exist in the template force
+        for idx in range(aux_force.getNumAngles()):
+            p1, p2, p3, angle, k = aux_force.getAngleParameters(idx)
+            if set([p1, p2, p3]).intersection(target_index_set) != set():
+                # if there is a target atom in the auxiliary term, write it to the hybrid force
+                to_force.addAngle(p1, p2, p3, angle, k)
+
+        # Then add the to_force to the hybrid_system
+        self._hybrid_system.addForce(to_force)
 
     def _handle_torsions(self):
         """
