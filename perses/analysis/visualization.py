@@ -172,8 +172,10 @@ class Visualization(object):
         if self._old_traj is not None and self._new_traj is not None:
             cmd.load_traj(self._old_traj, state=1)
             cmd.load_traj(self._new_traj, state=1)
-        cmd.set_name(os.path.splitext(os.path.basename(self._old_pdb))[0], "old")
-        cmd.set_name(os.path.splitext(os.path.basename(self._new_pdb))[0], "new")
+        old_name = os.path.splitext(os.path.basename(self._old_pdb))[0]
+        new_name = os.path.splitext(os.path.basename(self._new_pdb))[0]
+        cmd.set_name(old_name, "old")
+        cmd.set_name(new_name, "new")
         cmd.intra_fit("old")
         cmd.intra_fit("new")
 
@@ -279,8 +281,8 @@ class Visualization(object):
                          "purple": cmd.util.cbap,
                          "pink": cmd.util.cbak}
 
-        _logger.info("Aligning the mutated residue/ligand...")
-        cmd.align(self._old_selection, self._new_selection)
+        # _logger.info("Aligning the mutated residue/ligand...")
+        # cmd.align(self._old_selection, self._new_selection)
 
         # Format color and shape of mutated residue
         _logger.info("Coloring the mutated residue/ligand...")
