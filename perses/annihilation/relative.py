@@ -2219,6 +2219,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
     def _handle_bonds(self):
         """
         Copy over the appropriate bonds from the old or new system to the hybrid system;
+
         If the endstate is old, then we copy all of the old system force terms to the hybrid system and then iterate through
         the new system, copying over all of the force terms that contain a unique new atom;
         Do the opposite if at the new endstate
@@ -2257,9 +2258,11 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
     def _handle_angles(self):
         """
         Copy over the appropriate angles from the old or new system to the hybrid system;
+
         If the endstate is old, then we copy all of the old system force terms to the hybrid system and then iterate through
         the new system, copying over all of the force terms that contain a unique new atom;
         Do the opposite if at the new endstate
+
         """
         # Define the force we are going to write to
         self._hybrid_system_forces['HarmonicAngleForce'] = openmm.HarmonicAngleForce()
@@ -2294,18 +2297,54 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
 
     def _handle_torsions(self):
         """
-        same as `_handle_bonds`
+        Copy over the appropriate torsions from the old or new system to the hybrid system;
+
+        If the endstate is old, then we copy all of the old system force terms to the hybrid system and then iterate through
+        the new system, copying over all of the force terms that contain a unique new atom;
+        Do the opposite if at the new endstate
+
         """
-        #TODO: add this, ivy
+        # Define the force we are going to write to
+        self._hybrid_system_forces['PeriodicTorsionForce'] = openmm.PeriodicTorsionForce()
+        to_force = self._hybrid_system_forces['PeriodicTorsionForce']
+
+        # Define the template force and the auxiliary force
+        if self._endstate == 0:
+            template_force = self._old_system_forces['PeriodicTorsionForce']
+            aux_force = self._new_system_forces['PeriodicTorsionForce']
+            target_index_set = self._atom_classes['unique_new_atoms']
+        elif self._endstate == 1:
+            template_force = self._new_system_forces['PeriodicTorsionForce']
+            aux_force = self._old_system_forces['PeriodicTorsionForce']
+            target_index_set = self._atom_classes['unique_old_atoms']
+        else:
+            raise Exception(f"endstate must be 0 or 1")
+
+        # Copy over the template force...
+        for idx in range(template_force.getNumTorsions()):
+            p1, p2, p3, p4, periodicity, phase, k = template_force.getTorsionParameters(idx)
+            to_force.addTorsion(p1, p2, p3, p4, periodicity, phase, k)
+
+        # Query the auxiliary force to extract and copy over the 'special' terms that don't exist in the template force
+        for idx in range(aux_force.getNumTorsions()):
+            p1, p2, p3, p4, periodicity, phase, k = aux_force.getTorsionParameters(idx)
+            if set([p1, p2, p3, p4]).intersection(target_index_set) != set():
+                # if there is a target atom in the auxiliary term, write it to the hybrid force
+                to_force.addTorsion(p1, p2, p3, p4, periodicity, phase, k)
+
+        # Then add the to_force to the hybrid_system
+        self._hybrid_system.addForce(to_force)
 
     def _handle_nonbonded(self):
         """
-        transcribe nonbonded forces
+        Transcribe nonbonded forces
+
         """
         #TODO: dominic
 
     def _alchemify(self):
         """
-        generate an AlchemicalFactory with an appropriate Alchemical region and 'alchemify' the hybrid system
+        Generate an AlchemicalFactory with an appropriate Alchemical region and 'alchemify' the hybrid system
+        
         """
         #TODO: dominic
