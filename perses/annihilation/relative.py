@@ -2083,11 +2083,11 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
     subclass of the HybridTopologyFactory to allow for more expansive alchemical regions and controllability
     """
     def __init__(self,
-                 topology_proposal: TopologyProposal,
-                 current_positions: simtk.unit.Quantity,
-                 new_positions: simtk.unit.Quantity,
-                 endstate: int,
-                 alchemical_region: list = None,
+                 topology_proposal,
+                 current_positions,
+                 new_positions,
+                 endstate,
+                 alchemical_region=None,
                  **kwargs):
         """
         arguments
