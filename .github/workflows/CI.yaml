@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+    branches:
+      - "master"
   schedule:
     # nightly tests
     - cron: '0 0 * * *'
@@ -11,12 +13,11 @@ on:
 
 jobs:
   test:
-
-    runs-on: ${{ matrix.os }}
+    name: Test on ${{ matrix.cfg.os }}, Python ${{ matrix.cfg.python-version }}, OpenMM ${{ matrix.cfg.openmm }}
+    runs-on: ${{ matrix.cfg.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest] #, macOS-latest]
         cfg:
           - {python-version: 3.6, openmm: "latest"}
           - {python-version: 3.7, openmm: "latest"}
@@ -25,11 +26,8 @@ jobs:
           - {python-version: 3.7, openmm: "conda-forge"}
 
     env:
-      ORGNAME: omnia
-      PACKAGENAME: perses
-      OE_LICENSE: $HOME/oe_license.txt
-      OPENEYE_CHANNEL: -i https://pypi.anaconda.org/OpenEye/simple
-      CI_OS: ${{ matrix.os }}
+      OPENMM: ${{ matrix.cfg.openmm }}
+      OE_LICENSE: ${{ github.workspace }}/oe_license.txt
 
     steps:
     - uses: actions/checkout@v1
@@ -98,15 +96,17 @@ jobs:
         export OE_LICENSE="$HOME/oe_license.txt"
         export TRAVIS=true
         pushd .
-        nosetests ${PACKAGENAME} --with-coverage --verbosity=3 --with-timer -a '!advanced'
+        nosetests ${PACKAGENAME} --with-coverage --verbosity=3 --with-timer -a '!advanced' --cover-xml --cover-xml-file=./coverage.xml
         popd
     - name: Codecov
-      uses: codecov/codecov-action@v1.0.5
+      uses: codecov/codecov-action@v1.0.13
       with:
         # User defined upload name. Visible in Codecov UI
         name: perses
         # Repository upload token - get it from codecov.io
         token: 618f5706-686e-444a-86a6-b017e52708a9
+        fail_ci_if_error: false
+        path_to_write_report: ./codecov_report.gz
 
     - name: Deploy
       shell: bash

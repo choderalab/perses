@@ -3,8 +3,6 @@ __author__ = 'Patrick B. Grinaway'
 import simtk.openmm as openmm
 import openeye.oechem as oechem
 import openmoltools
-import openeye.oeiupac as oeiupac
-import openeye.oeomega as oeomega
 import simtk.openmm.app as app
 import simtk.unit as unit
 import logging
@@ -13,7 +11,6 @@ import parmed
 from collections import namedtuple, OrderedDict
 import copy
 from unittest import skipIf
-from pkg_resources import resource_filename
 try:
     from urllib.request import urlopen
     from io import StringIO
@@ -30,11 +27,9 @@ from openmmtools.constants import kB
 from perses.rjmc import coordinate_numba
 
 from perses.rjmc.geometry import check_dimensionality
-from perses.utils.data import get_data_filename
 from perses.utils.openeye import smiles_to_oemol, OEMol_to_omm_ff
 from openmmforcefields.generators import SystemGenerator
 from openforcefield.topology import Molecule
-from simtk.openmm import app
 
 #global variables
 forcefield_files = ['amber14/protein.ff14SB.xml', 'amber/tip3p_standard.xml']
@@ -157,7 +152,7 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
         The positions for the atoms were taken from an earlier test for the geometry engine.
 
         Parameters
-        ---------
+        ----------
         bond : Boolean, default True
             Whether to include the bond force term
         angle : Boolean, default True
@@ -661,8 +656,8 @@ def calculate_torsion_discrete_log_pdf_manually(beta, torsion, phis):
     """
     Manually calculate the torsion potential for a series of phis and a given beta.
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     beta : float
         inverse temperature
     torsion : parmed.Dihedral object
@@ -796,8 +791,8 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
     """
     Given four atom positions in cartesians, will output the internal positions in spherical coords
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     atom_coords : unit.Quantity(np.array([x,y,z]), unit = unit.nanometers)
         x, y, and z cartesians of an atom
     bond_coords : unit.Quantity(np.array([x,y,z]), unit = unit.nanometers)
@@ -1004,7 +999,7 @@ def run_proposals(proposal_list):
 
     """
     import logging
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     import time
     start_time = time.time()
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
@@ -1130,7 +1125,7 @@ def run_geometry_engine(index=0):
     without exceptions. Convert n-pentane to 2-methylpentane
     """
     import logging
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     import copy
     from perses.utils.openeye import iupac_to_oemol
     molecule_name_1 = 'benzene'
@@ -1367,8 +1362,8 @@ class LinearValenceTestSystem(GeometryTestSystem):
 
     def __init__(self, bond=True, angle=True, torsion=True, n_atoms=4, add_extra_angle=True):
         """
-        Arguments
-        ---------
+        Parameters
+        ----------
         bond : Boolean, default True
             Whether to include the bond force term
         angle : Boolean, default True
@@ -1530,8 +1525,8 @@ class AnalyticalBeadSystems(object):
     """
     def __init__(self, transformation, num_iterations):
         """
-        Arguments
-        ---------
+        Parameters
+        ----------
         transformation: list
             [int, int+1] where int = 3 or 4
         num_iterations: int
@@ -1558,8 +1553,8 @@ class AnalyticalBeadSystems(object):
         """
         Convert openmm position objects into numpy ndarrays
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         openmm_positions: openmm unit.Quantity object
             Positions generated from openmm simulation
 
@@ -1577,8 +1572,8 @@ class AnalyticalBeadSystems(object):
         """
         Utility function to minimize a system
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         system: openmm system object
         positions: openmm unit.Quantity object
             openmm position (single frame)
@@ -1601,8 +1596,8 @@ class AnalyticalBeadSystems(object):
         """
         Utility function to compute the reduced potential
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         system: openmm system object
         positions: openmm unit.Quantity object
             openmm position (single frame)
@@ -1625,8 +1620,8 @@ class AnalyticalBeadSystems(object):
         """
         Utility function to generate a topology proposal from a linear bead system
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         sys_pos_top: dict
             dictionary of openmm.system, openmm.positions, openmm.topology for molecules A and B
         n_atoms_initial: int
@@ -1675,8 +1670,8 @@ class AnalyticalBeadSystems(object):
         """
         Function to execute reversibje jump MC
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         configurations_initial: openmm.Quantity
             n_replicate frames of equilibrium simulation of initial system
         topology_proposal: dict
@@ -1720,8 +1715,8 @@ class AnalyticalBeadSystems(object):
         """
         Function to simulate i.i.d conformations of the initial molecule
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         printer: boolean
             whether to print the stacked positions of the simulated initial molecule
 
@@ -1760,8 +1755,8 @@ class AnalyticalBeadSystems(object):
         """
         Function to conduct run_rj_simple_system RJMC on each conformation of initial molecule (i.e. A --> B)
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         iid_positions_A: openmm.Quantity
             ndarray of iid conformations of molecule A
         printer: boolean
@@ -1793,8 +1788,8 @@ class AnalyticalBeadSystems(object):
         Function to conduct run_rj_simple_system RJMC on each conformation of proposed molecule (i.e. B --> A)
         backward_positions should be the same unit.Quantity as iid_positions_A (the test function has an assertion to maintain this)
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         proposed_positions: openmm.Quantity
             ndarray of proposed conformations of molecule B
         printer: boolean
@@ -1827,8 +1822,8 @@ class AnalyticalBeadSystems(object):
         """
         Function to compute variance of forward and backward works, and to add the work arrays pairwise
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         printer: boolean
             whether to print the forward, reverse, variance and comparison works
 
@@ -1864,8 +1859,8 @@ def test_AnalyticalBeadSystems(transformation=[[3,4], [4,5], [3,5]], num_iterati
 
     Also asserts that each iid configuration of molecule A is equal (within a threshold) to the final proposal position of B --> A (i.e. the backward_transformation proposal molecule)
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     transformation: list
         list of pairwise transformation proposals
     num_iterations: int

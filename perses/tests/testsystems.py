@@ -28,13 +28,11 @@ __author__ = 'John D. Chodera'
 ################################################################################
 from simtk import openmm, unit
 from simtk.openmm import app
-import os, os.path
-import sys, math
+import os
+import os.path
 import numpy as np
 from functools import partial
-from pkg_resources import resource_filename
-from openeye import oechem, oeshape, oeomega
-from openmmtools import testsystems
+from openeye import oechem
 from openmmtools import states
 from openmmtools.mcmc import MCMCSampler, LangevinSplittingDynamicsMove
 from perses.utils.smallmolecules import sanitizeSMILES, canonicalize_SMILES
@@ -43,9 +41,7 @@ from perses.rjmc.topology_proposal import OESMILES_OPTIONS
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import tempfile
 import copy
-from openmmtools.constants import kB
-from unittest import skipIf
-from perses.dispersed.utils import minimize #updated minimizer
+from perses.dispersed.utils import minimize
 from openmmtools.states import ThermodynamicState, SamplerState
 from openmmforcefields.generators import SystemGenerator
 from openforcefield.topology import Molecule

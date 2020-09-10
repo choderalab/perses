@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
-import os, sys
+import os
+import sys
 from glob import glob
 from perses.analysis import utils
 

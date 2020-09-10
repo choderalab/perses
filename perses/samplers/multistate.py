@@ -7,7 +7,6 @@ from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaP
 from openmmtools.multistate import sams, replicaexchange
 from openmmtools import cache, utils
 from perses.dispersed.utils import configure_platform
-from openmmtools import cache
 cache.global_context_cache.platform = configure_platform(utils.get_fastest_platform().getName())
 from openmmtools.states import *
 from perses.dispersed.utils import create_endstates

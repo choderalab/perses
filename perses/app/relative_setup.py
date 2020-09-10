@@ -3,7 +3,6 @@ from __future__ import absolute_import
 from perses.dispersed import feptasks
 from perses.utils.openeye import *
 from perses.utils.data import load_smi
-from perses.annihilation.relative import HybridTopologyFactory
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
 from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
@@ -57,6 +56,7 @@ class RelativeFEPSetup(object):
                  pressure=1.0 * unit.atmosphere,
                  temperature=300.0 * unit.kelvin,
                  solvent_padding=9.0 * unit.angstroms,
+                 ionic_strength=0.15 * unit.molar,
                  atom_map=None,
                  hmass=4*unit.amus,
                  neglect_angles=False,
@@ -73,6 +73,7 @@ class RelativeFEPSetup(object):
                  complex_box_dimensions=None,
                  solvent_box_dimensions=None,
                  map_strategy='geometry',
+                 remove_constraints=False
                  ):
         """
         Initialize a NonequilibriumFEPSetup object
@@ -96,6 +97,9 @@ class RelativeFEPSetup(object):
             Temperature to use for the Langevin integrator
         solvent_padding : Quantity, units of length
             The amount of padding to use when adding solvent
+
+        : Quantity, units of concentration
+            Concentration of solvent ions to be used when solvating the system
         neglect_angles : bool
             Whether to neglect certain angle terms for the purpose of minimizing work variance in the RJMC protocol.
         anneal_14s : bool, default False
@@ -133,13 +137,16 @@ class RelativeFEPSetup(object):
             - random will use a random map of those that are possible
             - weighted-random uses a map chosen at random, proportional to how close it is in geometry to ligand B. The same as for 'geometry', this requires the coordinates of ligand B to be meaninful
             - return-all BREAKS THE API as it returns a list of dicts, rather than list. This is intended for development code, not main pipeline.
-
+        remove_constraints : bool, default=False
+            if hydrogen constraints should be constrained in the simulation
+            default is False, so no constraints removed, but 'all' or 'not water' can be used to remove constraints.
         """
         self._pressure = pressure
         self._temperature = temperature
         self._barostat_period = 50
         self._pme_tol = 2.5e-04
         self._padding = solvent_padding
+        self._ionic_strength = ionic_strength
         self._hmass = hmass
         _logger.info(f"\t\t\t_hmass: {hmass}.\n")
         self._proposal_phase = None
@@ -151,6 +158,21 @@ class RelativeFEPSetup(object):
         self._complex_box_dimensions = complex_box_dimensions
         self._solvent_box_dimensions = solvent_box_dimensions
         self._map_strategy = map_strategy
+
+        if remove_constraints is False:
+            self._h_constraints = app.HBonds
+            self._rigid_water = True
+        elif remove_constraints == 'all':
+            _logger.info(f'Hydrogens will not be constrained. This may be problematic if using a larger timestep')
+            self._h_constraints = None
+            self._rigid_water = False
+        elif remove_constraints == 'not water':
+            _logger.info(f'Hydrogens will not be constrained for non-water molecules. This may be problematic if using a larger timestep')
+            self._h_constraints = None
+            self._rigid_water = True
+        else:
+            _logger.warning(f"remove_constraints value of {remove_constraints}. Allowed values are False 'all' or 'not water'")
+
         try:
             self._nonbonded_method = getattr(app,nonbonded_method)
             _logger.info(f'Setting non bonded method to {nonbonded_method}')
@@ -214,8 +236,8 @@ class RelativeFEPSetup(object):
 
             elif self._ligand_input[-3:] == 'sdf' or self._ligand_input[-4:] == 'mol2': #
                 _logger.info(f"Detected .sdf format.  Proceeding...") #TODO: write checkpoints for sdf format
-                self._ligand_oemol_old = createOEMolFromSDF(self._ligand_input, index=self._old_ligand_index)
-                self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input, index=self._new_ligand_index)
+                self._ligand_oemol_old = createOEMolFromSDF(self._ligand_input, index=self._old_ligand_index, allow_undefined_stereo=True)
+                self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input, index=self._new_ligand_index, allow_undefined_stereo=True)
                 self._ligand_oemol_old = generate_unique_atom_names(self._ligand_oemol_old)
                 self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
 
@@ -290,7 +312,7 @@ class RelativeFEPSetup(object):
 
         # Create openforcefield Molecule objects for old and new molecules
         from openforcefield.topology import Molecule
-        molecules = [ Molecule.from_openeye(oemol) for oemol in [self._ligand_oemol_old, self._ligand_oemol_new] ]
+        molecules = [ Molecule.from_openeye(oemol,allow_undefined_stereo=True) for oemol in [self._ligand_oemol_old, self._ligand_oemol_new] ]
 
         # Handle spectator molecules
         if self._spectator_filenames is not None:
@@ -317,7 +339,7 @@ class RelativeFEPSetup(object):
         # Create SystemGenerator
         from openmmforcefields.generators import SystemGenerator
         _logger.info(f'PME tolerance: {self._pme_tol}')
-        forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'constraints' : app.HBonds, 'hydrogenMass' : self._hmass}
+        forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'constraints' : self._h_constraints, 'rigidWater': self._rigid_water, 'hydrogenMass' : self._hmass}
         if small_molecule_forcefield is None or small_molecule_forcefield == 'None':
             self._system_generator = SystemGenerator(forcefields=forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
                                       periodic_forcefield_kwargs = {'nonbondedMethod': self._nonbonded_method})
@@ -340,7 +362,7 @@ class RelativeFEPSetup(object):
             _logger.info(f"setting up complex phase...")
             self._setup_complex_phase(protein_pdb_filename,receptor_mol2_filename,mol_list)
             self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(
-            self._complex_topology_old, self._complex_positions_old,phase='complex',box_dimensions=self._complex_box_dimensions)
+            self._complex_topology_old, self._complex_positions_old,phase='complex',box_dimensions=self._complex_box_dimensions, ionic_strength=self._ionic_strength)
             _logger.info(f"successfully generated complex topology, positions, system")
 
             self._complex_md_topology_old_solvated = md.Topology.from_openmm(self._complex_topology_old_solvated)
@@ -385,7 +407,7 @@ class RelativeFEPSetup(object):
                 _logger.info(f"no complex detected in phases...generating unique topology/geometry proposals...")
                 _logger.info(f"solvating ligand...")
                 self._ligand_topology_old_solvated, self._ligand_positions_old_solvated, self._ligand_system_old_solvated = self._solvate_system(
-                self._ligand_topology_old, self._ligand_positions_old,phase='solvent',box_dimensions=self._solvent_box_dimensions)
+                self._ligand_topology_old, self._ligand_positions_old,phase='solvent',box_dimensions=self._solvent_box_dimensions,ionic_strength=self._ionic_strength)
                 self._ligand_md_topology_old_solvated = md.Topology.from_openmm(self._ligand_topology_old_solvated)
 
                 _logger.info(f"creating TopologyProposal")
@@ -689,7 +711,7 @@ class RelativeFEPSetup(object):
 
         return ligand_topology_proposal, old_ligand_positions
 
-    def _solvate_system(self, topology, positions, model='tip3p',phase='complex', box_dimensions=None):
+    def _solvate_system(self, topology, positions, model='tip3p',phase='complex', box_dimensions=None,ionic_strength=0.15 * unit.molar):
         """
         Generate a solvated topology, positions, and system for a given input topology and positions.
         For generating the system, the forcefield files provided in the constructor will be used.
@@ -738,9 +760,9 @@ class RelativeFEPSetup(object):
         if run_solvate:
             _logger.info(f"\tpreparing to add solvent")
             if box_dimensions is None:
-                modeller.addSolvent(self._system_generator.forcefield, model=model, padding=self._padding, ionicStrength=0.15*unit.molar)
+                modeller.addSolvent(self._system_generator.forcefield, model=model, padding=self._padding, ionicStrength=ionic_strength)
             else:
-                modeller.addSolvent(self._system_generator.forcefield, model=model, ionicStrength=0.15*unit.molar, boxSize=box_dimensions)
+                modeller.addSolvent(self._system_generator.forcefield, model=model, ionicStrength=ionic_strength, boxSize=box_dimensions)
         solvated_topology = modeller.getTopology()
         if phase == 'complex' and self._padding._value == 0. and box_dimensions is not None:
             _logger.info(f'Complex phase, where padding is set to 0. and box dimensions are provided so setting unit cell dimensions')
@@ -862,14 +884,14 @@ class DaskClient(object):
         """
         wrapper to map a function and its arguments to the client for scheduling
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         func : function to map
             arguments: tuple of the arguments that the function will take
         argument : tuple of argument lists
 
         Returns
-        ---------
+        -------
         futures
         """
         if self.client is None:
@@ -885,12 +907,12 @@ class DaskClient(object):
         """
         wrapper to gather a function given its arguments
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         futures : future pointers
 
         Returns
-        ---------
+        -------
         results
         """
         if self.client is None:
@@ -1179,7 +1201,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
         Instantiate sMC particles. This entails loading n_iterations snapshots from disk (from each endstate of specified)
         and distributing Particle classes.
 
-        Arguments
+        Parameters
         ----------
         n_lambdas : int, default None
             number of lambdas values.
@@ -1678,7 +1700,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
         Given corresponding start_val and end_val of observables, conduct a binary search to find min value for which the observable threshold
         is exceeded.
 
-        Arguments
+        Parameters
         ----------
         futures:
             list of dask.Future objects that point to futures

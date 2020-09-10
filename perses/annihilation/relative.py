@@ -1,14 +1,9 @@
-import sys
 import simtk.openmm as openmm
-import simtk.openmm.app as app
 import simtk.unit as unit
 import mdtraj as md
 import numpy as np
 import copy
 import enum
-from io import StringIO
-import lxml.etree as etree
-from openmmtools.constants import ONE_4PI_EPS0
 
 InteractionGroup = enum.Enum("InteractionGroup", ['unique_old', 'unique_new', 'core', 'environment'])
 
@@ -88,7 +83,7 @@ class HybridTopologyFactory(object):
             Whether to use the long range correction in the custom sterics force. This is very expensive for NCMC.
         functions : dict, default None
             Alchemical functions that determine how each force is scaled with lambda. The keys must be strings with
-            names beginning with lambda_ and ending with each of bonds, angles, torsions, sterics, electrostatics.
+            names beginning with ``lambda_`` and ending with each of bonds, angles, torsions, sterics, electrostatics.
             If functions is none, then the integrator will need to set each of these and parameter derivatives will be unavailable.
             If functions is not None, all lambdas must be specified.
         softcore_alpha: float, default None
@@ -443,7 +438,8 @@ class HybridTopologyFactory(object):
     def _translate_nonbonded_method_to_custom(self, standard_nonbonded_method):
         """
         Utility function to translate the nonbonded method enum from the standard nonbonded force to the custom version
-       `CutoffPeriodic`, `PME`, and `Ewald` all become `CutoffPeriodic`; `NoCutoff` becomes `NoCutoff`; `CutoffNonPeriodic` becomes `CutoffNonPeriodic`
+        `CutoffPeriodic`, `PME`, and `Ewald` all become `CutoffPeriodic`; `NoCutoff` becomes `NoCutoff`; `CutoffNonPeriodic` becomes `CutoffNonPeriodic`
+
         Parameters
         ----------
         standard_nonbonded_method : openmm.NonbondedForce.NonbondedMethod
@@ -1237,9 +1233,10 @@ class HybridTopologyFactory(object):
     def handle_periodic_torsion_force(self):
         """
         Handle the torsions defined in the new and old systems as such:
-            1. old system torsions will enter the `custom_torsion_force` if they do not contain `unique_old_atoms` and will interpolate from `on` to `off` from lambda_torsions = 0 to 1, respectively
-            2. new system torsions will enter the `custom_torsion_force` if they do not contain `unique_new_atoms` and will interpolate from `off` to `on` from lambda_torsions = 0 to 1, respectively
-            3. old _and_ new system torsions will enter the `unique_atom_torsion_force`(standard_torsion_force) and will _not_ be interpolated.
+
+        1. old system torsions will enter the ``custom_torsion_force`` if they do not contain ``unique_old_atoms`` and will interpolate from ``on`` to ``off`` from ``lambda_torsions`` = 0 to 1, respectively
+        2. new system torsions will enter the ``custom_torsion_force`` if they do not contain ``unique_new_atoms`` and will interpolate from ``off`` to ``on`` from ``lambda_torsions`` = 0 to 1, respectively
+        3. old *and* new system torsions will enter the ``unique_atom_torsion_force`` (``standard_torsion_force``) and will *not* be interpolated
         """
         old_system_torsion_force = self._old_system_forces['PeriodicTorsionForce']
         new_system_torsion_force = self._new_system_forces['PeriodicTorsionForce']

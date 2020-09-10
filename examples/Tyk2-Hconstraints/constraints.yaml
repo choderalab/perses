@@ -1,33 +1,25 @@
+#provide the full path of the protein PDB file
+protein_pdb: Tyk2_protein.pdb
 #provide the path to the ligand file with coordinates
-ligand_file: PTP1B_ligands_shifted.sdf 
+ligand_file: Tyk2_ligands_shifted.sdf 
 
 #The ligand file contains multiple ligands. Choose the indices of the ligands
 #between which we should compute a relative free energy
-#old_ligand_index: 18 
-#new_ligand_index: 12
-old_ligand_index: 3 
-new_ligand_index: 7 
+old_ligand_index: 10 
+new_ligand_index: 24 
 
 # OpenMM ffxml force field files installed via the openmm-forcefields package
 # for biopolymers and solvents.
 # Note that small molecule force field files should NOT be included here.
 forcefield_files:
+    - amber/ff14SB.xml # ff14SB protein force field
     - amber/tip3p_standard.xml # TIP3P and recommended monovalent ion parameters
     - amber/tip3p_HFE_multivalent.xml # for divalent ions
+    - amber/phosaa10.xml # HANDLES THE TPO
 
 # Small molecule force field
 # We recommnd one of ['gaff-1.81', 'gaff-2.11', 'smirnoff99Frosst-1.1.0', 'openff-1.0.0']
-small_molecule_forcefield: openff-1.0.0 
-
-# set atom/bond mapping criteria by hand
-# see https://docs.eyesopen.com/toolkits/python/oechemtk/OEChemConstants/OEExprOpts.html
-# for all options
-atom_expression:
-    - IntType
-    - Degree # This will stop the C=S and O=C mapping
-
-bond_expression:
-    - IntType
+small_molecule_forcefield: openff-1.2.0 
 
 #the temperature and pressure of the simulation, as well as how much solvent paddding to add
 #units:
@@ -38,21 +30,23 @@ pressure: 1.0
 temperature: 300.0
 solvent_padding: 9.0
 
+atom_expression:
+    - IntType
+bond_expession:
+    - DefaultBonds
+
 #number of equilibrium steps per move application
 n_steps_per_move_application: 250 
-
-#The name of the pickle file where we will save the setup object
-save_setup_pickle_as: fesetup_hbonds.pkl
 
 #the type of free energy calculation.
 #currently, this could be either nonequilibrium or sams
 fe_type: repex 
 
 #checkpoint interval in iterations:
-checkpoint_interval: 100 
+checkpoint_interval: 50 
 
 #number of iterations
-n_cycles: 1 
+n_cycles: 5
 
 #The number of SAMS states
 n_states: 11 
@@ -61,7 +55,7 @@ n_states: 11
 n_equilibration_iterations: 0
 
 #where to put the trajectories
-trajectory_directory: Stronger 
+trajectory_directory: temp/offlig10to24 
 
 #how to prefix the trajectory files (project-specific name)
 trajectory_prefix: out 
@@ -71,8 +65,12 @@ atom_selection: not water
 
 #which phases do we want to run. Any combination or number of complex, solvent or vacuum will be accepted 
 phases:
+    - complex
     - solvent
     - vacuum
 
 #timestep in fs
-timestep: 4.0
+timestep: 2.
+
+#remove constraints of 'all' or 'not water'
+remove_constraints: not water

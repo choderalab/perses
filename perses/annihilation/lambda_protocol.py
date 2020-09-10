@@ -2,12 +2,11 @@ from __future__ import print_function
 import numpy as np
 import logging
 import copy
-import traceback
 from openmmtools.alchemy import AlchemicalState
 
 logging.basicConfig(level=logging.NOTSET)
 _logger = logging.getLogger("lambda_protocol")
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.INFO)
 
 
 class LambdaProtocol(object):
@@ -49,16 +48,16 @@ class LambdaProtocol(object):
         default : ele and LJ terms of the old system are turned off between 0.0 -> 0.5
         ele and LJ terms of the new system are turned on between 0.5 -> 1.0
         core terms treated linearly
-        
+
         quarters : 0.25 of the protocol is used in turn to individually change the
         (a) off old ele, (b) off old sterics, (c) on new sterics (d) on new ele
         core terms treated linearly
-        
+
         namd : follows the protocol outlined here: https://pubs.acs.org/doi/full/10.1021/acs.jcim.9b00362#
-        Jiang, Wei, Christophe Chipot, and Benoît Roux. "Computing Relative Binding Affinity of Ligands 
-        to Receptor: An Effective Hybrid Single-Dual-Topology Free-Energy Perturbation Approach in NAMD." 
+        Jiang, Wei, Christophe Chipot, and Benoît Roux. "Computing Relative Binding Affinity of Ligands
+        to Receptor: An Effective Hybrid Single-Dual-Topology Free-Energy Perturbation Approach in NAMD."
         Journal of chemical information and modeling 59.9 (2019): 3794-3802.
-        
+
         ele-scaled : all terms are treated as in default, except for the old and new ele
         these are scaled with lambda^0.5, so as to be linear in energy, rather than lambda
 
@@ -120,9 +119,9 @@ class LambdaProtocol(object):
                                   'lambda_torsions':
                                   lambda x: x}
             elif self.type == 'ele-scaled':
-                self.functions = {'lambda_electrostatics_insert': 
+                self.functions = {'lambda_electrostatics_insert':
                                    lambda x: 0.0 if x < 0.5 else ((2*(x-0.5))**0.5),
-                                  'lambda_electrostatics_delete': 
+                                  'lambda_electrostatics_delete':
                                    lambda x: (2*x)**2 if x < 0.5 else 1.0
                                  }
             elif self.type == 'user-defined':
@@ -130,7 +129,7 @@ class LambdaProtocol(object):
             else:
                 _logger.warning(f"""LambdaProtocol type : {self.type} not
                                   recognised. Allowed values are 'default',
-                                  'namd' and 'quarters' and 'user-defined'. 
+                                  'namd' and 'quarters' and 'user-defined'.
                                   Setting LambdaProtocol functions to default. """)
                 self.functions = LambdaProtocol.default_functions
 

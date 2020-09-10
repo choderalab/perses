@@ -1,39 +1,24 @@
-import simtk.openmm as openmm
 import openmmtools.cache as cache
-from typing import List, Tuple, Union, NamedTuple
 import os
 import copy
 from perses.dispersed.utils import *
 
 import openmmtools.mcmc as mcmc
-import openmmtools.integrators as integrators
-import openmmtools.states as states
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
 import numpy as np
 import mdtraj as md
-from perses.annihilation.relative import HybridTopologyFactory
-import mdtraj.utils as mdtrajutils
-import pickle
 import simtk.unit as unit
 import tqdm
-from perses.tests.utils import compute_potential_components
-from openmmtools.constants import kB
-import pdb
 import logging
-import tqdm
-from sys import getsizeof
 import time
 from collections import namedtuple
 from perses.annihilation.lambda_protocol import LambdaProtocol
-from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
+from perses.annihilation.lambda_protocol import RelativeAlchemicalState
 from perses.dispersed import *
 import random
 import pymbar
-import dask.distributed as distributed
 from perses.dispersed.parallel import Parallelism
-import tqdm
-import time
-from openmmtools import mcmc, utils
+from openmmtools import utils
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("sMC")
@@ -213,8 +198,8 @@ class SequentialMonteCarlo():
         Function to implement the approprate parallelism given input arguments.
         This is exposed as a method in case the class already exists and the user wants to change the parallelism scheme.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         external_parallelism : dict('parallelism': perses.dispersed.parallel.Parallelism, 'available_workers': list(str)), default None
             an external parallelism dictionary
         internal_parallelism : dict, default {'library': ('dask', 'LSF'), 'num_processes': 2}
@@ -312,7 +297,7 @@ class SequentialMonteCarlo():
         Conduct vanilla AIS (i.e. nonequilibrium switching FEP) with a given protocol (for each direction), specified annealing time per lambda, and support for rethermalization (i.e. velocity resampling)
         NOTE: AIS is NaN-safe
 
-        Arguments
+        Parameters
         ----------
         num_particles : int
             number of particles to run in each direction
@@ -436,7 +421,7 @@ class SequentialMonteCarlo():
         """
         Conduct SequentialMonteCarlo sampling with a trailblazed protocol.  Resampling is supported.
 
-        Arguments
+        Parameters
         ----------
         num_particles : int
             number of particles to run in each direction
@@ -740,8 +725,8 @@ class SequentialMonteCarlo():
         via AIS or generalized sMC.  The self.cumulative_works, self.dg_EXP, and self.dg_BAR (if applicable) are returned as
         instance attributes.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         cumulative_work_dict : dict
             dictionary of the form {_direction <str>: np.nddarray of shape (num_particles, iterations)}
             where _direction is 'forward' or 'reverse' and np.2darray is of the shape (num_particles, iteration_number + 2)
@@ -947,7 +932,7 @@ class SequentialMonteCarlo():
         """
         Attempt to resample particles given an observable diagnostic and a resampling method.
 
-        Arguments
+        Parameters
         ----------
         incremental_works : np.array() of floats
             the incremental work accumulated from importance sampling at time t
@@ -1025,7 +1010,7 @@ class SequentialMonteCarlo():
         """
         Given corresponding start_val and end_val of observables, conduct a binary search to find min value for which the observable threshold
         is exceeded.
-        Arguments
+        Parameters
         ----------
         sampler_states : np.array(openmmtools.states.SamplerState)
             numpy array of sampler states

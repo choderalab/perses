@@ -43,7 +43,30 @@ extensions = [
     ]
 
 autosummary_generate = True
-autodoc_default_flags = ['members', 'inherited-members']
+autodoc_default_options = {
+    "members": True,
+    "inherited-members": True,
+}
+# autodoc_mock_imports = [
+#     "matplotlib",
+#     "mdtraj",
+#     "netCDF4",
+#     "networkx",
+#     "oechem",
+#     "openeye",
+#     "openforcefield",
+#     "openmmtools",
+#     "openmoltools",
+#     "parmed",
+#     "progressbar",
+#     "pymbar",
+#     "scipy",
+#     "seaborn",
+#     "simtk",
+#     "tqdm",
+#     # "numba", # this must be installed because mocking fails with jit stuff
+#     # "perses.rjmc.coordinate_numba",
+# ]
 numpydoc_class_members_toctree = False
 
 # Add any paths that contain templates here, relative to this directory.
@@ -104,7 +127,7 @@ html_theme_options = {
     'github_user': 'choderalab',
     'github_repo': 'perses',
     'github_banner': 'true',
-    'travis_button': 'true',
+    'travis_button': 'false',
     'show_powered_by' :'true',
     'font_family': 'calibri, helvetica, sans-serif',
     'head_font_family': 'cambria, tahoma, serif',

@@ -239,8 +239,8 @@ class ExpandedEnsembleSampler(object):
         log_weight : float
             The log weight of the provided state key.
 
-        Note
-        ----
+        Notes
+        -----
         This adds the key to the self.log_weights dict.
 
         """
@@ -253,8 +253,8 @@ class ExpandedEnsembleSampler(object):
         Given an OpenMM system object, create a corresponding ThermodynamicState that has the same
         temperature and pressure as the current thermodynamic state.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         system : openmm.System
             The OpenMM system for which to create the thermodynamic state
 
