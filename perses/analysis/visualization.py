@@ -95,7 +95,7 @@ class Visualization(object):
                         mutated_chain,
                         is_protein=True,
                         mutated_residue=None,
-                        ligand_chain=None,):
+                        ligand_chain=None):
         """
         Note: the pdb and trajectory names should be the same, only differing in file extension.
 
@@ -118,7 +118,8 @@ class Visualization(object):
             Leave as None if the trajectory involves a small molecule transformation.
         ligand_chain : str, default None
             One letter string representing the chain id that contains the ligand.
-            Leave as None if the trajectory involves a small molecule transformation.
+            Leave as None if the trajectory involves a small molecule transformation or a protein mutation transformation
+            without a small molecule.
 
         """
         _check_pymol()
@@ -136,8 +137,6 @@ class Visualization(object):
         if self._is_protein:
             if self._mutated_residue is None:
                 raise Exception("Need to specify the mutated residue id!")
-            if self._ligand_chain is None:
-                raise Exception("Need to specify the ligand chain!")
             self._old_selection = f"(old and chain {self._mutated_chain} and resi {self._mutated_residue})"
             self._new_selection = f"(new and chain {self._mutated_chain} and resi {self._mutated_residue})"
             self._both_selection = f"(chain {self._mutated_chain} and resi {self._mutated_residue})"
@@ -167,17 +166,28 @@ class Visualization(object):
 
         # Load trajectories
         cmd.set("defer_builds_mode", 3)  # Improve performance for handling long trajectories
-        cmd.load(self._old_pdb)
-        cmd.load(self._new_pdb)
-        if self._old_traj is not None and self._new_traj is not None:
+        if os.path.exists(self._old_pdb):
+            cmd.load(self._old_pdb)
+        else:
+            raise FileNotFoundError(f"{self._old_pdb} not found")
+        if os.path.exists(self._old_traj):
             cmd.load_traj(self._old_traj, state=1)
+        else:
+            raise FileNotFoundError(f"{self._old_traj} not found")
+        if os.path.exists(self._new_pdb):
+            cmd.load(self._new_pdb)
+        else:
+            raise FileNotFoundError(f"{self._new_pdb} not found")
+        if os.path.exists(self._new_traj):
             cmd.load_traj(self._new_traj, state=1)
+        else:
+            raise FileNotFoundError(f"{self._new_traj} not found")
+
+        # Rename objects
         old_name = os.path.splitext(os.path.basename(self._old_pdb))[0]
         new_name = os.path.splitext(os.path.basename(self._new_pdb))[0]
         cmd.set_name(old_name, "old")
         cmd.set_name(new_name, "new")
-        cmd.intra_fit("old")
-        cmd.intra_fit("new")
 
         # Check that the trajectories are the same length
         old_states = cmd.count_states("old")
@@ -190,6 +200,10 @@ class Visualization(object):
         cmd.remove("resn hoh")
         cmd.remove("resn na")
         cmd.remove("resn cl")
+
+        # Intra fit frames (must be after removing solvent)
+        cmd.intra_fit("old")
+        cmd.intra_fit("new")
 
         # Format overall appearance
         _logger.info("Formatting overall appearance, color, and background color...")
@@ -281,8 +295,8 @@ class Visualization(object):
                          "purple": cmd.util.cbap,
                          "pink": cmd.util.cbak}
 
-        # _logger.info("Aligning the mutated residue/ligand...")
-        # cmd.align(self._old_selection, self._new_selection)
+        _logger.info("Aligning the mutated residue/ligand...")
+        cmd.align(self._old_selection, self._new_selection)
 
         # Format color and shape of mutated residue
         _logger.info("Coloring the mutated residue/ligand...")
@@ -294,18 +308,20 @@ class Visualization(object):
         cmd.set("sphere_scale", sphere_radius)
         cmd.set("sphere_transparency", 1, self._new_selection)
 
-        # Format small molecule
-        _logger.info("Coloring the small molecule...")
-        color_dict[color_ligand](f"chain {self._ligand_chain}")
-
-        # Fade out the protein and small molecule
+        # Fade out the protein
         _logger.info("Fading out the protein...")
         cmd.select("not " + self._both_selection)
         cmd.set("cartoon_transparency", 0.8, "sele")
-        if self._is_protein:
+
+        # Format small molecule
+        if self._ligand_chain:
+            _logger.info("Coloring the small molecule...")
+            color_dict[color_ligand](f"chain {self._ligand_chain}")
+
             _logger.info("Fading out the small molecule...")
-            cmd.set("stick_transparency", 0.8, "sele")
-            # Remove duplicate small molecule
+            cmd.set("stick_transparency", 0.8, f"chain {self._ligand_chain}")
+
+            _logger.info("Removing duplicate small molecule...")
             cmd.select(f"new and chain {self._ligand_chain}")
             cmd.remove("sele")
 
@@ -342,7 +358,6 @@ class Visualization(object):
     def save_frames(self,
                     equilibration_frames=25,
                     outfile_prefix="frame",
-                    background_color="white",
                     width=10,
                     dpi=400):
         """
@@ -367,7 +382,8 @@ class Visualization(object):
 
         states = int(cmd.count_states("old"))
 
-        for step in range(states):
+        # for step in range(states):
+        for step in range(0, states, 30):
             cmd.frame(step)
             if step <= equilibration_frames:
                 self._set_transparency(0, 1, self._old_selection, self._new_selection)
