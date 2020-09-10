@@ -19,11 +19,12 @@ jobs:
       fail-fast: false
       matrix:
         cfg:
-          - {python-version: 3.6, openmm: "latest"}
-          - {python-version: 3.7, openmm: "latest"}
-          - {python-version: 3.7, openmm: "rc"}
-          - {python-version: 3.7, openmm: "nightly"} # Can we have this run only nightly?
-          - {python-version: 3.7, openmm: "conda-forge"}
+          - { os: ubuntu-latest, python-version: 3.7, openmm: latest }
+          - { os: ubuntu-latest, python-version: 3.8, openmm: latest }
+          - { os: ubuntu-latest, python-version: 3.7, openmm: nightly }
+          - { os: ubuntu-latest, python-version: 3.8, openmm: nightly }
+          - { os: ubuntu-latest, python-version: 3.7, openmm: conda-forge }
+          - { os: ubuntu-latest, python-version: 3.8, openmm: conda-forge }
 
     env:
       OPENMM: ${{ matrix.cfg.openmm }}
