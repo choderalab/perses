@@ -13,11 +13,12 @@ on:
 
 jobs:
   test:
-    name: Test on ${{ matrix.cfg.os }}, Python ${{ matrix.cfg.python-version }}, OpenMM ${{ matrix.cfg.openmm }}
-    runs-on: ${{ matrix.cfg.os }}
+    name: Test on ${{ matrix.os }}, Python ${{ matrix.cfg.python-version }}, OpenMM ${{ matrix.cfg.openmm }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest] #, macOS-latest]
         cfg:
           - {python-version: 3.6, openmm: "latest"}
           - {python-version: 3.7, openmm: "latest"}
