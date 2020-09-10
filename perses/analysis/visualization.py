@@ -95,6 +95,7 @@ class Visualization(object):
                         mutated_chain,
                         is_protein=True,
                         mutated_residue=None,
+                        as_spheres=True,
                         ligand_chain=None):
         """
         Note: the pdb and trajectory names should be the same, only differing in file extension.
@@ -116,6 +117,9 @@ class Visualization(object):
         mutated_residue : str, default None
             Residue id of the protein mutation
             Leave as None if the trajectory involves a small molecule transformation.
+        as_spheres : boolean, default True
+            Indicates whether to represent the mutated residue/ligand as spheres or sticks.
+            If True, will be spheres. Otherwise, will be sticks.
         ligand_chain : str, default None
             One letter string representing the chain id that contains the ligand.
             Leave as None if the trajectory involves a small molecule transformation or a protein mutation transformation
@@ -132,8 +136,10 @@ class Visualization(object):
         self._is_protein = is_protein
         self._mutated_chain = mutated_chain
         self._mutated_residue = mutated_residue
+        self._as_spheres = as_spheres
         self._ligand_chain = ligand_chain
 
+        # Set selection strings for mutated residue/ligand
         if self._is_protein:
             if self._mutated_residue is None:
                 raise Exception("Need to specify the mutated residue id!")
@@ -145,18 +151,44 @@ class Visualization(object):
             self._new_selection = f"(new and chain {self._mutated_chain})"
             self._both_selection = f"chain {self._mutated_chain}"
 
-    def load(self,
-             color_complex="green",
-             background_color="white"):
+        # Get PyMOL indices of unique old and new atoms as strings
+        _logger.info("Getting unique old and new atom indices...")
+        old = app.PDBFile(self._old_pdb)
+        new = app.PDBFile(self._new_pdb)
+
+        if self._is_protein:
+            old_atoms = [atom for residue in old.topology.residues()
+             if residue.id == self._mutated_residue and residue.chain.id == self._mutated_chain
+             for atom in residue.atoms()]
+
+            new_atoms = [atom for residue in new.topology.residues()
+                 if residue.id == self._mutated_residue and residue.chain.id == self._mutated_chain
+                 for atom in residue.atoms()]
+        else:
+            old_atoms = [atom for residue in old.topology.residues()
+                         if residue.chain.id == self._mutated_chain
+                         for atom in residue.atoms()]
+
+            new_atoms = [atom for residue in new.topology.residues()
+                         if residue.chain.id == self._mutated_chain
+                         for atom in residue.atoms()]
+
+        core = []
+        for new_atom in new_atoms:
+            for old_atom in old_atoms:
+                if new_atom.name == old_atom.name and new_atom.index == old_atom.index:
+                    core.append(new_atom)
+                    core.append(old_atom)
+
+        unique_old_str = "+".join([str(atom.index + 1) for atom in old_atoms if atom not in core]) # Add one to match PyMOL index
+        unique_new_str = "+".join([str(atom.index + 1) for atom in new_atoms if atom not in core]) # Add one to match PyMOL index
+        self._unique_old = f"old and index {unique_old_str}"
+        self._unique_new = f"new and index {unique_new_str}"
+
+    def load(self):
         """
         Load the perses trajectory into PyMOL.
 
-        Parameters
-        ----------
-        color_complex : str, default "green"
-            Color to set for the whole complex structure.
-        background_color : str, default "white"
-            Color to set the background.
         """
         _logger.info("Loading trajectory...")
 
@@ -205,47 +237,10 @@ class Visualization(object):
         cmd.intra_fit("old")
         cmd.intra_fit("new")
 
-        # Format overall appearance
-        _logger.info("Formatting overall appearance, color, and background color...")
-        cmd.space("cmyk")
-        cmd.color(f"{color_complex}")
-        cmd.bg_color(background_color)
-
-        # Get PyMOL indices of unique old and new atoms as strings
-        _logger.info("Getting unique old and new atom indices...")
-        old = app.PDBFile(self._old_pdb)
-        new = app.PDBFile(self._new_pdb)
-
-        if self._is_protein:
-            old_atoms = [atom for residue in old.topology.residues()
-             if residue.id == self._mutated_residue and residue.chain.id == self._mutated_chain
-             for atom in residue.atoms()]
-
-            new_atoms = [atom for residue in new.topology.residues()
-                 if residue.id == self._mutated_residue and residue.chain.id == self._mutated_chain
-                 for atom in residue.atoms()]
-        else:
-            old_atoms = [atom for residue in old.topology.residues()
-                         if residue.chain.id == self._mutated_chain
-                         for atom in residue.atoms()]
-
-            new_atoms = [atom for residue in new.topology.residues()
-                         if residue.chain.id == self._mutated_chain
-                         for atom in residue.atoms()]
-
-        core = []
-        for new_atom in new_atoms:
-            for old_atom in old_atoms:
-                if new_atom.name == old_atom.name and new_atom.index == old_atom.index:
-                    core.append(new_atom)
-                    core.append(old_atom)
-
-        unique_old_str = "+".join([str(atom.index + 1) for atom in old_atoms if atom not in core]) # Add one to match PyMOL index
-        unique_new_str = "+".join([str(atom.index + 1) for atom in new_atoms if atom not in core]) # Add one to match PyMOL index
-        self._unique_old = f"old and index {unique_old_str}"
-        self._unique_new = f"new and index {unique_new_str}"
 
     def format(self,
+               color_complex="green",
+               background_color="white",
                color_residue="yellow",
                color_ligand="green",
                sphere_radius=1,
@@ -262,6 +257,10 @@ class Visualization(object):
 
         Parameters
         ----------
+        color_complex : str, default "green"
+            Color to set for the whole complex structure.
+        background_color : str, default "white"
+            Color to set the background.
         color_residue : str, default "yellow"
             Color to set the mutated amino acid.
         color_ligand : str, default "green"
@@ -284,6 +283,7 @@ class Visualization(object):
         smooth : bool, default True
             Whether to perform smoothing on the trajectory to reduce high frequency vibrations.
         """
+
         color_dict = {"yellow": cmd.util.cbay,
                          "green": cmd.util.cbag,
                          "cyan": cmd.util.cbac,
@@ -295,6 +295,13 @@ class Visualization(object):
                          "purple": cmd.util.cbap,
                          "pink": cmd.util.cbak}
 
+        # Format overall appearance
+        _logger.info("Formatting overall appearance, color, and background color...")
+        cmd.space("cmyk")
+        cmd.color(f"{color_complex}")
+        cmd.bg_color(background_color)
+
+        # Align mutated residues/ligand
         _logger.info("Aligning the mutated residue/ligand...")
         cmd.align(self._old_selection, self._new_selection)
 
@@ -302,18 +309,23 @@ class Visualization(object):
         _logger.info("Coloring the mutated residue/ligand...")
         color_dict[color_residue](self._both_selection)
 
-        # Format spheres and sticks of mutated residue
-        _logger.info("Showing spheres...")
-        cmd.show("spheres", self._old_selection)
-        cmd.set("sphere_scale", sphere_radius)
-        cmd.set("sphere_transparency", 1, self._new_selection)
+        # Format spheres or sticks of mutated residue
+        if self._as_spheres:
+            _logger.info("Showing spheres...")
+            cmd.show("spheres", self._old_selection)
+            cmd.set("sphere_scale", sphere_radius)
+            cmd.set("sphere_transparency", 1, self._new_selection)
+        else:
+            _logger.info("Showing sticks...")
+            cmd.show("sticks", self._old_selection)
+            cmd.set("stick_transparency", 1, self._new_selection)
 
         # Fade out the protein
         _logger.info("Fading out the protein...")
         cmd.select("not " + self._both_selection)
         cmd.set("cartoon_transparency", 0.8, "sele")
 
-        # Format small molecule
+        # Format small molecule (when it is not part of the transformation)
         if self._ligand_chain:
             _logger.info("Coloring the small molecule...")
             color_dict[color_ligand](f"chain {self._ligand_chain}")
@@ -339,21 +351,26 @@ class Visualization(object):
         if smooth:
             cmd.smooth()
 
-    def _set_transparency(self, old_sphere, new_sphere, old_selection, new_selection):
+    def _set_transparency(self, old_transparency, new_transparency, old_selection, new_selection):
         """
         Set sphere transparencies.
 
         Parameters
         ----------
-        old_sphere : int
-            Sphere transparency of old residue/small molecule
-        new_sphere : int
-            Sphere transparency of new residue/small molecule
+        old_transparency : int
+            Transparency of old residue/small molecule
+        new_transparency : int
+            Transparency of new residue/small molecule
 
         """
-        cmd.show("spheres", self._both_selection)
-        cmd.set("sphere_transparency", old_sphere, old_selection)
-        cmd.set("sphere_transparency", new_sphere, new_selection)
+        if self._as_spheres:
+            cmd.show("spheres", self._both_selection)
+            cmd.set("sphere_transparency", old_transparency, old_selection)
+            cmd.set("sphere_transparency", new_transparency, new_selection)
+        else:
+            cmd.show("sticks", self._both_selection)
+            cmd.set("stick_transparency", old_transparency, old_selection)
+            cmd.set("stick_transparency", new_transparency, new_selection)
 
     def save_frames(self,
                     equilibration_frames=25,
@@ -383,7 +400,7 @@ class Visualization(object):
         states = int(cmd.count_states("old"))
 
         # for step in range(states):
-        for step in range(0, states, 30):
+        for step in range(100, states+1, 10):
             cmd.frame(step)
             if step <= equilibration_frames:
                 self._set_transparency(0, 1, self._old_selection, self._new_selection)
