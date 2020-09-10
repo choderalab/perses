@@ -67,7 +67,7 @@ jobs:
       run: |
         . devtools/scripts/initialize_conda.sh
         conda activate
-        conda create --quiet -n test -c local ${PACKAGENAME}-dev nose nose-timer
+        conda create --quiet -n test -c local "${PACKAGENAME}-dev" nose nose-timer
         conda activate test
         # Install openmm-forcefields via pip (until available via omnia)
         conda install --yes tinydb "openforcefield>=0.6.0" "openforcefields>=1.0.0"
