@@ -89,10 +89,10 @@ jobs:
       - name: Decrypt OpenEye license
         shell: bash -l {0}
         env:
-          ENC_OE_LICENSE: ${{ secrets.OE_LICENSE }}
+          OE_LICENSE_TEXT: ${{ secrets.OE_LICENSE }}
         run: |
-          echo "${ENC_OE_LICENSE}" > ${OE_LICENSE}
-          python -c "import openeye; print(openeye.oechem.OEChemIsLicensed())"
+          echo "${OE_LICENSE_TEXT}" > ${OE_LICENSE}
+          python -c "import openeye; assert openeye.oechem.OEChemIsLicensed(), 'OpenEye license checks failed!'"
 
       - name: Test the package
         shell: bash -l {0}
