@@ -36,3 +36,4 @@ dependencies:
   - nose-timer
   - openforcefield
   - sphinx
+  - dicttoxml
