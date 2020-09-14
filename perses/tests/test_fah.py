@@ -57,7 +57,7 @@ def test_pipeline_small_molecule():
 def test_pipeline_small_molecule_solvent():
     from pkg_resources import resource_filename
     from perses.app.fah_generator import run_neq_fah_setup
-    ligand_file = resource_filename('perses', 'data/bace-example/Bace_ligands_shifted.sdf')
+    ligand_file = resource_filename('perses', 'data/cdk2-example/CDK2_ligands.sdf')
 
     projs = {'vacuum':DEFAULT_PROJ_ID['vacuum'],'solvent':DEFAULT_PROJ_ID['solvent']}
 
