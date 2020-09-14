@@ -34,6 +34,7 @@ dependencies:
   - tqdm
   - nose
   - nose-timer
+  - coverage
   - openforcefield
   - sphinx
   - dicttoxml
