@@ -20,7 +20,6 @@ __author__ = 'Ivy Zhang'
 ################################################################################
 
 import sys, os
-from simtk.openmm import app
 
 try:
     import pymol
@@ -153,37 +152,8 @@ class Visualization(object):
 
         # Get PyMOL indices of unique old and new atoms as strings
         _logger.info("Getting unique old and new atom indices...")
-        old = app.PDBFile(self._old_pdb)
-        new = app.PDBFile(self._new_pdb)
-
-        if self._is_protein:
-            old_atoms = [atom for residue in old.topology.residues()
-             if residue.id == self._mutated_residue and residue.chain.id == self._mutated_chain
-             for atom in residue.atoms()]
-
-            new_atoms = [atom for residue in new.topology.residues()
-                 if residue.id == self._mutated_residue and residue.chain.id == self._mutated_chain
-                 for atom in residue.atoms()]
-        else:
-            old_atoms = [atom for residue in old.topology.residues()
-                         if residue.chain.id == self._mutated_chain
-                         for atom in residue.atoms()]
-
-            new_atoms = [atom for residue in new.topology.residues()
-                         if residue.chain.id == self._mutated_chain
-                         for atom in residue.atoms()]
-
-        core = []
-        for new_atom in new_atoms:
-            for old_atom in old_atoms:
-                if new_atom.name == old_atom.name and new_atom.index == old_atom.index:
-                    core.append(new_atom)
-                    core.append(old_atom)
-
-        unique_old_str = "+".join([str(atom.index + 1) for atom in old_atoms if atom not in core]) # Add one to match PyMOL index
-        unique_new_str = "+".join([str(atom.index + 1) for atom in new_atoms if atom not in core]) # Add one to match PyMOL index
-        self._unique_old = f"old and index {unique_old_str}"
-        self._unique_new = f"new and index {unique_new_str}"
+        self._unique_old = f"(old and chain {self._mutated_chain} and resi {self._mutated_residue} and not backbone)"
+        self._unique_new = f"(new and chain {self._mutated_chain} and resi {self._mutated_residue} and not backbone)"
 
     def load(self):
         """
@@ -368,6 +338,7 @@ class Visualization(object):
             cmd.set("sphere_transparency", old_transparency, old_selection)
             cmd.set("sphere_transparency", new_transparency, new_selection)
         else:
+            cmd.hide("spheres", self._both_selection)
             cmd.show("sticks", self._both_selection)
             cmd.set("stick_transparency", old_transparency, old_selection)
             cmd.set("stick_transparency", new_transparency, new_selection)
@@ -392,15 +363,14 @@ class Visualization(object):
             Color to set the background
         width : int, default 10
             Width, in cm, of the png
-        dpi : int, default 1500
+        dpi : int, default 400
             Dots per inch. Controls resolution of the png.
 
         """
 
         states = int(cmd.count_states("old"))
 
-        # for step in range(states):
-        for step in range(100, states+1, 10):
+        for step in range(states):
             cmd.frame(step)
             if step <= equilibration_frames:
                 self._set_transparency(0, 1, self._old_selection, self._new_selection)
