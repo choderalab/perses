@@ -1,0 +1,40 @@
+name: test
+channels:
+  - conda-forge
+  - defaults
+  - omnia-dev
+  - omnia
+  - openeye
+dependencies:
+  - python >=3.6
+  - setuptools
+  - fire
+  - joblib
+  - numpy >=1.14
+  - scipy
+  - numexpr
+  - autograd
+  - pymbar
+  - openmm >=7.3.1
+  - openmoltools # may need to sort out ambermini/ambertools/parmed dependencies (we don't want ambertools)
+  - openmmtools # may need to sort out ambermini/ambertools/parmed dependencies
+  - numba
+  - netcdf4
+  - matplotlib
+  - seaborn
+  - mdtraj
+  - pdbfixer
+  - lxml
+  - networkx >=2.0
+  - openeye-toolkits
+  - dask
+  - distributed
+  - progressbar2
+  - parmed # may need to sort out ambermini/ambertools/parmed dependencies
+  - tqdm
+  - nose
+  - nose-timer
+  - coverage
+  - openforcefield
+  - sphinx
+  - dicttoxml
