@@ -67,7 +67,8 @@ class HybridTopologyFactory(object):
                  softcore_electrostatics_alpha = 0.3,
                  softcore_sigma_Q = 1.0,
                  interpolate_old_and_new_14s = False,
-                 omitted_terms = None):
+                 omitted_terms = None,
+                 **kwargs):
         """
         Initialize the Hybrid topology factory.
 
@@ -684,7 +685,7 @@ class HybridTopologyFactory(object):
             self._hybrid_system.addForce(unique_atom_torsion_force)
             self._hybrid_system_forces['unique_atom_torsion_force'] = unique_atom_torsion_force
 
-    def _add_nonbonded_force_terms(self):
+    def _add_nonbonded_force_terms(self, add_custom_sterics_force=True):
         """
         Add the nonbonded force terms to the hybrid system. Note that as with the other forces,
         this method does not add any interactions. It only sets up the forces.
@@ -770,9 +771,10 @@ class HybridTopologyFactory(object):
         _logger.info(f"\t_add_nonbonded_force_terms: {custom_nonbonded_method} added to sterics_custom_nonbonded force")
 
 
-        self._hybrid_system.addForce(sterics_custom_nonbonded_force)
-        self._hybrid_system_forces['core_sterics_force'] = sterics_custom_nonbonded_force
-        _logger.info(f"\t_add_nonbonded_force_terms: {sterics_custom_nonbonded_force} added to hybrid system")
+        if add_custom_sterics_force:
+            self._hybrid_system.addForce(sterics_custom_nonbonded_force)
+            self._hybrid_system_forces['core_sterics_force'] = sterics_custom_nonbonded_force
+            _logger.info(f"\t_add_nonbonded_force_terms: {sterics_custom_nonbonded_force} added to hybrid system")
 
 
         # Set the use of dispersion correction to be the same between the new nonbonded force and the old one:
@@ -2119,6 +2121,15 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
         self._new_positions = new_positions
         self._endstate = endstate
 
+        #the softcore is defaulted as True even though we are not using it...we only need it to pass to the
+        self._softcore_LJ_v2 = True
+        self._softcore_electrostatics = True
+        self._softcore_LJ_v2_alpha = 0.85
+        self._softcore_electrostatics_alpha = 0.3
+        self._softcore_sigma_Q = 1.0
+        self._has_functions = False
+        self._use_dispersion_correction = False
+
         # Prepare dicts of forces, which will be useful later
         # TODO: Store this as self._system_forces[name], name in ('old', 'new', 'hybrid') for compactness
         self._old_system_forces = {type(force).__name__ : force for force in self._old_system.getForces()}
@@ -2217,11 +2228,14 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
 
         # Then add the nonbonded force (this is _slightly_ trickier)
         if 'NonbondedForce' in self._old_system_forces or 'NonbondedForce' in self._new_system_forces:
-            self._add_nonbonded_force_terms(add_custom_core_force=False, add_unique_atom_torsion_force=False)
+            self._add_nonbonded_force_terms(add_custom_sterics_force=False)
             self._handle_nonbonded()
 
         # The last thing to do is call the alchemical factory on the _hybrid_system
         self._alchemify()
+
+        # Get positions for the hybrid
+        self._hybrid_positions = self._compute_hybrid_positions()
 
     def _handle_bonds(self):
         """
@@ -2240,24 +2254,30 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
             template_force = self._old_system_forces['HarmonicBondForce']
             aux_force = self._new_system_forces['HarmonicBondForce']
             target_index_set = self._atom_classes['unique_new_atoms']
+            template_map = self._old_to_hybrid_map
+            aux_map = self._new_to_hybrid_map
         elif self._endstate == 1:
             template_force = self._new_system_forces['HarmonicBondForce']
             aux_force = self._old_system_forces['HarmonicBondForce']
             target_index_set = self._atom_classes['unique_old_atoms']
+            template_map = self._new_to_hybrid_map
+            aux_map = self._old_to_hybrid_map
         else:
             raise Exception(f"endstate must be 0 or 1")
 
         # Copy over the template force...
         for idx in range(template_force.getNumBonds()):
             p1, p2, length, k = template_force.getBondParameters(idx)
-            to_force.addBond(p1, p2, length, k)
+            hybrid_p1, hybrid_p2 = template_map[p1], template_map[p2]
+            to_force.addBond(hybrid_p1, hybrid_p2, length, k)
 
-        # Query the auxiliary force to extract and copy over the 'special' terms that don't exist in the template force
+        #Query the auxiliary force to extract and copy over the 'special' terms that don't exist in the template force
         for idx in range(aux_force.getNumBonds()):
             p1, p2, length, k = aux_force.getBondParameters(idx)
-            if set([p1, p2]).intersection(target_index_set) != set():
+            hybrid_p1, hybrid_p2 = aux_map[p1], aux_map[p2]
+            if set([hybrid_p1, hybrid_p2]).intersection(target_index_set) != set():
                 # If there is a target atom in the auxiliary term, write it to the hybrid force
-                to_force.addBond(p1, p2, length, k)
+                to_force.addBond(hybrid_p1, hybrid_p2, length, k)
 
         # Then add the to_force to the hybrid_system
         self._hybrid_system.addForce(to_force)
@@ -2280,24 +2300,30 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
             template_force = self._old_system_forces['HarmonicAngleForce']
             aux_force = self._new_system_forces['HarmonicAngleForce']
             target_index_set = self._atom_classes['unique_new_atoms']
+            template_map = self._old_to_hybrid_map
+            aux_map = self._new_to_hybrid_map
         elif self._endstate == 1:
             template_force = self._new_system_forces['HarmonicAngleForce']
             aux_force = self._old_system_forces['HarmonicAngleForce']
             target_index_set = self._atom_classes['unique_old_atoms']
+            template_map = self._new_to_hybrid_map
+            aux_map = self._old_to_hybrid_map
         else:
             raise Exception(f"endstate must be 0 or 1")
 
         # Copy over the template force...
         for idx in range(template_force.getNumAngles()):
             p1, p2, p3, angle, k = template_force.getAngleParameters(idx)
-            to_force.addAngle(p1, p2, p3, angle, k)
+            hybrid_p1, hybrid_p2, hybrid_p3 = template_map[p1], template_map[p2], template_map[p3]
+            to_force.addAngle(hybrid_p1, hybrid_p2, hybrid_p3, angle, k)
 
         # Query the auxiliary force to extract and copy over the 'special' terms that don't exist in the template force
         for idx in range(aux_force.getNumAngles()):
             p1, p2, p3, angle, k = aux_force.getAngleParameters(idx)
-            if set([p1, p2, p3]).intersection(target_index_set) != set():
+            hybrid_p1, hybrid_p2, hybrid_p3 = aux_map[p1], aux_map[p2], aux_map[p3]
+            if set([hybrid_p1, hybrid_p2, hybrid_p3]).intersection(target_index_set) != set():
                 # If there is a target atom in the auxiliary term, write it to the hybrid force
-                to_force.addAngle(p1, p2, p3, angle, k)
+                to_force.addAngle(hybrid_p1, hybrid_p2, hybrid_p3, angle, k)
 
         # Then add the to_force to the hybrid_system
         self._hybrid_system.addForce(to_force)
@@ -2320,30 +2346,36 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
             template_force = self._old_system_forces['PeriodicTorsionForce']
             aux_force = self._new_system_forces['PeriodicTorsionForce']
             target_index_set = self._atom_classes['unique_new_atoms']
+            template_map = self._old_to_hybrid_map
+            aux_map = self._new_to_hybrid_map
         elif self._endstate == 1:
             template_force = self._new_system_forces['PeriodicTorsionForce']
             aux_force = self._old_system_forces['PeriodicTorsionForce']
             target_index_set = self._atom_classes['unique_old_atoms']
+            template_map = self._new_to_hybrid_map
+            aux_map = self._old_to_hybrid_map
         else:
             raise Exception(f"endstate must be 0 or 1")
 
         # Copy over the template force...
         for idx in range(template_force.getNumTorsions()):
             p1, p2, p3, p4, periodicity, phase, k = template_force.getTorsionParameters(idx)
-            to_force.addTorsion(p1, p2, p3, p4, periodicity, phase, k)
+            hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = template_map[p1], template_map[p2], template_map[p3], template_map[p4]
+            to_force.addTorsion(hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4, periodicity, phase, k)
 
         # Query the auxiliary force to extract and copy over the 'special' terms that don't exist in the template force
         for idx in range(aux_force.getNumTorsions()):
             p1, p2, p3, p4, periodicity, phase, k = aux_force.getTorsionParameters(idx)
-            if set([p1, p2, p3, p4]).intersection(target_index_set) != set():
+            hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = aux_map[p1], aux_map[p2], aux_map[p3], aux_map[p4]
+            if set([hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]).intersection(target_index_set) != set():
                 # If there is a target atom in the auxiliary term, write it to the hybrid force
-                to_force.addTorsion(p1, p2, p3, p4, periodicity, phase, k)
+                to_force.addTorsion(hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4, periodicity, phase, k)
 
         # Then add the to_force to the hybrid_system
         self._hybrid_system.addForce(to_force)
 
 
-    def handle_nonbonded(self):
+    def _handle_nonbonded(self):
         """
         Transcribe nonbonded forces; depending on the endstate
         """
@@ -2408,6 +2440,8 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
 
                 # Add the environment atoms to the regular nonbonded force as well: should we be adding steric terms here, too?
                 self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, epsilon)
+
+        self._handle_exceptions()
 
 
 

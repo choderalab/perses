@@ -227,7 +227,11 @@ def generate_dipeptide_top_pos_sys(topology,
                                    system_generator,
                                    conduct_geometry_prop = True,
                                    conduct_htf_prop = False,
-                                   validate_energy_bookkeeping=True):
+                                   validate_energy_bookkeeping=True,
+                                   repartitioned=False,
+                                   endstate=None,
+                                   validate_endstate_energy=True
+                                   ):
     """generate point mutation engine, geometry_engine, and conduct topology proposal, geometry propsal, and hybrid factory generation"""
     from perses.tests.utils import validate_endstate_energies
     if conduct_htf_prop:
@@ -276,8 +280,14 @@ def generate_dipeptide_top_pos_sys(topology,
 
     if conduct_htf_prop:
         #create a hybrid topology factory
-        from perses.annihilation.relative import HybridTopologyFactory
-        forward_htf = HybridTopologyFactory(topology_proposal = topology_proposal,
+        if not repartitioned:
+            from perses.annihilation.relative import HybridTopologyFactory
+            factory = HybridTopologyFactory
+        else:
+            from perses.annihilation.relative import RepartitionedHybridTopologyFactory
+            factory = RepartitionedHybridTopologyFactory
+
+        forward_htf = factory(topology_proposal = topology_proposal,
                      current_positions =  positions,
                      new_positions = forward_new_positions,
                      use_dispersion_correction = False,
@@ -294,27 +304,31 @@ def generate_dipeptide_top_pos_sys(topology,
                      softcore_electrostatics_alpha = 0.3,
                      softcore_sigma_Q = 1.0,
                      interpolate_old_and_new_14s = False,
-                     omitted_terms = None)
+                     omitted_terms = None,
+                     endstate=endstate)
 
-        if not topology_proposal.unique_new_atoms:
-            assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
-            assert geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
-            vacuum_added_valence_energy = 0.0
+        if not validate_endstate_energy:
+            return forward_htf
         else:
-            added_valence_energy = geometry_engine.forward_final_context_reduced_potential - geometry_engine.forward_atoms_with_positions_reduced_potential
+            if not topology_proposal.unique_new_atoms:
+                assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
+                assert geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
+                vacuum_added_valence_energy = 0.0
+            else:
+                added_valence_energy = geometry_engine.forward_final_context_reduced_potential - geometry_engine.forward_atoms_with_positions_reduced_potential
 
-        if not topology_proposal.unique_old_atoms:
-            assert geometry_engine.reverse_final_context_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.reverse_final_context_reduced_potential})"
-            assert geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
-            subtracted_valence_energy = 0.0
-        else:
-            subtracted_valence_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
+            if not topology_proposal.unique_old_atoms:
+                assert geometry_engine.reverse_final_context_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.reverse_final_context_reduced_potential})"
+                assert geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
+                subtracted_valence_energy = 0.0
+            else:
+                subtracted_valence_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
 
-        zero_state_error, one_state_error = validate_endstate_energies(forward_htf._topology_proposal, forward_htf, added_valence_energy, subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, platform = openmm.Platform.getPlatformByName('Reference'))
-        print(f"zero state error : {zero_state_error}")
-        print(f"one state error : {one_state_error}")
+            zero_state_error, one_state_error = validate_endstate_energies(forward_htf._topology_proposal, forward_htf, added_valence_energy, subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, platform = openmm.Platform.getPlatformByName('Reference'))
+            print(f"zero state error : {zero_state_error}")
+            print(f"one state error : {one_state_error}")
 
-        return forward_htf
+            return forward_htf
 
 
 def test_mutate_from_alanine():
