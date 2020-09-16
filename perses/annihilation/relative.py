@@ -2430,7 +2430,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
             # Otherwise, the particle is in the environment
             else:
                 _logger.debug(f"\t\thandle_nonbonded: particle {particle_index} is an envronment")
-                assert particle_idx in self._atom_classes['environment_atoms']
+                assert particle_index in self._atom_classes['environment_atoms']
                 # The parameters will be the same in new and old system, so just take the old parameters
                 if self._endstate == 0:
                     old_index = hybrid_to_old_map[particle_index]
