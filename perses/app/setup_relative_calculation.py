@@ -322,6 +322,11 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     for phase in phases:
         assert (phase in known_phases), f"Unknown phase, {phase} provided. run_setup() can be used with {known_phases}"
 
+    if `use_given_geometries` not in setup_options.keys():
+        use_given_geometries = False
+    else:
+        assert type(setup_options[use_given_geometries]) == type(True)
+
     if 'complex' in phases:
         _logger.info(f"\tPulling receptor (as pdb or mol2)...")
         # We'll need the protein PDB file (without missing atoms)
@@ -437,7 +442,8 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
                                           trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'],
 
-                                          complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'], ionic_strength=ionic_strength, remove_constraints=setup_options['remove_constraints'])
+                                          complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'], ionic_strength=ionic_strength, remove_constraints=setup_options['remove_constraints'],
+                                          use_given_geometries = setup_options['use_given_geometries'])
 
 
         _logger.info(f"\twriting pickle output...")
