@@ -358,7 +358,7 @@ def check_system(system):
     outfile.write(serialized_system)
     outfile.close()
 
-def generate_endpoint_thermodynamic_states(system, topology_proposal, repartitioned_endstate):
+def generate_endpoint_thermodynamic_states(system, topology_proposal, repartitioned_endstate=None):
     """
     Generate endpoint thermodynamic states for the system
 
@@ -368,9 +368,9 @@ def generate_endpoint_thermodynamic_states(system, topology_proposal, repartitio
         System object corresponding to thermodynamic state
     topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
         TopologyProposal representing transformation
-    repartitioned_endstate : int
+    repartitioned_endstate : int, default None
         If the htf was generated using RepartitionedHybridTopologyFactory, use this argument to specify the endstate at
-        which it was generated. Otherwise, None.
+        which it was generated. Otherwise, leave as None.
 
     Returns
     -------
