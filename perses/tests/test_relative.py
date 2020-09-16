@@ -61,11 +61,11 @@ def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positi
     hybrid_endpoint_results : list
        list of [df, ddf, N_eff] for 1 and 0
     """
-    #create the hybrid system:
+    # Create the hybrid system:
     #hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=True)
     hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=False) # DEBUG
 
-    #get the relevant thermodynamic states:
+    # Get the relevant thermodynamic states:
     nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state = utils.generate_endpoint_thermodynamic_states(
         hybrid_factory.hybrid_system, topology_proposal)
 
@@ -73,7 +73,7 @@ def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positi
 
     alchemical_thermodynamic_states = [lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state]
 
-    #create an MCMCMove, BAOAB with default parameters (but don't restart if we encounter a NaN)
+    # Create an MCMCMove, BAOAB with default parameters (but don't restart if we encounter a NaN)
     mc_move = mcmc.LangevinDynamicsMove(n_restart_attempts=0, n_steps=100)
 
     initial_sampler_state = SamplerState(hybrid_factory.hybrid_positions, box_vectors=hybrid_factory.hybrid_system.getDefaultPeriodicBoxVectors())
@@ -209,11 +209,11 @@ def test_simple_overlap_pairs(pairs=None):
     for pair in pairs:
         print('{} -> {}'.format(pair[0],pair[1]))
         test_simple_overlap(pair[0],pair[1])
-        # now running the reverse
+        # Now running the reverse
         print('{} -> {}'.format(pair[1],pair[0]))
         test_simple_overlap(pair[1],pair[0])
 
-@nottest #this is, in fact, a helper function that is called in other working tests
+@nottest # This is, in fact, a helper function that is called in other working tests
 @skipIf(running_on_github_actions, "Skip helper function on GH Actions")
 def test_simple_overlap(name1='pentane', name2='butane', forcefield_kwargs=None, system_generator_kwargs=None):
     """Test that the variance of the hybrid -> real perturbation in vacuum is sufficiently small.
@@ -258,7 +258,7 @@ def test_hostguest_overlap():
             raise Exception(message)
 
 @skipIf(running_on_github_actions, "Skip broken test on GH Actions")
-@nottest # at the moment, the mapping between imatinib and nilotinib is faulty
+@nottest # At the moment, the mapping between imatinib and nilotinib is faulty
 def test_difficult_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for imatinib->nilotinib in solvent"""
     name1 = 'imatinib'
@@ -326,7 +326,7 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
     """
     import mdtraj as md
 
-    #run an initial minimization:
+    # Run an initial minimization:
     mcmc_sampler = mcmc.MCMCSampler(lambda_thermodynamic_state, initial_hybrid_sampler_state, mc_move)
     mcmc_sampler.minimize(max_iterations=20)
     new_sampler_state = mcmc_sampler.sampler_state
@@ -337,12 +337,12 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
         with open(f'nonalchemical{lambda_index}-system.xml', 'w') as outfile:
             outfile.write(openmm.XmlSerializer.serialize(nonalchemical_thermodynamic_state.system))
 
-    #initialize work array
+    # Initialize work array
     w = np.zeros([n_iterations])
     non_potential = np.zeros([n_iterations])
     hybrid_potential = np.zeros([n_iterations])
 
-    #run n_iterations of the endpoint perturbation:
+    # Run n_iterations of the endpoint perturbation:
     hybrid_trajectory = unit.Quantity(np.zeros([n_iterations, lambda_thermodynamic_state.system.getNumParticles(), 3]), unit.nanometers) # DEBUG
     nonalchemical_trajectory = unit.Quantity(np.zeros([n_iterations, nonalchemical_thermodynamic_state.system.getNumParticles(), 3]), unit.nanometers) # DEBUG
     for iteration in range(n_iterations):
@@ -443,17 +443,16 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene",atom_express
     system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs, nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
                                          small_molecule_forcefield = 'gaff-2.11', molecules=molecules, cache=None)
 
+    # Make a topology proposal with the appropriate data:
     topology = generateTopologyFromOEMol(refmol)
     system = system_generator.create_system(topology)
     positions = extractPositionsFromOEMol(refmol)
-
 
     proposal_engine = SmallMoleculeSetProposalEngine([refmol, mol], system_generator)
     proposal = proposal_engine.propose(system, topology, atom_expr = atom_expr, bond_expr = bond_expr)
     geometry_engine = FFAllAngleGeometryEngine()
     new_positions, _ = geometry_engine.propose(proposal, positions, beta = beta, validate_energy_bookkeeping = False)
     _ = geometry_engine.logp_reverse(proposal, new_positions, positions, beta)
-    #make a topology proposal with the appropriate data:
 
     factory = HybridTopologyFactory(proposal, positions, new_positions)
     if not proposal.unique_new_atoms:
@@ -486,7 +485,7 @@ def test_position_output():
     from perses.annihilation.relative import HybridTopologyFactory
     import numpy as np
 
-    #generate topology proposal
+    # Generate topology proposal
     topology_proposal, old_positions, new_positions = utils.generate_solvated_hybrid_test_topology()
 
     factory = HybridTopologyFactory(topology_proposal, old_positions, new_positions)
@@ -504,9 +503,9 @@ def test_generate_endpoint_thermodynamic_states():
     topology_proposal, current_positions, new_positions = utils.generate_solvated_hybrid_test_topology(current_mol_name='propane', proposed_mol_name='pentane', vacuum = False)
     hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=True)
 
-    #get the relevant thermodynamic states:
+    # Get the relevant thermodynamic states:
     _, _, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state = utils.generate_endpoint_thermodynamic_states(hybrid_factory.hybrid_system, topology_proposal)
-    # check the parameters for each state
+    # Check the parameters for each state
     lambda_protocol = ['lambda_sterics_core','lambda_electrostatics_core','lambda_sterics_insert','lambda_electrostatics_insert','lambda_sterics_delete','lambda_electrostatics_delete']
     for value in lambda_protocol:
         if getattr(lambda_zero_thermodynamic_state, value) != 0.:
@@ -522,27 +521,26 @@ def HybridTopologyFactory_energies(current_mol = 'toluene', proposed_mol = '1,2-
     from perses.tests.utils import generate_solvated_hybrid_test_topology, generate_endpoint_thermodynamic_states
     import openmmtools.cache as cache
 
-    #Just test the solvated system
+    # Just test the solvated system
     top_proposal, old_positions, _ = generate_solvated_hybrid_test_topology(current_mol_name = current_mol, proposed_mol_name = proposed_mol)
 
-    #remove the dispersion correction
+    # Remove the dispersion correction
     top_proposal._old_system.getForce(3).setUseDispersionCorrection(False)
     top_proposal._new_system.getForce(3).setUseDispersionCorrection(False)
 
 
-    # run geometry engine to generate old and new positions
+    # Run geometry engine to generate old and new positions
     _geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
     _new_positions, _lp = _geometry_engine.propose(top_proposal, old_positions, beta, validate_geometry_energy_bookkeeping)
     _lp_rev = _geometry_engine.logp_reverse(top_proposal, _new_positions, old_positions, beta, validate_geometry_energy_bookkeeping)
 
-    # make the hybrid system, reset the CustomNonbondedForce cutoff
+    # Make the hybrid system, reset the CustomNonbondedForce cutoff
     HTF = HybridTopologyFactory(top_proposal, old_positions, _new_positions)
     hybrid_system = HTF.hybrid_system
 
     nonalch_zero, nonalch_one, alch_zero, alch_one = generate_endpoint_thermodynamic_states(hybrid_system, top_proposal)
 
-    # compute reduced energies
-    #for the nonalchemical systems...
+    # Compute reduced energies for the nonalchemical systems...
     attrib_list = [(nonalch_zero, old_positions, top_proposal._old_system.getDefaultPeriodicBoxVectors()),
                     (alch_zero, HTF._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
                     (alch_one, HTF._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
@@ -556,7 +554,7 @@ def HybridTopologyFactory_energies(current_mol = 'toluene', proposed_mol = '1,2-
         rp = state.reduced_potential(context)
         rp_list.append(rp)
 
-    #valence energy definitions
+    # Valence energy definitions
     forward_added_valence_energy = _geometry_engine.forward_final_context_reduced_potential - _geometry_engine.forward_atoms_with_positions_reduced_potential
     reverse_subtracted_valence_energy = _geometry_engine.reverse_final_context_reduced_potential - _geometry_engine.reverse_atoms_with_positions_reduced_potential
 
