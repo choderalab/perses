@@ -358,7 +358,7 @@ def check_system(system):
     outfile.write(serialized_system)
     outfile.close()
 
-def generate_endpoint_thermodynamic_states(system: openmm.System, topology_proposal: TopologyProposal):
+def generate_endpoint_thermodynamic_states(system, topology_proposal, repartitioned_endstate):
     """
     Generate endpoint thermodynamic states for the system
 
@@ -368,6 +368,9 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
         System object corresponding to thermodynamic state
     topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
         TopologyProposal representing transformation
+    repartitioned_endstate : int
+        If the htf was generated using RepartitionedHybridTopologyFactory, use this argument to specify the endstate at
+        which it was generated. Otherwise, None.
 
     Returns
     -------
@@ -383,25 +386,33 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
     # Create the thermodynamic state
     from perses.annihilation.lambda_protocol import RelativeAlchemicalState
 
-    lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(system)
-    lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
-
-    # Ensure their states are set appropriately
-    lambda_zero_alchemical_state.set_alchemical_parameters(0.0)
-    lambda_one_alchemical_state.set_alchemical_parameters(1.0)
-
     check_system(system)
-
-    # Create the base thermodynamic state with the hybrid system
-    thermodynamic_state = states.ThermodynamicState(system, temperature=temperature)
 
     # Create thermodynamic states for the nonalchemical endpoints
     nonalchemical_zero_thermodynamic_state = states.ThermodynamicState(topology_proposal.old_system, temperature=temperature)
     nonalchemical_one_thermodynamic_state = states.ThermodynamicState(topology_proposal.new_system, temperature=temperature)
 
-    # Now create the compound states with different alchemical states
-    lambda_zero_thermodynamic_state = states.CompoundThermodynamicState(thermodynamic_state, composable_states=[lambda_zero_alchemical_state])
-    lambda_one_thermodynamic_state = states.CompoundThermodynamicState(thermodynamic_state, composable_states=[lambda_one_alchemical_state])
+    # Create the base thermodynamic state with the hybrid system
+    thermodynamic_state = states.ThermodynamicState(system, temperature=temperature)
+
+    if repartitioned_endstate == 0:
+        lambda_zero_thermodynamic_state = thermodynamic_state
+        lambda_one_thermodynamic_state = None
+    elif repartitioned_endstate == 1:
+        lambda_zero_thermodynamic_state = None
+        lambda_one_thermodynamic_state = thermodynamic_state
+    else:
+        # Create relative alchemical states
+        lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(system)
+        lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
+
+        # Ensure their states are set appropriately
+        lambda_zero_alchemical_state.set_alchemical_parameters(0.0)
+        lambda_one_alchemical_state.set_alchemical_parameters(1.0)
+
+        # Now create the compound states with different alchemical states
+        lambda_zero_thermodynamic_state = states.CompoundThermodynamicState(thermodynamic_state, composable_states=[lambda_zero_alchemical_state])
+        lambda_one_thermodynamic_state = states.CompoundThermodynamicState(thermodynamic_state, composable_states=[lambda_one_alchemical_state])
 
     return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
 
@@ -716,7 +727,15 @@ def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_it
 
     return conformers, rj_works
 
-def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_energy, beta = 1.0/kT, ENERGY_THRESHOLD = 1e-6, platform = DEFAULT_PLATFORM, trajectory_directory=None):
+def validate_endstate_energies(topology_proposal,
+                               htf,
+                               added_energy,
+                               subtracted_energy,
+                               beta=1.0/kT,
+                               ENERGY_THRESHOLD=1e-6,
+                               platform=DEFAULT_PLATFORM,
+                               trajectory_directory=None,
+                               repartitioned_endstate=None):
     """
     Function to validate that the difference between the nonalchemical versus alchemical state at lambda = 0,1 is
     equal to the difference in valence energy (forward and reverse).
@@ -729,8 +748,19 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
         hybrid top factory for setting alchemical hybrid states
     added_energy : float
         reduced added valence energy
-    subtracted_energy: float
+    subtracted_energy : float
         reduced subtracted valence energy
+    beta : float, default 1.0/kT
+        unit-bearing inverse thermal energy
+    ENERGY_THRESHOLD : float, default 1e-6
+        threshold for ratio in energy difference at a particular endstate
+    platform : str, default utils.get_fastest_platform()
+        platform to conduct validation on (e.g. 'CUDA', 'Reference', 'OpenCL')
+    trajectory_directory : str, default None
+        path to save the save the serialized state to. If None, the state will not be saved
+    repartitioned_endstate : int, default None
+        if the htf was generated using RepartitionedHybridTopologyFactory, use this argument to specify the endstate at
+        which it was generated. Otherwise, leave as None.
 
     Returns
     -------
@@ -740,8 +770,6 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
         reduced potential difference of the nonalchemical and alchemical lambda = 1 state (corrected for valence energy).
     """
     import copy
-    #import openmmtools.cache as cache
-    #context_cache = cache.global_context_cache
     from perses.dispersed.utils import configure_platform
     from perses.utils import data
     platform = configure_platform(platform.getName(), fallback_platform_name='Reference', precision='double')
@@ -764,42 +792,57 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
     old_positions, new_positions = htf._old_positions, htf._new_positions
 
     # Generate endpoint thermostates
-    nonalch_zero, nonalch_one, alch_zero, alch_one = generate_endpoint_thermodynamic_states(hybrid_system, top_proposal)
+    nonalch_zero, nonalch_one, alch_zero, alch_one = generate_endpoint_thermodynamic_states(hybrid_system, top_proposal, repartitioned_endstate)
 
     # Compute reduced energies for the nonalchemical systems...
-    attrib_list = [('real-old',nonalch_zero, old_positions, top_proposal._old_system.getDefaultPeriodicBoxVectors()),
-                    ('hybrid-old',alch_zero, htf._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
-                    ('hybrid-new',alch_one, htf._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
-                    ('real-new',nonalch_one, new_positions, top_proposal._new_system.getDefaultPeriodicBoxVectors())]
+    attrib_list = [('real-old', nonalch_zero, old_positions, top_proposal._old_system.getDefaultPeriodicBoxVectors()),
+                    ('hybrid-old', alch_zero, htf._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
+                    ('hybrid-new', alch_one, htf._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
+                    ('real-new', nonalch_one, new_positions, top_proposal._new_system.getDefaultPeriodicBoxVectors())]
 
     rp_list = []
     for (state_name, state, pos, box_vectors) in attrib_list:
-        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-        context = state.create_context(integrator, platform)
-        samplerstate = states.SamplerState(positions = pos, box_vectors = box_vectors)
-        samplerstate.apply_to_context(context)
-        rp = state.reduced_potential(context)
-        rp_list.append(rp)
-        energy_comps = compute_potential_components(context)
-        for name, force in energy_comps:
-           print("\t\t\t{}: {}".format(name, force))
-        _logger.debug(f'added forces:{sum([energy for name, energy in energy_comps])}')
-        _logger.debug(f'rp: {rp}')
-        if trajectory_directory is not None:
-            _logger.info(f'Saving {state_name} state xml to {trajectory_directory}/{state_name}-state.gz')
-            state = context.getState(getPositions=True, getVelocities=True, getForces=True, getEnergy=True, getParameters=True)
-            data.serialize(state,f'{trajectory_directory}-{state_name}-state.gz')
-        del context, integrator
+        if not state:
+            rp_list.append(None)
+        else:
+            integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+            context = state.create_context(integrator, platform)
+            samplerstate = states.SamplerState(positions = pos, box_vectors = box_vectors)
+            samplerstate.apply_to_context(context)
+            rp = state.reduced_potential(context)
+            rp_list.append(rp)
+            energy_comps = compute_potential_components(context)
+            for name, force in energy_comps:
+               print("\t\t\t{}: {}".format(name, force))
+            _logger.debug(f'added forces:{sum([energy for name, energy in energy_comps])}')
+            _logger.debug(f'rp: {rp}')
+            if trajectory_directory is not None:
+                _logger.info(f'Saving {state_name} state xml to {trajectory_directory}/{state_name}-state.gz')
+                state = context.getState(getPositions=True, getVelocities=True, getForces=True, getEnergy=True, getParameters=True)
+                data.serialize(state,f'{trajectory_directory}-{state_name}-state.gz')
+            del context, integrator
 
     nonalch_zero_rp, alch_zero_rp, alch_one_rp, nonalch_one_rp = rp_list[0], rp_list[1], rp_list[2], rp_list[3]
 
-    ratio = abs((nonalch_zero_rp - alch_zero_rp + added_energy) / (nonalch_zero_rp + alch_zero_rp + added_energy))
-    assert ratio < ENERGY_THRESHOLD, f"The ratio in energy difference for the ZERO state is {ratio}.\n This is greater than the threshold of {ENERGY_THRESHOLD}.\n real-zero: {nonalch_zero_rp} \n alc-zero: {alch_zero_rp} \nadded-valence: {added_energy}"
-    ratio = abs((nonalch_one_rp - alch_one_rp + subtracted_energy) / (nonalch_one_rp + alch_one_rp + subtracted_energy))
-    assert ratio < ENERGY_THRESHOLD, f"The ratio in energy difference for the ONE state is {ratio}.\n This is greater than the threshold of {ENERGY_THRESHOLD}.\n real-one: {nonalch_one_rp} \n alc-one: {alch_one_rp} \nsubtracted-valence: {subtracted_energy}"
+    if repartitioned_endstate == 0:
+        zero_error = nonalch_zero_rp - alch_zero_rp + added_energy
+        one_error = None
+        ratio = abs((zero_error) / (nonalch_zero_rp + alch_zero_rp + added_energy))
+        assert ratio < ENERGY_THRESHOLD, f"The ratio in energy difference for the ZERO state is {ratio}.\n This is greater than the threshold of {ENERGY_THRESHOLD}.\n real-zero: {nonalch_zero_rp} \n alc-zero: {alch_zero_rp} \nadded-valence: {added_energy}"
+    elif repartitioned_endstate == 1:
+        zero_error = None
+        one_error = nonalch_one_rp - alch_one_rp + subtracted_energy
+        ratio = abs((one_error) / (nonalch_one_rp + alch_one_rp + subtracted_energy))
+        assert ratio < ENERGY_THRESHOLD, f"The ratio in energy difference for the ONE state is {ratio}.\n This is greater than the threshold of {ENERGY_THRESHOLD}.\n real-one: {nonalch_one_rp} \n alc-one: {alch_one_rp} \nsubtracted-valence: {subtracted_energy}"
+    else:
+        zero_error = nonalch_zero_rp - alch_zero_rp + added_energy
+        one_error = nonalch_one_rp - alch_one_rp + subtracted_energy
+        ratio = abs((zero_error) / (nonalch_zero_rp + alch_zero_rp + added_energy))
+        assert ratio < ENERGY_THRESHOLD, f"The ratio in energy difference for the ZERO state is {ratio}.\n This is greater than the threshold of {ENERGY_THRESHOLD}.\n real-zero: {nonalch_zero_rp} \n alc-zero: {alch_zero_rp} \nadded-valence: {added_energy}"
+        ratio = abs((one_error) / (nonalch_one_rp + alch_one_rp + subtracted_energy))
+        assert ratio < ENERGY_THRESHOLD, f"The ratio in energy difference for the ONE state is {ratio}.\n This is greater than the threshold of {ENERGY_THRESHOLD}.\n real-one: {nonalch_one_rp} \n alc-one: {alch_one_rp} \nsubtracted-valence: {subtracted_energy}"
 
-
-    return abs(nonalch_zero_rp - alch_zero_rp + added_energy), abs(nonalch_one_rp - alch_one_rp + subtracted_energy)
+    return zero_error, one_error
 
 
 def track_torsions(hybrid_factory):
