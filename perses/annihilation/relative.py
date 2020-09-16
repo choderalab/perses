@@ -2387,10 +2387,9 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
         #create the forces...
         self._hybrid_system_forces['NonbondedForce'] = openmm.NonbondedForce
 
-        scale = 0.0 if self._endstate == 1 else 1.0
-
         for particle_index in range(self._hybrid_system.getNumParticles()):
             if particle_index in self._atom_classes['unique_old_atoms']:
+                scale = 0.0 if self._endstate == 1 else 1.0
                 _logger.debug(f"\t\thandle_nonbonded: particle {particle_index} is a unique_old")
                 # Get the parameters in the old system
                 old_index = hybrid_to_old_map[particle_index]
@@ -2401,6 +2400,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
                 assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
             elif particle_index in self._atom_classes['unique_new_atoms']:
+                scale = 1.0 if self._endstate == 1 else 0.0
                 _logger.debug(f"\t\thandle_nonbonded: particle {particle_index} is a unique_new")
                 # Get the parameters in the new system
                 new_index = hybrid_to_new_map[particle_index]
@@ -2430,16 +2430,20 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
             # Otherwise, the particle is in the environment
             else:
                 _logger.debug(f"\t\thandle_nonbonded: particle {particle_index} is an envronment")
+                assert particle_idx in self._atom_classes['environment_atoms']
                 # The parameters will be the same in new and old system, so just take the old parameters
                 if self._endstate == 0:
                     old_index = hybrid_to_old_map[particle_index]
                     [charge, sigma, epsilon] = old_system_nonbonded_force.getParticleParameters(old_index)
-                else:
+                elif self._endstate == 1:
                     new_index = hybrid_to_new_map[particle_index]
                     [charge, sigma, epsilon] = new_system_nonbonded_force.getParticleParameters(new_index)
+                else:
+                    raise Exception()
 
                 # Add the environment atoms to the regular nonbonded force as well: should we be adding steric terms here, too?
-                self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, epsilon)
+                check_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, epsilon)
+                assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
         self._handle_exceptions()
 
@@ -2464,12 +2468,14 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
             index_map = self._old_to_hybrid_map
             unquerieds = unique_new_atoms
             aux_map = self._new_to_hybrid_map
-        else:
+        elif self._endstate == 1:
             template_force = self._new_system_forces['NonbondedForce']
             aux_force = self._old_system_forces['NonbondedForce']
             index_map = self._new_to_hybrid_map
             unquerieds = unique_old_atoms
             aux_map = self._old_to_hybrid_map
+        else:
+            raise Exception()
 
         #add the template exceptions
         for exception_idx in range(template_force.getNumExceptions()):
@@ -2481,7 +2487,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
         for exception_idx in range(aux_force.getNumExceptions()):
             p1, p2, chargeprod, sigma, epsilon = aux_force.getExceptionParameters(exception_idx)
             hybrid_p1, hybrid_p2 = aux_map[p1], aux_map[p2]
-            if set([hybrid_p1, hybrid_p2]).issubset(unquerieds):
+            if set([hybrid_p1, hybrid_p2]).intersection(unquerieds) != set():
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(hybrid_p1, hybrid_p2, chargeprod, sigma, epsilon)
 
 
