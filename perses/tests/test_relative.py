@@ -6,6 +6,7 @@ from simtk import unit, openmm
 import numpy as np
 import os
 from nose.tools import nottest
+from pkg_resources import resource_filename
 
 try:
     from StringIO import StringIO
@@ -575,3 +576,135 @@ def test_HybridTopologyFactory_energies(molecule_perturbation_list = [['naphthal
     for molecule_pair, validate in zip(molecule_perturbation_list, validations):
         print(f"\tconduct energy comparison for {molecule_pair[0]} --> {molecule_pair[1]}")
         HybridTopologyFactory_energies(current_mol = molecule_pair[0], proposed_mol = molecule_pair[1], validate_geometry_energy_bookkeeping = validate)
+
+def RepartitionedHybridTopologyFactory_energies(topology, chain, system, positions, system_generator):
+    """
+    Test whether the difference in the nonalchemical zero and alchemical zero states is the forward valence energy.  Also test for the one states.
+    """
+
+    from perses.rjmc.topology_proposal import PointMutationEngine
+    from perses.annihilation.relative import RepartitionedHybridTopologyFactory
+    from perses.tests.utils import validate_endstate_energies
+
+    ENERGY_THRESHOLD = 1e-6
+
+    # Create point mutation engine to mutate residue at id 2 to THR
+    point_mutation_engine = PointMutationEngine(wildtype_topology=topology,
+                                                system_generator=system_generator,
+                                                chain_id=chain,
+                                                max_point_mutants=1,
+                                                residues_allowed_to_mutate=['2'],  # the residue ids allowed to mutate
+                                                allowed_mutations=[('2', 'THR')],
+                                                aggregate=True)  # always allow aggregation
+
+    # Create topology proposal
+    topology_proposal = point_mutation_engine.propose(current_system=system, current_topology=topology)
+
+    # Create geometry engine
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    geometry_engine = FFAllAngleGeometryEngine(metadata=None,
+                                               use_sterics=False,
+                                               n_bond_divisions=100,
+                                               n_angle_divisions=180,
+                                               n_torsion_divisions=360,
+                                               verbose=True,
+                                               storage=None,
+                                               bond_softening_constant=1.0,
+                                               angle_softening_constant=1.0,
+                                               neglect_angles=False,
+                                               use_14_nonbondeds=True)
+
+    # Create geometry proposal
+    forward_new_positions, logp_proposal = geometry_engine.propose(topology_proposal, positions, beta,
+                                                                   validate_energy_bookkeeping=True)
+    logp_reverse = geometry_engine.logp_reverse(topology_proposal, forward_new_positions, positions, beta,
+                                                validate_energy_bookkeeping=True)
+
+    if not topology_proposal.unique_new_atoms:
+        assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
+        assert geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
+        vacuum_added_valence_energy = 0.0
+    else:
+        added_valence_energy = geometry_engine.forward_final_context_reduced_potential - geometry_engine.forward_atoms_with_positions_reduced_potential
+
+    if not topology_proposal.unique_old_atoms:
+        assert geometry_engine.reverse_final_context_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.reverse_final_context_reduced_potential})"
+        assert geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
+        subtracted_valence_energy = 0.0
+    else:
+        subtracted_valence_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
+
+    # Generate repartitioned htf at lambda = 0
+    zero_htf = RepartitionedHybridTopologyFactory(topology_proposal=topology_proposal,
+                          current_positions=positions,
+                          new_positions=forward_new_positions,
+                          endstate=0)
+
+    # Compute error at lambda = 0 endstate
+    zero_state_error, _ = validate_endstate_energies(zero_htf._topology_proposal,
+                                                     zero_htf,
+                                                     added_valence_energy,
+                                                     subtracted_valence_energy,
+                                                     ENERGY_THRESHOLD=ENERGY_THRESHOLD,
+                                                     platform=openmm.Platform.getPlatformByName('Reference'),
+                                                     repartitioned_endstate=0)
+    # Generate repartitioned htf at lambda = 1
+    one_htf = RepartitionedHybridTopologyFactory(topology_proposal=topology_proposal,
+                                                  current_positions=positions,
+                                                  new_positions=forward_new_positions,
+                                                  endstate=1)
+
+    # Compute error at lambda = 1 endstate
+    _, one_state_error = validate_endstate_energies(one_htf._topology_proposal,
+                                                     one_htf,
+                                                     added_valence_energy,
+                                                     subtracted_valence_energy,
+                                                     ENERGY_THRESHOLD=ENERGY_THRESHOLD,
+                                                     platform=openmm.Platform.getPlatformByName('Reference'),
+                                                     repartitioned_endstate=1)
+
+    # Check that endstate errors are below threshold
+    assert abs(zero_state_error) < ENERGY_THRESHOLD, f"The zero state alchemical and nonalchemical energy absolute difference {abs(zero_state_error)} is greater than the threshold of {ENERGY_THRESHOLD}."
+    assert abs(one_state_error) < ENERGY_THRESHOLD, f"The one state alchemical and nonalchemical energy absolute difference {abs(one_state_error)} is greater than the threshold of {ENERGY_THRESHOLD}."
+
+    print(f"Abs difference in zero alchemical vs nonalchemical systems: {abs(zero_state_error)}")
+    print(f"Abs difference in one alchemical vs nonalchemical systems: {abs(one_state_error)}")
+
+
+def test_RepartitionedHybridTopologyFactory_energies():
+    """
+    Test whether the difference in the nonalchemical zero and alchemical zero states is the forward valence energy.  Also test for the one states.
+    """
+
+    from perses.tests.test_topology_proposal import generate_atp
+    from openmmforcefields.generators import SystemGenerator
+
+    # Test alanine dipeptide in vacuum
+    atp, system_generator = generate_atp('vacuum')
+    RepartitionedHybridTopologyFactory_energies(atp.topology, '1', atp.system, atp.positions, system_generator)
+
+    # Test alanine dipeptide in solvent
+    atp, system_generator = generate_atp('solvent')
+    RepartitionedHybridTopologyFactory_energies(atp.topology, '1', atp.system, atp.positions, system_generator)
+
+    # Test 8-mer peptide in vacuum
+    peptide_filename = resource_filename('perses', 'data/8mer-example/4zuh_peptide_capped.pdb')
+    pdb = app.PDBFile(peptide_filename)
+    forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
+    barostat = None
+    system_generator = SystemGenerator(forcefields=forcefield_files,
+                                       barostat=barostat,
+                                       forcefield_kwargs={'removeCMMotion': False,
+                                                          'ewaldErrorTolerance': 0.00025,
+                                                          'constraints': app.HBonds,
+                                                          'hydrogenMass': 4 * unit.amus},
+                                       periodic_forcefield_kwargs=None,
+                                       small_molecule_forcefield='gaff-2.11',
+                                       nonperiodic_forcefield_kwargs={'nonbondedMethod': app.NoCutoff},
+                                       molecules=None,
+                                       cache=None)
+    system = system_generator.create_system(pdb.topology)
+    positions = unit.quantity.Quantity(
+                    value=np.array([list(atom_pos) for atom_pos in pdb.positions.value_in_unit_system(unit.md_unit_system)]),
+                    unit=unit.nanometers)
+    RepartitionedHybridTopologyFactory_energies(pdb.topology, 'C', system, positions, system_generator)
