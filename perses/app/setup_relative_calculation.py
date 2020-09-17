@@ -4,16 +4,15 @@ import pickle
 import os
 import sys
 import simtk.unit as unit
-from simtk import openmm
 import logging
 
 from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
 from perses.annihilation.relative import HybridTopologyFactory
-from perses.app.relative_setup import NonequilibriumSwitchingFEP, RelativeFEPSetup
+from perses.app.relative_setup import RelativeFEPSetup
 from perses.annihilation.lambda_protocol import LambdaProtocol
 
-from openmmtools import mcmc, utils
-from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
+from openmmtools import mcmc
+from openmmtools.multistate import MultiStateReporter
 from perses.utils.smallmolecules import render_atom_mapping
 from perses.tests.utils import validate_endstate_energies
 from perses.dispersed.smc import SequentialMonteCarlo
@@ -47,10 +46,12 @@ from openmmtools.constants import kB
 def getSetupOptions(filename):
     """
     Reads input yaml file, makes output directory and returns setup options
-    Parameter
-    ---------
+
+    Parameters
+    ----------
     filename : str
         .yaml file containing simulation parameters
+
     Returns
     -------
     setup_options :
@@ -73,23 +74,41 @@ def getSetupOptions(filename):
         setup_options['protocol-type'] = 'default'
 
 
+    if 'temperature' not in setup_options:
+        setup_options['temperature'] = 300.
+    if 'pressure' not in setup_options:
+        setup_options['pressure'] = 1.
+    if 'solvent_padding' not in setup_options:
+        setup_options['solvent_padding'] = 9.
+    if 'ionic_strength' not in setup_options:
+        setup_options['ionic_strength'] = 0.15
+
+
     if 'small_molecule_forcefield' not in setup_options:
         setup_options['small_molecule_forcefield'] = None
 
     if 'small_molecule_parameters_cache' not in setup_options:
         setup_options['small_molecule_parameters_cache'] = None
 
+    if 'remove_constraints' not in setup_options:
+        setup_options['remove_constraints'] = False
+        _logger.info('No constraints will be removed')
+    # remove_constraints can be 'all' or 'not water'
+    elif setup_options['remove_constraints'] not in ['all', 'not water', False]:
+        _logger.warning("remove_constraints value of {setup_options['remove_constraints']} not understood. 'all', 'none' or 'not water' are valid options. NOT REMOVING ANY CONSTRAINTS")
+        setup_options['remove_constraints'] = False
+
     if 'spectators' not in setup_options:
         _logger.info(f'No spectators')
         setup_options['spectators'] = None
-    
+
     if 'complex_box_dimensions' not in setup_options:
-        setup_options['complex_box_dimensions'] = None 
+        setup_options['complex_box_dimensions'] = None
     else:
-        setup_options['complex_box_dimensions'] = tuple([float(x) for x in setup_options['complex_box_dimensions']]) 
+        setup_options['complex_box_dimensions'] = tuple([float(x) for x in setup_options['complex_box_dimensions']])
 
     if 'solvent_box_dimensions' not in setup_options:
-        setup_options['solvent_box_dimensions'] = None 
+        setup_options['solvent_box_dimensions'] = None
 
     # Not sure why these are needed
     # TODO: Revisit these?
@@ -299,7 +318,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         - 'topology_proposals':
     """
     phases = setup_options['phases']
-    known_phases = ['complex','solvent','vacuum']
+    known_phases = ['complex', 'solvent', 'vacuum']
     for phase in phases:
         assert (phase in known_phases), f"Unknown phase, {phase} provided. run_setup() can be used with {known_phases}"
 
@@ -335,7 +354,10 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     forcefield_files = setup_options['forcefield_files']
 
     if "timestep" in setup_options:
-        timestep = setup_options['timestep'] * unit.femtoseconds
+        if isinstance(setup_options['timestep'], float):
+            timestep = setup_options['timestep'] * unit.femtoseconds
+        else:
+            timestep = setup_options['timestep']
         _logger.info(f"\ttimestep: {timestep}.")
     else:
         timestep = 1.0 * unit.femtoseconds
@@ -363,13 +385,26 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     else:
         measure_shadow_work = False
         _logger.info(f"\tno measure_shadow_work specified: defaulting to False.")
-
-    pressure = setup_options['pressure'] * unit.atmosphere
-    temperature = setup_options['temperature'] * unit.kelvin
-    solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
+    if isinstance(setup_options['pressure'],float):
+        pressure = setup_options['pressure'] * unit.atmosphere
+    else:
+        pressure = setup_options['pressure']
+    if isinstance(setup_options['temperature'], float):
+        temperature = setup_options['temperature'] * unit.kelvin
+    else:
+        temperature = setup_options['temperature']
+    if isinstance(setup_options['solvent_padding'], float):
+        solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
+    else:
+        solvent_padding_angstroms = setup_options['solvent_padding']
+    if isinstance(setup_options['ionic_strength'], float):
+        ionic_strength = setup_options['ionic_strength'] * unit.molar
+    else:
+        ionic_strength = setup_options['ionic_strength']
     _logger.info(f"\tsetting pressure: {pressure}.")
     _logger.info(f"\tsetting temperature: {temperature}.")
     _logger.info(f"\tsetting solvent padding: {solvent_padding_angstroms}A.")
+    _logger.info(f"\tsetting ionic strength: {ionic_strength}M.")
 
     setup_pickle_file = setup_options['save_setup_pickle_as'] if 'save_setup_pickle_as' in list(setup_options) else None
     _logger.info(f"\tsetup pickle file: {setup_pickle_file}")
@@ -401,7 +436,9 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                           atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
                                           trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'],
-                                          complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'])
+
+                                          complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'], ionic_strength=ionic_strength, remove_constraints=setup_options['remove_constraints'])
+
 
         _logger.info(f"\twriting pickle output...")
         if setup_pickle_file is not None:

@@ -9,24 +9,15 @@ __author__ = 'John D. Chodera'
 # IMPORTS
 ################################################################################
 
-from simtk import openmm, unit
-import math
 import numpy as np
-from functools import partial
-from unittest import skipIf
 import os
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
 ################################################################################
-# CONSTANTS
-################################################################################
-
-from openmmtools.constants import kB
-
-################################################################################
 # TESTS
 ################################################################################
+
 
 def collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, ghmc_nsteps=200, ncmc_nsteps=50, niterations=100, direction='insert', ncmc_integrator=None):
     """

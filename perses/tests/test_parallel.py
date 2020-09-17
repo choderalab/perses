@@ -1,15 +1,10 @@
 ###########################################
 # IMPORTS
 ###########################################
-from simtk.openmm import app
-from simtk import unit, openmm
 import numpy as np
 import os
 from nose.tools import nottest
 from unittest import skipIf
-
-import copy
-import pymbar
 
 ###
 from perses.dispersed import parallel
@@ -59,8 +54,8 @@ def run_parallelism(_parallel, data):
     """
     helper function to run through the parallelism tests
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     _parallel : perses.dispersed.parallelism.Parallelism
         parallelism object to run tests on
     data : np.array

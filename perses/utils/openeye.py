@@ -30,8 +30,8 @@ def system_generator_wrapper(oemols,
     """
     make a system generator (vacuum) for a small molecule
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     oemols : list of openeye.oechem.OEMol
         oemols
     barostat : openmm.MonteCarloBarostat, default None
@@ -209,8 +209,8 @@ def OEMol_to_omm_ff(molecule, system_generator):
         input molecule to convert
     system_generator : openmmforcefields.generators.SystemGenerator
 
-    Return
-    ------
+    Returns
+    -------
     system : openmm.system
     positions : openmm.positions
     topology : openmm.topology
@@ -319,7 +319,7 @@ def describe_oemol(mol):
     return description
 
 
-def createOEMolFromSDF(sdf_filename, index=0, add_hydrogens=True):
+def createOEMolFromSDF(sdf_filename, index=0, add_hydrogens=True, allow_undefined_stereo=False):
     """
     # TODO change this to return a list of all the mols if required
     Load an SDF file into an OEMol. Since SDF files can contain multiple
@@ -331,6 +331,8 @@ def createOEMolFromSDF(sdf_filename, index=0, add_hydrogens=True):
         The name of the SDF file
     index : int, default 0
         The index of the molecule in the SDF file
+    allow_undefined_stereo : bool, default=False
+        wether to skip stereo perception
 
     Returns
     -------
@@ -360,8 +362,9 @@ def createOEMolFromSDF(sdf_filename, index=0, add_hydrogens=True):
     oechem.OEPerceiveChiral(molecule)
 
     # perceive chirality
-    assert oechem.OE3DToInternalStereo(molecule), f"the stereochemistry perception from 3D coordinates failed"
-    assert not has_undefined_stereocenters(molecule), f"there is an atom with an undefined stereochemistry"
+    if not allow_undefined_stereo:
+        assert oechem.OE3DToInternalStereo(molecule), f"the stereochemistry perception from 3D coordinates failed"
+        assert not has_undefined_stereocenters(molecule), f"there is an atom with an undefined stereochemistry"
 
     return molecule
 

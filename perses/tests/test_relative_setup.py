@@ -1,12 +1,10 @@
-import numpy as np
 import os
 from pkg_resources import resource_filename
 from simtk import unit
 from perses.dispersed import feptasks
-from perses.app import relative_setup, setup_relative_calculation
+from perses.app import setup_relative_calculation
 import mdtraj as md
 from openmmtools import states, alchemy, testsystems, cache
-import yaml
 from unittest import skipIf
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 

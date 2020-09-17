@@ -1,34 +1,22 @@
 import simtk.openmm as openmm
-from typing import List, Tuple, Union, NamedTuple
 import os
 import copy
 
 import openmmtools.mcmc as mcmc
 import openmmtools.integrators as integrators
 import openmmtools.states as states
-from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
+from openmmtools.states import ThermodynamicState
 import numpy as np
 import mdtraj as md
-from perses.annihilation.relative import HybridTopologyFactory
 import mdtraj.utils as mdtrajutils
-import pickle
 import simtk.unit as unit
 import tqdm
-from perses.tests.utils import compute_potential_components
 from openmmtools.constants import kB
-import pdb
 import logging
-import tqdm
-from sys import getsizeof
 import time
 from collections import namedtuple
 from perses.annihilation.lambda_protocol import LambdaProtocol
-from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
-import random
-import pymbar
 import dask.distributed as distributed
-import tqdm
-import time
 from scipy.special import logsumexp
 import openmmtools.cache as cache
 from openmmtools import utils
@@ -36,7 +24,7 @@ from openmmtools import utils
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("sMC_utils")
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.INFO)
 DISTRIBUTED_ERROR_TOLERANCE = 1e-6
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
 
@@ -106,8 +94,8 @@ def compute_survival_rate(sMC_particle_ancestries):
     """
     compute the time-series survival rate as a function of resamples
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     sMC_particle_ancestries : dict of {_direction : list(np.array(ints))}
         dict of the particle ancestor indices
 
@@ -133,7 +121,7 @@ def minimize(thermodynamic_state,
     Minimize the given system and state, up to a maximum number of steps.
     This does not return a copy of the samplerstate; it is simply an update-in-place.
 
-    Arguments
+    Parameters
     ----------
     thermodynamic_state : openmmtools.states.ThermodynamicState
         The state at which the system could be minimized
@@ -230,8 +218,8 @@ def compute_timeseries(reduced_potentials):
     """
     Use pymbar timeseries to compute the uncorrelated samples in an array of reduced potentials.  Returns the uncorrelated sample indices.
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     reduced_potentials : np.array of floats
         reduced potentials from which a timeseries is to be extracted
 
@@ -263,8 +251,8 @@ def run_equilibrium(task):
     will be conducted at a time, including a time-series (pymbar) analysis to determine whether the data are decorrelated.
     The loop will conclude when a single configuration yields an iid sample.  This will be saved.
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     task : EquilibriumFEPTask namedtuple
         The namedtuple should have an 'input' argument.  The 'input' argument is a dict characterized with at least the following keys and values:
         {
@@ -392,7 +380,7 @@ def write_equilibrium_trajectory(trajectory: md.Trajectory, trajectory_filename:
     """
     Write the results of an equilibrium simulation to disk. This task will append the results to the given filename.
 
-    Arguments
+    Parameters
     ----------
     trajectory : md.Trajectory
         the trajectory resulting from an equilibrium simulation
@@ -419,7 +407,7 @@ def write_nonequilibrium_trajectory(nonequilibrium_trajectory, trajectory_filena
     Write the results of a nonequilibrium switching trajectory to a file. The trajectory is written to an
     mdtraj hdf5 file.
 
-    Arguments
+    Parameters
     ----------
     nonequilibrium_trajectory : md.Trajectory
         The trajectory resulting from a nonequilibrium simulation
@@ -439,7 +427,7 @@ def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sa
     """
     Compute the reduced potential of the given SamplerState under the given ThermodynamicState.
 
-    Arguments
+    Parameters
     ----------
     thermodynamic_state : openmmtools.states.ThermodynamicState
         The thermodynamic state under which to compute the reduced potential
@@ -467,8 +455,8 @@ def create_endstates(first_thermostate, last_thermostate):
     3. set PME tolerance to 1e-5
     4. enable LJPME to handle long range dispersion corrections in a physically reasonable manner
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     first_thermostate : openmmtools.states.CompoundThermodynamicState
         the first thermodynamic state for which an unsampled endstate will be created
     last_thermostate : openmmtools.states.CompoundThermodynamicState
@@ -697,8 +685,8 @@ class LocallyOptimalAnnealing():
         """
         conduct annealing across lambdas.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         sampler_state : openmmtools.states.SamplerState
             The starting state at which to minimize the system.
         noneq_trajectory_filename : str, default None
@@ -835,8 +823,8 @@ class LocallyOptimalAnnealing():
         """
         Attempt to terminate the annealing protocol and return the Particle attributes.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         noneq_trajectory_filename : str, default None
             Name of the nonequilibrium trajectory file to which we write
         """
@@ -860,15 +848,15 @@ class LocallyOptimalAnnealing():
         compute the incremental work of a lambda update on the thermodynamic state.
         function also updates the thermodynamic state and the context
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         _lambda : float
             the lambda value used to update the importance sample
         sampler_state : openmmtools.states.SamplerState
             sampler state with which to update
 
-        Return
-        ------
+        Returns
+        -------
         _incremental_work : float or None
             the incremental work returned from the lambda update; if None, then there is a numerical instability
         """
@@ -890,8 +878,8 @@ class LocallyOptimalAnnealing():
         """
         utility function to update the class context
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         _lambda : float
             the lambda value that the self.context will be updated to
         """
@@ -903,8 +891,8 @@ class LocallyOptimalAnnealing():
         """
         pass a conditional save function
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         iteration : int
             the iteration index
         sampler_state : openmmtools.states.SamplerState

@@ -1,12 +1,6 @@
-from simtk import openmm, unit
-from simtk.openmm import app
-import os, os.path
-import sys, math
-from unittest import skipIf
+from simtk import unit
+import sys
 import numpy as np
-from functools import partial
-from pkg_resources import resource_filename
-from openeye import oechem
 if sys.version_info >= (3, 0):
     from io import StringIO
     from subprocess import getstatusoutput
@@ -53,7 +47,7 @@ def plot_logPs(logps, molecule_name, scheme, component):
     """
     Create line plot of mean and standard deviation of given logPs.
 
-    Arguments:
+    Parameters
     ----------
         logps: dict { int : np.ndarray }
             key : number of total NCMC steps
@@ -94,7 +88,7 @@ def benchmark_exen_ncmc_protocol(analyses, molecule_name, scheme):
         * Plot mean and standard deviation of EXEN logP as a function of
           total steps
 
-    Arguments:
+    Parameters
     ----------
         analyses : dict { int : perses.Analysis }
             key : number of total NCMC steps

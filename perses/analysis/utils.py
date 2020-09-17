@@ -45,8 +45,8 @@ def plot_replica_mixing(ncfile_name, title='',filename='replicas.png'):
     """
     Plots the path of each replica through the states, with marginal distribution shown
 
-    Arguments
-    --------
+    Parameters
+    ----------
     ncfile_name : str
         path to nc file to analyse
     title : str, default=''

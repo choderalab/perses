@@ -2,16 +2,14 @@ from __future__ import print_function
 import numpy as np
 import copy
 import logging
-import traceback
-from simtk import openmm, unit
-from perses.dispersed.feptasks import Particle, compute_reduced_potential
+from perses.dispersed.feptasks import compute_reduced_potential
 from perses.storage import NetCDFStorageView
 from perses.annihilation.relative import HybridTopologyFactory
-from perses.tests.utils import quantity_is_finite
 from openmmtools.constants import kB
 from openmmtools.cache import LRUCache, global_context_cache
 from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
+from simtk import unit
 
 default_temperature = 300.0*unit.kelvin
 default_nsteps = 1
@@ -51,8 +49,8 @@ class NCMCEngine(object):
         """
         This is the base class for NCMC switching between two different systems.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         temperature : simtk.unit.Quantity with units compatible with kelvin
             The temperature at which switching is to be run
         functions : dict of str:str, optional, default=default_functions
@@ -164,8 +162,8 @@ class NCMCEngine(object):
         Convert a topology proposal to thermodynamic states for the end systems. This will be used to compute the
         "logP_energy" quantity.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology_proposal : perses.rjmc.TopologyProposal
             topology proposal for whose endpoint systems we want ThermodynamicStates
 
@@ -191,8 +189,8 @@ class NCMCEngine(object):
         HybridTopologyFactory. It memoizes so that calling multiple times (within a recent time period)
         will immediately return a cached object.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology_proposal : perses.rjmc.TopologyProposal
             Unmodified real system corresponding to appropriate leg of transformation.
         current_positions : np.ndarray of float

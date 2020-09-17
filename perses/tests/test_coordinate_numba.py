@@ -1,16 +1,8 @@
 import simtk.openmm as openmm
-import openmoltools
-import simtk.openmm.app as app
 import simtk.unit as unit
-import logging
 import numpy as np
-import parmed
-import copy
 import os
-from unittest import skipIf
-from pkg_resources import resource_filename
 from openmmtools.constants import kB
-from perses.rjmc import coordinate_numba
 from perses.rjmc.geometry import check_dimensionality
 from perses.tests.test_geometry_engine import _get_internal_from_omm
 ################################################################################

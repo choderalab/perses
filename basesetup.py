@@ -3,7 +3,6 @@ import os
 import sys
 import imp
 import json
-import string
 import shutil
 import subprocess
 import tempfile

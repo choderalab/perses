@@ -1,7 +1,6 @@
 import simtk.openmm.app as app
 import simtk.openmm as openmm
 import simtk.unit as unit
-import copy
 from pkg_resources import resource_filename
 import numpy as np
 import os
@@ -14,18 +13,15 @@ except:
 from nose.plugins.attrib import attr
 
 from openmmtools.constants import kB
-from perses.utils.data import get_data_filename
 from perses.utils.openeye import OEMol_to_omm_ff, smiles_to_oemol
 from perses.utils.smallmolecules import render_atom_mapping
-from unittest import skipIf
 from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
 from perses.rjmc import topology_proposal
 from collections import defaultdict
-from perses.utils.openeye import smiles_to_oemol, OEMol_to_omm_ff
 import openeye.oechem as oechem
 from openmmforcefields.generators import SystemGenerator
 from openforcefield.topology import Molecule
-from openmoltools.forcefield_generators import generateTopologyFromOEMol, generateOEMolFromTopologyResidue
+from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
 
 #default arguments for SystemGenerators
 barostat = None
