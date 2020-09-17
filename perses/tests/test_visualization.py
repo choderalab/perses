@@ -1,6 +1,7 @@
 from perses.analysis.visualization import Visualization
 from pkg_resources import resource_filename
 import os
+from unittest import skipIf
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
