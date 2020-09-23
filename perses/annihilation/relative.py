@@ -2234,6 +2234,9 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
         # The last thing to do is call the alchemical factory on the _hybrid_system
         self._alchemify()
 
+        # Generate the topology representation
+        self._hybrid_topology = self._create_topology()
+
         # Get positions for the hybrid
         self._hybrid_positions = self._compute_hybrid_positions()
 
