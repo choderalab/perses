@@ -68,6 +68,7 @@ class HybridTopologyFactory(object):
                  softcore_sigma_Q = 1.0,
                  interpolate_old_and_new_14s = False,
                  omitted_terms = None,
+                 flatten_torsions = False,
                  **kwargs):
         """
         Initialize the Hybrid topology factory.
@@ -117,6 +118,9 @@ class HybridTopologyFactory(object):
             whether to turn on new 1,4 interactions and turn off old 1,4 interactions; if False, they are present in the nonbonded force
         omitted_terms : dict
             dictionary of terms (by new topology index) that must be annealed in over a lambda protocol
+        flatten_torsions : bool, default False
+            if True, torsion terms involving `unique_new_atoms` will be scaled such that at lambda=0,1, the torsion term is turned off/on respectively
+            the opposite is true for `unique_old_atoms`.
 
         TODO: Document how positions for hybrid system are constructed
         TODO: allow support for annealing in omitted terms
@@ -134,6 +138,7 @@ class HybridTopologyFactory(object):
         self._soften_only_new = soften_only_new
         self._interpolate_14s = interpolate_old_and_new_14s
         self.omitted_terms = omitted_terms
+        self._flatten_torsions = flatten_torsions
 
         if omitted_terms is not None:
             raise Exception(f"annealing of omitted terms is not currently supported.  Aborting!")
@@ -1269,10 +1274,14 @@ class HybridTopologyFactory(object):
             # If all atoms are in the core, we'll need to find the corresponding parameters in the old system and
             # interpolate
             if hybrid_index_set.intersection(self._atom_classes['unique_old_atoms']) != set():
-                # Then it goes to a standard force...
-                self._hybrid_system_forces['unique_atom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
-                                                                        hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
-                                                                        torsion_parameters[5], torsion_parameters[6])
+                if self._flatten_torsions:
+                    force_params = [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], torsion_parameters[4], torsion_parameters[5], 0.]
+                    self._hybrid_system_forces['custom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], force_params)
+                else:
+                    # Then it goes to a standard force...
+                    self._hybrid_system_forces['unique_atom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
+                                                                            hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
+                                                                            torsion_parameters[5], torsion_parameters[6])
             else:
                 # It is a core-only term, an environment-only term, or a core/env term;
                 # in any case, it goes to the core torsion_force
@@ -1291,10 +1300,14 @@ class HybridTopologyFactory(object):
             hybrid_index_set = set(hybrid_index_list)
 
             if hybrid_index_set.intersection(self._atom_classes['unique_new_atoms']) != set():
-                # Then it goes to a standard force...
-                self._hybrid_system_forces['unique_atom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
-                                                                        hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
-                                                                        torsion_parameters[5], torsion_parameters[6])
+                if self._flatten_torsions:
+                    force_params = [torsion_parameters[4], torsion_parameters[5], 0.0, torsion_parameters[4], torsion_parameters[5], torsion_parameters[6]]
+                    self._hybrid_system_forces['custom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], force_params)
+                else:
+                    # Then it goes to the custom torsion force (scaled to zero)
+                    self._hybrid_system_forces['unique_atom_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
+                                                                            hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
+                                                                            torsion_parameters[5], torsion_parameters[6])
             else:
 
                 torsion_indices = torsion_parameters[:4]
@@ -2095,6 +2108,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
                  new_positions,
                  endstate,
                  alchemical_region=None,
+                 flatten_torsions = False,
                  **kwargs):
         """
         arguments
@@ -2120,6 +2134,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
         self._old_positions = current_positions
         self._new_positions = new_positions
         self._endstate = endstate
+
 
         #the softcore is defaulted as True even though we are not using it...we only need it to pass to the
         self._softcore_LJ_v2 = True
@@ -2351,6 +2366,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
             target_index_set = self._atom_classes['unique_new_atoms']
             template_map = self._old_to_hybrid_map
             aux_map = self._new_to_hybrid_map
+
         elif self._endstate == 1:
             template_force = self._new_system_forces['PeriodicTorsionForce']
             aux_force = self._old_system_forces['PeriodicTorsionForce']
@@ -2372,7 +2388,8 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
             hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = aux_map[p1], aux_map[p2], aux_map[p3], aux_map[p4]
             if set([hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]).intersection(target_index_set) != set():
                 # If there is a target atom in the auxiliary term, write it to the hybrid force
-                to_force.addTorsion(hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4, periodicity, phase, k)
+                scale = 1. if not self._flatten_torsions else 0.
+                to_force.addTorsion(hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4, periodicity, phase, k*scale)
 
         # Then add the to_force to the hybrid_system
         self._hybrid_system.addForce(to_force)
