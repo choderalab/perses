@@ -59,16 +59,16 @@ class HybridTopologyFactory(object):
                  bond_softening_constant=1.0,
                  angle_softening_constant=1.0,
                  soften_only_new=False,
-                 neglected_new_angle_terms = [],
-                 neglected_old_angle_terms = [],
-                 softcore_LJ_v2 = True,
-                 softcore_electrostatics = True,
-                 softcore_LJ_v2_alpha = 0.85,
-                 softcore_electrostatics_alpha = 0.3,
-                 softcore_sigma_Q = 1.0,
-                 interpolate_old_and_new_14s = False,
-                 omitted_terms = None,
-                 flatten_torsions = False,
+                 neglected_new_angle_terms=[],
+                 neglected_old_angle_terms=[],
+                 softcore_LJ_v2=True,
+                 softcore_electrostatics=True,
+                 softcore_LJ_v2_alpha=0.85,
+                 softcore_electrostatics_alpha=0.3,
+                 softcore_sigma_Q=1.0,
+                 interpolate_old_and_new_14s=False,
+                 omitted_terms=None,
+                 flatten_torsions=False,
                  **kwargs):
         """
         Initialize the Hybrid topology factory.
@@ -2108,7 +2108,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
                  new_positions,
                  endstate,
                  alchemical_region=None,
-                 flatten_torsions = False,
+                 flatten_torsions=False,
                  **kwargs):
         """
         arguments
@@ -2122,6 +2122,9 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
                 list of atoms comprising the alchemical region; if None, core_atoms + unique_new_atoms + unique_old_atoms are alchemical region
             endstate : int
                 the lambda endstate to parameterize
+           flatten_torsions : bool, default False
+            if True, torsion terms involving `unique_new_atoms` will be scaled such that at lambda=0,1, the torsion term is turned off/on respectively
+            the opposite is true for `unique_old_atoms`.
         """
         from itertools import chain
 
@@ -2134,7 +2137,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
         self._old_positions = current_positions
         self._new_positions = new_positions
         self._endstate = endstate
-
+        self._flatten_torsions = flatten_torsions
 
         #the softcore is defaulted as True even though we are not using it...we only need it to pass to the
         self._softcore_LJ_v2 = True
