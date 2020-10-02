@@ -1,25 +1,53 @@
-ligand_file: mmc2_barnase.pdb
-old_ligand_index: None
-new_ligand_index: None
-forcefield_files:
- - amber/ff14SB.xml
- - amber/tip3p_standard.xml
- - amber/tip3p_HFE_multivalent.xml
- - amber/phosaa10.xml
-trajectory_directory: RUN1
-num_equilibration_iterations: 100
-num_equilibration_steps_per_iteration: 250
-nsteps_eq: 1250000
-nsteps_neq: 1250000
-small_molecule_forcefield: openff-1.2.0
+# Specify the type of transformation
 setup: protein
+
+# Specify the names of the project and run directories and which phases we will be running
+phase_project_ids:
+    complex: 17300
+    apo: 17301
+trajectory_directory: RUN0
+phases: ['complex', 'apo']
+
+# Specify the name of the protein file, the chain id, and the residue id to be mutated
+# Then, specify the proposed residue
 protein_kwargs:
   protein_filename: mmc2_barstar.pdb
   mutation_chain_id: '1'
   mutation_residue_id: '42'
   proposed_residue: ALA
-  phase: complex
-  conduct_endstate_validation: True
-  ligand_file: mmc2_barnase.pdb
-  ligand_index: 0
-  water_model: tip3p
+
+# Specify the name of the ligand (will not be transformed) and the old and new ligand indexes (leave as None
+# since we are not running a ligand transformation)
+ligand_file: mmc2_barnase.pdb
+old_ligand_index: None
+new_ligand_index: None
+
+# Define general simulation parameters
+forcefield_files:
+    - amber/ff14SB.xml
+    - amber/tip3p_standard.xml
+small_molecule_forcefield: openff-1.2.0
+complex_box_dimensions: [7.1, 7.1, 7.1]
+
+# Specify relaxation length (before running nonequilibrium switching) 
+# total equilibration length = num_equilibration_iterations*num_equilibration_steps_per_iteration*timestep)
+# where the default timestep is 2.0 fs
+num_equilibration_iterations: 100
+num_equilibration_steps_per_iteration: 250
+
+# Specify time to spend in equilibrium vs. nonequilibrium for the PeriodicNonequilibriumIntegrator
+# e.g. total time spend in neq: nsteps_neq*timestep
+# where the default timestep is 4.0 fs
+nsteps_eq: 12500
+nsteps_neq: 12500
+
+# Defaults (FYI):
+# pressure - 1.0 atm
+# temperature - 300 K
+# platform - 'OpenCL'
+# collision rate (relaxation) - 90/picosecond
+# collision rate (neq switching) - 1/picosecond
+# barostat - openmm.MonteCarloBarostat(1.0 * unit.atmosphere, temperature, 50)
+# forcefield_kwargs - {'removeCMMotion': False, 'ewaldErrorTolerance': 0.00025, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+# periodic_forcefield_kwargs={'nonbondedMethod': app.PME}
+# nonperiodic_forcefield_kwargs=None
