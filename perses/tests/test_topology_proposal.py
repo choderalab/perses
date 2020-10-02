@@ -233,6 +233,7 @@ def generate_dipeptide_top_pos_sys(topology,
                                    conduct_htf_prop = False,
                                    validate_energy_bookkeeping=True,
                                    repartitioned=False,
+                                   flatten_torsions=False,
                                    endstate=None,
                                    validate_endstate_energy=True
                                    ):
@@ -309,7 +310,8 @@ def generate_dipeptide_top_pos_sys(topology,
                      softcore_sigma_Q=1.0,
                      interpolate_old_and_new_14s=False,
                      omitted_terms=None,
-                     endstate=endstate)
+                     endstate=endstate,
+                     flatten_torsions=flatten_torsions)
 
         if not validate_endstate_energy:
             return forward_htf
