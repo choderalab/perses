@@ -424,6 +424,11 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         atom_map=None
         _logger.info(f"\tno atom map specified: default to None.")
 
+    if 'use_given_geometries' not in setup_options.keys():
+        use_given_geometries = False
+    else:
+        use_given_geometries = setup_options['use_given_geometries']
+
     if 'topology_proposal' not in list(setup_options.keys()) or setup_options['topology_proposal'] is None:
         _logger.info(f"\tno topology_proposal specified; proceeding to RelativeFEPSetup...\n\n\n")
         if 'set_solvent_box_dims_to_complex' in list(setup_options.keys()) and setup_options['set_solvent_box_dims_to_complex']:
@@ -443,7 +448,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                           trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'],
 
                                           complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'], ionic_strength=ionic_strength, remove_constraints=setup_options['remove_constraints'],
-                                          use_given_geometries = setup_options['use_given_geometries'])
+                                          use_given_geometries = use_given_geometries)
 
 
         _logger.info(f"\twriting pickle output...")
