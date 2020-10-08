@@ -163,6 +163,7 @@ class RelativeFEPSetup(object):
         self._solvent_box_dimensions = solvent_box_dimensions
         self._map_strategy = map_strategy
         self._use_given_geometries = use_given_geometries
+        self._ligand_input = ligand_input
 
         if self._use_given_geometries:
             assert self._ligand_input[-3:] == 'sdf' or self._ligand_input[-4:] == 'mol2', f"cannot use deterministic atom placement if the ligand input files do not contain geometry information (e.g. in .sdf or .mol2 format)"
@@ -755,19 +756,9 @@ class RelativeFEPSetup(object):
         """
         given an old complex topology, positions, the positions of the new ligand, and a topology proposal, generate new complex positions
         """
-
-        new_solvated_topology = getattr(self, f"_{phase}_topology_proposal.new_topology")
-        old_solvated_topology = getattr(self, f"_{phase}_topology_proposal.old_topology")
-
-        old_md_solvated_topology = md.Topology.from_openmm(old_solvated_topology)
-        new_md_solvated_topology = md.Topology.from_openmm(new_solvated_topology)
-
-        new_ligand_indices = new_md_solvated_topology.select("resname == 'MOL' ")
-        assert np.array(new_ligand_indices).data.contiguous
-        old_ligand_indices = old_solvated_topology.select("resname == 'MOL'")
-        assert np.array(old_ligand_indices).data.contiguous
-
-        assert min(old_ligand_indices) == min(new_ligand_indices), f"the small molecules in complex do not start at the same indices"
+        top_proposal = getattr(self, f"_{phase}_topology_proposal")
+        old_solvated_topology = top_proposal._old_topology
+        old_to_new_atom_map = top_proposal._old_to_new_atom_map
 
         if phase == 'complex':
             old_pos = getattr(self, f"_complex_positions_old_solvated").value_in_unit_system(unit.md_unit_system)
@@ -776,18 +767,15 @@ class RelativeFEPSetup(object):
         elif phase == 'vacuum':
             old_pos = getattr(self, f"_ligand_positions_old").value_in_unit_system(unit.md_unit_system)
 
-        min_new_ligand_index, max_new_ligand_index = min(new_ligand_indices), max(new_ligand_indices)
-        new_positions = np.zeros((new_md_solvated_topology.n_atoms, 3))
-        new_positions[:min_new_ligand_index,:] = old_pos[:min(old_ligand_indices),:]
-        new_positions[new_ligand_indices,:] = self._ligand_positions_new.value_in_unit_system(unit.md_unit_system)
-        new_positions[max(new_ligand_index)+1,:] = old_pos[max(old_ligand_indices)+1:,:]
-        return new_positions*unit.nanometers
-
-
-
-
-
-
+        new_positions = np.zeros((top_proposal._new_topology.getNumAtoms(), 3))
+        new_positions[list(old_to_new_atom_map.values()),:] = old_pos[list(old_to_new_atom_map.keys()),:]
+        new_indices = top_proposal.unique_new_atoms
+        old_indices = top_proposal.unique_old_atoms
+        if len(new_indices) != 0:
+            new_positions[list(top_proposal._new_topology.residue_to_oemol_map.keys())] = self._ligand_positions_new.value_in_unit_system(unit.md_unit_system)[list(top_proposal._new_topology.residue_to_oemol_map.values())]
+        else:
+            pass
+        return new_positions * unit.nanometers
 
     def _solvate_system(self, topology, positions, model='tip3p',phase='complex', box_dimensions=None,ionic_strength=0.15 * unit.molar):
         """

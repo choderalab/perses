@@ -229,7 +229,7 @@ def test_host_guest_deterministic_geometries():
                  ligand_input = ligand_sdf,
                  old_ligand_index=0,
                  new_ligand_index=1,
-                 forcefield_files = forcefield_files = ['amber/ff14SB.xml','amber/tip3p_standard.xml','amber/tip3p_HFE_multivalent.xml'],
+                 forcefield_files = ['amber/ff14SB.xml','amber/tip3p_standard.xml','amber/tip3p_HFE_multivalent.xml'],
                  phases = ['complex', 'solvent', 'vacuum'],
                  protein_pdb_filename=host_pdb,
                  receptor_mol2_filename=None,
