@@ -325,7 +325,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     if 'use_given_geometries' not in list(setup_options.keys()):
         use_given_geometries = False
     else:
-        assert type(setup_options[use_given_geometries]) == type(True)
+        assert type(setup_options['use_given_geometries']) == type(True)
 
     if 'complex' in phases:
         _logger.info(f"\tPulling receptor (as pdb or mol2)...")
