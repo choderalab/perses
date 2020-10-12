@@ -233,8 +233,9 @@ def generate_dipeptide_top_pos_sys(topology,
                                    conduct_htf_prop = False,
                                    validate_energy_bookkeeping=True,
                                    repartitioned=False,
-                                   flatten_torsions=False,
                                    endstate=None,
+                                   flatten_torsions=False,
+                                   flatten_excceptions=False,
                                    validate_endstate_energy=True
                                    ):
     """generate point mutation engine, geometry_engine, and conduct topology proposal, geometry propsal, and hybrid factory generation"""
@@ -311,7 +312,8 @@ def generate_dipeptide_top_pos_sys(topology,
                      interpolate_old_and_new_14s=False,
                      omitted_terms=None,
                      endstate=endstate,
-                     flatten_torsions=flatten_torsions)
+                     flatten_torsions=flatten_torsions,
+                     interpolate_old_and_new_14s=flatten_exceptions)
 
         if not validate_endstate_energy:
             return forward_htf
