@@ -235,7 +235,7 @@ def generate_dipeptide_top_pos_sys(topology,
                                    repartitioned=False,
                                    endstate=None,
                                    flatten_torsions=False,
-                                   flatten_excceptions=False,
+                                   flatten_exceptions=False,
                                    validate_endstate_energy=True
                                    ):
     """generate point mutation engine, geometry_engine, and conduct topology proposal, geometry propsal, and hybrid factory generation"""
