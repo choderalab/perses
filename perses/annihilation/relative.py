@@ -2479,8 +2479,6 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
         Instead of excluding interactions that shouldn't occur, we provide exceptions for interactions that were zeroed
         out but should occur. we do not allow for the interpolation of 1,4s
         """
-        import itertools
-
         old_system_nonbonded_force = self._old_system_forces['NonbondedForce']
         new_system_nonbonded_force = self._new_system_forces['NonbondedForce']
 
