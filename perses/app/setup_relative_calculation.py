@@ -326,6 +326,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         use_given_geometries = False
     else:
         assert type(setup_options['use_given_geometries']) == type(True)
+        use_given_geometries = setup_options['use_given_geometries']
 
     if 'complex' in phases:
         _logger.info(f"\tPulling receptor (as pdb or mol2)...")
@@ -423,11 +424,6 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     except Exception:
         atom_map=None
         _logger.info(f"\tno atom map specified: default to None.")
-
-    if 'use_given_geometries' not in setup_options.keys():
-        use_given_geometries = False
-    else:
-        use_given_geometries = setup_options['use_given_geometries']
 
     if 'topology_proposal' not in list(setup_options.keys()) or setup_options['topology_proposal'] is None:
         _logger.info(f"\tno topology_proposal specified; proceeding to RelativeFEPSetup...\n\n\n")
@@ -570,7 +566,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
             _forward_added_valence_energy = top_prop['%s_added_valence_energy' % phase]
             _reverse_subtracted_valence_energy = top_prop['%s_subtracted_valence_energy' % phase]
 
-            if not setup_options['use_given_geometries']:
+            if not use_given_geometries:
                 zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD)#, trajectory_directory=f'{xml_directory}{phase}')
                 _logger.info(f"\t\terror in zero state: {zero_state_error}")
                 _logger.info(f"\t\terror in one state: {one_state_error}")
