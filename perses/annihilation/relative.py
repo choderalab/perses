@@ -2109,6 +2109,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
                  endstate,
                  alchemical_region=None,
                  flatten_torsions=False,
+                 interpolate_old_and_new_14s=False,
                  **kwargs):
         """
         arguments
@@ -2138,6 +2139,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
         self._new_positions = new_positions
         self._endstate = endstate
         self._flatten_torsions = flatten_torsions
+        self._interpolate_14s = interpolate_old_and_new_14s
 
         #the softcore is defaulted as True even though we are not using it...we only need it to pass to the
         self._softcore_LJ_v2 = True
@@ -2477,6 +2479,8 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
         Instead of excluding interactions that shouldn't occur, we provide exceptions for interactions that were zeroed
         out but should occur. we do not allow for the interpolation of 1,4s
         """
+        import itertools
+
         old_system_nonbonded_force = self._old_system_forces['NonbondedForce']
         new_system_nonbonded_force = self._new_system_forces['NonbondedForce']
 
@@ -2484,19 +2488,20 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
         unique_old_atoms = self._atom_classes['unique_old_atoms']
         unique_new_atoms = self._atom_classes['unique_new_atoms']
 
-
         if self._endstate == 0:
             template_force = self._old_system_forces['NonbondedForce']
             aux_force = self._new_system_forces['NonbondedForce']
             index_map = self._old_to_hybrid_map
             unquerieds = unique_new_atoms
             aux_map = self._new_to_hybrid_map
+            template_unique = unique_old_atoms
         elif self._endstate == 1:
             template_force = self._new_system_forces['NonbondedForce']
             aux_force = self._old_system_forces['NonbondedForce']
             index_map = self._new_to_hybrid_map
             unquerieds = unique_old_atoms
             aux_map = self._old_to_hybrid_map
+            template_unique = unique_new_atoms
         else:
             raise Exception()
 
@@ -2504,14 +2509,21 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
         for exception_idx in range(template_force.getNumExceptions()):
             p1, p2, chargeprod, sigma, epsilon = template_force.getExceptionParameters(exception_idx)
             hybrid_p1, hybrid_p2 = index_map[p1], index_map[p2]
-            self._hybrid_system_forces['standard_nonbonded_force'].addException(hybrid_p1, hybrid_p2, chargeprod, sigma, epsilon)
+            if self._interpolate_14s:
+                if p1 in template_unique or p2 in template_unique:
+                    self._hybrid_system_forces['standard_nonbonded_force'].addException(hybrid_p1, hybrid_p2, chargeprod*0.0, sigma, epsilon*0.0)
+            else:
+                self._hybrid_system_forces['standard_nonbonded_force'].addException(hybrid_p1, hybrid_p2, chargeprod, sigma, epsilon)
 
         #now for the auxiliary force
         for exception_idx in range(aux_force.getNumExceptions()):
             p1, p2, chargeprod, sigma, epsilon = aux_force.getExceptionParameters(exception_idx)
             hybrid_p1, hybrid_p2 = aux_map[p1], aux_map[p2]
             if set([hybrid_p1, hybrid_p2]).intersection(unquerieds) != set():
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(hybrid_p1, hybrid_p2, chargeprod, sigma, epsilon)
+                if self._interpolate_14s:
+                    self._hybrid_system_forces['standard_nonbonded_force'].addException(hybrid_p1, hybrid_p2, chargeprod*0.0, sigma, epsilon*0.0)
+                else:
+                    self._hybrid_system_forces['standard_nonbonded_force'].addException(hybrid_p1, hybrid_p2, chargeprod, sigma, epsilon)
 
 
     def _alchemify(self):
