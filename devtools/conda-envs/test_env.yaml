@@ -35,6 +35,6 @@ dependencies:
   - nose
   - nose-timer
   - coverage
-  - openforcefield
+  - openforcefield >=0.7.1
   - sphinx
   - dicttoxml
