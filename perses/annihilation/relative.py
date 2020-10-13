@@ -2492,14 +2492,12 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
             index_map = self._old_to_hybrid_map
             unquerieds = unique_new_atoms
             aux_map = self._new_to_hybrid_map
-            template_unique = unique_old_atoms
         elif self._endstate == 1:
             template_force = self._new_system_forces['NonbondedForce']
             aux_force = self._old_system_forces['NonbondedForce']
             index_map = self._new_to_hybrid_map
             unquerieds = unique_old_atoms
             aux_map = self._old_to_hybrid_map
-            template_unique = unique_new_atoms
         else:
             raise Exception()
 
@@ -2508,7 +2506,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
             p1, p2, chargeprod, sigma, epsilon = template_force.getExceptionParameters(exception_idx)
             hybrid_p1, hybrid_p2 = index_map[p1], index_map[p2]
             if self._interpolate_14s:
-                if p1 in template_unique or p2 in template_unique:
+                if hybrid_p1 in unquerieds or hybrid_p2 in unquerieds:
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(hybrid_p1, hybrid_p2, chargeprod*0.0, sigma, epsilon*0.0)
             else:
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(hybrid_p1, hybrid_p2, chargeprod, sigma, epsilon)
