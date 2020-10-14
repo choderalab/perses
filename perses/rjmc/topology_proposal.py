@@ -334,7 +334,7 @@ class AtomMapper(object):
         return all_scores
 
     @staticmethod
-    def _get_mol_atom_map_by_positions(molA, molB):
+    def _get_mol_atom_map_by_positions(molA, molB, rtol=1e-5, atol=1e-3):
         """
         Return an atom map whereby atoms are mapped if the positions of the atoms are overlapping via np.isclose
         """
@@ -344,7 +344,7 @@ class AtomMapper(object):
 
         returnable = {}
         for a_idx, a_pos_tup in molA_positions.items():
-            match_pos = [idx for idx, b_pos in molB_positions.items() if np.allclose(np.array(a_pos_tup), np.array(b_pos))]
+            match_pos = [idx for idx, b_pos in molB_positions.items() if np.allclose(np.array(a_pos_tup), np.array(b_pos), rtol=rtol, atol=atol)]
             if not len(match_pos) in [0,1]:
                 raise Exception(f"there are multiple molB positions with the same coordinates as molA index {a_idx} (by OEMol indexing)")
             if len(match_pos) == 1:
