@@ -348,7 +348,8 @@ class AtomMapper(object):
             if not len(match_pos) in [0,1]:
                 raise Exception(f"there are multiple molB positions with the same coordinates as molA index {a_idx} (by OEMol indexing)")
             if len(match_pos) == 1:
-                returnable[a_idx] = match_pos[0]
+                returnable[match_pos[0]] = a_idx
+                #returnable[a_idx] = match_pos[0]
 
         return returnable
 
