@@ -663,6 +663,7 @@ class RelativeFEPSetup(object):
             new_to_old_atom_map[new_mol_len + i] = old_mol_len + i
 
         # make a TopologyProposal
+        new_to_old_atom_map = {int(key): int(val) for key, val in new_to_old_atom_map.items()}
         ligand_topology_proposal = TopologyProposal(new_topology=new_solvated_ligand_omm_topology,
                                                     new_system=new_solvated_system,old_alchemical_atoms=old_alchemical_atoms,
                                                     old_topology=old_solvated_topology, old_system=old_solvated_system,
@@ -730,6 +731,7 @@ class RelativeFEPSetup(object):
                                old_complex.select("resname == 'MOL' ") if x in atom_map.keys()}
 
 
+        new_to_old_atom_map = {int(key): int(val) for key, val in new_to_old_atom_map.items()}
         # make a TopologyProposal
         ligand_topology_proposal = TopologyProposal(new_topology=new_ligand_topology,
                                                     new_system=new_ligand_system,
