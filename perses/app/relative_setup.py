@@ -73,7 +73,8 @@ class RelativeFEPSetup(object):
                  complex_box_dimensions=None,
                  solvent_box_dimensions=None,
                  map_strategy='geometry',
-                 remove_constraints=False
+                 remove_constraints=False,
+                 use_given_geometries = False
                  ):
         """
         Initialize a NonequilibriumFEPSetup object
@@ -140,6 +141,9 @@ class RelativeFEPSetup(object):
         remove_constraints : bool, default=False
             if hydrogen constraints should be constrained in the simulation
             default is False, so no constraints removed, but 'all' or 'not water' can be used to remove constraints.
+        use_given_geometries : bool, default False
+            whether to extract the positions of ligand B and set the unique_new atom positions deterministically;
+            if True, `complex` must be in `phases` and .sdf or .mol2 file of ligand must be provided
         """
         self._pressure = pressure
         self._temperature = temperature
@@ -158,6 +162,13 @@ class RelativeFEPSetup(object):
         self._complex_box_dimensions = complex_box_dimensions
         self._solvent_box_dimensions = solvent_box_dimensions
         self._map_strategy = map_strategy
+        self._use_given_geometries = use_given_geometries
+        self._ligand_input = ligand_input
+
+        if self._use_given_geometries:
+            assert self._ligand_input[-3:] == 'sdf' or self._ligand_input[-4:] == 'mol2', f"cannot use deterministic atom placement if the ligand input files do not contain geometry information (e.g. in .sdf or .mol2 format)"
+            assert 'complex' in phases, f"cannot use deterministic atom placement if complex is not in the specified phases to generate"
+            # TODO: add deterministic geometry proposal to solvent and vacuum
 
         if remove_constraints is False:
             self._h_constraints = app.HBonds
@@ -238,13 +249,14 @@ class RelativeFEPSetup(object):
                 _logger.info(f"Detected .sdf format.  Proceeding...") #TODO: write checkpoints for sdf format
                 self._ligand_oemol_old = createOEMolFromSDF(self._ligand_input, index=self._old_ligand_index, allow_undefined_stereo=True)
                 self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input, index=self._new_ligand_index, allow_undefined_stereo=True)
-                self._ligand_oemol_old = generate_unique_atom_names(self._ligand_oemol_old)
-                self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
+                # self._ligand_oemol_old = generate_unique_atom_names(self._ligand_oemol_old)
+                # self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
 
                 mol_list.append(self._ligand_oemol_old)
                 mol_list.append(self._ligand_oemol_new)
 
                 self._ligand_positions_old = extractPositionsFromOEMol(self._ligand_oemol_old)
+                self._ligand_positions_new = extractPositionsFromOEMol(self._ligand_oemol_new)
                 _logger.info(f"\tsuccessfully extracted positions from OEMOL.")
 
                 self._ligand_oemol_old.SetTitle("MOL")
@@ -352,8 +364,11 @@ class RelativeFEPSetup(object):
         self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_oemol_old, self._ligand_oemol_new], self._system_generator, residue_name='MOL')
 
         _logger.info(f"instantiating FFAllAngleGeometryEngine...")
-        # NOTE: we are conducting the geometry proposal without any neglected angles
-        self._geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = neglect_angles, use_14_nonbondeds = (not self._anneal_14s))
+        if self._use_given_geometries:
+            self._geometry_engine = None
+        else:
+            # NOTE: we are conducting the geometry proposal without any neglected angles
+            self._geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = neglect_angles, use_14_nonbondeds = (not self._anneal_14s))
 
         # if we are running multiple phases, we only want to generate one topology proposal, and use the same one for the other legs
         # this is tracked using _proposal_phase
@@ -371,33 +386,42 @@ class RelativeFEPSetup(object):
             self._complex_topology_proposal = self._proposal_engine.propose(self._complex_system_old_solvated,
                                           self._complex_topology_old_solvated,
                                           current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr,
-                                          map_strategy=self._map_strategy)
+                                          map_strategy=self._map_strategy,
+                                          use_given_geometries=self._use_given_geometries)
 
             self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
 
             self._proposal_phase = 'complex'
 
             _logger.info(f"conducting geometry proposal...")
-            self._complex_positions_new_solvated, self._complex_logp_proposal = self._geometry_engine.propose(self._complex_topology_proposal,
-                                                                                self._complex_positions_old_solvated,
-                                                                                beta, validate_energy_bookkeeping=False)
-            self._complex_logp_reverse = self._geometry_engine.logp_reverse(self._complex_topology_proposal, self._complex_positions_new_solvated, self._complex_positions_old_solvated, beta, validate_energy_bookkeeping=False)
-            if not self._complex_topology_proposal.unique_new_atoms:
-                assert self._geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
-                assert self._geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
-                self._complex_added_valence_energy = 0.0
+            if self._use_given_geometries:
+                self._complex_positions_new_solvated, self._complex_logp_proposal = self._make_new_deterministic_positions('complex'), 0.
             else:
-                self._complex_added_valence_energy = self._geometry_engine.forward_final_context_reduced_potential - self._geometry_engine.forward_atoms_with_positions_reduced_potential
-
-            if not self._complex_topology_proposal.unique_old_atoms:
-                assert self._geometry_engine.reverse_final_context_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.reverse_final_context_reduced_potential})"
-                assert self._geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
-                self._complex_subtracted_valence_energy = 0.0
+                self._complex_positions_new_solvated, self._complex_logp_proposal = self._geometry_engine.propose(self._complex_topology_proposal,
+                                                                                    self._complex_positions_old_solvated,
+                                                                                    beta, validate_energy_bookkeeping=False)
+            if self._use_given_geometries:
+                self._complex_logp_reverse = 0.
+                self._complex_added_valence_energy, self._complex_subtracted_valence_energy = None, None
+                self._complex_forward_neglected_angles, self._complex_reverse_neglected_angles = None, None
             else:
-                self._complex_subtracted_valence_energy = self._geometry_engine.reverse_final_context_reduced_potential - self._geometry_engine.reverse_atoms_with_positions_reduced_potential
+                self._complex_logp_reverse = self._geometry_engine.logp_reverse(self._complex_topology_proposal, self._complex_positions_new_solvated, self._complex_positions_old_solvated, beta, validate_energy_bookkeeping=False)
+                if not self._complex_topology_proposal.unique_new_atoms:
+                    assert self._geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
+                    assert self._geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
+                    self._complex_added_valence_energy = 0.0
+                else:
+                    self._complex_added_valence_energy = self._geometry_engine.forward_final_context_reduced_potential - self._geometry_engine.forward_atoms_with_positions_reduced_potential
 
-            self._complex_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
-            self._complex_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
+                if not self._complex_topology_proposal.unique_old_atoms:
+                    assert self._geometry_engine.reverse_final_context_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.reverse_final_context_reduced_potential})"
+                    assert self._geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
+                    self._complex_subtracted_valence_energy = 0.0
+                else:
+                    self._complex_subtracted_valence_energy = self._geometry_engine.reverse_final_context_reduced_potential - self._geometry_engine.reverse_atoms_with_positions_reduced_potential
+
+                self._complex_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
+                self._complex_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
             self._complex_geometry_engine = copy.deepcopy(self._geometry_engine)
 
 
@@ -423,25 +447,33 @@ class RelativeFEPSetup(object):
                     self._complex_topology_proposal, self._complex_positions_old_solvated)
 
             _logger.info(f"conducting geometry proposal...")
-            self._ligand_positions_new_solvated, self._solvent_logp_proposal = self._geometry_engine.propose(self._solvent_topology_proposal,
-                                                                                    self._ligand_positions_old_solvated, beta, validate_energy_bookkeeping=False)
-            self._solvent_logp_reverse = self._geometry_engine.logp_reverse(self._solvent_topology_proposal, self._ligand_positions_new_solvated, self._ligand_positions_old_solvated, beta, validate_energy_bookkeeping=False)
-            if not self._solvent_topology_proposal.unique_new_atoms:
-                assert self._geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
-                assert self._geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
-                self._solvent_added_valence_energy = 0.0
+            if self._use_given_geometries:
+                self._ligand_positions_new_solvated, self._solvent_logp_proposal = self._make_new_deterministic_positions('solvent'), 0.
             else:
-                self._solvent_added_valence_energy = self._geometry_engine.forward_final_context_reduced_potential - self._geometry_engine.forward_atoms_with_positions_reduced_potential
-
-            if not self._solvent_topology_proposal.unique_old_atoms:
-                assert self._geometry_engine.reverse_final_context_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.reverse_final_context_reduced_potential})"
-                assert self._geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
-                self._solvent_subtracted_valence_energy = 0.0
+                self._ligand_positions_new_solvated, self._solvent_logp_proposal = self._geometry_engine.propose(self._solvent_topology_proposal,
+                                                                                        self._ligand_positions_old_solvated, beta, validate_energy_bookkeeping=False)
+            if self._use_given_geometries:
+                self._solvent_logp_reverse = 0.
+                self._solvent_added_valence_energy, self._solvent_subtracted_valence_energy = None, None
+                self._solvent_forward_neglected_angles, self._solvent_reverse_neglected_angles = None, None
             else:
-                self._solvent_subtracted_valence_energy = self._geometry_engine.reverse_final_context_reduced_potential - self._geometry_engine.reverse_atoms_with_positions_reduced_potential
+                self._solvent_logp_reverse = self._geometry_engine.logp_reverse(self._solvent_topology_proposal, self._ligand_positions_new_solvated, self._ligand_positions_old_solvated, beta, validate_energy_bookkeeping=False)
+                if not self._solvent_topology_proposal.unique_new_atoms:
+                    assert self._geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
+                    assert self._geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
+                    self._solvent_added_valence_energy = 0.0
+                else:
+                    self._solvent_added_valence_energy = self._geometry_engine.forward_final_context_reduced_potential - self._geometry_engine.forward_atoms_with_positions_reduced_potential
 
-            self._solvent_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
-            self._solvent_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
+                if not self._solvent_topology_proposal.unique_old_atoms:
+                    assert self._geometry_engine.reverse_final_context_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.reverse_final_context_reduced_potential})"
+                    assert self._geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
+                    self._solvent_subtracted_valence_energy = 0.0
+                else:
+                    self._solvent_subtracted_valence_energy = self._geometry_engine.reverse_final_context_reduced_potential - self._geometry_engine.reverse_atoms_with_positions_reduced_potential
+
+                self._solvent_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
+                self._solvent_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
             self._solvent_geometry_engine = copy.deepcopy(self._geometry_engine)
 
         if 'vacuum' in phases:
@@ -477,26 +509,35 @@ class RelativeFEPSetup(object):
                     self._solvent_topology_proposal, self._ligand_positions_old_solvated)
 
             _logger.info(f"conducting geometry proposal...")
-            self._vacuum_positions_new, self._vacuum_logp_proposal = self._geometry_engine.propose(self._vacuum_topology_proposal,
-                                                                          self._vacuum_positions_old,
-                                                                          beta, validate_energy_bookkeeping=False)
-            self._vacuum_logp_reverse = self._geometry_engine.logp_reverse(self._vacuum_topology_proposal, self._vacuum_positions_new, self._vacuum_positions_old, beta, validate_energy_bookkeeping=False)
-            if not self._vacuum_topology_proposal.unique_new_atoms:
-                assert self._geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
-                assert self._geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
-                self._vacuum_added_valence_energy = 0.0
+            if self._use_given_geometries:
+                self._vacuum_positions_new, self._vacuum_logp_proposal = self._make_new_deterministic_positions('vacuum'), 0.
             else:
-                self._vacuum_added_valence_energy = self._geometry_engine.forward_final_context_reduced_potential - self._geometry_engine.forward_atoms_with_positions_reduced_potential
-
-            if not self._vacuum_topology_proposal.unique_old_atoms:
-                assert self._geometry_engine.reverse_final_context_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.reverse_final_context_reduced_potential})"
-                assert self._geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
-                self._vacuum_subtracted_valence_energy = 0.0
+                self._vacuum_positions_new, self._vacuum_logp_proposal = self._geometry_engine.propose(self._vacuum_topology_proposal,
+                                                                              self._vacuum_positions_old,
+                                                                              beta, validate_energy_bookkeeping=False)
+            if self._use_given_geometries:
+                if self._use_given_geometries:
+                    self._vacuum_logp_reverse = 0.
+                    self._vacuum_added_valence_energy, self._vacuum_subtracted_valence_energy = None, None
+                    self._vacuum_forward_neglected_angles, self._vacuum_reverse_neglected_angles = None, None
             else:
-                self._vacuum_subtracted_valence_energy = self._geometry_engine.reverse_final_context_reduced_potential - self._geometry_engine.reverse_atoms_with_positions_reduced_potential
+                self._vacuum_logp_reverse = self._geometry_engine.logp_reverse(self._vacuum_topology_proposal, self._vacuum_positions_new, self._vacuum_positions_old, beta, validate_energy_bookkeeping=False)
+                if not self._vacuum_topology_proposal.unique_new_atoms:
+                    assert self._geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
+                    assert self._geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
+                    self._vacuum_added_valence_energy = 0.0
+                else:
+                    self._vacuum_added_valence_energy = self._geometry_engine.forward_final_context_reduced_potential - self._geometry_engine.forward_atoms_with_positions_reduced_potential
 
-            self._vacuum_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
-            self._vacuum_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
+                if not self._vacuum_topology_proposal.unique_old_atoms:
+                    assert self._geometry_engine.reverse_final_context_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.reverse_final_context_reduced_potential})"
+                    assert self._geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
+                    self._vacuum_subtracted_valence_energy = 0.0
+                else:
+                    self._vacuum_subtracted_valence_energy = self._geometry_engine.reverse_final_context_reduced_potential - self._geometry_engine.reverse_atoms_with_positions_reduced_potential
+
+                self._vacuum_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
+                self._vacuum_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
             self._vacuum_geometry_engine = copy.deepcopy(self._geometry_engine)
 
     def _setup_complex_phase(self,protein_pdb_filename,receptor_mol2_filename,mol_list):
@@ -622,6 +663,7 @@ class RelativeFEPSetup(object):
             new_to_old_atom_map[new_mol_len + i] = old_mol_len + i
 
         # make a TopologyProposal
+        new_to_old_atom_map = {int(key): int(val) for key, val in new_to_old_atom_map.items()}
         ligand_topology_proposal = TopologyProposal(new_topology=new_solvated_ligand_omm_topology,
                                                     new_system=new_solvated_system,old_alchemical_atoms=old_alchemical_atoms,
                                                     old_topology=old_solvated_topology, old_system=old_solvated_system,
@@ -689,6 +731,7 @@ class RelativeFEPSetup(object):
                                old_complex.select("resname == 'MOL' ") if x in atom_map.keys()}
 
 
+        new_to_old_atom_map = {int(key): int(val) for key, val in new_to_old_atom_map.items()}
         # make a TopologyProposal
         ligand_topology_proposal = TopologyProposal(new_topology=new_ligand_topology,
                                                     new_system=new_ligand_system,
@@ -710,6 +753,31 @@ class RelativeFEPSetup(object):
                                 {i: i for i in range(new_mol_len)})
 
         return ligand_topology_proposal, old_ligand_positions
+
+    def _make_new_deterministic_positions(self, phase):
+        """
+        given an old complex topology, positions, the positions of the new ligand, and a topology proposal, generate new complex positions
+        """
+        top_proposal = getattr(self, f"_{phase}_topology_proposal")
+        old_solvated_topology = top_proposal._old_topology
+        old_to_new_atom_map = top_proposal._old_to_new_atom_map
+
+        if phase == 'complex':
+            old_pos = getattr(self, f"_complex_positions_old_solvated").value_in_unit_system(unit.md_unit_system)
+        elif phase == 'solvent':
+            old_pos = getattr(self, f"_ligand_positions_old_solvated").value_in_unit_system(unit.md_unit_system)
+        elif phase == 'vacuum':
+            old_pos = getattr(self, f"_ligand_positions_old").value_in_unit_system(unit.md_unit_system)
+
+        new_positions = np.zeros((top_proposal._new_topology.getNumAtoms(), 3))
+        new_positions[list(old_to_new_atom_map.values()),:] = old_pos[list(old_to_new_atom_map.keys()),:]
+        new_indices = top_proposal.unique_new_atoms
+        old_indices = top_proposal.unique_old_atoms
+        if len(new_indices) != 0:
+            new_positions[list(top_proposal._new_topology.residue_to_oemol_map.keys())] = self._ligand_positions_new.value_in_unit_system(unit.md_unit_system)[list(top_proposal._new_topology.residue_to_oemol_map.values())]
+        else:
+            pass
+        return new_positions * unit.nanometers
 
     def _solvate_system(self, topology, positions, model='tip3p',phase='complex', box_dimensions=None,ionic_strength=0.15 * unit.molar):
         """
