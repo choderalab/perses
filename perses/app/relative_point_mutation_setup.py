@@ -101,6 +101,8 @@ class PointMutationExecutor(object):
                  small_molecule_forcefields='gaff-2.11',
                  complex_box_dimensions=None,
                  apo_box_dimensions=None,
+                 flatten_torsions=False,
+                 flatten_exceptions=False,
                  **kwargs):
         """
         arguments
@@ -144,6 +146,10 @@ class PointMutationExecutor(object):
             apo_box_dimensions :  Vec3, default None
                 define box dimensions of apo phase phase;
                 if None, padding is 1nm
+            flatten_torsions : bool, default False
+                in the htf, flatten torsions involving unique new atoms at lambda = 0 and unique old atoms are lambda = 1
+            flatten_exceptions : bool, default False
+                in the htf, flatten exceptions involving unique new atoms at lambda = 0 and unique old atoms at lambda = 1
 
         TODO : allow argument for spectator ligands besides the 'ligand_file'
 
@@ -253,8 +259,9 @@ class PointMutationExecutor(object):
                                                  softcore_LJ_v2_alpha=0.85,
                                                  softcore_electrostatics_alpha=0.3,
                                                  softcore_sigma_Q=1.0,
-                                                 interpolate_old_and_new_14s=False,
-                                                 omitted_terms=None)
+                                                 interpolate_old_and_new_14s=flatten_exceptions,
+                                                 omitted_terms=None,
+                                                 flatten_torsions=flatten_torsions))
 
             if not topology_proposal.unique_new_atoms:
                 assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
