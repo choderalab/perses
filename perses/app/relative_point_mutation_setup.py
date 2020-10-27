@@ -163,7 +163,6 @@ class PointMutationExecutor(object):
             if isinstance(ligand_input, str):
                 if ligand_input.endswith('.sdf'): # small molecule
                         ligand_mol = createOEMolFromSDF(ligand_input, index=ligand_index)
-                        ligand_mol = generate_unique_atom_names(ligand_mol)
                         molecules.append(Molecule.from_openeye(ligand_mol, allow_undefined_stereo=False))
                         ligand_positions, ligand_topology = extractPositionsFromOEMol(ligand_mol),  forcefield_generators.generateTopologyFromOEMol(ligand_mol)
                         ligand_md_topology = md.Topology.from_openmm(ligand_topology)
