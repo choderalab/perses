@@ -177,10 +177,9 @@ class PointMutationExecutor(object):
                         ligand_pdb.topology)
                     ligand_n_atoms = ligand_md_topology.n_atoms
 
-            elif isinstance(ligand_input, list): # list of oemol object(s)
-                ligand_mol = ligand_input[0] # assume only one molecule in the list
-                molecules.append(Molecule.from_openeye(ligand_mol, allow_undefined_stereo=False))
-                ligand_positions, ligand_topology = extractPositionsFromOEMol(ligand_mol),  forcefield_generators.generateTopologyFromOEMol(ligand_mol)
+            elif isinstance(ligand_input, oechem.OEMol): # oemol object
+                molecules.append(Molecule.from_openeye(ligand_input, allow_undefined_stereo=False))
+                ligand_positions, ligand_topology = extractPositionsFromOEMol(ligand_input),  forcefield_generators.generateTopologyFromOEMol(ligand_input)
                 ligand_md_topology = md.Topology.from_openmm(ligand_topology)
                 ligand_n_atoms = ligand_md_topology.n_atoms
 
