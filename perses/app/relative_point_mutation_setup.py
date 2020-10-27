@@ -117,7 +117,7 @@ class PointMutationExecutor(object):
             conduct_endstate_validation : bool, default True
                 whether to conduct an endstate validation of the hybrid topology factory
             ligand_input : str or list of oemol objects, default None
-                path to ligand of interest (i.e. small molecule or protein); .sdf or .pdb
+                path to ligand of interest: .pdb for protein and .sdf or oemol for small molecule
             ligand_index : int, default 0
                 which ligand to use
             water_model : str, default 'tip3p'
