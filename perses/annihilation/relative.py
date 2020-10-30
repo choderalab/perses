@@ -116,14 +116,14 @@ class HybridTopologyFactory(object):
         softcore_sigma_Q : float, default 1.0
             softcore sigma parameter for softcore electrostatics.
         interpolate_old_and_new_14s : bool, default False
-            whether to turn off interactions for new exceptions (not just 1,4s)) at lambda = 0 and old exceptions at lambda = 1; if False, they are present in the nonbonded force
+            whether to turn off interactions for new exceptions (not just 1,4s) at lambda = 0 and old exceptions at lambda = 1; if False, they are present in the nonbonded force
         omitted_terms : dict
             dictionary of terms (by new topology index) that must be annealed in over a lambda protocol
         flatten_torsions : bool, default False
             if True, torsion terms involving `unique_new_atoms` will be scaled such that at lambda=0,1, the torsion term is turned off/on respectively
             the opposite is true for `unique_old_atoms`.
         endstate : int
-                the lambda endstate to parameterize. should always be None for HybridTopologyFactory, but must be 0 or 1 for the RepartitionedHybridTopologyFactory
+            the lambda endstate to parameterize. should always be None for HybridTopologyFactory, but must be 0 or 1 for the RepartitionedHybridTopologyFactory
 
         TODO: Document how positions for hybrid system are constructed
         TODO: allow support for annealing in omitted terms
