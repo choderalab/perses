@@ -69,6 +69,7 @@ class HybridTopologyFactory(object):
                  interpolate_old_and_new_14s=False,
                  omitted_terms=None,
                  flatten_torsions=False,
+                 endstate=None,
                  **kwargs):
         """
         Initialize the Hybrid topology factory.
@@ -121,12 +122,17 @@ class HybridTopologyFactory(object):
         flatten_torsions : bool, default False
             if True, torsion terms involving `unique_new_atoms` will be scaled such that at lambda=0,1, the torsion term is turned off/on respectively
             the opposite is true for `unique_old_atoms`.
+        endstate : int
+                the lambda endstate to parameterize. should always be None for HybridTopologyFactory, but must be 0 or 1 for the RepartitionedHybridTopologyFactory
 
         TODO: Document how positions for hybrid system are constructed
         TODO: allow support for annealing in omitted terms
 
         """
-        _logger.info("Beginning nonbonded method, total particle, barostat, and exceptions retrieval...")
+        if endstate:
+            raise Exception("endstate must be none! Aborting!")
+
+	_logger.info("Beginning nonbonded method, total particle, barostat, and exceptions retrieval...")
         self._topology_proposal = topology_proposal
         self._old_system = copy.deepcopy(topology_proposal.old_system)
         self._new_system = copy.deepcopy(topology_proposal.new_system)
