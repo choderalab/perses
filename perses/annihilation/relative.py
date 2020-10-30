@@ -116,7 +116,7 @@ class HybridTopologyFactory(object):
         softcore_sigma_Q : float, default 1.0
             softcore sigma parameter for softcore electrostatics.
         interpolate_old_and_new_14s : bool, default False
-            whether to turn on new 1,4 interactions and turn off old 1,4 interactions; if False, they are present in the nonbonded force
+            whether to turn off interactions for new exceptions (not just 1,4s)) at lambda = 0 and old exceptions at lambda = 1; if False, they are present in the nonbonded force
         omitted_terms : dict
             dictionary of terms (by new topology index) that must be annealed in over a lambda protocol
         flatten_torsions : bool, default False
