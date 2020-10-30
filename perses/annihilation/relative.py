@@ -2132,10 +2132,10 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
             alchemical_region : list, default None
                 list of atoms comprising the alchemical region; if None, core_atoms + unique_new_atoms + unique_old_atoms are alchemical region
             endstate : int
-                the lambda endstate to parameterize
-           flatten_torsions : bool, default False
-            if True, torsion terms involving `unique_new_atoms` will be scaled such that at lambda=0,1, the torsion term is turned off/on respectively
-            the opposite is true for `unique_old_atoms`.
+               the lambda endstate to parameterize
+            flatten_torsions : bool, default False
+               if True, torsion terms involving `unique_new_atoms` will be scaled such that at lambda=0,1, the torsion term is turned off/on respectively
+               the opposite is true for `unique_old_atoms`.
         """
         from itertools import chain
 
