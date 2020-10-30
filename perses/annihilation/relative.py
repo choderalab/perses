@@ -2532,10 +2532,3 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
                 else:
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(hybrid_p1, hybrid_p2, chargeprod, sigma, epsilon)
 
-
-    def _alchemify(self):
-        """
-        Generate an AlchemicalFactory with an appropriate Alchemical region and 'alchemify' the hybrid system
-
-        """
-        # TODO: dominic
