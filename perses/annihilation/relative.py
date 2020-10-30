@@ -140,6 +140,10 @@ class HybridTopologyFactory(object):
         self.omitted_terms = omitted_terms
         self._flatten_torsions = flatten_torsions
 
+        if self._flatten_torsions:
+            _logger.info("Flattening torsions of unique new/old at lambda = 0/1")
+        if self._interpolate_14s:
+            _logger.info("Flattening exceptions of unique new/old at lambda = 0/1")
         if omitted_terms is not None:
             raise Exception(f"annealing of omitted terms is not currently supported.  Aborting!")
 
@@ -2141,6 +2145,11 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
         self._flatten_torsions = flatten_torsions
         self._interpolate_14s = interpolate_old_and_new_14s
 
+        if self._flatten_torsions:
+            _logger.info("Flattening torsions of unique new/old at lambda = 0/1")
+        if self._interpolate_14s:
+            _logger.info("Flattening exceptions of unique new/old at lambda = 0/1")
+
         #the softcore is defaulted as True even though we are not using it...we only need it to pass to the
         self._softcore_LJ_v2 = True
         self._softcore_electrostatics = True
@@ -2505,11 +2514,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
         for exception_idx in range(template_force.getNumExceptions()):
             p1, p2, chargeprod, sigma, epsilon = template_force.getExceptionParameters(exception_idx)
             hybrid_p1, hybrid_p2 = index_map[p1], index_map[p2]
-            if self._interpolate_14s:
-                if hybrid_p1 in unquerieds or hybrid_p2 in unquerieds:
-                    self._hybrid_system_forces['standard_nonbonded_force'].addException(hybrid_p1, hybrid_p2, chargeprod*0.0, sigma, epsilon*0.0)
-            else:
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(hybrid_p1, hybrid_p2, chargeprod, sigma, epsilon)
+            self._hybrid_system_forces['standard_nonbonded_force'].addException(hybrid_p1, hybrid_p2, chargeprod, sigma, epsilon)
 
         #now for the auxiliary force
         for exception_idx in range(aux_force.getNumExceptions()):
