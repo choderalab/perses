@@ -322,6 +322,9 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     for phase in phases:
         assert (phase in known_phases), f"Unknown phase, {phase} provided. run_setup() can be used with {known_phases}"
 
+    if not 'rmsd_restraint' in setup_options:
+        setup_options['rmsd_restraint'] = False
+
     if 'use_given_geometries' not in list(setup_options.keys()):
         use_given_geometries = False
     else:
@@ -521,7 +524,9 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                                neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
                                                neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
                                                softcore_LJ_v2 = setup_options['softcore_v2'],
-                                               interpolate_old_and_new_14s = setup_options['anneal_1,4s'])
+                                               interpolate_old_and_new_14s = setup_options['anneal_1,4s'],
+                                               rmsd_restraint=setup_options['rmsd_restraint'],
+                                               )
 
             if build_samplers:
                 ne_fep[phase] = SequentialMonteCarlo(factory = hybrid_factory,
@@ -557,7 +562,9 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                                neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
                                                neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
                                                softcore_LJ_v2 = setup_options['softcore_v2'],
-                                               interpolate_old_and_new_14s = setup_options['anneal_1,4s'])
+                                               interpolate_old_and_new_14s = setup_options['anneal_1,4s'],
+                                               rmsd_restraint=setup_options['rmsd_restraint']
+                                               )
 
         for phase in phases:
            # Define necessary vars to check energy bookkeeping

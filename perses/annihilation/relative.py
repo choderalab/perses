@@ -67,7 +67,8 @@ class HybridTopologyFactory(object):
                  softcore_electrostatics_alpha = 0.3,
                  softcore_sigma_Q = 1.0,
                  interpolate_old_and_new_14s = False,
-                 omitted_terms = None):
+                 omitted_terms = None,
+                 rmsd_restraint=False):
         """
         Initialize the Hybrid topology factory.
 
@@ -116,6 +117,8 @@ class HybridTopologyFactory(object):
             whether to turn on new 1,4 interactions and turn off old 1,4 interactions; if False, they are present in the nonbonded force
         omitted_terms : dict
             dictionary of terms (by new topology index) that must be annealed in over a lambda protocol
+        rmsd_restraint : bool, optional, default=False
+            If True, impose an RMSD restraint between core heavy atoms and protein CA atoms
 
         TODO: Document how positions for hybrid system are constructed
         TODO: allow support for annealing in omitted terms
@@ -313,6 +316,11 @@ class HybridTopologyFactory(object):
 
         #generate the topology representation
         self._hybrid_topology = self._create_topology()
+
+        #impose RMSD restraint, if requested
+        if rmsd_restraint:
+            _logger.info("Attempting to impose RMSD restraints.")
+            self._impose_rmsd_restraint()
 
     def _validate_disjoint_sets(self):
         """
@@ -1965,6 +1973,55 @@ class HybridTopologyFactory(object):
                 hybrid_topology.add_bond(atom1_to_bond, atom2_to_bond)
 
         return hybrid_topology
+
+    def _impose_rmsd_restraint(self):
+        """
+        Impose an RMSD restraint between the core heavy atoms and protein CA atoms within 6A
+        
+        TODO: Generalize this to accommodate options.
+        TODO: Don't turn this on for sidechain mutations.
+        """
+        # Determine core heavy atom indices
+        core_atoms = [ int(index) for index in self._atom_classes['core_atoms'] ]
+        heavy_atoms = [ int(index) for index in self._hybrid_topology.select('mass > 1.5') ]
+        core_heavy_atoms = [ int(index) for index in set(core_atoms).intersection(set(heavy_atoms)) ]
+
+        # Determine protein CA atoms
+        protein_atoms = self._hybrid_topology.select('protein and name CA')
+        
+        if len(core_heavy_atoms)==0 or len(protein_atoms)==0:
+            # No restraint to be added
+            _logger.info(f"\t\t_impose_rmsd_restraint: No restraint added (core_atoms={core_heavy_atoms}, protein_atoms={protein_atoms})")
+            return
+            
+        # Filter protein CA atoms within cutoff of core heavy atoms
+        import mdtraj as md
+        from simtk import unit
+        cutoff = 0.65 # 6.5 A
+        trajectory = md.Trajectory([self.hybrid_positions/unit.nanometers], topology=self._hybrid_topology)
+        matches = md.compute_neighbors(trajectory, cutoff, core_heavy_atoms, haystack_indices=protein_atoms, periodic=False)
+        protein_atoms = set()
+        for match in matches:
+            for index in match:
+                protein_atoms.add(int(index))
+        protein_atoms = [ int(index) for index in protein_atoms ]
+        _logger.info(f"\t\t_impose_rmsd_restraint: Restraint will be added (core_atoms={core_heavy_atoms}, protein_atoms={protein_atoms})")
+
+        # Compute RMSD atom indices
+        rmsd_atom_indices = core_heavy_atoms + protein_atoms
+
+        from simtk import unit, openmm
+        kB = unit.AVOGADRO_CONSTANT_NA * unit.BOLTZMANN_CONSTANT_kB 
+        temperature = 300 * unit.kelvin
+        kT = kB * temperature     
+        sigma = 1.0 * unit.angstrom
+        buffer = 2.0 * unit.angstrom
+        custom_cv_force = openmm.CustomCVForce('step(RMSD-buffer)*(K_RMSD/2)*(RMSD-buffer)^2')
+        custom_cv_force.addGlobalParameter('K_RMSD', kT / sigma**2)
+        custom_cv_force.addGlobalParameter('buffer', buffer)
+        rmsd_force = openmm.RMSDForce(self.hybrid_positions, rmsd_atom_indices)
+        custom_cv_force.addCollectiveVariable('RMSD', rmsd_force)
+        self._hybrid_system.addForce(custom_cv_force)
 
     def old_positions(self, hybrid_positions):
         """

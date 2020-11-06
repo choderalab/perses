@@ -235,6 +235,7 @@ def run_neq_fah_setup(ligand_file,
                       protein_kwargs=None,
                       ionic_strength=0.15*unit.molar,
                       remove_constraints='not water',
+                      rmsd_restraint=False,
                       **kwargs):
     """
     main execution function that will:
@@ -323,6 +324,8 @@ def run_neq_fah_setup(ligand_file,
             tolerance to use for constraints
         n_steps_per_move_application : int default=250
             number of equilibrium steps to take per move
+        rmsd_restraint : bool, optional, default=False
+            If True, will restraint the core atoms and protein CA atoms within 6.5A of the core atoms
     """
     from perses.utils import data
     if isinstance(temperature,float) or isinstance(temperature,int):
