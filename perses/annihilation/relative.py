@@ -1987,7 +1987,7 @@ class HybridTopologyFactory(object):
         core_heavy_atoms = [ int(index) for index in set(core_atoms).intersection(set(heavy_atoms)) ]
 
         # Determine protein CA atoms
-        protein_atoms = self._hybrid_topology.select('protein and name CA')
+        protein_atoms = [ int(index) for index in self._hybrid_topology.select('protein and name CA') ]
     
         if len(core_heavy_atoms)==0 or len(protein_atoms)==0:
             # No restraint to be added
@@ -2003,7 +2003,7 @@ class HybridTopologyFactory(object):
         from simtk import openmm    
         bondforce = openmm.CustomBondForce('0')
         bondforce.addBond(core_heavy_atoms[0], protein_atoms[0], [])
-        system.addForce(bondforce)
+        self._hybrid_system.addForce(bondforce)
         _logger.info(f"\t\t_impose_rmsd_restraint: Added virtual bond between {core_heavy_atoms[0]} and {protein_atoms[0]}")
         
         # Filter protein CA atoms within cutoff of core heavy atoms
