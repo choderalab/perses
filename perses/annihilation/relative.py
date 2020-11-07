@@ -2027,7 +2027,7 @@ class HybridTopologyFactory(object):
         temperature = 300 * unit.kelvin
         kT = kB * temperature     
         sigma = 1.0 * unit.angstrom
-        buffer = 2.0 * unit.angstrom
+        buffer = 1.0 * unit.angstrom
         custom_cv_force = openmm.CustomCVForce('step(RMSD-buffer)*(K_RMSD/2)*(RMSD-buffer)^2')
         custom_cv_force.addGlobalParameter('K_RMSD', kT / sigma**2)
         custom_cv_force.addGlobalParameter('buffer', buffer)
