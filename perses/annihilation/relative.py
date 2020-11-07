@@ -1988,12 +1988,24 @@ class HybridTopologyFactory(object):
 
         # Determine protein CA atoms
         protein_atoms = self._hybrid_topology.select('protein and name CA')
-        
+    
         if len(core_heavy_atoms)==0 or len(protein_atoms)==0:
             # No restraint to be added
-            _logger.info(f"\t\t_impose_rmsd_restraint: No restraint added (core_atoms={core_heavy_atoms}, protein_atoms={protein_atoms})")
+            _logger.info(f"\t\t_impose_rmsd_restraint: No restraint added because one set is empty (core_atoms={core_heavy_atoms}, protein_atoms={protein_atoms})")
             return
-            
+    
+        if len(set(core_atoms).intersection(set(protein_atoms))) != 0:
+            # Core atoms are part of protein
+            _logger.info(f"\t\t_impose_rmsd_restraint: No restraint added because sets overlap (core_atoms={core_heavy_atoms}, protein_atoms={protein_atoms})")
+            return
+
+        # Add virtual bond between a core and protein atom to ensure they are periodically replicated together
+        from simtk import openmm    
+        bondforce = openmm.CustomBondForce('0')
+        bondforce.addBond(core_heavy_atoms[0], protein_atoms[0], [])
+        system.addForce(bondforce)
+        _logger.info(f"\t\t_impose_rmsd_restraint: Added virtual bond between {core_heavy_atoms[0]} and {protein_atoms[0]}")
+        
         # Filter protein CA atoms within cutoff of core heavy atoms
         import mdtraj as md
         from simtk import unit
