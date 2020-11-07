@@ -392,7 +392,7 @@ def run_neq_fah_setup(ligand_file,
 
         #make and serialize an integrator
         integrator = make_neq_integrator(**setup_options)
-        data.serialize(integrator, f"{dir}/integrator.xml")
+        data.serialize(integrator, f"{dir}/integrator.xml.bz2")
 
         #create and serialize a state
         try:
