@@ -1999,13 +1999,6 @@ class HybridTopologyFactory(object):
             _logger.info(f"\t\t_impose_rmsd_restraint: No restraint added because sets overlap (core_atoms={core_heavy_atoms}, protein_atoms={protein_atoms})")
             return
 
-        # Add virtual bond between a core and protein atom to ensure they are periodically replicated together
-        from simtk import openmm    
-        bondforce = openmm.CustomBondForce('0')
-        bondforce.addBond(core_heavy_atoms[0], protein_atoms[0], [])
-        self._hybrid_system.addForce(bondforce)
-        _logger.info(f"\t\t_impose_rmsd_restraint: Added virtual bond between {core_heavy_atoms[0]} and {protein_atoms[0]}")
-        
         # Filter protein CA atoms within cutoff of core heavy atoms
         import mdtraj as md
         from simtk import unit
@@ -2019,6 +2012,13 @@ class HybridTopologyFactory(object):
         protein_atoms = [ int(index) for index in protein_atoms ]
         _logger.info(f"\t\t_impose_rmsd_restraint: Restraint will be added (core_atoms={core_heavy_atoms}, protein_atoms={protein_atoms})")
 
+        # Add virtual bond between a core and protein atom to ensure they are periodically replicated together
+        from simtk import openmm    
+        bondforce = openmm.CustomBondForce('0')
+        bondforce.addBond(core_heavy_atoms[0], protein_atoms[0], [])
+        self._hybrid_system.addForce(bondforce)
+        _logger.info(f"\t\t_impose_rmsd_restraint: Added virtual bond between {core_heavy_atoms[0]} and {protein_atoms[0]}")
+        
         # Compute RMSD atom indices
         rmsd_atom_indices = core_heavy_atoms + protein_atoms
 
