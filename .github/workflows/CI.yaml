@@ -72,7 +72,7 @@ jobs:
               conda install --quiet -c omnia-dev openmm;;
             conda-forge)
               echo "Using OpenMM conda-forge testing build."
-              conda install --quiet -c conda-forge/label/testing openmm;;
+              conda install --quiet -c conda-forge/label/test openmm;;
           esac
 
       - name: Install package
