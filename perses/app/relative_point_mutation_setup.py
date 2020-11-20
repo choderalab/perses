@@ -261,7 +261,7 @@ class PointMutationExecutor(object):
                                                  softcore_sigma_Q=1.0,
                                                  interpolate_old_and_new_14s=flatten_exceptions,
                                                  omitted_terms=None,
-                                                 flatten_torsions=flatten_torsions))
+                                                 flatten_torsions=flatten_torsions)
 
             if not topology_proposal.unique_new_atoms:
                 assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
