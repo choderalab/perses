@@ -132,7 +132,7 @@ class HybridTopologyFactory(object):
         if endstate:
             raise Exception("endstate must be none! Aborting!")
 
-	_logger.info("Beginning nonbonded method, total particle, barostat, and exceptions retrieval...")
+        _logger.info("Beginning nonbonded method, total particle, barostat, and exceptions retrieval...")
         self._topology_proposal = topology_proposal
         self._old_system = copy.deepcopy(topology_proposal.old_system)
         self._new_system = copy.deepcopy(topology_proposal.new_system)
