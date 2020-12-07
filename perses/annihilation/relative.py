@@ -2267,7 +2267,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
             self._handle_nonbonded()
 
         # The last thing to do is call the alchemical factory on the _hybrid_system
-        self._alchemify()
+        # self._alchemify()
 
         # Generate the topology representation
         self._hybrid_topology = self._create_topology()
