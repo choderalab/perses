@@ -49,17 +49,25 @@ class RESTTopologyFactory(HybridTopologyFactory):
                 subset solute region
             use_dispersion_correction : bool, default False
                 whether to use a dispersion correction
+
+        Properties
+        ----------
+            REST_system : simtk.openmm.system
+                the REST2-implemented system
         """
+        self._use_dispersion_correction = use_dispersion_correction
         self._num_particles = system.getNumParticles()
         self._og_system = system
-        self._og_system_forces = {type(force).__name__ : force for force in self._old_system.getForces()}
+        self._og_system_forces = {type(force).__name__ : force for force in self._og_system.getForces()}
         self._out_system_forces = {}
         self._solute_region = solute_region
         self._solvent_region = list(set(range(self._num_particles)).difference(set(self._solute_region)))
+        _logger.debug(f"solvent region: {self._solvent_region}")
+        _logger.debug(f"solute region: {self._solute_region}")
 
 
         assert set(solute_region).issubset(set(range(self._num_particles))), f"the solute region is not a subset of the system particles"
-        self._nonbonded_method = self._old_system_forces['NonbondedForce'].getNonbondedMethod()
+        self._nonbonded_method = self._og_system_forces['NonbondedForce'].getNonbondedMethod()
         self._out_system = openmm.System()
 
         for particle_idx in range(self._num_particles):
@@ -76,14 +84,14 @@ class RESTTopologyFactory(HybridTopologyFactory):
 
         # Copy over the box vectors:
         box_vectors = self._og_system.getDefaultPeriodicBoxVectors()
-        self._new_system.setDefaultPeriodicBoxVectors(*box_vectors)
+        self._out_system.setDefaultPeriodicBoxVectors(*box_vectors)
         _logger.info(f"getDefaultPeriodicBoxVectors added to hybrid: {box_vectors}")
 
         self._og_system_exceptions = self._generate_dict_from_exceptions(self._og_system_forces['NonbondedForce'])
 
 
         # Check that there are no unknown forces in the new and old systems:
-        for system_name in ('og'):
+        for system_name in ['og']:
             force_names = getattr(self, '_{}_system_forces'.format(system_name)).keys()
             unknown_forces = set(force_names) - set(self._known_forces)
             if len(unknown_forces) > 0:
@@ -107,7 +115,7 @@ class RESTTopologyFactory(HybridTopologyFactory):
 
     def _handle_constraints(self):
         for constraint_idx in range(self._og_system.getNumConstraints()):
-            atom1, atom2, length = system.getConstraintParameters(constraint_idx)
+            atom1, atom2, length = self._og_system.getConstraintParameters(constraint_idx)
             self._out_system.addConstraint(atom1, atom2, length)
 
     def _add_bond_force_terms(self):
@@ -145,10 +153,10 @@ class RESTTopologyFactory(HybridTopologyFactory):
         core_energy_expression += self.scaling_expression()
 
         # Create the force and add the relevant parameters
-        custom_core_force = openmm.CustomBondForce(core_energy_expression)
-        custom_core_force.addPerBondParameter('theta0')
-        custom_core_force.addPerBondParameter('k')
-        custom_core_force.addPerBondParameter('identifier')
+        custom_core_force = openmm.CustomAngleForce(core_energy_expression)
+        custom_core_force.addPerAngleParameter('theta0')
+        custom_core_force.addPerAngleParameter('k')
+        custom_core_force.addPerAngleParameter('identifier')
 
         custom_core_force.addGlobalParameter('solute_scale', 1.0)
         custom_core_force.addGlobalParameter('inter_scale', 1.0)
@@ -188,12 +196,15 @@ class RESTTopologyFactory(HybridTopologyFactory):
         custom_nonbonded_force = openmm.CustomNonbondedForce(custom_nonbonded_expression)
 
         self._out_system.addForce(standard_nonbonded_force)
-        self._out_system_forces['NonbondedForce'] = standard_nonbonded_force
+        self._out_system_forces[standard_nonbonded_force.__class__.__name__] = standard_nonbonded_force
+
+        self._out_system.addForce(custom_nonbonded_force)
+        self._out_system_forces[custom_nonbonded_force.__class__.__name__] = custom_nonbonded_force
 
         #set the appropriate parameters
         epsilon_solvent = self._og_system_forces['NonbondedForce'].getReactionFieldDielectric()
         r_cutoff = self._og_system_forces['NonbondedForce'].getCutoffDistance()
-        if self._nonbonded_method != openmm.NonbondedForce.NoCutoff
+        if self._nonbonded_method != openmm.NonbondedForce.NoCutoff:
             standard_nonbonded_force.setReactionFieldDielectric(epsilon_solvent)
             standard_nonbonded_force.setCutoffDistance(r_cutoff)
             custom_nonbonded_force.setCutoffDistance(r_cutoff)
@@ -203,7 +214,7 @@ class RESTTopologyFactory(HybridTopologyFactory):
             standard_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
             standard_nonbonded_force.setEwaldErrorTolerance(delta)
         standard_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
-        custom_nonbonded_method.setNonbondedMethod(self._translate_nonbonded_method_to_custom(self._nonbonded_method))
+        custom_nonbonded_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(self._nonbonded_method))
 
         #translate nonbonded to custom
         if self._og_system_forces['NonbondedForce'].getUseDispersionCorrection():
@@ -226,8 +237,38 @@ class RESTTopologyFactory(HybridTopologyFactory):
         custom_nonbonded_force.addPerParticleParameter("q")
         custom_nonbonded_force.addPerParticleParameter("sigma")
         custom_nonbonded_force.addPerParticleParameter("epsilon")
+        custom_nonbonded_force.addPerParticleParameter("identifier")
 
-    def get_identifier(particles):
+        custom_nonbonded_force.addGlobalParameter('solute_scale', 1.0)
+        custom_nonbonded_force.addGlobalParameter('inter_scale', 1.0)
+
+        #finally, make a custombondedforce to treat the exceptions
+        custom_bonded_expression = f"(4*epsilon*((sigma/r)^12-(sigma/r)^6) + ONE_4PI_EPS0*chargeProd/r) * scale_factor; \
+                                        ONE_4PI_EPS0 = {ONE_4PI_EPS0};"
+
+        custom_bonded_expression += self.scaling_expression()
+
+        custom_bond_force = openmm.CustomBondForce(custom_bonded_expression)
+        self._out_system.addForce(custom_bond_force)
+        self._out_system_forces["CustomExceptionForce"] = custom_bond_force
+
+        #charges
+        custom_bond_force.addPerBondParameter("chargeProd")
+
+        #sigma
+        custom_bond_force.addPerBondParameter("sigma")
+
+        #epsilon
+        custom_bond_force.addPerBondParameter("epsilon")
+
+        #identifier
+        custom_bond_force.addPerBondParameter("identifier")
+
+        #global params
+        custom_bond_force.addGlobalParameter('solute_scale', 1.0)
+        custom_bond_force.addGlobalParameter('inter_scale', 1.0)
+
+    def get_identifier(self, particles):
         if type(particles) == int:
             out = 0 if particles in self._solute_region else 1
             return out
@@ -237,7 +278,6 @@ class RESTTopologyFactory(HybridTopologyFactory):
         elif particles in self._solute_region:
             out = 0
         else:
-            assert particles in self._solvent_region + self._solute_region
             out = 2
         return out
 
@@ -250,7 +290,7 @@ class RESTTopologyFactory(HybridTopologyFactory):
         for bond_idx in range(og_bond_force.getNumBonds()):
             p1, p2, length, k = og_bond_force.getBondParameters(bond_idx)
             identifier = self.get_identifier([p1, p2])
-            self._out_system_forces['CustomBondForce'].addBond(p1, p2, length, [k, identifier])
+            self._out_system_forces['CustomBondForce'].addBond(p1, p2, [length, k, identifier])
 
     def _add_angles(self):
         og_angle_force = self._og_system_forces['HarmonicAngleForce']
@@ -262,7 +302,7 @@ class RESTTopologyFactory(HybridTopologyFactory):
     def _add_torsions(self):
         og_torsion_force = self._og_system_forces['PeriodicTorsionForce']
         for torsion_idx in range(og_torsion_force.getNumTorsions()):
-            p1, p2, p3, p4, per, phase, k = og_torsion_force.getParticleParameters(torsion_idx)
+            p1, p2, p3, p4, per, phase, k = og_torsion_force.getTorsionParameters(torsion_idx)
             identifier = self.get_identifier([p1, p2, p3, p4])
             self._out_system_forces['CustomTorsionForce'].addTorsion(p1, p2, p3, p4, [per, phase, k, identifier])
 
@@ -307,3 +347,20 @@ class RESTTopologyFactory(HybridTopologyFactory):
                 self._out_system_forces['CustomNonbondedForce'].addExclusion(p1, p2) #maintain consistent exclusions w/ exceptions
 
         #now add the CustomBondForce for exceptions
+        exception_force = self._out_system_forces['CustomExceptionForce']
+
+        for solute_exception_term in self._solute_exceptions:
+            p1, p2, [chargeProd, sigma, epsilon] = solute_exception_term
+            if (chargeProd.value_in_unit_system(unit.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(unit.md_unit_system) != 0.0):
+                identifier = 0
+                exception_force.addBond(p1, p2, [chargeProd, sigma, epsilon, identifier])
+
+        for interexception_term in self._interexceptions:
+            p1, p2, [chargeProd, sigma, epsilon] = interexception_term
+            if (chargeProd.value_in_unit_system(unit.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(unit.md_unit_system) != 0.0):
+                identifier = 2
+                exception_force.addBond(p1, p2, [chargeProd, sigma, epsilon, identifier])
+
+    @property
+    def REST_system(self):
+        return self._out_system
