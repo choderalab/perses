@@ -54,6 +54,9 @@ class RESTTopologyFactory(HybridTopologyFactory):
         self._og_system = system
         self._og_system_forces = {type(force).__name__ : force for force in self._old_system.getForces()}
         self._out_system_forces = {}
+        self._solute_region = solute_region
+        self._solvent_region = list(set(range(self._num_particles)).difference(set(self._solute_region)))
+
 
         assert set(solute_region).issubset(set(range(self._num_particles))), f"the solute region is not a subset of the system particles"
         self._nonbonded_method = self._old_system_forces['NonbondedForce'].getNonbondedMethod()
@@ -87,6 +90,21 @@ class RESTTopologyFactory(HybridTopologyFactory):
                 raise ValueError("Unkown forces {} encountered in {} system" % (unknown_forces, system_name))
         _logger.info("No unknown forces.")
 
+        self._handle_constraints()
+
+        self._add_bond_force_terms()
+        self._add_bonds()
+
+        self._add_angle_force_terms()
+        self._add_angles()
+
+        self._add_torsion_force_terms()
+        self._add_torsions()
+
+        self._add_nonbonded_force_terms()
+        self._add_nonbondeds()
+
+
     def _handle_constraints(self):
         for constraint_idx in range(self._og_system.getNumConstraints()):
             atom1, atom2, length = system.getConstraintParameters(constraint_idx)
@@ -95,7 +113,7 @@ class RESTTopologyFactory(HybridTopologyFactory):
     def _add_bond_force_terms(self):
         core_energy_expression = '(K/2)*(r-length)^2;'
         core_energy_expression += 'K = k*scale_factor;' # linearly interpolate spring constant
-        core_energy_expression += self.scaling_expression
+        core_energy_expression += self.scaling_expression()
 
         # Create the force and add the relevant parameters
         custom_core_force = openmm.CustomBondForce(core_energy_expression)
@@ -109,18 +127,22 @@ class RESTTopologyFactory(HybridTopologyFactory):
         self._out_system.addForce(custom_core_force)
         self._out_system_forces[custom_core_force.__class__.__name__] = custom_core_force
 
-    @property
-    def scaling_expression(self):
-        out = "scale_factor = solute_scale*_is_solute + solvent_scale*_is_solvent + inter_scale*_is_inter; \
+    def scaling_expression(self, nb=False):
+        if not nb:
+            last_line = '_is_solute = delta(identifier); _is_solvent = delta(1-identifier); _is_inter = delta(2-identifier);'
+        else:
+            last_line = '_is_solute = delta(identifier1 + identifier2); _is_solvent = delta(2 - (identifier1 + identifier2)); _is_inter = delta(1 - (identifier1 + identifier2));'
+
+        out = f"scale_factor = solute_scale*_is_solute + solvent_scale*_is_solvent + inter_scale*_is_inter; \
                solvent_scale = 1.; \
-               _is_solute = delta(identifier); _is_solvent = delta(1-identifier); _is_inter = delta(2-identifier); \
+               {last_line} \
                "
         return out
 
     def _add_angle_force_terms(self):
         core_energy_expression = '(K/2)*(theta-theta0)^2;'
         core_energy_expression += 'K = k*scale_factor;' # linearly interpolate spring constant
-        core_energy_expression += self.scaling_expression
+        core_energy_expression += self.scaling_expression()
 
         # Create the force and add the relevant parameters
         custom_core_force = openmm.CustomBondForce(core_energy_expression)
@@ -137,13 +159,13 @@ class RESTTopologyFactory(HybridTopologyFactory):
     def _add_torsion_force_terms(self):
         core_energy_expression = 'K*(1+cos(periodicity*theta-phase));'
         core_energy_expression += 'K = k*scale_factor;' # linearly interpolate spring constant
-        core_energy_expression += self.scaling_expression
+        core_energy_expression += self.scaling_expression()
 
         # Create the force and add the relevant parameters
         custom_core_force = openmm.CustomTorsionForce(core_energy_expression)
         custom_core_force.addPerTorsionParameter('periodicity') # molecule1 periodicity
         custom_core_force.addPerTorsionParameter('phase') # molecule1 phase
-        custom_core_force.addPerTorsionParameter('K') # molecule1 spring constant
+        custom_core_force.addPerTorsionParameter('k') # molecule1 spring constant
         custom_core_force.addPerTorsionParameter('identifier')
 
         custom_core_force.addGlobalParameter('solute_scale', 1.0)
@@ -162,7 +184,7 @@ class RESTTopologyFactory(HybridTopologyFactory):
                                         ONE_4PI_EPS0 = {ONE_4PI_EPS0}; \
                                         chargeProd=q1*q2;"
 
-        custom_nonbonded_expression += self.scaling_expression
+        custom_nonbonded_expression += self.scaling_expression(nb=True)
         custom_nonbonded_force = openmm.CustomNonbondedForce(custom_nonbonded_expression)
 
         self._out_system.addForce(standard_nonbonded_force)
@@ -204,4 +226,84 @@ class RESTTopologyFactory(HybridTopologyFactory):
         custom_nonbonded_force.addPerParticleParameter("q")
         custom_nonbonded_force.addPerParticleParameter("sigma")
         custom_nonbonded_force.addPerParticleParameter("epsilon")
-        
+
+    def get_identifier(particles):
+        if type(particles) == int:
+            out = 0 if particles in self._solute_region else 1
+            return out
+
+        if particles in self._solvent_region:
+            out = 1
+        elif particles in self._solute_region:
+            out = 0
+        else:
+            assert particles in self._solvent_region + self._solute_region
+            out = 2
+        return out
+
+
+    def _add_bonds(self):
+        """
+        add bonds
+        """
+        og_bond_force = self._og_system_forces['HarmonicBondForce']
+        for bond_idx in range(og_bond_force.getNumBonds()):
+            p1, p2, length, k = og_bond_force.getBondParameters(bond_idx)
+            identifier = self.get_identifier([p1, p2])
+            self._out_system_forces['CustomBondForce'].addBond(p1, p2, length, [k, identifier])
+
+    def _add_angles(self):
+        og_angle_force = self._og_system_forces['HarmonicAngleForce']
+        for angle_idx in range(og_angle_force.getNumAngles()):
+            p1, p2, p3, theta0, k = og_angle_force.getAngleParameters(angle_idx)
+            identifier = self.get_identifier([p1, p2, p3])
+            self._out_system_forces['CustomAngleForce'].addAngle(p1, p2, p3, [theta0, k, identifier])
+
+    def _add_torsions(self):
+        og_torsion_force = self._og_system_forces['PeriodicTorsionForce']
+        for torsion_idx in range(og_torsion_force.getNumTorsions()):
+            p1, p2, p3, p4, per, phase, k = og_torsion_force.getParticleParameters(torsion_idx)
+            identifier = self.get_identifier([p1, p2, p3, p4])
+            self._out_system_forces['CustomTorsionForce'].addTorsion(p1, p2, p3, p4, [per, phase, k, identifier])
+
+    def _add_nonbondeds(self):
+        self._solute_exceptions, self._interexceptions = [], []
+
+        #the output nonbonded force _only_ contains solvent atoms (the rest are zeroed); same with exceptions
+        """
+        First, handle the NonbondedForce in the out_system
+        """
+        og_nb_force = self._og_system_forces['NonbondedForce']
+        for particle_idx in range(self._num_particles):
+            q, sigma, epsilon = og_nb_force.getParticleParameters(particle_idx)
+            identifier = self.get_identifier(particle_idx)
+
+            if identifier == 1:
+                self._out_system_forces['NonbondedForce'].addParticle(q, sigma, epsilon)
+                self._out_system_forces['CustomNonbondedForce'].addParticle([q, sigma, epsilon, identifier])
+            else:
+                self._out_system_forces['NonbondedForce'].addParticle(q*0.0, sigma, epsilon*0.0)
+                self._out_system_forces['CustomNonbondedForce'].addParticle([q, sigma, epsilon, identifier])
+
+        #add appropriate interaction group
+        solute_ig, solvent_ig = set(self._solute_region), set(self._solvent_region)
+        self._out_system_forces['CustomNonbondedForce'].addInteractionGroup(solute_ig, solvent_ig)
+        self._out_system_forces['CustomNonbondedForce'].addInteractionGroup(solute_ig, solute_ig)
+
+        #handle exceptions
+        for exception_idx in range(og_nb_force.getNumExceptions()):
+            p1, p2, chargeProd, sigma, epsilon = og_nb_force.getExceptionParameters(exception_idx)
+            identifier = self.get_identifier([p1, p2])
+            if identifier == 1:
+                self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd, sigma, epsilon)
+                self._out_system_forces['CustomNonbondedForce'].addExclusion(p1, p2) #maintain consistent exclusions w/ exceptions
+            elif identifier == 0:
+                self._solute_exceptions.append([p1, p2, [chargeProd, sigma, epsilon]])
+                self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd*0.0, sigma, epsilon*0.0)
+                self._out_system_forces['CustomNonbondedForce'].addExclusion(p1, p2) #maintain consistent exclusions w/ exceptions
+            elif identifier == 2:
+                self._interexceptions.append([p1, p2, [chargeProd, sigma, epsilon]])
+                self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd*0.0, sigma, epsilon*0.0)
+                self._out_system_forces['CustomNonbondedForce'].addExclusion(p1, p2) #maintain consistent exclusions w/ exceptions
+
+        #now add the CustomBondForce for exceptions
