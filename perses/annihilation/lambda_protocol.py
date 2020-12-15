@@ -215,7 +215,7 @@ class RESTProtocol(object):
                          'inter_scale' : lambda beta0, beta : np.sqrt(beta / beta0)
                          }
     def __init__(self):
-        self.functions = default_functions
+        self.functions = RESTProtocol.default_functions
 
 
 class RelativeAlchemicalState(AlchemicalState):
