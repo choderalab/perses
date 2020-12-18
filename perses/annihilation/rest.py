@@ -273,9 +273,9 @@ class RESTTopologyFactory(HybridTopologyFactory):
             out = 0 if particles in self._solute_region else 1
             return out
 
-        if particles in self._solvent_region:
+        if all(x in self._solvent_region for x in particles):
             out = 1
-        elif particles in self._solute_region:
+        elif all(x in self._solute_region for x in particles):
             out = 0
         else:
             out = 2
