@@ -12,6 +12,7 @@ import numpy as np
 import copy
 import enum
 from perses.annihilation.relative import HybridTopologyFactory
+import itertools
 
 #######LOGGING#############################
 import logging
@@ -346,6 +347,13 @@ class RESTTopologyFactory(HybridTopologyFactory):
                 self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd*0.0, sigma, epsilon*0.0)
                 self._out_system_forces['CustomNonbondedForce'].addExclusion(p1, p2) #maintain consistent exclusions w/ exceptions
 
+        # Add exceptions/exclusions to CustomNonbonded for inter region
+        for pair in list(itertools.product(solute_ig, solvent_ig)):
+            p1 = pair[0]
+            p2 = pair[1]
+            self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd * 0.0, sigma, epsilon * 0.0)
+            self._out_system_forces['CustomNonbondedForce'].addExclusion(p1, p2)
+
         #now add the CustomBondForce for exceptions
         exception_force = self._out_system_forces['CustomExceptionForce']
 
@@ -360,6 +368,16 @@ class RESTTopologyFactory(HybridTopologyFactory):
             if (chargeProd.value_in_unit_system(unit.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(unit.md_unit_system) != 0.0):
                 identifier = 2
                 exception_force.addBond(p1, p2, [chargeProd, sigma, epsilon, identifier])
+
+        # Add inter region exceptions to the CustomBondForce
+        for pair in list(itertools.product(solute_ig, solvent_ig)):
+            p1 = pair[0]
+            p2 = pair[1]
+            p1_charge, p1_sigma, p1_epsilon = og_nb_force.getParticleParameters(p1)
+            p2_charge, p2_sigma, p2_epsilon = og_nb_force.getParticleParameters(p2)
+            identifier = 2
+            exception_force.addBond(p1, p2, [p1_charge * p2_charge, 0.5 * (p1_sigma + p2_sigma),
+                                             np.sqrt(p1_epsilon * p2_epsilon), identifier])
 
     @property
     def REST_system(self):
