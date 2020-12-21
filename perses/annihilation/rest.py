@@ -41,7 +41,7 @@ class RESTTopologyFactory(HybridTopologyFactory):
     """
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
 
-    def __init__(self, system, solute_region, use_dispersion_correction=False):
+    def __init__(self, system, solute_region, use_dispersion_correction=False, **kwargs):
         """
         arguments
             system : simtk.openmm.system
@@ -226,7 +226,7 @@ class RESTTopologyFactory(HybridTopologyFactory):
             custom_nonbonded_force.setUseLongRangeCorrection(False)
 
         if self._og_system_forces['NonbondedForce'].getUseSwitchingFunction():
-            switching_distance = self._out_system_forces['NonbondedForce'].getSwitchingDistance()
+            switching_distance = self._og_system_forces['NonbondedForce'].getSwitchingDistance()
             standard_nonbonded_force.setUseSwitchingFunction(True)
             standard_nonbonded_force.setSwitchingDistance(switching_distance)
             custom_nonbonded_force.setUseSwitchingFunction(True)
@@ -347,12 +347,12 @@ class RESTTopologyFactory(HybridTopologyFactory):
                 self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd*0.0, sigma, epsilon*0.0)
                 self._out_system_forces['CustomNonbondedForce'].addExclusion(p1, p2) #maintain consistent exclusions w/ exceptions
 
-        # Add exceptions/exclusions to CustomNonbonded for inter region
-        for pair in list(itertools.product(solute_ig, solvent_ig)):
-            p1 = pair[0]
-            p2 = pair[1]
-            self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd * 0.0, sigma, epsilon * 0.0)
-            self._out_system_forces['CustomNonbondedForce'].addExclusion(p1, p2)
+        # # Add exceptions/exclusions to CustomNonbonded for inter region
+        # for pair in list(itertools.product(solute_ig, solvent_ig)):
+        #     p1 = pair[0]
+        #     p2 = pair[1]
+        #     self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd * 0.0, sigma, epsilon * 0.0)
+        #     self._out_system_forces['CustomNonbondedForce'].addExclusion(p1, p2)
 
         #now add the CustomBondForce for exceptions
         exception_force = self._out_system_forces['CustomExceptionForce']
@@ -369,15 +369,15 @@ class RESTTopologyFactory(HybridTopologyFactory):
                 identifier = 2
                 exception_force.addBond(p1, p2, [chargeProd, sigma, epsilon, identifier])
 
-        # Add inter region exceptions to the CustomBondForce
-        for pair in list(itertools.product(solute_ig, solvent_ig)):
-            p1 = pair[0]
-            p2 = pair[1]
-            p1_charge, p1_sigma, p1_epsilon = og_nb_force.getParticleParameters(p1)
-            p2_charge, p2_sigma, p2_epsilon = og_nb_force.getParticleParameters(p2)
-            identifier = 2
-            exception_force.addBond(p1, p2, [p1_charge * p2_charge, 0.5 * (p1_sigma + p2_sigma),
-                                             np.sqrt(p1_epsilon * p2_epsilon), identifier])
+        # # Add inter region exceptions to the CustomBondForce
+        # for pair in list(itertools.product(solute_ig, solvent_ig)):
+        #     p1 = pair[0]
+        #     p2 = pair[1]
+        #     p1_charge, p1_sigma, p1_epsilon = og_nb_force.getParticleParameters(p1)
+        #     p2_charge, p2_sigma, p2_epsilon = og_nb_force.getParticleParameters(p2)
+        #     identifier = 2
+        #     exception_force.addBond(p1, p2, [p1_charge * p2_charge, 0.5 * (p1_sigma + p2_sigma),
+        #                                      np.sqrt(p1_epsilon * p2_epsilon), identifier])
 
     @property
     def REST_system(self):
