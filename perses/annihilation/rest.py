@@ -222,7 +222,10 @@ class RESTTopologyFactory(HybridTopologyFactory):
             self._out_system_forces['NonbondedForce'].setUseDispersionCorrection(True)
             if self._use_dispersion_correction:
                 custom_nonbonded_force.setUseLongRangeCorrection(True)
+            else:
+                custom_nonbonded_force.setUseLongRangeCorrection(False)
         else:
+            standard_nonbonded_force.setUseDispersionCorrection(False)
             custom_nonbonded_force.setUseLongRangeCorrection(False)
 
         if self._og_system_forces['NonbondedForce'].getUseSwitchingFunction():
