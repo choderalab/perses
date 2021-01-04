@@ -119,7 +119,8 @@ class PointMutationExecutor(object):
             phase : str, default complex
                 if phase == vacuum, then the complex will not be solvated with water; else, it will be solvated with tip3p
             conduct_endstate_validation : bool, default True
-                whether to conduct an endstate validation of the hybrid topology factory
+                whether to conduct an endstate validation of the HybridTopologyFactory. If using the RepartitionedHybridTopologyFactory,
+                endstate validation cannot and will not be conducted.
             ligand_file : str, default None
                 path to ligand of interest (i.e. small molecule or protein); .sdf or .pdb
             ligand_index : int, default 0
@@ -290,7 +291,7 @@ class PointMutationExecutor(object):
                 subtracted_valence_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
 
 
-            if conduct_endstate_validation:
+            if conduct_endstate_validation and not repartitioned:
                 zero_state_error, one_state_error = validate_endstate_energies(forward_htf._topology_proposal, forward_htf, added_valence_energy, subtracted_valence_energy, beta=beta, ENERGY_THRESHOLD=ENERGY_THRESHOLD, repartitioned_endstate=repartitioned_endstate)
                 if zero_state_error > ENERGY_THRESHOLD:
                     _logger.warning(f"Reduced potential difference of the nonalchemical and alchemical Lambda = 0 state is above the threshold ({ENERGY_THRESHOLD}): {zero_state_error}")
