@@ -257,7 +257,7 @@ class PointMutationExecutor(object):
 
             forward_htf = factory(topology_proposal=topology_proposal,
                                   current_positions=pos,
-                                  new_positions=forward_new_positions,
+                                  new_positions=new_positions,
                                   use_dispersion_correction=False,
                                   functions=None,
                                   softcore_alpha=None,
