@@ -104,7 +104,7 @@ class PointMutationExecutor(object):
                  flatten_torsions=False,
                  flatten_exceptions=False,
                  repartitioned=False,
-                 repartitioned_endstate=None
+                 repartitioned_endstate=None,
                  **kwargs):
         """
         arguments
