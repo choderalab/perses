@@ -129,8 +129,10 @@ class HybridTopologyFactory(object):
         TODO: allow support for annealing in omitted terms
 
         """
-        if endstate:
+        if endstate == 0 or endstate == 1:
             raise Exception("endstate must be none! Aborting!")
+        elif endstate is None:
+            _logger.info("*** Generating vanilla HybridTopologyFactory ***")
 
         _logger.info("Beginning nonbonded method, total particle, barostat, and exceptions retrieval...")
         self._topology_proposal = topology_proposal
@@ -2150,6 +2152,11 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
         self._endstate = endstate
         self._flatten_torsions = flatten_torsions
         self._interpolate_14s = interpolate_old_and_new_14s
+
+        if endstate == 0 or endstate == 1:
+            _logger.info("*** Generating RepartitionedHybridTopologyFactory ***")
+        elif endstate is None:
+            raise Exception("endstate must be 0 or 1! Aborting!")
 
         if self._flatten_torsions:
             _logger.info("Flattening torsions of unique new/old at lambda = 0/1")
