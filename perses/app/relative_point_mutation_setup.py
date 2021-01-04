@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 from perses.utils.openeye import *
-from perses.annihilation.relative import HybridTopologyFactory
+from perses.annihilation.relative import HybridTopologyFactory, RepartitionedHybridTopologyFactory
 from perses.rjmc.topology_proposal import PointMutationEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 
@@ -103,6 +103,8 @@ class PointMutationExecutor(object):
                  apo_box_dimensions=None,
                  flatten_torsions=False,
                  flatten_exceptions=False,
+                 repartitioned=False,
+                 repartitioned_endstate=None
                  **kwargs):
         """
         arguments
@@ -142,7 +144,7 @@ class PointMutationExecutor(object):
                 the forcefield string for small molecule parametrization
             complex_box_dimensions : Vec3, default None
                 define box dimensions of complex phase;
-                if none, padding is 1nm
+                if None, padding is 1nm
             apo_box_dimensions :  Vec3, default None
                 define box dimensions of apo phase phase;
                 if None, padding is 1nm
@@ -150,7 +152,12 @@ class PointMutationExecutor(object):
                 in the htf, flatten torsions involving unique new atoms at lambda = 0 and unique old atoms are lambda = 1
             flatten_exceptions : bool, default False
                 in the htf, flatten exceptions involving unique new atoms at lambda = 0 and unique old atoms at lambda = 1
-
+            repartitioned : bool, default False
+                indicates whether to use the HybridTopologyFactory or the RepartitionedHybridTopologyFactory. By default,
+                the former will be created. If True, the latter will be created.
+            repartitioned_endstate : int, default None
+                the endstate (0 or 1) at which to build the RepartitionedHybridTopologyFactory. This parameter is only used when
+                repartitioned = True.
         TODO : allow argument for spectator ligands besides the 'ligand_file'
 
         """
@@ -243,25 +250,31 @@ class PointMutationExecutor(object):
             logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta,
                                                         validate_energy_bookkeeping=validate_bool)
 
-            forward_htf = HybridTopologyFactory(topology_proposal=topology_proposal,
-                                                 current_positions=pos,
-                                                 new_positions=new_positions,
-                                                 use_dispersion_correction=False,
-                                                 functions=None,
-                                                 softcore_alpha=None,
-                                                 bond_softening_constant=1.0,
-                                                 angle_softening_constant=1.0,
-                                                 soften_only_new=False,
-                                                 neglected_new_angle_terms=[],
-                                                 neglected_old_angle_terms=[],
-                                                 softcore_LJ_v2=True,
-                                                 softcore_electrostatics=True,
-                                                 softcore_LJ_v2_alpha=0.85,
-                                                 softcore_electrostatics_alpha=0.3,
-                                                 softcore_sigma_Q=1.0,
-                                                 interpolate_old_and_new_14s=flatten_exceptions,
-                                                 omitted_terms=None,
-                                                 flatten_torsions=flatten_torsions)
+            if not repartitioned:
+                factory = HybridTopologyFactory
+            else:
+                factory = RepartitionedHybridTopologyFactory
+
+            forward_htf = factory(topology_proposal=topology_proposal,
+                                  current_positions=pos,
+                                  new_positions=forward_new_positions,
+                                  use_dispersion_correction=False,
+                                  functions=None,
+                                  softcore_alpha=None,
+                                  bond_softening_constant=1.0,
+                                  angle_softening_constant=1.0,
+                                  soften_only_new=False,
+                                  neglected_new_angle_terms=[],
+                                  neglected_old_angle_terms=[],
+                                  softcore_LJ_v2=True,
+                                  softcore_electrostatics=True,
+                                  softcore_LJ_v2_alpha=0.85,
+                                  softcore_electrostatics_alpha=0.3,
+                                  softcore_sigma_Q=1.0,
+                                  interpolate_old_and_new_14s=flatten_exceptions,
+                                  omitted_terms=None,
+                                  endstate=repartitioned_endstate,
+                                  flatten_torsions=flatten_torsions)
 
             if not topology_proposal.unique_new_atoms:
                 assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
