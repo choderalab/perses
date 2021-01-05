@@ -2012,13 +2012,6 @@ class HybridTopologyFactory(object):
         protein_atoms = [ int(index) for index in protein_atoms ]
         _logger.info(f"\t\t_impose_rmsd_restraint: Restraint will be added (core_atoms={core_heavy_atoms}, protein_atoms={protein_atoms})")
 
-        # Add virtual bond between a core and protein atom to ensure they are periodically replicated together
-        from simtk import openmm    
-        bondforce = openmm.CustomBondForce('0')
-        bondforce.addBond(core_heavy_atoms[0], protein_atoms[0], [])
-        self._hybrid_system.addForce(bondforce)
-        _logger.info(f"\t\t_impose_rmsd_restraint: Added virtual bond between {core_heavy_atoms[0]} and {protein_atoms[0]}")
-        
         # Compute RMSD atom indices
         rmsd_atom_indices = core_heavy_atoms + protein_atoms
 
@@ -2034,6 +2027,34 @@ class HybridTopologyFactory(object):
         rmsd_force = openmm.RMSDForce(self.hybrid_positions, rmsd_atom_indices)
         custom_cv_force.addCollectiveVariable('RMSD', rmsd_force)
         self._hybrid_system.addForce(custom_cv_force)
+        _logger.info(f"\t\t_impose_rmsd_restraint: RMSD restraint added with buffer {buffer/unit.angstrom} A and stddev {sigma/unit.angstrom} A")
+
+        # Add virtual bond between a core and protein atom to ensure they are periodically replicated together
+        from simtk import openmm    
+        bondforce = openmm.CustomBondForce('0')
+        bondforce.addBond(core_heavy_atoms[0], protein_atoms[0], [])
+        self._hybrid_system.addForce(bondforce)
+        _logger.info(f"\t\t_impose_rmsd_restraint: Added virtual bond between {core_heavy_atoms[0]} and {protein_atoms[0]} so they are imaged together")
+
+        # Extract protein and molecule chains and indices before adding solvent
+        mdtop = trajectory.top
+        protein_atom_indices = mdtop.select('protein and (mass > 1)')
+        molecule_atom_indices = mdtop.select('(not protein) and (not water) and (mass > 1)') 
+        protein_chainids = list(set([atom.residue.chain.index for atom in mdtop.atoms if atom.index in protein_atom_indices]))
+        n_protein_chains = len(protein_chainids)
+        protein_chain_atom_indices = dict()
+        for chainid in protein_chainids:
+            protein_chain_atom_indices[chainid] = mdtop.select(f'protein and chainid {chainid}')
+
+        # Add a virtual bond between protein chains so they are imaged together
+        if (n_protein_chains > 1):
+            chainid = protein_chainids[0]
+            iatom = protein_chain_atom_indices[chainid][0]
+            for chainid in protein_chainids[1:]:
+                jatom = protein_chain_atom_indices[chainid][0]
+                _logger.info(f"\t\t_impose_rmsd_restraint: Added virtual bond between protein chains atoms {iatom} and {jatom} so they are imaged together")
+                virtual_bond_force.addBond(int(iatom), int(jatom), [])
+        
 
     def old_positions(self, hybrid_positions):
         """
