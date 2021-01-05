@@ -310,7 +310,10 @@ class RESTStateV2(RESTState):
     version 2 of RESTState
     """
     class _LambdaParameter(AlchemicalState._LambdaParameter):
-        pass
+        def lambda_validator(self, instance, parameter_value):
+            if parameter_value is None:
+                return parameter_value
+            return float(parameter_value)
 
     solute_scale = _LambdaParameter('solute_scale')
     inter_scale = _LambdaParameter('inter_scale')
