@@ -110,8 +110,8 @@ class RESTTopologyFactory(HybridTopologyFactory):
         self._add_torsion_force_terms()
         self._add_torsions()
 
-        self._add_nonbonded_force_terms()
-        self._add_nonbondeds()
+        self._add_nonbonded_force_terms_v2()
+        self._add_nonbondeds_v2()
 
 
     def _handle_constraints(self):

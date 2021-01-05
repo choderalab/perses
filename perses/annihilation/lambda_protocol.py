@@ -217,6 +217,15 @@ class RESTProtocol(object):
     def __init__(self):
         self.functions = RESTProtocol.default_functions
 
+class RESTProtocolV2(object):
+    default_functions = {'solute_scale': lambda beta0, beta : beta / beta0,
+                         'inter_scale' : lambda beta0, beta : np.sqrt(beta / beta0),
+                         'steric_scale' : lambda beta0, beta : beta / beta0 - 1,
+                         'electrostatic_scale' : lambda beta0, beta : np.sqrt(beta / beta0) - 1
+                         }
+    def __init__(self):
+        self.functions = RESTProtocol.default_functions
+
 
 class RelativeAlchemicalState(AlchemicalState):
     """
@@ -292,6 +301,35 @@ class RESTState(AlchemicalState):
            The new value for all defined parameters.
        """
        lambda_protocol = RESTProtocol()
+       for parameter_name in lambda_protocol.functions:
+           lambda_value = lambda_protocol.functions[parameter_name](beta0, beta)
+           setattr(self, parameter_name, lambda_value)
+
+class RESTStateV2(RESTState):
+    """
+    version 2 of RESTState
+    """
+    class _LambdaParameter(AlchemicalState._LambdaParameter):
+        pass
+
+    solute_scale = _LambdaParameter('solute_scale')
+    inter_scale = _LambdaParameter('inter_scale')
+    electrostatic_scale = _LambdaParameter('electrostatic_scale')
+    steric_scale = _LambdaParameter('steric_scale')
+
+    def set_alchemical_parameters(self,
+                                  beta0,
+                                  beta):
+       """Set each lambda value according to the lambda_functions protocol.
+       The undefined parameters (i.e. those being set to None) remain
+       undefined.
+
+       Parameters
+       ----------
+       lambda_value : float
+           The new value for all defined parameters.
+       """
+       lambda_protocol = RESTProtocolV2()
        for parameter_name in lambda_protocol.functions:
            lambda_value = lambda_protocol.functions[parameter_name](beta0, beta)
            setattr(self, parameter_name, lambda_value)
