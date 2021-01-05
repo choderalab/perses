@@ -96,7 +96,7 @@ class RESTTopologyFactory(HybridTopologyFactory):
             force_names = getattr(self, '_{}_system_forces'.format(system_name)).keys()
             unknown_forces = set(force_names) - set(self._known_forces)
             if len(unknown_forces) > 0:
-                raise ValueError("Unkown forces {} encountered in {} system" % (unknown_forces, system_name))
+                raise ValueError(f"Unknown forces {unknown_forces} encountered in {system_name} system")
         _logger.info("No unknown forces.")
 
         self._handle_constraints()
@@ -248,7 +248,10 @@ class RESTTopologyFactory(HybridTopologyFactory):
             self._out_system_forces['NonbondedForce'].setUseDispersionCorrection(True)
             if self._use_dispersion_correction:
                 custom_nonbonded_force.setUseLongRangeCorrection(True)
+            else:
+                custom_nonbonded_force.setUseLongRangeCorrection(False)
         else:
+            standard_nonbonded_force.setUseDispersionCorrection(False)
             custom_nonbonded_force.setUseLongRangeCorrection(False)
 
         if self._og_system_forces['NonbondedForce'].getUseSwitchingFunction():
