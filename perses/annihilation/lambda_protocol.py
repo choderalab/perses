@@ -309,7 +309,9 @@ class RESTStateV2(RESTState):
     """
     version 2 of RESTState
     """
+
     class _LambdaParameter(AlchemicalState._LambdaParameter):
+        @staticmethod
         def lambda_validator(self, instance, parameter_value):
             if parameter_value is None:
                 return parameter_value
