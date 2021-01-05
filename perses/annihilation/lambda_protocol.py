@@ -224,7 +224,7 @@ class RESTProtocolV2(object):
                          'electrostatic_scale' : lambda beta0, beta : np.sqrt(beta / beta0) - 1
                          }
     def __init__(self):
-        self.functions = RESTProtocol.default_functions
+        self.functions = RESTProtocolV2.default_functions
 
 
 class RelativeAlchemicalState(AlchemicalState):
