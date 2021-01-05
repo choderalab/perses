@@ -345,7 +345,6 @@ class RESTTopologyFactory(HybridTopologyFactory):
             self._out_system_forces['CustomTorsionForce'].addTorsion(p1, p2, p3, p4, [per, phase, k, identifier])
 
     def _add_nonbondeds_v2(self):
-        self._solute_exceptions, self._interexceptions = [], []
         og_nb_force = self._og_system_forces['NonbondedForce']
 
         for particle_idx in range(self._num_particles):
@@ -368,17 +367,11 @@ class RESTTopologyFactory(HybridTopologyFactory):
             exc_idx = self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd, sigma, epsilon)
             if identifier == 1: #solvent
                 pass
-                #exc_idx = self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd, sigma, epsilon)
-                #self._out_system_forces['NonbondedForce'].addExceptionParameterOffset('steric_scale', exc_idx, chargeProd, 0.0*sigma, epsilon)
             elif identifier == 0: #solute
-                self._solute_exceptions.append([p1, p2, [chargeProd, sigma, epsilon]])
-                #exc_idx = self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd, sigma, epsilon)
                 self._out_system_forces['NonbondedForce'].addExceptionParameterOffset('steric_scale', exc_idx, chargeProd, 0.0*sigma, epsilon)
+
             elif identifier == 2: #inter
-                self._interexceptions.append([p1, p2, [chargeProd, sigma, epsilon]])
-                #exc_idx = self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd, sigma, epsilon)
                 self._out_system_forces['NonbondedForce'].addExceptionParameterOffset('electrostatic_scale', exc_idx, chargeProd, 0.0*sigma, epsilon)
-                #self._out_system_forces['CustomNonbondedForce'].addExclusion(p1, p2) #maintain consistent exclusions w/ exceptions
 
     def _add_nonbondeds(self):
         self._solute_exceptions, self._interexceptions = [], []
