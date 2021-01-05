@@ -191,6 +191,12 @@ class RESTTopologyFactory(HybridTopologyFactory):
         #set the appropriate parameters
         epsilon_solvent = self._og_system_forces['NonbondedForce'].getReactionFieldDielectric()
         r_cutoff = self._og_system_forces['NonbondedForce'].getCutoffDistance()
+        switch_bool = self._og_system_forces['NonbondedForce'].getUseSwitchingFunction()
+        standard_nonbonded_force.setUseSwitchingFunction(switch_bool)
+        if switch_bool:
+            switching_distance = self._og_system_forces['NonbondedForce'].getSwitchingDistance()
+            standard_nonbonded_force.setSwitchingDistance(switching_distance)
+
         if self._nonbonded_method != openmm.NonbondedForce.NoCutoff:
             standard_nonbonded_force.setReactionFieldDielectric(epsilon_solvent)
             standard_nonbonded_force.setCutoffDistance(r_cutoff)
@@ -357,17 +363,18 @@ class RESTTopologyFactory(HybridTopologyFactory):
         for exception_idx in range(og_nb_force.getNumExceptions()):
             p1, p2, chargeProd, sigma, epsilon = og_nb_force.getExceptionParameters(exception_idx)
             identifier = self.get_identifier([p1, p2])
-            self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd, sigma, epsilon)
+            exc_idx = self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd, sigma, epsilon)
             if identifier == 1: #solvent
-                exc_idx = self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd, sigma, epsilon)
+                pass
+                #exc_idx = self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd, sigma, epsilon)
                 #self._out_system_forces['NonbondedForce'].addExceptionParameterOffset('steric_scale', exc_idx, chargeProd, 0.0*sigma, epsilon)
             elif identifier == 0: #solute
                 self._solute_exceptions.append([p1, p2, [chargeProd, sigma, epsilon]])
-                exc_idx = self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd, sigma, epsilon)
+                #exc_idx = self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd, sigma, epsilon)
                 self._out_system_forces['NonbondedForce'].addExceptionParameterOffset('steric_scale', exc_idx, chargeProd, 0.0*sigma, epsilon)
             elif identifier == 2: #inter
                 self._interexceptions.append([p1, p2, [chargeProd, sigma, epsilon]])
-                exc_idx = self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd*0.0, sigma, epsilon*0.0)
+                #exc_idx = self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd, sigma, epsilon)
                 self._out_system_forces['NonbondedForce'].addExceptionParameterOffset('electrostatic_scale', exc_idx, chargeProd, 0.0*sigma, epsilon)
                 #self._out_system_forces['CustomNonbondedForce'].addExclusion(p1, p2) #maintain consistent exclusions w/ exceptions
 
