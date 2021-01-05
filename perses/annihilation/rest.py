@@ -183,6 +183,32 @@ class RESTTopologyFactory(HybridTopologyFactory):
         self._out_system.addForce(custom_core_force)
         self._out_system_forces[custom_core_force.__class__.__name__] = custom_core_force
 
+    def _add_nonbonded_force_terms_v2(self):
+        standard_nonbonded_force = openmm.NonbondedForce()
+        self._out_system.addForce(standard_nonbonded_force)
+        self._out_system_forces[standard_nonbonded_force.__class__.__name__] = standard_nonbonded_force
+
+        #set the appropriate parameters
+        epsilon_solvent = self._og_system_forces['NonbondedForce'].getReactionFieldDielectric()
+        r_cutoff = self._og_system_forces['NonbondedForce'].getCutoffDistance()
+        if self._nonbonded_method != openmm.NonbondedForce.NoCutoff:
+            standard_nonbonded_force.setReactionFieldDielectric(epsilon_solvent)
+            standard_nonbonded_force.setCutoffDistance(r_cutoff)
+        if self._nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
+            [alpha_ewald, nx, ny, nz] = self._og_system_forces['NonbondedForce'].getPMEParameters()
+            delta = self._og_system_forces['NonbondedForce'].getEwaldErrorTolerance()
+            standard_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
+            standard_nonbonded_force.setEwaldErrorTolerance(delta)
+        standard_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
+
+        if self._og_system_forces['NonbondedForce'].getUseDispersionCorrection():
+            self._out_system_forces['NonbondedForce'].setUseDispersionCorrection(True)
+
+        #add the global value
+        self._out_system_forces['NonbondedForce'].addGlobalParameter('electrostatic_scale', 0.)
+        self._out_system_forces['NonbondedForce'].addGlobalParameter('steric_scale', 0.)
+
+
     def _add_nonbonded_force_terms(self):
         from openmmtools.constants import ONE_4PI_EPS0 # OpenMM constant for Coulomb interactions (implicitly in md_unit_system units)
 
@@ -306,6 +332,41 @@ class RESTTopologyFactory(HybridTopologyFactory):
             p1, p2, p3, p4, per, phase, k = og_torsion_force.getTorsionParameters(torsion_idx)
             identifier = self.get_identifier([p1, p2, p3, p4])
             self._out_system_forces['CustomTorsionForce'].addTorsion(p1, p2, p3, p4, [per, phase, k, identifier])
+
+    def _add_nonbondeds_v2(self):
+        self._solute_exceptions, self._interexceptions = [], []
+        og_nb_force = self._og_system_forces['NonbondedForce']
+
+        for particle_idx in range(self._num_particles):
+            q, sigma, epsilon = og_nb_force.getParticleParameters(particle_idx)
+            identifier = self.get_identifier(particle_idx)
+
+            if identifier == 1: #solvent
+                self._out_system_forces['NonbondedForce'].addParticle(q, sigma, epsilon)
+
+            else: #solute
+                self._out_system_forces['NonbondedForce'].addParticle(q, sigma, epsilon)
+                self._out_system_forces['NonbondedForce'].addParticleParameterOffset('electrostatic_scale', particle_idx, q, 0.0*sigma, epsilon*0.0)
+                self._out_system_forces['NonbondedForce'].addParticleParameterOffset('steric_scale', particle_idx, q*0.0, 0.0*sigma, epsilon)
+
+
+        #handle exceptions
+        for exception_idx in range(og_nb_force.getNumExceptions()):
+            p1, p2, chargeProd, sigma, epsilon = og_nb_force.getExceptionParameters(exception_idx)
+            identifier = self.get_identifier([p1, p2])
+            self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd, sigma, epsilon)
+            if identifier == 1: #solvent
+                exc_idx = self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd, sigma, epsilon)
+                #self._out_system_forces['NonbondedForce'].addExceptionParameterOffset('steric_scale', exc_idx, chargeProd, 0.0*sigma, epsilon)
+            elif identifier == 0: #solute
+                self._solute_exceptions.append([p1, p2, [chargeProd, sigma, epsilon]])
+                exc_idx = self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd, sigma, epsilon)
+                self._out_system_forces['NonbondedForce'].addExceptionParameterOffset('steric_scale', exc_idx, chargeProd, 0.0*sigma, epsilon)
+            elif identifier == 2: #inter
+                self._interexceptions.append([p1, p2, [chargeProd, sigma, epsilon]])
+                exc_idx = self._out_system_forces['NonbondedForce'].addException(p1, p2, chargeProd*0.0, sigma, epsilon*0.0)
+                self._out_system_forces['NonbondedForce'].addExceptionParameterOffset('electrostatic_scale', exc_idx, chargeProd, 0.0*sigma, epsilon)
+                #self._out_system_forces['CustomNonbondedForce'].addExclusion(p1, p2) #maintain consistent exclusions w/ exceptions
 
     def _add_nonbondeds(self):
         self._solute_exceptions, self._interexceptions = [], []
