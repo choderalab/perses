@@ -207,8 +207,10 @@ class RESTTopologyFactory(HybridTopologyFactory):
             standard_nonbonded_force.setEwaldErrorTolerance(delta)
         standard_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
 
-        if self._og_system_forces['NonbondedForce'].getUseDispersionCorrection():
+        if self._og_system_forces['NonbondedForce'].getUseDispersionCorrection() and self._use_dispersion_correction:
             self._out_system_forces['NonbondedForce'].setUseDispersionCorrection(True)
+        else:
+            self._out_system_forces['NonbondedForce'].setUseDispersionCorrection(False)
 
         #add the global value
         self._out_system_forces['NonbondedForce'].addGlobalParameter('electrostatic_scale', 0.)
