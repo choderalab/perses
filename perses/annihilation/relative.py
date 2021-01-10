@@ -2053,7 +2053,7 @@ class HybridTopologyFactory(object):
             for chainid in protein_chainids[1:]:
                 jatom = protein_chain_atom_indices[chainid][0]
                 _logger.info(f"\t\t_impose_rmsd_restraint: Added virtual bond between protein chains atoms {iatom} and {jatom} so they are imaged together")
-                virtual_bond_force.addBond(int(iatom), int(jatom), [])
+                bondforce.addBond(int(iatom), int(jatom), [])
         
 
     def old_positions(self, hybrid_positions):
