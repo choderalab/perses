@@ -1977,10 +1977,12 @@ class HybridTopologyFactory(object):
     def _impose_rmsd_restraint(self):
         """
         Impose an RMSD restraint between the core heavy atoms and protein CA atoms within 6A
-        
+
         TODO: Generalize this to accommodate options.
         TODO: Don't turn this on for sidechain mutations.
         """
+        from simtk import unit, openmm
+
         # Determine core heavy atom indices
         core_atoms = [ int(index) for index in self._atom_classes['core_atoms'] ]
         heavy_atoms = [ int(index) for index in self._hybrid_topology.select('mass > 1.5') ]
@@ -1988,20 +1990,18 @@ class HybridTopologyFactory(object):
 
         # Determine protein CA atoms
         protein_atoms = [ int(index) for index in self._hybrid_topology.select('protein and name CA') ]
-    
+
         if len(core_heavy_atoms)==0 or len(protein_atoms)==0:
             # No restraint to be added
             _logger.info(f"\t\t_impose_rmsd_restraint: No restraint added because one set is empty (core_atoms={core_heavy_atoms}, protein_atoms={protein_atoms})")
             return
-    
+
         if len(set(core_atoms).intersection(set(protein_atoms))) != 0:
             # Core atoms are part of protein
             _logger.info(f"\t\t_impose_rmsd_restraint: No restraint added because sets overlap (core_atoms={core_heavy_atoms}, protein_atoms={protein_atoms})")
             return
 
         # Filter protein CA atoms within cutoff of core heavy atoms
-        import mdtraj as md
-        from simtk import unit
         cutoff = 0.65 # 6.5 A
         trajectory = md.Trajectory([self.hybrid_positions/unit.nanometers], topology=self._hybrid_topology)
         matches = md.compute_neighbors(trajectory, cutoff, core_heavy_atoms, haystack_indices=protein_atoms, periodic=False)
@@ -2015,10 +2015,9 @@ class HybridTopologyFactory(object):
         # Compute RMSD atom indices
         rmsd_atom_indices = core_heavy_atoms + protein_atoms
 
-        from simtk import unit, openmm
-        kB = unit.AVOGADRO_CONSTANT_NA * unit.BOLTZMANN_CONSTANT_kB 
+        kB = unit.AVOGADRO_CONSTANT_NA * unit.BOLTZMANN_CONSTANT_kB
         temperature = 300 * unit.kelvin
-        kT = kB * temperature     
+        kT = kB * temperature
         sigma = 1.0 * unit.angstrom
         buffer = 1.0 * unit.angstrom
         custom_cv_force = openmm.CustomCVForce('step(RMSD-buffer)*(K_RMSD/2)*(RMSD-buffer)^2')
@@ -2030,7 +2029,6 @@ class HybridTopologyFactory(object):
         _logger.info(f"\t\t_impose_rmsd_restraint: RMSD restraint added with buffer {buffer/unit.angstrom} A and stddev {sigma/unit.angstrom} A")
 
         # Add virtual bond between a core and protein atom to ensure they are periodically replicated together
-        from simtk import openmm    
         bondforce = openmm.CustomBondForce('0')
         bondforce.addBond(core_heavy_atoms[0], protein_atoms[0], [])
         self._hybrid_system.addForce(bondforce)
@@ -2039,7 +2037,7 @@ class HybridTopologyFactory(object):
         # Extract protein and molecule chains and indices before adding solvent
         mdtop = trajectory.top
         protein_atom_indices = mdtop.select('protein and (mass > 1)')
-        molecule_atom_indices = mdtop.select('(not protein) and (not water) and (mass > 1)') 
+        molecule_atom_indices = mdtop.select('(not protein) and (not water) and (mass > 1)')
         protein_chainids = list(set([atom.residue.chain.index for atom in mdtop.atoms if atom.index in protein_atom_indices]))
         n_protein_chains = len(protein_chainids)
         protein_chain_atom_indices = dict()
@@ -2054,7 +2052,7 @@ class HybridTopologyFactory(object):
                 jatom = protein_chain_atom_indices[chainid][0]
                 _logger.info(f"\t\t_impose_rmsd_restraint: Added virtual bond between protein chains atoms {iatom} and {jatom} so they are imaged together")
                 bondforce.addBond(int(iatom), int(jatom), [])
-        
+
 
     def old_positions(self, hybrid_positions):
         """
