@@ -100,7 +100,7 @@ jobs:
           export OE_LICENSE="$HOME/oe_license.txt"
           export TRAVIS=true
           pushd .
-          nosetests ${PACKAGENAME} --with-coverage --verbosity=3 --with-timer -a '!advanced' --cover-xml --cover-xml-file=./coverage.xml
+          nosetests perses --with-coverage --verbosity=3 --with-timer -a '!advanced' --cover-xml --cover-xml-file=./coverage.xml
           popd
 
       - name: Codecov
