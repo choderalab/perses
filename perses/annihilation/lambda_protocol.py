@@ -212,19 +212,12 @@ class LambdaProtocol(object):
 
 class RESTProtocol(object):
     default_functions = {'solute_scale': lambda beta0, beta : beta / beta0,
-                         'inter_scale' : lambda beta0, beta : np.sqrt(beta / beta0)
-                         }
-    def __init__(self):
-        self.functions = RESTProtocol.default_functions
-
-class RESTProtocolV2(object):
-    default_functions = {'solute_scale': lambda beta0, beta : beta / beta0,
                          'inter_scale' : lambda beta0, beta : np.sqrt(beta / beta0),
                          'steric_scale' : lambda beta0, beta : beta / beta0 - 1,
                          'electrostatic_scale' : lambda beta0, beta : np.sqrt(beta / beta0) - 1
                          }
     def __init__(self):
-        self.functions = RESTProtocolV2.default_functions
+        self.functions = RESTProtocol.default_functions
 
 
 class RelativeAlchemicalState(AlchemicalState):
@@ -271,7 +264,6 @@ class RelativeAlchemicalState(AlchemicalState):
            lambda_value = lambda_protocol.functions[parameter_name](global_lambda)
            setattr(self, parameter_name, lambda_value)
 
-
 class RESTState(AlchemicalState):
     """
     REST State to handle all lambda parameters required for REST2 implementation.
@@ -280,34 +272,6 @@ class RESTState(AlchemicalState):
     ----------
     solute_scale : solute scaling parameter
     inter_scale : inter-region scaling parameter
-    """
-
-    class _LambdaParameter(AlchemicalState._LambdaParameter):
-        pass
-
-    solute_scale = _LambdaParameter('solute_scale')
-    inter_scale = _LambdaParameter('inter_scale')
-
-    def set_alchemical_parameters(self,
-                                  beta0,
-                                  beta):
-       """Set each lambda value according to the lambda_functions protocol.
-       The undefined parameters (i.e. those being set to None) remain
-       undefined.
-
-       Parameters
-       ----------
-       lambda_value : float
-           The new value for all defined parameters.
-       """
-       lambda_protocol = RESTProtocol()
-       for parameter_name in lambda_protocol.functions:
-           lambda_value = lambda_protocol.functions[parameter_name](beta0, beta)
-           setattr(self, parameter_name, lambda_value)
-
-class RESTStateV2(RESTState):
-    """
-    version 2 of RESTState
     """
 
     class _LambdaParameter(AlchemicalState._LambdaParameter):
@@ -334,7 +298,7 @@ class RESTStateV2(RESTState):
        lambda_value : float
            The new value for all defined parameters.
        """
-       lambda_protocol = RESTProtocolV2()
+       lambda_protocol = RESTProtocol()
        for parameter_name in lambda_protocol.functions:
            lambda_value = lambda_protocol.functions[parameter_name](beta0, beta)
            setattr(self, parameter_name, lambda_value)
