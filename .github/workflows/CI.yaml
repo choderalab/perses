@@ -45,7 +45,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           environment-file: devtools/conda-envs/test_env.yaml
-          channels: conda-forge,defaults,omnia-dev,omnia,openeye
+          channels: conda-forge,defaults,omnia-dev,openeye
           activate-environment: test
           auto-update-conda: true
           auto-activate-base: false
@@ -60,19 +60,10 @@ jobs:
           case ${{ matrix.cfg.openmm }} in
             latest)
               echo "Using latest release OpenMM."
-              conda install --quiet -c omnia openmm;;
-            rc)
-              echo "Using OpenMM rc"
-              conda install --quiet -c omnia/label/rc openmm;;
-            beta)
-              echo "Using OpenMM beta"
-              conda install --quiet -c omnia/label/beta openmm;;
+              conda install --quiet -c conda-forge openmm;;
             nightly)
               echo "Using OpenMM nightly dev build."
               conda install --quiet -c omnia-dev openmm;;
-            conda-forge)
-              echo "Using OpenMM conda-forge testing build."
-              conda install --quiet -c conda-forge/label/test openmm;;
           esac
 
       - name: Install package
