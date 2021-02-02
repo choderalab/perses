@@ -33,4 +33,6 @@ dependencies:
   - nose-timer
   - openff-toolkit
   - sphinx
-  - openmmforcefields # This may not work until on conda-forge, try pip install git+https://github.com/openmm/openmmforcefields.git 
+  - openmmforcefields # This may not work until on conda-forge, try pip install git+https://github.com/openmm/openmmforcefields.git
+  - dicttoxml 
+  - tinydb

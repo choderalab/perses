@@ -39,3 +39,5 @@ dependencies:
   - sphinx
   - dicttoxml
   - openmmforcefields
+  - dicttoxml
+  - tinydb
