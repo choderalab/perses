@@ -2138,6 +2138,9 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
             flatten_torsions : bool, default False
                if True, torsion terms involving `unique_new_atoms` will be scaled such that at lambda=0,1, the torsion term is turned off/on respectively
                the opposite is true for `unique_old_atoms`.
+            interpolate_old_and_new_14s : bool, default False
+               if True, 1,4 exception terms involving `unique_new_atoms` will be scaled such that at lambda=0,1, the 1,4 exception term is turned off/on respectively
+               the opposite is true for `unique_old_atoms`.
         """
         from itertools import chain
 
