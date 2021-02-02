@@ -40,7 +40,7 @@ class PointMutationExecutor(object):
         protein_path = 'data/perses_jacs_systems/thrombin/Thrombin_protein.pdb'
         ligands_path = 'data/perses_jacs_systems/thrombin/Thrombin_ligands.sdf'
         protein_filename = resource_filename('openmmforcefields', protein_path)
-        ligand_file = resource_filename('openmmforcefields', ligands_path)
+        ligand_input = resource_filename('openmmforcefields', ligands_path)
 
         pm_delivery = PointMutationExecutor(protein_filename=protein_filename,
                                     mutation_chain_id='2',
@@ -48,7 +48,7 @@ class PointMutationExecutor(object):
                                      proposed_residue='THR',
                                      phase='complex',
                                      conduct_endstate_validation=False,
-                                     ligand_file=ligand_file,
+                                     ligand_input=ligand_input,
                                      ligand_index=0,
                                      forcefield_files=['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
                                      barostat=openmm.MonteCarloBarostat(1.0 * unit.atmosphere, temperature, 50),
@@ -89,7 +89,7 @@ class PointMutationExecutor(object):
                  proposed_residue,
                  phase='complex',
                  conduct_endstate_validation=True,
-                 ligand_file=None,
+                 ligand_input=None,
                  ligand_index=0,
                  water_model='tip3p',
                  ionic_strength=0.15 * unit.molar,
@@ -169,21 +169,27 @@ class PointMutationExecutor(object):
 
         # Load the ligand, if present
         molecules = []
-        if ligand_file:
-            if ligand_file.endswith('.sdf'): # small molecule
-                ligand_mol = createOEMolFromSDF(ligand_file, index=ligand_index)
-                ligand_mol = generate_unique_atom_names(ligand_mol)
-                molecules.append(Molecule.from_openeye(ligand_mol, allow_undefined_stereo=False))
-                ligand_positions, ligand_topology = extractPositionsFromOEMol(ligand_mol),  forcefield_generators.generateTopologyFromOEMol(ligand_mol)
-                ligand_md_topology = md.Topology.from_openmm(ligand_topology)
-                ligand_n_atoms = ligand_md_topology.n_atoms
+        if ligand_input:
+            if isinstance(ligand_input, str):
+                if ligand_input.endswith('.sdf'): # small molecule
+                        ligand_mol = createOEMolFromSDF(ligand_input, index=ligand_index)
+                        molecules.append(Molecule.from_openeye(ligand_mol, allow_undefined_stereo=False))
+                        ligand_positions, ligand_topology = extractPositionsFromOEMol(ligand_mol),  forcefield_generators.generateTopologyFromOEMol(ligand_mol)
+                        ligand_md_topology = md.Topology.from_openmm(ligand_topology)
+                        ligand_n_atoms = ligand_md_topology.n_atoms
 
-            elif ligand_file.endswith('pdb'): # protein
-                ligand_pdbfile = open(ligand_file, 'r')
-                ligand_pdb = app.PDBFile(ligand_pdbfile)
-                ligand_pdbfile.close()
-                ligand_positions, ligand_topology, ligand_md_topology = ligand_pdb.positions, ligand_pdb.topology, md.Topology.from_openmm(
-                    ligand_pdb.topology)
+                if ligand_input.endswith('pdb'): # protein
+                    ligand_pdbfile = open(ligand_input, 'r')
+                    ligand_pdb = app.PDBFile(ligand_pdbfile)
+                    ligand_pdbfile.close()
+                    ligand_positions, ligand_topology, ligand_md_topology = ligand_pdb.positions, ligand_pdb.topology, md.Topology.from_openmm(
+                        ligand_pdb.topology)
+                    ligand_n_atoms = ligand_md_topology.n_atoms
+
+            elif isinstance(ligand_input, oechem.OEMol): # oemol object
+                molecules.append(Molecule.from_openeye(ligand_input, allow_undefined_stereo=False))
+                ligand_positions, ligand_topology = extractPositionsFromOEMol(ligand_input),  forcefield_generators.generateTopologyFromOEMol(ligand_input)
+                ligand_md_topology = md.Topology.from_openmm(ligand_topology)
                 ligand_n_atoms = ligand_md_topology.n_atoms
 
             else:
@@ -210,7 +216,7 @@ class PointMutationExecutor(object):
         # Solvate apo and complex...
         apo_input = list(self._solvate(protein_topology, protein_positions, water_model, phase, ionic_strength, apo_box_dimensions))
         inputs = [apo_input]
-        if ligand_file:
+        if ligand_input:
             inputs.append(self._solvate(complex_topology, complex_positions, water_model, phase, ionic_strength, complex_box_dimensions))
 
         geometry_engine = FFAllAngleGeometryEngine(metadata=None,
@@ -299,7 +305,7 @@ class PointMutationExecutor(object):
             htfs.append(forward_htf)
 
         self.apo_htf = htfs[0]
-        self.complex_htf = htfs[1] if ligand_file else None
+        self.complex_htf = htfs[1] if ligand_input else None
 
     def get_complex_htf(self):
         return self.complex_htf

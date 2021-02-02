@@ -322,6 +322,12 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     for phase in phases:
         assert (phase in known_phases), f"Unknown phase, {phase} provided. run_setup() can be used with {known_phases}"
 
+    if 'use_given_geometries' not in list(setup_options.keys()):
+        use_given_geometries = False
+    else:
+        assert type(setup_options['use_given_geometries']) == type(True)
+        use_given_geometries = setup_options['use_given_geometries']
+
     if 'complex' in phases:
         _logger.info(f"\tPulling receptor (as pdb or mol2)...")
         # We'll need the protein PDB file (without missing atoms)
@@ -437,7 +443,8 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
                                           trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'],
 
-                                          complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'], ionic_strength=ionic_strength, remove_constraints=setup_options['remove_constraints'])
+                                          complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'], ionic_strength=ionic_strength, remove_constraints=setup_options['remove_constraints'],
+                                          use_given_geometries = use_given_geometries)
 
 
         _logger.info(f"\twriting pickle output...")
@@ -559,9 +566,12 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
             _forward_added_valence_energy = top_prop['%s_added_valence_energy' % phase]
             _reverse_subtracted_valence_energy = top_prop['%s_subtracted_valence_energy' % phase]
 
-            zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD)#, trajectory_directory=f'{xml_directory}{phase}')
-            _logger.info(f"\t\terror in zero state: {zero_state_error}")
-            _logger.info(f"\t\terror in one state: {one_state_error}")
+            if not use_given_geometries:
+                zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD)#, trajectory_directory=f'{xml_directory}{phase}')
+                _logger.info(f"\t\terror in zero state: {zero_state_error}")
+                _logger.info(f"\t\terror in one state: {one_state_error}")
+            else:
+                _logger.info(f"'use_given_geometries' was passed to setup; skipping endstate validation")
 
             #TODO expose more of these options in input
             if build_samplers:
