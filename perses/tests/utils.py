@@ -462,7 +462,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     from perses.utils.openeye import generate_expression
     from openmmforcefields.generators import SystemGenerator
-    from openforcefield.topology import Molecule
+    from openff.toolkit.topology import Molecule
 
     atom_expr = generate_expression(atom_expression)
     bond_expr = generate_expression(bond_expression)

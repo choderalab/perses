@@ -29,7 +29,7 @@ from perses.rjmc import coordinate_numba
 from perses.rjmc.geometry import check_dimensionality
 from perses.utils.openeye import smiles_to_oemol, OEMol_to_omm_ff
 from openmmforcefields.generators import SystemGenerator
-from openforcefield.topology import Molecule
+from openff.toolkit.topology import Molecule
 
 #global variables
 forcefield_files = ['amber14/protein.ff14SB.xml', 'amber/tip3p_standard.xml']
@@ -1921,7 +1921,7 @@ def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'pro
     from perses.utils.smallmolecules import render_atom_mapping
     import tqdm
     from openmmforcefields.generators import SystemGenerator
-    from openforcefield.topology import Molecule
+    from openff.toolkit.topology import Molecule
 
     current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name,title=current_mol_name[0:4])
     proposed_mol = iupac_to_oemol(proposed_mol_name)

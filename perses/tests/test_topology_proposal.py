@@ -20,7 +20,7 @@ from perses.rjmc import topology_proposal
 from collections import defaultdict
 import openeye.oechem as oechem
 from openmmforcefields.generators import SystemGenerator
-from openforcefield.topology import Molecule
+from openff.toolkit.topology import Molecule
 from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
 
 #default arguments for SystemGenerators

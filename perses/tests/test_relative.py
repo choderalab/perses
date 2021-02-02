@@ -434,7 +434,7 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene",atom_express
     refmol = iupac_to_oemol(ref_mol_name)
     refmol = generate_conformers(refmol,max_confs=1)
 
-    from openforcefield.topology import Molecule
+    from openff.toolkit.topology import Molecule
     molecules = [Molecule.from_openeye(oemol) for oemol in [refmol, mol]]
     barostat = None
     forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']

@@ -13,7 +13,7 @@ from openmoltools import forcefield_generators
 import mdtraj as md
 from openmmtools.constants import kB
 from perses.tests.utils import validate_endstate_energies
-from openforcefield.topology import Molecule
+from openff.toolkit.topology import Molecule
 from openmmforcefields.generators import SystemGenerator
 
 ENERGY_THRESHOLD = 1e-2
