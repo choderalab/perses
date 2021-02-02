@@ -323,7 +323,7 @@ class RelativeFEPSetup(object):
             _logger.info(f"omitted MonteCarloBarostat because pressure was not specified")
 
         # Create openforcefield Molecule objects for old and new molecules
-        from openforcefield.topology import Molecule
+        from openff.toolkit.topology import Molecule
         molecules = [ Molecule.from_openeye(oemol,allow_undefined_stereo=True) for oemol in [self._ligand_oemol_old, self._ligand_oemol_new] ]
 
         # Handle spectator molecules

@@ -44,7 +44,7 @@ import copy
 from perses.dispersed.utils import minimize
 from openmmtools.states import ThermodynamicState, SamplerState
 from openmmforcefields.generators import SystemGenerator
-from openforcefield.topology import Molecule
+from openff.toolkit.topology import Molecule
 from perses.utils.openeye import smiles_to_oemol
 
 #global variables

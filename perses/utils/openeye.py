@@ -49,7 +49,7 @@ def system_generator_wrapper(oemols,
     -------
     system_generator : openmmforcefields.generators.SystemGenerator
     """
-    from openforcefield.topology import Molecule
+    from openff.toolkit.topology import Molecule
     from openmmforcefields.generators import SystemGenerator
     system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
                                          small_molecule_forcefield = small_molecule_forcefield, molecules=[Molecule.from_openeye(oemol) for oemol in oemols], cache=None)
