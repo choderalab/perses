@@ -128,7 +128,15 @@ def make_core_file(numSteps,
         outfile.write(dom.toprettyxml())
 
 
-def relax_structure(temperature, system, positions, nequil=1000, n_steps_per_iteration=250,platform_name='OpenCL',timestep=2.*unit.femtosecond,collision_rate=90./unit.picosecond):
+def relax_structure(temperature,
+                    system,
+                    positions,
+                    nequil=1000,
+                    n_steps_per_iteration=250,
+                    platform_name='OpenCL',
+                    timestep=2.*unit.femtosecond,
+                    collision_rate=90./unit.picosecond,
+                    **kwargs):
     """
     arguments
         temperature : simtk.unit.Quantity with units compatible with kelvin
