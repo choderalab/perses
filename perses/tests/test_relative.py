@@ -581,6 +581,7 @@ def test_HybridTopologyFactory_energies(molecule_perturbation_list = [['naphthal
 def RepartitionedHybridTopologyFactory_energies(topology, chain, system, positions, system_generator):
     """
     Test whether the difference in the nonalchemical zero and alchemical zero states is the forward valence energy.  Also test for the one states.
+    Note that two RepartitionedHybridTopologyFactorys need to be generated (one for each endstate) because the energies need to be validated separately for each endstate.
     """
 
     from perses.rjmc.topology_proposal import PointMutationEngine
@@ -720,6 +721,7 @@ def test_RepartitionedHybridTopologyFactory_energies():
 def flattenedHybridTopologyFactory_energies(topology, chain, system, positions, system_generator, repartitioned=False):
     """
     Test whether the difference in the nonalchemical zero and alchemical zero states is the forward valence energy.  Also test for the one states.
+    Note that the torsions/1,4 exception terms of the off atoms are manually zeroed for the lambda = 0 endstate and the endstate error is computed. Then, this is repeated for the lambda = 1 endstate.
     """
 
     from perses.rjmc.topology_proposal import PointMutationEngine
