@@ -25,6 +25,7 @@ dependencies:
   - networkx >=2.0
   - openeye-toolkits
   - dask
+  - dask-jobqueue
   - distributed
   - progressbar2
   - parmed # may need to sort out ambermini/ambertools/parmed dependencies
