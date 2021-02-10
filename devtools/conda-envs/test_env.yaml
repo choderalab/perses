@@ -39,6 +39,6 @@ dependencies:
   - openff-toolkit
   - sphinx
   - dicttoxml
-  - openmmforcefields
+  - openmmforcefields >=0.9.0
   - dicttoxml
   - tinydb

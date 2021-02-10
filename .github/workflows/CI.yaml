@@ -54,9 +54,6 @@ jobs:
       - name: Refine test environment
         shell: bash -l {0}
         run: |
-          # Install openmm-forcefields via pip (until available via omnia)
-          conda install --yes tinydb "openforcefield>=0.6.0" "openforcefields>=1.0.0"
-          pip install https://github.com/openmm/openmm-forcefields/archive/master.tar.gz
           case ${{ matrix.cfg.openmm }} in
             latest)
               echo "Using latest release OpenMM."
