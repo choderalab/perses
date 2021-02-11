@@ -358,7 +358,6 @@ def createOEMolFromSDF(sdf_filename, index=0, add_hydrogens=True, allow_undefine
     oechem.OEAssignHybridization(molecule)
     if add_hydrogens:
         oechem.OEAddExplicitHydrogens(molecule)
-    oechem.OEAddExplicitHydrogens(molecule)
     oechem.OEPerceiveChiral(molecule)
 
     # perceive chirality

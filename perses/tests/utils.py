@@ -575,6 +575,7 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     """
     from openmoltools import forcefield_generators
     from openmmtools import testsystems
+    from openmmforcefields.generators import SystemGenerator
 
     from perses.utils.openeye import smiles_to_oemol
     from perses.utils.data import get_data_filename
