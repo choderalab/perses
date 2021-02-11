@@ -420,7 +420,10 @@ def generate_unique_atom_names(molecule):
     else:
         # generating new atom names
         from collections import defaultdict
-        from simtk.openmm.app.element import Element
+        try:
+            from openmm.app.element import Element
+        except ModuleNotFoundError:  # <=7.5.0
+            from simtk.openmm.app.element import Element
         _logger.info(f'molecule {molecule.GetTitle()} \
                      does not have unique atom names. Generating now...')
         element_counts = defaultdict(int)
