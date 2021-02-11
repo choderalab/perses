@@ -58,6 +58,9 @@ jobs:
             latest)
               echo "Using latest release OpenMM."
               conda install --quiet -c conda-forge openmm;;
+           #rc) # We can uncomment this case when we have this label on conda-forge
+             #echo "Using OpenMM rc" 
+             #conda install --quiet -c conda-forge/label/openmm-rc openmm;;
             nightly)
               echo "Using OpenMM nightly dev build."
               conda install --quiet -c omnia-dev openmm;;
@@ -88,7 +91,7 @@ jobs:
           export OE_LICENSE="$HOME/oe_license.txt"
           export TRAVIS=true
           pushd .
-          nosetests perses --with-coverage --verbosity=3 --with-timer -a '!advanced' --cover-xml --cover-xml-file=./coverage.xml
+          nosetests perses --with-coverage --cover-package=perses --verbosity=3 --with-timer -a '!advanced' --cover-xml --cover-xml-file=./coverage.xml
           popd
 
       - name: Codecov
