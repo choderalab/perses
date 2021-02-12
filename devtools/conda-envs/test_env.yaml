@@ -7,6 +7,7 @@ channels:
   - openeye
 dependencies:
   - python >=3.6
+  - pip
   - setuptools
   - fire
   - joblib
@@ -35,7 +36,6 @@ dependencies:
   - tqdm
   - pytest
   - pytest-cov
-  - pytest-attrib
   - coverage
   - openff-toolkit
   - sphinx
@@ -43,3 +43,5 @@ dependencies:
   - openmmforcefields >=0.9.0
   - dicttoxml
   - tinydb
+  - pip:
+    - pytest-attrib
