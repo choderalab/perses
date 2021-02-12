@@ -9,6 +9,7 @@ on:
 
 jobs:
   test:
+    if: (github.event_name == 'schedule'  && matrix.cfg.nightly) || github.event_name != 'schedule' 
     name: Test on ${{ matrix.cfg.os }}, Python ${{ matrix.cfg.python-version }}, OpenMM ${{ matrix.cfg.openmm }}
     runs-on: ${{ matrix.cfg.os }}
     strategy:
