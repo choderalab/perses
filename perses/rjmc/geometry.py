@@ -1176,7 +1176,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return xyz, detJ
 
     def _bond_log_pmf(self, bond, beta, n_divisions):
-        """
+        r"""
         Calculate the log probability mass function (PMF) of drawing a bond.
 
         .. math ::
@@ -1242,7 +1242,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return r_i, log_p_i, bin_width
 
     def _bond_logp(self, r, bond, beta, n_divisions):
-        """
+        r"""
         Calculate the log-probability of a given bond at a given inverse temperature
 
         Propose dimensionless bond length r from distribution
@@ -1286,7 +1286,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return logp
 
     def _propose_bond(self, bond, beta, n_divisions):
-        """
+        r"""
         Propose dimensionless bond length r from distribution
 
         .. math ::
@@ -1330,7 +1330,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return r
 
     def _angle_log_pmf(self, angle, beta, n_divisions):
-        """
+        r"""
         Calculate the log probability mass function (PMF) of drawing a angle.
 
         .. math ::
@@ -1398,7 +1398,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return theta_i, log_p_i, bin_width
 
     def _angle_logp(self, theta, angle, beta, n_divisions):
-        """
+        r"""
         Calculate the log-probability of a given angle at a given inverse temperature
 
         Propose dimensionless bond length r from distribution
@@ -1442,7 +1442,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return logp
 
     def _propose_angle(self, angle, beta, n_divisions):
-        """
+        r"""
         Propose dimensionless angle from distribution
 
         .. math ::
