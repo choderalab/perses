@@ -91,7 +91,7 @@ jobs:
           export OE_LICENSE="$HOME/oe_license.txt"
           export TRAVIS=true
           pushd .
-          nosetests perses --with-coverage --cover-package=perses --verbosity=3 --with-timer -a '!advanced' --cover-xml --cover-xml-file=./coverage.xml
+          pytest -v --cov-report xml --cov=perses --durations=0
           popd
 
       - name: Codecov
