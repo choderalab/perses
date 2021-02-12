@@ -60,7 +60,7 @@ jobs:
               conda install --quiet -c conda-forge openmm;;
            #rc) # We can uncomment this case when we have this label on conda-forge
              #echo "Using OpenMM rc" 
-             #conda install --quiet -c conda-forge/label/openmm-rc openmm;;
+             #conda install --quiet -c conda-forge/label/openmm_rc openmm;;
             nightly)
               echo "Using OpenMM nightly dev build."
               conda install --quiet -c omnia-dev openmm;;
