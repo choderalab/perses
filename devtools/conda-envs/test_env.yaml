@@ -28,6 +28,7 @@ dependencies:
   - networkx >=2.0
   - openeye-toolkits
   - dask
+  - dask-jobqueue
   - distributed
   - progressbar2
   - parmed # may need to sort out ambermini/ambertools/parmed dependencies
@@ -35,6 +36,9 @@ dependencies:
   - nose
   - nose-timer
   - coverage
-  - openforcefield >=0.7.1
+  - openff-toolkit
   - sphinx
   - dicttoxml
+  - openmmforcefields >=0.9.0
+  - dicttoxml
+  - tinydb
