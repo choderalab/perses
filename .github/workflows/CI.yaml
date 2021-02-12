@@ -21,8 +21,8 @@ jobs:
         cfg:
           - { os: ubuntu-latest, python-version: 3.7, openmm: latest }
           - { os: ubuntu-latest, python-version: 3.8, openmm: latest }
-          - { os: ubuntu-latest, python-version: 3.7, openmm: nightly }
-          - { os: ubuntu-latest, python-version: 3.8, openmm: nightly }
+          - { os: ubuntu-latest, python-version: 3.7, openmm: nightly, experimental: true }
+          - { os: ubuntu-latest, python-version: 3.8, openmm: nightly, experimental: true }
           - { os: ubuntu-latest, python-version: 3.7, openmm: conda-forge }
           - { os: ubuntu-latest, python-version: 3.8, openmm: conda-forge }
 
