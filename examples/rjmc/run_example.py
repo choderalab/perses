@@ -12,7 +12,6 @@ import copy
 import logging
 
 import numpy as np
-import openmoltools
 import perses.annihilation.ncmc_switching as ncmc_switching
 import perses.bias.bias_engine as bias_engine
 import perses.rjmc.geometry as geometry
@@ -21,7 +20,6 @@ from openff.toolkit.topology import Molecule
 from openmmforcefields.generators import SystemGenerator
 from perses.utils.openeye import OEMol_to_omm_ff, smiles_to_oemol
 from simtk import openmm, unit
-from simtk.openmm import app
 
 
 def run():
