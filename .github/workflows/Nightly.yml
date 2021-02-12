@@ -92,9 +92,9 @@ jobs:
 
       - name: Make an issue
         if: ${{ failure() }}
-        - uses: JasonEtco/create-an-issue@v2
-          env:
+      - uses: JasonEtco/create-an-issue@v2
+        env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          with:
+        with:
              assignees: mikemhnery
              filename: .github/nightly-fail.md
