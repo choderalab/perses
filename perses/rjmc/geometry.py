@@ -2192,11 +2192,12 @@ class GeometrySystemGenerator(object):
         rotor = oechem.OEIsRotor()
         torsion_predicate = oechem.OENotBond(rotor)
         non_rotor_torsions = list(oechem.OEGetTorsions(reference_topology.residue_oemol, torsion_predicate))
-        relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
+        #relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
+        relevant_torsion_list = non_rotor_torsions
 
         #now, for each torsion, extract the set of indices and the angle
         periodicity = 1
-        k = 120.0*unit.kilocalories_per_mole # stddev of 12 degrees
+        k = 1200.0*unit.kilocalories_per_mole # stddev of 1.2 degrees
         #print([atom.name for atom in growth_indices])
         _logger.debug(f"\t\t\trelevant torsions for ring restraints being added...")
         for torsion in relevant_torsion_list:
