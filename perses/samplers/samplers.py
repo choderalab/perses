@@ -134,7 +134,7 @@ class ExpandedEnsembleSampler(object):
 
     """
     def __init__(self, sampler, topology, state_key, proposal_engine, geometry_engine, log_weights=None, options=None, platform=None, envname=None, storage=None, ncmc_write_interval=1):
-        """
+        r"""
         Create an expanded ensemble sampler.
 
         p(x,k) \propto \exp[-u_k(x) + g_k]
@@ -830,7 +830,7 @@ class MultiTargetDesign(object):
 
     """
     def __init__(self, target_samplers, storage=None, verbose=False):
-        """
+        r"""
         Initialize a multi-objective design sampler with the specified target sampler powers.
 
         Parameters

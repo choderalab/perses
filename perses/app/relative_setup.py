@@ -1722,7 +1722,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
 
     @staticmethod
     def multinomial_resample(cumulative_works, sampler_states, num_resamples, previous_labels):
-        """
+        r"""
         from a list of cumulative works and sampler states, resample the sampler states N times with replacement
         from a multinomial distribution conditioned on the weights w_i \propto e^{-cumulative_works_i}
 
