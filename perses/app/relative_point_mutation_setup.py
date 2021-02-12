@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 from perses.utils.openeye import *
-from perses.annihilation.relative import HybridTopologyFactory
+from perses.annihilation.relative import HybridTopologyFactory, RepartitionedHybridTopologyFactory
 from perses.rjmc.topology_proposal import PointMutationEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 
@@ -101,6 +101,9 @@ class PointMutationExecutor(object):
                  small_molecule_forcefields='gaff-2.11',
                  complex_box_dimensions=None,
                  apo_box_dimensions=None,
+                 flatten_torsions=False,
+                 flatten_exceptions=False,
+                 repartitioned_endstate=None,
                  **kwargs):
         """
         arguments
@@ -115,9 +118,10 @@ class PointMutationExecutor(object):
             phase : str, default complex
                 if phase == vacuum, then the complex will not be solvated with water; else, it will be solvated with tip3p
             conduct_endstate_validation : bool, default True
-                whether to conduct an endstate validation of the hybrid topology factory
-            ligand_input : str or oemol, default None
-                path to ligand of interest: .pdb for protein and .sdf or oemol for small molecule
+                whether to conduct an endstate validation of the HybridTopologyFactory. If using the RepartitionedHybridTopologyFactory,
+                endstate validation cannot and will not be conducted.
+            ligand_file : str, default None
+                path to ligand of interest (i.e. small molecule or protein); .sdf or .pdb
             ligand_index : int, default 0
                 which ligand to use
             water_model : str, default 'tip3p'
@@ -140,12 +144,18 @@ class PointMutationExecutor(object):
                 the forcefield string for small molecule parametrization
             complex_box_dimensions : Vec3, default None
                 define box dimensions of complex phase;
-                if none, padding is 1nm
+                if None, padding is 1nm
             apo_box_dimensions :  Vec3, default None
                 define box dimensions of apo phase phase;
                 if None, padding is 1nm
-
-        TODO : allow argument for spectator ligands besides the 'ligand_input'
+            flatten_torsions : bool, default False
+                in the htf, flatten torsions involving unique new atoms at lambda = 0 and unique old atoms are lambda = 1
+            flatten_exceptions : bool, default False
+                in the htf, flatten exceptions involving unique new atoms at lambda = 0 and unique old atoms at lambda = 1
+            repartitioned_endstate : int, default None
+                the endstate (0 or 1) at which to build the RepartitionedHybridTopologyFactory. By default, this is None,
+                meaning a vanilla HybridTopologyFactory will be built.
+        TODO : allow argument for spectator ligands besides the 'ligand_file'
 
         """
 
@@ -243,24 +253,31 @@ class PointMutationExecutor(object):
             logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta,
                                                         validate_energy_bookkeeping=validate_bool)
 
-            forward_htf = HybridTopologyFactory(topology_proposal=topology_proposal,
-                                                 current_positions=pos,
-                                                 new_positions=new_positions,
-                                                 use_dispersion_correction=False,
-                                                 functions=None,
-                                                 softcore_alpha=None,
-                                                 bond_softening_constant=1.0,
-                                                 angle_softening_constant=1.0,
-                                                 soften_only_new=False,
-                                                 neglected_new_angle_terms=[],
-                                                 neglected_old_angle_terms=[],
-                                                 softcore_LJ_v2=True,
-                                                 softcore_electrostatics=True,
-                                                 softcore_LJ_v2_alpha=0.85,
-                                                 softcore_electrostatics_alpha=0.3,
-                                                 softcore_sigma_Q=1.0,
-                                                 interpolate_old_and_new_14s=False,
-                                                 omitted_terms=None)
+            if repartitioned_endstate is None:
+                factory = HybridTopologyFactory
+            elif repartitioned_endstate in [0, 1]:
+                factory = RepartitionedHybridTopologyFactory
+
+            forward_htf = factory(topology_proposal=topology_proposal,
+                                  current_positions=pos,
+                                  new_positions=new_positions,
+                                  use_dispersion_correction=False,
+                                  functions=None,
+                                  softcore_alpha=None,
+                                  bond_softening_constant=1.0,
+                                  angle_softening_constant=1.0,
+                                  soften_only_new=False,
+                                  neglected_new_angle_terms=[],
+                                  neglected_old_angle_terms=[],
+                                  softcore_LJ_v2=True,
+                                  softcore_electrostatics=True,
+                                  softcore_LJ_v2_alpha=0.85,
+                                  softcore_electrostatics_alpha=0.3,
+                                  softcore_sigma_Q=1.0,
+                                  interpolate_old_and_new_14s=flatten_exceptions,
+                                  omitted_terms=None,
+                                  endstate=repartitioned_endstate,
+                                  flatten_torsions=flatten_torsions)
 
             if not topology_proposal.unique_new_atoms:
                 assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
@@ -276,7 +293,7 @@ class PointMutationExecutor(object):
                 subtracted_valence_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
 
 
-            if conduct_endstate_validation:
+            if conduct_endstate_validation and repartitioned_endstate is None:
                 zero_state_error, one_state_error = validate_endstate_energies(forward_htf._topology_proposal, forward_htf, added_valence_energy, subtracted_valence_energy, beta=beta, ENERGY_THRESHOLD=ENERGY_THRESHOLD)
                 if zero_state_error > ENERGY_THRESHOLD:
                     _logger.warning(f"Reduced potential difference of the nonalchemical and alchemical Lambda = 0 state is above the threshold ({ENERGY_THRESHOLD}): {zero_state_error}")
