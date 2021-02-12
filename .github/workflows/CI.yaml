@@ -45,7 +45,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           environment-file: devtools/conda-envs/test_env.yaml
-          channels: conda-forge,defaults,omnia-dev,omnia,openeye
+          channels: conda-forge,defaults,omnia-dev,openeye
           activate-environment: test
           auto-update-conda: true
           auto-activate-base: false
@@ -54,25 +54,16 @@ jobs:
       - name: Refine test environment
         shell: bash -l {0}
         run: |
-          # Install openmm-forcefields via pip (until available via omnia)
-          conda install --yes tinydb "openforcefield>=0.6.0" "openforcefields>=1.0.0"
-          pip install https://github.com/openmm/openmm-forcefields/archive/master.tar.gz
           case ${{ matrix.cfg.openmm }} in
             latest)
               echo "Using latest release OpenMM."
-              conda install --quiet -c omnia openmm;;
-            rc)
-              echo "Using OpenMM rc"
-              conda install --quiet -c omnia/label/rc openmm;;
-            beta)
-              echo "Using OpenMM beta"
-              conda install --quiet -c omnia/label/beta openmm;;
+              conda install --quiet -c conda-forge openmm;;
+           #rc) # We can uncomment this case when we have this label on conda-forge
+             #echo "Using OpenMM rc" 
+             #conda install --quiet -c conda-forge/label/openmm_rc openmm;;
             nightly)
               echo "Using OpenMM nightly dev build."
               conda install --quiet -c omnia-dev openmm;;
-            conda-forge)
-              echo "Using OpenMM conda-forge testing build."
-              conda install --quiet -c conda-forge/label/test openmm;;
           esac
 
       - name: Install package
@@ -100,7 +91,7 @@ jobs:
           export OE_LICENSE="$HOME/oe_license.txt"
           export TRAVIS=true
           pushd .
-          nosetests ${PACKAGENAME} --with-coverage --verbosity=3 --with-timer -a '!advanced' --cover-xml --cover-xml-file=./coverage.xml
+          nosetests perses --with-coverage --cover-package=perses --verbosity=3 --with-timer -a '!advanced' --cover-xml --cover-xml-file=./coverage.xml
           popd
 
       - name: Codecov
