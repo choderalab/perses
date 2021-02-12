@@ -2,14 +2,11 @@ from simtk import unit
 import sys
 import numpy as np
 if sys.version_info >= (3, 0):
-    from io import StringIO
-    from subprocess import getstatusoutput
+    pass
 else:
-    from cStringIO import StringIO
-    from commands import getstatusoutput
+    pass
 import matplotlib as mpl
 mpl.use('Agg')
-import seaborn as sns
 from openmmtools.constants import kB
 import matplotlib.pyplot as plt
 
@@ -146,11 +143,8 @@ def benchmark_ncmc_work_during_protocol():
         * Plot mean and standard deviation of EXEN logP as a function of
           total steps
     """
-    from perses.tests.testsystems import NaphthaleneTestSystem, ButaneTestSystem, PropaneTestSystem
+    from perses.tests.testsystems import ButaneTestSystem
     from perses.analysis import Analysis
-    import netCDF4 as netcdf
-    import pickle
-    import codecs
     molecule_names = {
         #'propane' : PropaneTestSystem,
         'butane' : ButaneTestSystem,

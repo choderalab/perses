@@ -5,7 +5,6 @@ from openmmtools.states import SamplerState, ThermodynamicState, CompoundThermod
 from simtk import unit, openmm
 from perses.tests.utils import compute_potential_components
 from openmmtools.constants import kB
-from openmmtools import utils
 from perses.dispersed.utils import configure_platform
 from perses.annihilation.rest import RESTTopologyFactory
 from perses.annihilation.lambda_protocol import RESTState

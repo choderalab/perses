@@ -14,16 +14,14 @@ from simtk.openmm import app
 import sys
 import numpy as np
 from perses.rjmc import geometry
-from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine
+from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
 from openeye import oechem
 if sys.version_info >= (3, 0):
-    from io import StringIO
-    from subprocess import getstatusoutput
+    pass
 else:
-    from cStringIO import StringIO
-    from commands import getstatusoutput
+    pass
 from openmmtools.constants import kB
-from openmmtools import alchemy, states
+from openmmtools import states
 import contextlib
 from openmmtools import utils
 ################################################################################
@@ -453,11 +451,10 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
     from openmoltools import forcefield_generators
 
     from openeye import oechem
-    from openmoltools.openeye import iupac_to_oemol, generate_conformers, smiles_to_oemol
+    from openmoltools.openeye import iupac_to_oemol, smiles_to_oemol
     from openmoltools import forcefield_generators
     import perses.utils.openeye as openeye
-    from perses.utils.data import get_data_filename
-    from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
     import simtk.unit as unit
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     from perses.utils.openeye import generate_expression
@@ -640,7 +637,6 @@ def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_it
         work from each conformer proposal
     """
     from openmmtools import integrators
-    from perses.utils.openeye import smiles_to_oemol
     import simtk.unit as unit
     import simtk.openmm as openmm
     from openmmtools.constants import kB

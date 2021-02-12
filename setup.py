@@ -8,16 +8,12 @@ DOCLINES = __doc__.split("\n")
 
 import os
 import sys
-import glob
-import traceback
-import numpy as np
 from os.path import join as pjoin
 from os.path import relpath
-from setuptools import setup, Extension, find_packages
+from setuptools import setup
 try:
     sys.dont_write_bytecode = True
     sys.path.insert(0, '.')
-    from basesetup import write_version_py, CompilerDetection, check_dependencies
 finally:
     sys.dont_write_bytecode = False
 

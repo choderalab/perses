@@ -752,7 +752,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         """
         import copy
-        from simtk import openmm, unit
+        from simtk import unit
         no_nb_system = copy.deepcopy(system)
         _logger.info("\tbeginning construction of no_nonbonded final system...")
         _logger.info(f"\tinitial no-nonbonded final system forces {[force.__class__.__name__ for force in list(no_nb_system.getForces())]}")
@@ -2035,7 +2035,6 @@ class GeometrySystemGenerator(object):
                 growth_system.addForce(modified_sterics_force)
 
                 # Translate nonbonded method to the custom nonbonded force
-                import simtk.openmm.app as app
                 _logger.info("\t\tsetting nonbonded method, cutoff, switching function, and switching distance to custom nonbonded force...")
                 if reference_nonbonded_force_method in [0,1]: #if Nonbonded method is NoCutoff or CutoffNonPeriodic
                     modified_sterics_force.setNonbondedMethod(reference_nonbonded_force_method)
@@ -2633,7 +2632,6 @@ class NetworkXProposalOrder(object):
             The contribution to the overall proposal log probability as a list of sequential logps
 
         """
-        from scipy import special
         atom_torsions= []
         logp = []
         assert len(atom_group) == len(set(atom_group)), "There are duplicate atom indices in the list of atom proposal indices"

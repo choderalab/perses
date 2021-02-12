@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 from perses.dispersed import feptasks
-from perses.utils.openeye import *
+from perses.utils.openeye import createOEMolFromSDF, createSystemFromSMILES, extractPositionsFromOEMol, generate_unique_atom_names, nonalchemical_perturbation_dict, oechem, temperature
 from perses.utils.data import load_smi
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
 from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine
@@ -17,14 +17,11 @@ import numpy as np
 from openmoltools import forcefield_generators
 import copy
 import mdtraj as md
-from io import StringIO
 from openmmtools.constants import kB
 import logging
 import os
 import dask.distributed as distributed
-import parmed as pm
 from collections import namedtuple
-from typing import List, Tuple, Union, NamedTuple
 from collections import namedtuple
 import random
 from scipy.special import logsumexp
@@ -808,7 +805,6 @@ class RelativeFEPSetup(object):
         """
         # DEBUG: Write PDB file being fed into Modeller to check why MOL isn't being matched
         from simtk.openmm.app import PDBFile
-        import os
         modeller = app.Modeller(topology, positions)
         # retaining protein protonation from input files
         #hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
@@ -1582,7 +1578,6 @@ class NonequilibriumSwitchingFEP(DaskClient):
                 self.survival[_direction] = survival
             except Exception as e:
                 _logger.info(f"{e}")
-                pass
 
     def compute_sMC_free_energy(self):
         """
