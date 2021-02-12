@@ -35,6 +35,7 @@ dependencies:
   - tqdm
   - pytest
   - pytest-cov
+  - pytest-attrib
   - coverage
   - openff-toolkit
   - sphinx
