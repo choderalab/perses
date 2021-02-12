@@ -1,10 +1,6 @@
 from simtk import unit
 import sys
 import numpy as np
-if sys.version_info >= (3, 0):
-    pass
-else:
-    pass
 import matplotlib as mpl
 mpl.use('Agg')
 from openmmtools.constants import kB

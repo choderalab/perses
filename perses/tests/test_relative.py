@@ -9,10 +9,6 @@ import random
 from nose.tools import nottest
 from pkg_resources import resource_filename
 
-try:
-    pass
-except ImportError:
-    pass
 
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.rjmc.geometry import FFAllAngleGeometryEngine

@@ -16,10 +16,6 @@ import numpy as np
 from perses.rjmc import geometry
 from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
 from openeye import oechem
-if sys.version_info >= (3, 0):
-    pass
-else:
-    pass
 from openmmtools.constants import kB
 from openmmtools import states
 import contextlib
