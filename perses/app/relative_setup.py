@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 from perses.dispersed import feptasks
-from perses.utils.openeye import createOEMolFromSDF, createSystemFromSMILES, extractPositionsFromOEMol, generate_unique_atom_names, nonalchemical_perturbation_dict, oechem, temperature
+from perses.utils.openeye import createOEMolFromSDF, createSystemFromSMILES, extractPositionsFromOEMol, generate_unique_atom_names, oechem
 from perses.utils.data import load_smi
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
 from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine
