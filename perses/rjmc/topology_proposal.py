@@ -1677,32 +1677,11 @@ class PolymerProposalEngine(ProposalEngine):
         _logger.debug(f"\told res name: {old_res_name}")
         new_res_name = list(index_to_new_residues.values())[0]
 
-
-        # Adjust logp_propose based on HIS presence
-        # his_residues = ['HID', 'HIE']
-        # old_residue = residue_map[0][0]
-        # proposed_residue = residue_map[0][1]
-        # if old_residue.name in his_residues and proposed_residue not in his_residues:
-        #     logp_propose = math.log(2)
-        # elif old_residue.name not in his_residues and proposed_residue in his_residues:
-        #     logp_propose = math.log(0.5)
-        # else:
-        #     logp_propose = 0.0
-
-        #we should be able to check the system to make sure that all of the core atoms
-
         # Create TopologyProposal.
         current_res = [res for res in current_topology.residues() if res.index == chosen_res_index][0]
         proposed_res = [res for res in new_topology.residues() if res.index == chosen_res_index][0]
-        current_resname = current_res.name
-        proposed_resname = proposed_res.name
         augment_openmm_topology(topology = old_topology, residue_oemol = old_oemol_res_copy, residue_topology = current_res, residue_to_oemol_map = old_res_to_oemol_map)
         augment_openmm_topology(topology = new_topology, residue_oemol = new_oemol_res_copy, residue_topology = proposed_res, residue_to_oemol_map = new_res_to_oemol_map)
-
-        #we need to see if this involved a charge change...if so, we need to choose a random ion somewhere away from the protein and discharge it...
-        charge_diff = self._get_charge_difference(current_resname, new_resname)
-        if charge_diff != 0: #need to do charge change of ion
-
 
         topology_proposal = TopologyProposal(logp_proposal = 0.,
                                              new_to_old_atom_map = atom_map,

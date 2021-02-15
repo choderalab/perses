@@ -263,6 +263,7 @@ class PointMutationExecutor(object):
                                                                        positive_ion_name='NA',
                                                                        negative_ion_name='CL',
                                                                        radius=0.3)
+                self._modify_new_system(new_ion_indices_to_neutralize, topology_proposal._new_system)
 
 
 
@@ -330,7 +331,14 @@ class PointMutationExecutor(object):
         return self.apo_htf
 
     @staticmethod
-    def _modify_new_system(couterions_to_neutralize, system):
+    def _modify_new_system(counterions_to_neutralize, system):
+        force_dict = {i.__class__.__name__: i for i in system.getForces()}
+        if 'NonbondedForce' in [i for i in force_dict.keys()]:
+            nbf = force_dict['NonbondedForce']
+            for idx in counterions_to_neutralize:
+                charge, sigma, eps = nbf.getParticleParameters(idx)
+                nbf.setParticleParameters(idx, charge*0.0, sigma, eps*0.0)
+
 
 
 
