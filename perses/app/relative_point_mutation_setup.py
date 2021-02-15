@@ -250,6 +250,22 @@ class PointMutationExecutor(object):
             validate_bool = False if old_res.name in ring_amino_acids or proposed_residue in ring_amino_acids else True
             new_positions, logp_proposal = geometry_engine.propose(topology_proposal, pos, beta,
                                                                    validate_energy_bookkeeping=validate_bool)
+
+            #check for charge change...
+            charge_diff = point_mutation_engine._get_charge_difference(current_resname = topology_proposal._old_topology.residue_topology.name,
+                                                                       new_resname = topology_proposal._new_topology.residue_topology.name)
+            if charge_diff != 0:
+                new_ion_indices_to_neutralize = get_counterion_indices(charge_diff,
+                                                                       old_res = topology_proposal._old_topology.residue_topology,
+                                                                       new_res = topology_proposal._new_topology.residue_topology,
+                                                                       new_positions = new_positions,
+                                                                       new_topology = topology_proposal._new_topology,
+                                                                       positive_ion_name='NA',
+                                                                       negative_ion_name='CL',
+                                                                       radius=0.3)
+
+
+
             logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta,
                                                         validate_energy_bookkeeping=validate_bool)
 
@@ -312,6 +328,10 @@ class PointMutationExecutor(object):
 
     def get_apo_htf(self):
         return self.apo_htf
+
+    @staticmethod
+    def _modify_new_system(couterions_to_neutralize, system):
+
 
 
     def _solvate(self,

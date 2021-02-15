@@ -1431,6 +1431,9 @@ class PolymerProposalEngine(ProposalEngine):
         self._aminos = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'PHE',
                         'SER', 'THR', 'TRP', 'TYR', 'VAL'] # common naturally-occurring amino acid names
                         # Note this does not include PRO since there's a problem with OpenMM's template DEBUG
+        self._positive_aminos = ['ARG', 'HIS', 'LYS']
+        self._negative_aminos = ['ASP', 'GLU']
+        self._neutral_aminos =  [amino for amino in self._aminos if amino not in self._positive_aminos and amino not in self._negative_aminos]
         self._aminos_3letter_to_1letter_map = {'ALA' : 'A' ,
                                                 'ARG' : 'R' ,
                                                 'ASN' : 'N' ,
@@ -1469,6 +1472,63 @@ class PolymerProposalEngine(ProposalEngine):
                 name_without_spaces = name_without_spaces[1:] + name_without_spaces[0]
             atom.SetName(name_without_spaces)
         return current_oemol
+
+    @staticmethod
+    def _get_charge_difference(current_resname, new_resname):
+        """
+        return the charge of the new res - charge old res
+
+        Parameters
+        ----------
+        current_resname : str
+            three letter identifier for original residue
+        new_resnme : str
+            three letter identifier for new residue
+
+        Returns
+        -------
+        chargediff : int
+            charge(new_res) - charge(old_res)
+        """
+        assert new_resname in self._aminos
+        assert current_resname in self._aminos
+
+        new_rescharge, current_rescharge = 0,0
+        resname_to_charge = {current_resname: 0, new_resname: 0}
+        for resname in [new_resname, current_resname]:
+            if resname in self._negative_aminos:
+                resname_to_charge[resname] -= 1
+            elif resname in self._positive_aminos:
+                resname_to_charge[resname] += 1
+
+        return resname_to_charge[new_resname] - resname_to_charge[current_resname]
+
+    @staticmethod
+    def get_counterion_indices(charge_diff, old_res, new_res, new_positions, new_topology, positive_ion_name='NA', negative_ion_name='CL', radius=0.3):
+
+        # Create trajectory
+        traj = md.Trajectory(new_positions[np.newaxis, ...], md.Topology.from_openmm(new_topology))
+
+        # Get ion atom indices
+        if charge_diff < 0:
+            ion_name = negative_ion_name
+        elif charge_diff > 0:
+            ion_name = positive_ion_name
+
+        atoms = list(traj.topology.select(f"resname {ion_name}"))
+
+        query_indices = traj.top.select('protein')
+
+        # Get ion indices within radius of mutated residue
+        neighboring_ions = list(md.compute_neighbors(traj, radius, query_indices, haystack_indices=atoms)[0])
+
+        # Get ion indices outside of radius of mutated residue
+        nonneighboring_ions = list(set(range(new_topology.getNumAtoms())) - set(neighboring_ions))
+        assert len(nonneighboring_ions) > 0
+        choice_idx = np.random.choice(nonneighboring_ions, size=abs(charge_diff), replace=False)
+        return choice_idx
+
+
 
     def propose(self,
                 current_system,
@@ -1634,8 +1694,15 @@ class PolymerProposalEngine(ProposalEngine):
         # Create TopologyProposal.
         current_res = [res for res in current_topology.residues() if res.index == chosen_res_index][0]
         proposed_res = [res for res in new_topology.residues() if res.index == chosen_res_index][0]
+        current_resname = current_res.name
+        proposed_resname = proposed_res.name
         augment_openmm_topology(topology = old_topology, residue_oemol = old_oemol_res_copy, residue_topology = current_res, residue_to_oemol_map = old_res_to_oemol_map)
         augment_openmm_topology(topology = new_topology, residue_oemol = new_oemol_res_copy, residue_topology = proposed_res, residue_to_oemol_map = new_res_to_oemol_map)
+
+        #we need to see if this involved a charge change...if so, we need to choose a random ion somewhere away from the protein and discharge it...
+        charge_diff = self._get_charge_difference(current_resname, new_resname)
+        if charge_diff != 0: #need to do charge change of ion
+
 
         topology_proposal = TopologyProposal(logp_proposal = 0.,
                                              new_to_old_atom_map = atom_map,
