@@ -9,10 +9,6 @@ import random
 from nose.tools import nottest
 from pkg_resources import resource_filename
 
-try:
-    from StringIO import StringIO
-except ImportError:
-    from io import StringIO
 
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
@@ -412,7 +408,6 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene",atom_express
     Make an atom map where the molecule at either lambda endpoint is identical, and check that the energies are also the same.
     """
     from openmmtools.constants import kB
-    from openmmtools import alchemy, states
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
     from perses.annihilation.relative import HybridTopologyFactory
     from perses.rjmc.geometry import FFAllAngleGeometryEngine

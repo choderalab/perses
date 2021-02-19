@@ -139,7 +139,6 @@ class Analysis(object):
         :param environment:
         :return:
         """
-        pass
 
     def plot_chemical_trajectory(self, environment, filename):
         """
@@ -261,7 +260,6 @@ class Analysis(object):
 
         """
         # TODO
-        pass
 
     def extract_logP_values(self, environment, logP_accept_component, subtract_sams=False):
         """

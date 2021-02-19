@@ -1025,7 +1025,6 @@ class HybridTopologyFactory(object):
 
             elif len(index_set.intersection(self._atom_classes['environment_atoms'])) == 1 and len(index_set.intersection(self._atom_classes['core_atoms'])) == 1:
                 _logger.debug(f"\t\thandle_harmonic_bonds: bond_index {bond_index} is an environemnt-core; this has been previously added")
-                pass
 
             else:
                 raise Exception(f"\t\thybrid index set {index_set} does not fit into a canonical atom type")

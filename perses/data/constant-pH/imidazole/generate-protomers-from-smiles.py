@@ -7,7 +7,6 @@ Generate protomers using Epik.
 from __future__ import print_function
 import os
 import re
-import csv
 import traceback
 import numpy as np
 

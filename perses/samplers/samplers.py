@@ -15,15 +15,10 @@ __author__ = 'John D. Chodera'
 # IMPORTS
 ################################################################################
 
-from simtk import openmm, unit
-from simtk.openmm import app
 import mdtraj as md
 import numpy as np
-from openmmtools import testsystems
-import copy
 import time
-from openmmtools.states import SamplerState, ThermodynamicState, CompoundThermodynamicState, group_by_compatibility
-from openmmtools.multistate import sams, replicaexchange
+from openmmtools.states import SamplerState, ThermodynamicState
 from openmmtools import cache, utils
 from perses.dispersed.utils import configure_platform
 cache.global_context_cache.platform = configure_platform(utils.get_fastest_platform().getName())
@@ -385,7 +380,6 @@ class ExpandedEnsembleSampler(object):
         """
         if self.verbose: print("Updating chemical state with geometry-ncmc-geometry scheme...")
 
-        from perses.tests.utils import compute_potential
 
         logP_chemical_proposal = topology_proposal.logp_proposal
 
@@ -632,7 +626,6 @@ class SAMSSampler(object):
 
         """
         from scipy.special import logsumexp
-        from perses.utils.openeye import smiles_to_oemol
 
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
