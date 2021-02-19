@@ -255,7 +255,7 @@ class PointMutationExecutor(object):
             charge_diff = point_mutation_engine._get_charge_difference(current_resname = topology_proposal._old_topology.residue_topology.name,
                                                                        new_resname = topology_proposal._new_topology.residue_topology.name)
             if charge_diff != 0:
-                new_ion_indices_to_neutralize = get_counterion_indices(charge_diff,
+                new_ion_indices_to_neutralize = point_mutation_engine.get_counterion_indices(charge_diff,
                                                                        old_res = topology_proposal._old_topology.residue_topology,
                                                                        new_res = topology_proposal._new_topology.residue_topology,
                                                                        new_positions = new_positions,
