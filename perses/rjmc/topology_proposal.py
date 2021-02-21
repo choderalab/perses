@@ -1401,6 +1401,34 @@ class PolymerProposalEngine(ProposalEngine):
     This base class is not meant to be invoked directly.
     """
 
+    _aminos = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'PHE',
+                    'SER', 'THR', 'TRP', 'TYR', 'VAL'] # common naturally-occurring amino acid names
+                    # Note this does not include PRO since there's a problem with OpenMM's template DEBUG
+    _positive_aminos = ['ARG', 'HIS', 'LYS']
+    _negative_aminos = ['ASP', 'GLU']
+    _neutral_aminos =  [amino for amino in _aminos if amino not in ['ARG', 'HIS', 'LYS', 'ASP', 'GLU']]
+    _aminos_3letter_to_1letter_map = {'ALA' : 'A' ,
+                                            'ARG' : 'R' ,
+                                            'ASN' : 'N' ,
+                                            'ASP' : 'D' ,
+                                            'CYS' : 'C' ,
+                                            'GLN' : 'Q' ,
+                                            'GLU' : 'E' ,
+                                            'GLY' : 'G' ,
+                                            'HIS' : 'H' ,
+                                            'ILE' : 'I' ,
+                                            'LEU' : 'L' ,
+                                            'LYS' : 'K' ,
+                                            'MET' : 'M' ,
+                                            'PHE' : 'F' ,
+                                            'PRO' : 'P' ,
+                                            'SER' : 'S' ,
+                                            'THR' : 'T' ,
+                                            'TRP' : 'W' ,
+                                            'TYR' : 'Y' ,
+                                            'VAL' : 'V' }
+
+
     # TODO: Document meaning of 'aggregate'
     def __init__(self, system_generator, chain_id, proposal_metadata=None, always_change=True, aggregate=False):
         """
@@ -1428,33 +1456,6 @@ class PolymerProposalEngine(ProposalEngine):
         _logger.debug(f"Instantiating PolymerProposalEngine")
         super(PolymerProposalEngine,self).__init__(system_generator=system_generator, proposal_metadata=proposal_metadata, always_change=always_change)
         self._chain_id = chain_id # chain identifier defining polymer to be modified
-        self._aminos = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'PHE',
-                        'SER', 'THR', 'TRP', 'TYR', 'VAL'] # common naturally-occurring amino acid names
-                        # Note this does not include PRO since there's a problem with OpenMM's template DEBUG
-        self._positive_aminos = ['ARG', 'HIS', 'LYS']
-        self._negative_aminos = ['ASP', 'GLU']
-        self._neutral_aminos =  [amino for amino in self._aminos if amino not in self._positive_aminos and amino not in self._negative_aminos]
-        self._aminos_3letter_to_1letter_map = {'ALA' : 'A' ,
-                                                'ARG' : 'R' ,
-                                                'ASN' : 'N' ,
-                                                'ASP' : 'D' ,
-                                                'CYS' : 'C' ,
-                                                'GLN' : 'Q' ,
-                                                'GLU' : 'E' ,
-                                                'GLY' : 'G' ,
-                                                'HIS' : 'H' ,
-                                                'ILE' : 'I' ,
-                                                'LEU' : 'L' ,
-                                                'LYS' : 'K' ,
-                                                'MET' : 'M' ,
-                                                'PHE' : 'F' ,
-                                                'PRO' : 'P' ,
-                                                'SER' : 'S' ,
-                                                'THR' : 'T' ,
-                                                'TRP' : 'W' ,
-                                                'TYR' : 'Y' ,
-                                                'VAL' : 'V' }
-
         self._aggregate = aggregate # ?????????
 
     @staticmethod
@@ -1490,22 +1491,57 @@ class PolymerProposalEngine(ProposalEngine):
         chargediff : int
             charge(new_res) - charge(old_res)
         """
-        assert new_resname in self._aminos
-        assert current_resname in self._aminos
+        assert new_resname in PolymerProposalEngine._aminos
+        assert current_resname in PolymerProposalEngine._aminos
 
         new_rescharge, current_rescharge = 0,0
         resname_to_charge = {current_resname: 0, new_resname: 0}
         for resname in [new_resname, current_resname]:
-            if resname in self._negative_aminos:
+            if resname in PolymerProposalEngine._negative_aminos:
                 resname_to_charge[resname] -= 1
-            elif resname in self._positive_aminos:
+            elif resname in PolymerProposalEngine._positive_aminos:
                 resname_to_charge[resname] += 1
 
         return resname_to_charge[new_resname] - resname_to_charge[current_resname]
 
     @staticmethod
-    def get_counterion_indices(charge_diff, old_res, new_res, new_positions, new_topology, positive_ion_name='NA', negative_ion_name='CL', radius=0.3):
+    def get_counterion_indices(charge_diff,
+                               old_res,
+                               new_res,
+                               new_positions,
+                               new_topology,
+                               positive_ion_name='NA',
+                               negative_ion_name='CL',
+                               radius=0.3):
+        """
+        return a randomized counterion index to neutralize (index w.r.t. new_topology)
 
+        Parameters
+        ----------
+        charge_diff : int
+            the charge difference between the new_system - old_system
+        old_res : openmm.Topology.residue
+            old mutating residue
+        new_res : openmm.Topology.residue
+            new mutating residue
+        new_positions : np.ndarray(N, 3)
+            positions of atoms corresponding to new_topology
+        new_topology : openmm.Topology
+            topology of new system (with new_res)
+        positive_ion_name : str, default 'NA'
+            name of positive ions to identify as candidates for neutralization (mdtraj naming convention)
+        negative_ion_name : str, default 'CL'
+            name of negative ions to identify as candidates for neutralization (mdtraj naming convention)
+        radius : float, default 0.3
+            minimum distance (in nm) that all candidate ions must be from 'protein atoms'
+
+        Returns
+        -------
+        ion_idx : np.array(abs(charge_diff))
+            index of counterion(s) that are identified for neutralization
+        """
+
+        import mdtraj as md
         # Create trajectory
         traj = md.Trajectory(new_positions[np.newaxis, ...], md.Topology.from_openmm(new_topology))
 
@@ -1520,11 +1556,11 @@ class PolymerProposalEngine(ProposalEngine):
         query_indices = traj.top.select('protein')
 
         # Get ion indices within radius of mutated residue
-        neighboring_ions = list(md.compute_neighbors(traj, radius, query_indices, haystack_indices=atoms)[0])
+        neighboring_ions = list(md.compute_neighbors(traj, radius, query_indices, haystack_indices=atoms))
 
         # Get ion indices outside of radius of mutated residue
-        nonneighboring_ions = list(set(range(new_topology.getNumAtoms())) - set(neighboring_ions))
-        assert len(nonneighboring_ions) > 0
+        nonneighboring_ions = [atom for atom in atoms if atom not in neighboring_ions]
+        assert len(nonneighboring_ions) > 0, f"there are no available nonneighboring ions"
         choice_idx = np.random.choice(nonneighboring_ions, size=abs(charge_diff), replace=False)
         return choice_idx
 

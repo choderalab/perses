@@ -331,12 +331,12 @@ def generate_dipeptide_top_pos_sys(topology,
             else:
                 subtracted_valence_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
 
-            zero_state_error, one_state_error = validate_endstate_energies(forward_htf._topology_proposal, 
-                                                                           forward_htf, 
-                                                                           added_valence_energy, 
-                                                                           subtracted_valence_energy, 
-                                                                           beta = 1.0/(kB*temperature), 
-                                                                           ENERGY_THRESHOLD = ENERGY_THRESHOLD, 
+            zero_state_error, one_state_error = validate_endstate_energies(forward_htf._topology_proposal,
+                                                                           forward_htf,
+                                                                           added_valence_energy,
+                                                                           subtracted_valence_energy,
+                                                                           beta = 1.0/(kB*temperature),
+                                                                           ENERGY_THRESHOLD = ENERGY_THRESHOLD,
                                                                            platform = openmm.Platform.getPlatformByName('Reference'),
                                                                            repartitioned_endstate=endstate)
             print(f"zero state error : {zero_state_error}")
@@ -905,9 +905,60 @@ def test_simple_heterocycle_mapping(iupac_pairs = [('benzene', 'pyridine')]):
 
         assert num_hetero_maps > 0, f"there are no differences in atomic number mappings in {iupac_pair}"
 
+def test_protein_counterion_topology_fix():
+    """
+    mutate alanine dipeptide into ASP dipeptide and assert that the appropriate counterion is being neutralized
+    """
+    from perses.rjmc.topology_proposal import PolymerProposalEngine
+    new_res = 'ASP'
+    counterion_name = 'Cl'
+    charge_diff = -1
 
+    #make a vacuum system
+    atp, system_generator = generate_atp(phase='vacuum')
 
+    #make a solvated system/topology/positions with modeller
+    modeller = app.Modeller(atp.topology, atp.positions)
+    modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9*unit.angstroms, ionicStrength=0.15*unit.molar)
+    solvated_topology = modeller.getTopology()
+    solvated_positions = modeller.getPositions()
 
+    # Canonicalize the solvated positions: turn tuples into np.array
+    atp.positions = unit.quantity.Quantity(value=np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit=unit.nanometers)
+    atp.topology = solvated_topology
+
+    atp.system = system_generator.create_system(atp.topology)
+
+    #make a topology proposal and generate new positions
+    top_proposal, _new_pos, _, _ = generate_dipeptide_top_pos_sys(topology = atp.topology,
+                                   new_res = new_res,
+                                   system = atp.system,
+                                   positions = atp.positions,
+                                   system_generator = system_generator,
+                                   conduct_geometry_prop = True,
+                                   conduct_htf_prop = False,
+                                   validate_energy_bookkeeping=True,
+                                   )
+
+    #get the charge difference
+    charge_diffs = PolymerProposalEngine._get_charge_difference(top_proposal._old_topology.residue_topology.name,
+                                                                top_proposal._new_topology.residue_topology.name)
+    assert charge_diffs == charge_diff
+
+    #get the array of counterion indices (w.r.t. new topology) to neutralize
+    new_idx_to_neutralize = PolymerProposalEngine.get_counterion_indices(charge_diff = charge_diffs,
+                                             old_res = 'ALA',
+                                             new_res = new_res,
+                                             new_positions = _new_pos,
+                                             new_topology = top_proposal._new_topology,
+                                             positive_ion_name='NA',
+                                             negative_ion_name='CL',
+                                             radius=0.3)
+
+    assert len(new_idx_to_neutralize) == 1
+
+    atoms = [atom for atom in top_proposal._new_topology.atoms()]
+    assert atoms[new_idx_to_neutralize[0]].name == counterion_name
 
 #if __name__ == "__main__":
 

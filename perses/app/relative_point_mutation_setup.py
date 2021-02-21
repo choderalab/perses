@@ -263,7 +263,7 @@ class PointMutationExecutor(object):
                                                                        positive_ion_name='NA',
                                                                        negative_ion_name='CL',
                                                                        radius=0.3)
-                self._modify_new_system(new_ion_indices_to_neutralize, topology_proposal._new_system)
+                PointMutationExecutor._modify_new_system(new_ion_indices_to_neutralize, topology_proposal._new_system)
 
 
 
@@ -332,6 +332,21 @@ class PointMutationExecutor(object):
 
     @staticmethod
     def _modify_new_system(counterions_to_neutralize, system):
+        """
+        given a system and an array of ints (corresponding to atoms to neutralize), neutralize the nonbonded particle parameters in the system
+
+        Parameters
+        ----------
+        counterions_to_neutralize : np.array(int)
+            integers corresponding to particle indices to neutralize
+        system : simtk.openmm.System
+            system to modify
+
+        Returns
+        -------
+        modify system in place
+
+        """
         force_dict = {i.__class__.__name__: i for i in system.getForces()}
         if 'NonbondedForce' in [i for i in force_dict.keys()]:
             nbf = force_dict['NonbondedForce']
