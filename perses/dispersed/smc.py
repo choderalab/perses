@@ -515,7 +515,7 @@ class SequentialMonteCarlo():
         _logger.debug(f"sMC_timers: {sMC_timers}")
 
         sMC_incremental_works = {_direction: None for _direction in directions}
-        _logger.debug(f"\tsMC_incremental_works: {sMC_cumulative_works}")
+        _logger.debug(f"\tsMC_incremental_works: {sMC_incremental_works}")
 
 
         sMC_cumulative_works = {_direction : [np.zeros(num_particles)] for _direction in directions}
