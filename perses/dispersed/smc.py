@@ -978,7 +978,6 @@ class SequentialMonteCarlo():
             _logger.debug(f"\t\tnormalized observable value ({normalized_observable_value}) > {resample_observable_threshold}.  Skipping resampling.")
             resampled_works = total_works
             resampled_indices = np.arange(num_particles)
-            normalized_observable_value = normalized_observable_value
 
         _logger.debug(f"\t\tfinal resampled normalized observable_value: {normalized_observable_value}")
         return normalized_observable_value, resampled_works, resampled_indices, resample_bool
