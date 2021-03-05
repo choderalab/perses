@@ -1710,7 +1710,7 @@ class PolymerProposalEngine(ProposalEngine):
         old_prev_res = [res for res in old_chain.residues() if res.index == prev_res_index][0]
 
         assert new_prev_res.name == old_prev_res.name, f"the new residue left adjacent to mutation res (name {new_prev_res.name}) is not the name of the old residue left adjacent to mutation res (name {old_prev_res.name})"
-        assert new_next_res.name == new_next_res.name, f"the new residue right adjacent to mutation res (name {new_next_res.name}) is not the name of the old residue right adjacent to mutation res (name {old_next_res.name})"
+        assert new_next_res.name == old_next_res.name, f"the new residue right adjacent to mutation res (name {new_next_res.name}) is not the name of the old residue right adjacent to mutation res (name {old_next_res.name})"
 
         new_next_res_to_old_next_res_map = {new_atom.index : old_atom.index for new_atom, old_atom in zip(new_next_res.atoms(), old_next_res.atoms())}
         new_prev_res_to_old_prev_res_map = {new_atom.index : old_atom.index for new_atom, old_atom in zip(new_prev_res.atoms(), old_prev_res.atoms())}
