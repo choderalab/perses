@@ -3,6 +3,7 @@ This file contains the base classes for topology proposals
 """
 
 from simtk.openmm import app
+from simtk import unit
 
 import copy
 import logging
@@ -14,7 +15,9 @@ import networkx as nx
 import openmoltools.forcefield_generators as forcefield_generators
 from perses.storage import NetCDFStorageView
 from perses.rjmc.geometry import NoTorsionError
+from perses.utils.rbd import edit_pdb_for_tleap, edit_tleap_in_inputs, edit_tleap_in_ions, generate_tleap_system
 from functools import partial
+
 try:
     from subprocess import getoutput  # If python 3
 except ImportError:
@@ -3209,8 +3212,8 @@ class PointMutationEngineRBD(PointMutationEngine):
         name = 'rbd_ace2' if is_complex else 'rbd'
         mutant_position = self._allowed_mutations[0][0] # assume only allowed_mutations only has one mutation
         mutant_residue = self._allowed_mutations[0][1] # assume only allowed_mutations only has one mutation
-        self._mutate(f"2_{name}_for_mutation.pdb", f'{self._chain_id}/{mutant_position}/', mutant_residue, name)
-#         os.system(f"python 3_mutate.py 2_{name}_for_mutation.pdb {self._chain_id}/{mutant_position}/ {mutant_residue} {name}")
+        #self._mutate(f"2_{name}_for_mutation.pdb", f'{self._chain_id}/{mutant_position}/', mutant_residue, name)
+        os.system(f"python 3_mutate.py 2_{name}_for_mutation.pdb {self._chain_id}/{mutant_position}/ {mutant_residue} {name}")
         
         # Prep PDBs for tleap
         _logger.info("Prepping PDBs for tleap")
@@ -3295,53 +3298,6 @@ class PointMutationEngineRBD(PointMutationEngine):
         # Write out the new system
         new_system.atoms.write(f"2_{name}_for_mutation.pdb")
         
-    def _mutate(self, input_pdb, mutation_selection, mutant_residue, name):
-        """
-        Given a WT PDB and a desired mutation, mutate the PDB in pymol.
-        
-        Parameters
-        ----------
-        input_pdb : str
-            Path to PDB to be mutated
-        mutation_selection : str
-            Pymol selection string for the residue to be mutated. Example: For Chain R Residue 439, use 'R/439/'
-        mutant_residue : str
-            Three-letter code for the residue to mutate to. Example: For lysine, use 'LYS'
-        name : str
-            Name of the system to be used in the output file. Example: 'rbd_ace2'
-   
-        """
-        
-        import pymol
-        from pymol import cmd
-        import sys
-        
-        d = {'CYS': 'C', 'ASP': 'D', 'SER': 'S', 'GLN': 'Q', 'LYS': 'K',
-             'ILE': 'I', 'PRO': 'P', 'THR': 'T', 'PHE': 'F', 'ASN': 'N',
-             'GLY': 'G', 'HIS': 'H', 'LEU': 'L', 'ARG': 'R', 'TRP': 'W',
-             'ALA': 'A', 'VAL':'V', 'GLU': 'E', 'TYR': 'Y', 'MET': 'M'}
-
-        # Launch pymol session
-        pymol.pymol_argv = ["pymol", "-qc"] + sys.argv[1:]
-        pymol.finish_launching()
-
-        # Load RBD (no solvent)
-        cmd.load(input_pdb)
-
-        # Mutate
-        cmd.wizard("mutagenesis")
-        cmd.do("refresh_wizard")
-        cmd.get_wizard().set_mode(mutant_residue)
-        cmd.get_wizard().do_select(mutation_selection)
-
-        # Apply the mutation
-        cmd.get_wizard().apply()
-        cmd.set_wizard() # Equivalent to clicking "Done" in the GUI
-
-        # Save
-        cmd.save(f"3_{name}_mutant.pdb")
-        cmd.refresh()
-    
     def _prep_for_tleap(self, old_topology, new_topology, current_positions, is_complex):
         """
         Given a mutated PDB, prepare a PDB for tleap input: 1) Rearrange the mutated PDB positions such that they 
@@ -3370,11 +3326,11 @@ class PointMutationEngineRBD(PointMutationEngine):
         
         # Map atom indices from pymol PDB to atom indices in new_topology
         d_omm = {} # key: (atom name, residue id, chain id), value: atom index
-        for atom_omm in tqdm_notebook(new_topology.atoms()):
+        for atom_omm in new_topology.atoms():
             d_omm[(atom_omm.name, atom_omm.residue.id, atom_omm.residue.chain.id)] = atom_omm.index
 
         d_map = {} # key: atom index from pymol mutated PDB, value: atom index in new_topology
-        for atom_pymol in tqdm_notebook(mutated_pdb.topology.atoms()):
+        for atom_pymol in mutated_pdb.topology.atoms():
             match_index = d_omm[(atom_pymol.name, atom_pymol.residue.id, atom_pymol.residue.chain.id)]
             d_map[atom_pymol.index] = match_index
 
