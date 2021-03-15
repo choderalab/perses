@@ -2,8 +2,8 @@ import os
 import tempfile
 import re
 from math import floor
-from simtk.openmm.app.amberinpcrdfile import AmberInpcrdFile
-from simtk.openmm.app.amberprmtopfile import AmberPrmtopFile
+from simtk.openmm import app
+from simtk import unit
 
 """
 Utility functions for prepping RBD and RBD:ACE2 systems in tleap.
@@ -207,8 +207,8 @@ def generate_tleap_system(tleap_prefix,
         raise Exception(f"tleap parametrization did not complete successfully, check {tleap_prefix}.out for errors")
 
     # Load prmtop and inpcrd files
-    prmtop = AmberPrmtopFile(f"{tleap_prefix}.prmtop")
-    inpcrd = AmberInpcrdFile(f"{tleap_prefix}.inpcrd")
+    prmtop = app.AmberPrmtopFile(f"{tleap_prefix}.prmtop")
+    inpcrd = app.AmberInpcrdFile(f"{tleap_prefix}.inpcrd")
 
     # Generate system
     system = prmtop.createSystem(
