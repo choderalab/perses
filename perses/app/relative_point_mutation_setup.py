@@ -373,3 +373,291 @@ class PointMutationExecutor(object):
         solvated_system = self.system_generator.create_system(solvated_topology)
 
         return solvated_topology, solvated_positions, solvated_system
+
+class PointMutationExecutorRBD(PointMutationExecutor):
+    def __init__(self,
+                 protein_filename,
+                 mutation_chain_id,
+                 mutation_residue_id,
+                 proposed_residue,
+                 phase='complex',
+                 clean=False,
+                 conduct_endstate_validation=True,
+                 ligand_input=None,
+                 ligand_index=0,
+                 water_model='tip3p',
+                 ionic_strength=0.15 * unit.molar,
+                 forcefield_files=['amber/protein.ff14SB.xml', 'amber/tip3p_standard.xml'],
+                 barostat=openmm.MonteCarloBarostat(1.0 * unit.atmosphere, temperature, 50),
+                 forcefield_kwargs={'removeCMMotion': False, 'ewaldErrorTolerance': 0.00025, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus},
+                 periodic_forcefield_kwargs={'nonbondedMethod': app.PME},
+                 nonperiodic_forcefield_kwargs=None,
+                 small_molecule_forcefields='gaff-2.11',
+                 complex_box_dimensions=None,
+                 apo_box_dimensions=None,
+                 flatten_torsions=False,
+                 flatten_exceptions=False,
+                 vanilla=True,
+                 repartitioned=True,
+                 **kwargs):
+        """
+        arguments
+            protein_filename : str
+                path to protein (to mutate); .pdb
+            mutation_chain_id : str
+                name of the chain to be mutated
+            mutation_residue_id : str
+                residue id to change
+            proposed_residue : str
+                three letter code of the residue to mutate to
+            phase : str, default complex
+                if phase == vacuum, then the complex will not be solvated with water; else, it will be solvated with tip3p
+            clean : bool, default False
+                whether to clean the PDB for tleap
+            conduct_endstate_validation : bool, default True
+                whether to conduct an endstate validation of the HybridTopologyFactory. If using the RepartitionedHybridTopologyFactory,
+                endstate validation cannot and will not be conducted.
+            ligand_file : str, default None
+                path to ligand of interest (i.e. small molecule or protein); .sdf or .pdb
+            ligand_index : int, default 0
+                which ligand to use
+            water_model : str, default 'tip3p'
+                solvent model to use for solvation
+            ionic_strength : float * unit.molar, default 0.15 * unit.molar
+                the total concentration of ions (both positive and negative) to add using Modeller.
+                This does not include ions that are added to neutralize the system.
+                Note that only monovalent ions are currently supported.
+            forcefield_files : list of str, default ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
+                forcefield files for proteins and solvent
+            barostat : openmm.MonteCarloBarostat, default openmm.MonteCarloBarostat(1.0 * unit.atmosphere, 300 * unit.kelvin, 50)
+                barostat to use
+            forcefield_kwargs : dict, default {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+                forcefield kwargs for system parametrization
+            periodic_forcefield_kwargs : dict, default {'nonbondedMethod': app.PME}
+                periodic forcefield kwargs for system parametrization
+            nonperiodic_forcefield_kwargs : dict, default None
+                non-periodic forcefield kwargs for system parametrization
+            small_molecule_forcefields : str, default 'gaff-2.11'
+                the forcefield string for small molecule parametrization
+            complex_box_dimensions : Vec3, default None
+                define box dimensions of complex phase;
+                if None, padding is 1nm
+            apo_box_dimensions :  Vec3, default None
+                define box dimensions of apo phase phase;
+                if None, padding is 1nm
+            flatten_torsions : bool, default False
+                in the htf, flatten torsions involving unique new atoms at lambda = 0 and unique old atoms are lambda = 1
+            flatten_exceptions : bool, default False
+                in the htf, flatten exceptions involving unique new atoms at lambda = 0 and unique old atoms at lambda = 1
+            vanilla : bool, default True
+                whether to generate a vanilla HybridTopologyFactory
+            repartitioned : bool, default True
+                whether to generate a RepartitionedHybridTopologyFactory
+        TODO : allow argument for spectator ligands besides the 'ligand_file'
+        """
+        
+        ## Generate the old topology, positions, and system
+        # Prep PDBs for tleap
+        _logger.info("Editing PDBs for tleap")
+        protein_tleap = f"{protein_filename[:-4]}_tleap.pdb"
+        ligand_tleap = f"{ligand_input[:-4]}_tleap.pdb"
+        if clean:
+            edit_pdb_for_tleap(protein_filename, protein_tleap)
+            edit_pdb_for_tleap(ligand_input, ligand_tleap)
+        else:
+            os.system(f"cp {protein_filename} {protein_tleap}")
+            os.system(f"cp {ligand_input} {ligand_tleap}")
+        
+        # Edit tleap files
+        _logger.info("Editing tleap.in input files")
+        apo_tleap_prefix = "1_rbd_tleap"
+        complex_tleap_prefix = "1_rbd_ace2_tleap"
+        edit_tleap_in_inputs("1_rbd_template_tleap.in", apo_tleap_prefix, input_pdb=protein_tleap)
+        edit_tleap_in_inputs("1_rbd_ace2_template_tleap.in", complex_tleap_prefix, input_pdb=protein_tleap)
+        
+        _logger.info("Editing tleap.in number of ions")
+        edit_tleap_in_ions(apo_tleap_prefix)
+        edit_tleap_in_ions(complex_tleap_prefix)
+        
+        # Generating old systems
+        _logger.info("Generating solvated old systems")
+        apo_topology, apo_positions, apo_system = generate_tleap_system(apo_tleap_prefix)
+        complex_topology, complex_positions, complex_system = generate_tleap_system(complex_tleap_prefix)
+        
+        # Correct the topologies
+        _logger.info("Correcting tleap topologies")
+        apo_topology_corrected = correct_topology(apo_topology)
+        complex_topology_corrected = correct_topology(complex_topology, is_apo=False)
+        
+        # Format inputs for pipeline
+        inputs = [[apo_topology_corrected, apo_positions, apo_system, apo_tleap_prefix, False], [complex_topology_corrected, complex_positions, complex_system, complex_tleap_prefix, True]]
+    
+        # Make system generator -- note this is only for system_generator.forcefield call in PointMutationEngine init
+        molecules = []
+        self.system_generator = SystemGenerator(forcefields=forcefield_files,
+                                                barostat=barostat,
+                                                forcefield_kwargs=forcefield_kwargs,
+                                                periodic_forcefield_kwargs=periodic_forcefield_kwargs,
+                                                nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
+                                                small_molecule_forcefield=small_molecule_forcefields,
+                                                molecules=molecules,
+                                                cache=None)
+        
+        # Run pipeline...
+        htfs = []
+        for (top, pos, sys, tleap_prefix, is_complex) in inputs:
+            name = 'rbd_ace2' if is_complex else 'rbd'
+            _logger.info(f"Generating topology proposal for {name}")
+            point_mutation_engine = PointMutationEngineRBD(wildtype_topology=top,
+                                                         system_generator=self.system_generator,
+                                                         chain_id=mutation_chain_id, # Denote the chain id allowed to mutate (it's always a string variable)
+                                                         max_point_mutants=1,
+                                                         residues_allowed_to_mutate=[mutation_residue_id], # The residue ids allowed to mutate
+                                                         allowed_mutations=[(mutation_residue_id, proposed_residue)], # The residue ids allowed to mutate with the three-letter code allowed to change
+                                                         aggregate=True) # Always allow aggregation
+
+            topology_proposal, new_positions = point_mutation_engine.propose(sys, top, pos, tleap_prefix, is_complex)
+                        
+            factories = []
+            if vanilla:
+                repartitioned_endstate = None
+                self.generate_htf(HybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
+            if repartitioned:
+                for repartitioned_endstate in [0, 1]:
+                    self.generate_htf(RepartitionedHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
+                
+    def generate_htf(self, factory, topology_proposal, old_positions, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex):
+        htf = factory(topology_proposal=topology_proposal,
+                                      current_positions=old_positions,
+                                      new_positions=new_positions,
+                                      use_dispersion_correction=False,
+                                      functions=None,
+                                      softcore_alpha=None,
+                                      bond_softening_constant=1.0,
+                                      angle_softening_constant=1.0,
+                                      soften_only_new=False,
+                                      neglected_new_angle_terms=[],
+                                      neglected_old_angle_terms=[],
+                                      softcore_LJ_v2=True,
+                                      softcore_electrostatics=True,
+                                      softcore_LJ_v2_alpha=0.85,
+                                      softcore_electrostatics_alpha=0.3,
+                                      softcore_sigma_Q=1.0,
+                                      interpolate_old_and_new_14s=flatten_exceptions,
+                                      omitted_terms=None,
+                                      endstate=repartitioned_endstate,
+                                      flatten_torsions=flatten_torsions)
+        if is_complex:
+            if factory == HybridTopologyFactory:
+                self.complex_htf = htf
+            elif factory == RepartitionedHybridTopologyFactory:
+                if repartitioned_endstate == 0:
+                    self.complex_rhtf_0 = htf
+                elif repartitioned_endstate == 1:
+                    self.complex_rhtf_1 = htf
+        else:
+            if factory == HybridTopologyFactory:
+                self.apo_htf = htf
+            elif factory == RepartitionedHybridTopologyFactory:
+                if repartitioned_endstate == 0:
+                    self.apo_rhtf_0 = htf
+                elif repartitioned_endstate == 1:
+                    self.apo_rhtf_1 = htf
+
+    def get_complex_rhtf_0(self):
+        return self.complex_rhtf_0
+
+    def get_apo_rhtf_0(self):
+        return self.apo_rhtf_0
+    
+    def get_complex_rhtf_1(self):
+        return self.complex_rhtf_1
+
+    def get_apo_rhtf_1(self):
+        return self.apo_rhtf_1
+    
+    def correct_topology(original_topology, is_apo=True):
+    
+        """
+        Correct topology to use the right RBD:ACE2 chain and residue ids.
+        
+        Parameters
+        ----------
+        original_topology : simtk.openmm.app.Topology object
+            The original topology
+        is_apo : bool, default True
+            Indicates whether the topology is for apo or complex.
+        Returns
+        -------
+        corrected_topology : simtk.openmm.app.Topology object
+            The corrected topology
+        """
+    
+        # Create new topology and positions
+        corrected_topology = app.Topology()
+        corrected_topology.setPeriodicBoxVectors(original_topology.getPeriodicBoxVectors())
+
+        # Create new chains
+        corrected_chain_R = corrected_topology.addChain(id="R")
+        corrected_chain_X = corrected_topology.addChain(id="X")
+        if not is_apo:
+            corrected_chain_C = corrected_topology.addChain(id="C")
+            corrected_chain_D = corrected_topology.addChain(id="D")
+            corrected_chain_E = corrected_topology.addChain(id="E")
+        corrected_chain_Y = corrected_topology.addChain(id="Y")
+
+        # Specify the starting residue ids for each chain
+        d_current_start = {"C": 18, "E": 1, "R": 332, "X": 528, "D": 727}
+
+        # Copy residues and atoms to corrected topology and create split into multiple chains. 
+        # Also rename residues based on d_current_start 
+        d_original_to_corrected = {} # Key: atom in original topology, Value: atom in corrected topology 
+        for res in original_topology.residues():  
+            residue_id = int(res.id)
+            if res.name not in ['HOH', 'Na+', 'Cl-']:
+                if residue_id <= 196:
+                    corrected_res = corrected_topology.addResidue(res.name, corrected_chain_R, id=str(d_current_start["R"]), insertionCode=res.insertionCode)
+                    for atom in res.atoms():
+                        corrected_atom = corrected_topology.addAtom(atom.name, atom.element, corrected_res)
+                        d_original_to_corrected[atom] = corrected_atom
+                    d_current_start["R"] += 1
+                elif residue_id >= 197 and residue_id <= 206:
+                    corrected_res = corrected_topology.addResidue(res.name, corrected_chain_X, id=str(d_current_start["X"]), insertionCode=res.insertionCode)
+                    for atom in res.atoms():
+                        corrected_atom = corrected_topology.addAtom(atom.name, atom.element, corrected_res)
+                        d_original_to_corrected[atom] = corrected_atom
+                    d_current_start["X"] += 1
+                elif residue_id >= 207 and residue_id <= 915:
+                    corrected_res = corrected_topology.addResidue(res.name, corrected_chain_C, id=str(d_current_start["C"]), insertionCode=res.insertionCode)
+                    for atom in res.atoms():
+                        corrected_atom = corrected_topology.addAtom(atom.name, atom.element, corrected_res)
+                        d_original_to_corrected[atom] = corrected_atom
+                    d_current_start["C"] += 1
+                elif residue_id >= 916 and residue_id <= 973:
+                    corrected_res = corrected_topology.addResidue(res.name, corrected_chain_D, id=str(d_current_start["D"]), insertionCode=res.insertionCode)
+                    for atom in res.atoms():
+                        corrected_atom = corrected_topology.addAtom(atom.name, atom.element, corrected_res)
+                        d_original_to_corrected[atom] = corrected_atom
+                    d_current_start["D"] += 1
+                elif residue_id >= 974 and residue_id <= 975:
+                    corrected_res = corrected_topology.addResidue(res.name, corrected_chain_E, id=str(d_current_start["E"]), insertionCode=res.insertionCode)
+                    for atom in res.atoms():
+                        corrected_atom = corrected_topology.addAtom(atom.name, atom.element, corrected_res)
+                        d_original_to_corrected[atom] = corrected_atom
+                    d_current_start["E"] += 1
+            else:
+                corrected_res = corrected_topology.addResidue(res.name, corrected_chain_Y, id=res.id, insertionCode=res.insertionCode)
+                for atom in res.atoms():
+                    corrected_atom = corrected_topology.addAtom(atom.name, atom.element, corrected_res)
+                    d_original_to_corrected[atom] = corrected_atom
+
+        # Copy bonds to corrected topology
+        for bond in original_topology.bonds():
+            atom_1 = bond[0]
+            atom_2 = bond[1]
+            atom_1_corrected = d_original_to_corrected[atom_1]
+            atom_2_corrected = d_original_to_corrected[atom_2]
+            corrected_topology.addBond(atom_1_corrected, atom_2_corrected)
+        
+        return corrected_topology
+
