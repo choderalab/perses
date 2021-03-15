@@ -2043,6 +2043,7 @@ class PolymerProposalEngine(ProposalEngine):
         new_oemol_res_copy : openeye.oechem.oemol object
             copy of modified new oemol
         """
+        _logger.debug("In construct atom map")
         from pkg_resources import resource_filename
         import openeye.oechem as oechem #must this be explicit?
 
@@ -2055,12 +2056,9 @@ class PolymerProposalEngine(ProposalEngine):
 
         # old_to_new_residues : dict, key : str old residue name, key : simtk.openmm.app.topology.Residue new residue
         old_to_new_residues = {}
+        new_residues = [residue for residue in new_topology.residues()] # Assumes all residue indices start from 0 and are contiguous
         for old_residue in old_topology.residues():
-            for new_residue in new_topology.residues():
-                if old_residue.index == new_residue.index:
-                    #old_to_new_residues[old_residue.name] = new_residue
-                    old_to_new_residues[old_residue] = new_residue
-                    break
+            old_to_new_residues[old_residue] = new_residues[old_residue.index]
         #_logger.debug(f"\t\told_to_new_residues: {old_to_new_residues}")
 
         # modified_residues : dict, key : index of old residue, value : proposed residue
