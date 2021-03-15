@@ -165,7 +165,6 @@ def _get_networkx_molecule(self):
                 graph.edges[index_rev_a, index_rev_b]['oemol_bond'] = bond
         except Exception as e:
             _logger.debug(f"\tbond oemol loop exception: {e}")
-            pass
 
     _logger.debug(f"\tgraph nodes: {graph.nodes()}")
     return graph
@@ -1388,7 +1387,6 @@ class ProposalEngine(object):
         chemical_state_key : str
             The chemical_state_key
         """
-        pass
 
     @property
     def chemical_state_list(self):
@@ -1423,8 +1421,6 @@ class PolymerProposalEngine(ProposalEngine):
 
 
         """
-        import pickle
-        from perses.utils.smallmolecules import render_atom_mapping
         _logger.debug(f"Instantiating PolymerProposalEngine")
         super(PolymerProposalEngine,self).__init__(system_generator=system_generator, proposal_metadata=proposal_metadata, always_change=always_change)
         self._chain_id = chain_id # chain identifier defining polymer to be modified
@@ -2047,7 +2043,6 @@ class PolymerProposalEngine(ProposalEngine):
         new_oemol_res_copy : openeye.oechem.oemol object
             copy of modified new oemol
         """
-        import pickle
         from pkg_resources import resource_filename
         import openeye.oechem as oechem #must this be explicit?
 
@@ -2180,7 +2175,7 @@ class PolymerProposalEngine(ProposalEngine):
         #NOTE: since the sidechain oemols are NOT zero-indexed anymore, we need to match by name (since they are unique identifiers)
         break_bool = False if old_res_name == 'TRP' or new_res_name == 'TRP' else True # Set allow_ring_breaking to be False if the transformation involves TRP
         _logger.debug(f"\t\t\t allow ring breaking: {break_bool}")
-        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength='default', matching_criterion='name', map_strategy='matching_criterion', allow_ring_breaking=break_bool)
+        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength='strong', matching_criterion='name', map_strategy='matching_criterion', allow_ring_breaking=break_bool)
 
         #check the atom map thus far:
         _logger.debug(f"\t\t\tlocal atom map nonstereo sidechain: {local_atom_map_nonstereo_sidechain}")
@@ -2500,7 +2495,6 @@ class PointMutationEngine(PolymerProposalEngine):
             each proposal to contain multiple mutations.
 
         """
-        import pickle
         super(PointMutationEngine, self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata, always_change=always_change, aggregate=aggregate)
 
         assert isinstance(wildtype_topology, app.Topology)

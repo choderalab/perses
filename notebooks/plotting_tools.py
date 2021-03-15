@@ -1,7 +1,4 @@
 import numpy as np
-import nglview
-from bokeh.plotting import figure, output_file, show
-import simtk.unit as unit
 import mdtraj as md
 import os
 import glob

@@ -641,8 +641,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
 
             if serialize_systems:
                 # save the systems and the states
-                from simtk.openmm import XmlSerializer
-                from perses.tests.utils import generate_endpoint_thermodynamic_states
+                pass
 
                 _logger.info('WRITING OUT XML FILES')
                 #old_thermodynamic_state, new_thermodynamic_state, hybrid_thermodynamic_state, _ = generate_endpoint_thermodynamic_states(htf[phase].hybrid_system, _top_prop)

@@ -752,7 +752,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         """
         import copy
-        from simtk import openmm, unit
+        from simtk import unit
         no_nb_system = copy.deepcopy(system)
         _logger.info("\tbeginning construction of no_nonbonded final system...")
         _logger.info(f"\tinitial no-nonbonded final system forces {[force.__class__.__name__ for force in list(no_nb_system.getForces())]}")
@@ -1176,7 +1176,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return xyz, detJ
 
     def _bond_log_pmf(self, bond, beta, n_divisions):
-        """
+        r"""
         Calculate the log probability mass function (PMF) of drawing a bond.
 
         .. math ::
@@ -1242,7 +1242,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return r_i, log_p_i, bin_width
 
     def _bond_logp(self, r, bond, beta, n_divisions):
-        """
+        r"""
         Calculate the log-probability of a given bond at a given inverse temperature
 
         Propose dimensionless bond length r from distribution
@@ -1286,7 +1286,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return logp
 
     def _propose_bond(self, bond, beta, n_divisions):
-        """
+        r"""
         Propose dimensionless bond length r from distribution
 
         .. math ::
@@ -1330,7 +1330,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return r
 
     def _angle_log_pmf(self, angle, beta, n_divisions):
-        """
+        r"""
         Calculate the log probability mass function (PMF) of drawing a angle.
 
         .. math ::
@@ -1398,7 +1398,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return theta_i, log_p_i, bin_width
 
     def _angle_logp(self, theta, angle, beta, n_divisions):
-        """
+        r"""
         Calculate the log-probability of a given angle at a given inverse temperature
 
         Propose dimensionless bond length r from distribution
@@ -1442,7 +1442,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return logp
 
     def _propose_angle(self, angle, beta, n_divisions):
-        """
+        r"""
         Propose dimensionless angle from distribution
 
         .. math ::
@@ -2035,7 +2035,6 @@ class GeometrySystemGenerator(object):
                 growth_system.addForce(modified_sterics_force)
 
                 # Translate nonbonded method to the custom nonbonded force
-                import simtk.openmm.app as app
                 _logger.info("\t\tsetting nonbonded method, cutoff, switching function, and switching distance to custom nonbonded force...")
                 if reference_nonbonded_force_method in [0,1]: #if Nonbonded method is NoCutoff or CutoffNonPeriodic
                     modified_sterics_force.setNonbondedMethod(reference_nonbonded_force_method)
@@ -2192,11 +2191,12 @@ class GeometrySystemGenerator(object):
         rotor = oechem.OEIsRotor()
         torsion_predicate = oechem.OENotBond(rotor)
         non_rotor_torsions = list(oechem.OEGetTorsions(reference_topology.residue_oemol, torsion_predicate))
-        relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
+        #relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
+        relevant_torsion_list = non_rotor_torsions
 
         #now, for each torsion, extract the set of indices and the angle
         periodicity = 1
-        k = 120.0*unit.kilocalories_per_mole # stddev of 12 degrees
+        k = 1200.0*unit.kilocalories_per_mole # stddev of 1.2 degrees
         #print([atom.name for atom in growth_indices])
         _logger.debug(f"\t\t\trelevant torsions for ring restraints being added...")
         for torsion in relevant_torsion_list:
@@ -2632,7 +2632,6 @@ class NetworkXProposalOrder(object):
             The contribution to the overall proposal log probability as a list of sequential logps
 
         """
-        from scipy import special
         atom_torsions= []
         logp = []
         assert len(atom_group) == len(set(atom_group)), "There are duplicate atom indices in the list of atom proposal indices"

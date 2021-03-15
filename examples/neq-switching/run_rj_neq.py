@@ -1,6 +1,6 @@
 import numpy as np
 import tqdm
-from openmmtools import integrators, states, mcmc, constants
+from openmmtools import constants, integrators, states
 from perses.rjmc.topology_proposal import TopologyProposal
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 from perses.annihilation.ncmc_switching import NCMCEngine
@@ -8,7 +8,6 @@ from simtk import openmm, unit
 from io import StringIO
 from simtk.openmm import app
 from perses.dispersed.feptasks import compute_reduced_potential
-from dask import distributed
 import mdtraj as md
 temperature = 300.0*unit.kelvin
 beta = 1.0 / (temperature*constants.kB)
@@ -222,7 +221,6 @@ if __name__=="__main__":
     import yaml
     import sys
     import itertools
-    import os
 
     input_filename = sys.argv[1]
     equilibrium = False if sys.argv[2] == '0' else True

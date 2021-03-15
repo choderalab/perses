@@ -44,7 +44,7 @@ import copy
 from perses.dispersed.utils import minimize
 from openmmtools.states import ThermodynamicState, SamplerState
 from openmmforcefields.generators import SystemGenerator
-from openforcefield.topology import Molecule
+from openff.toolkit.topology import Molecule
 from perses.utils.openeye import smiles_to_oemol
 
 #global variables
@@ -193,7 +193,6 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
 
 
         # Create peptide in solvent.
-        from openmmtools.testsystems import AlanineDipeptideExplicit, AlanineDipeptideImplicit, AlanineDipeptideVacuum
         from pkg_resources import resource_filename
         pdb_filename = resource_filename('openmmtools', 'data/alanine-dipeptide-gbsa/alanine-dipeptide.pdb')
         from simtk.openmm.app import PDBFile
@@ -334,7 +333,6 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
                                                                 forcefield_kwargs = { 'implicitSolvent' : None, 'constraints' : constraints }, nonperiodic_forcefield_kwargs={'nonbondedMethod' : app.NoCutoff})
 
         # Create peptide in solvent.
-        from openmmtools.testsystems import AlanineDipeptideExplicit, AlanineDipeptideImplicit, AlanineDipeptideVacuum
         from pkg_resources import resource_filename
         pdb_filename = resource_filename('openmmtools', 'data/alanine-dipeptide-gbsa/alanine-dipeptide.pdb')
         from simtk.openmm.app import PDBFile
@@ -491,8 +489,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
         # Create receptor in solvent.
         from pkg_resources import resource_filename
         pdb_filename = resource_filename('perses', 'data/181L.pdb')
-        import pdbfixer
-        from simtk.openmm.app import PDBFile, Modeller
+        from simtk.openmm.app import Modeller
         topologies = dict()
         positions = dict()
         [fixer_topology, fixer_positions] = load_via_pdbfixer(pdb_filename)
@@ -519,7 +516,6 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
             if residue.name == 'BNZ':
                 break
 
-        from perses.utils.openeye import extractPositionsFromOEMol, giveOpenmmPositionsToOEMol
         import perses.rjmc.geometry as geometry
         from perses.rjmc.topology_proposal import TopologyProposal
         # create OEMol version of benzene
@@ -706,8 +702,7 @@ class MybTestSystem(PersesTestSystem):
         # Create peptide in solvent.
         from pkg_resources import resource_filename
         pdb_filename = resource_filename('perses', 'data/1sb0.pdb')
-        import pdbfixer
-        from simtk.openmm.app import PDBFile, Modeller
+        from simtk.openmm.app import Modeller
         topologies = dict()
         positions = dict()
         #pdbfile = PDBFile(pdb_filename)
@@ -881,7 +876,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
                 system_generators[environment] = system_generators[solvent]
 
         # Load topologies and positions for all components
-        from simtk.openmm.app import PDBFile, Modeller
+        from simtk.openmm.app import PDBFile
         topologies = dict()
         positions = dict()
         for component in components:
@@ -1084,7 +1079,7 @@ class AblAffinityTestSystem(PersesTestSystem):
                 system_generators[environment] = system_generators[solvent]
 
         # Load topologies and positions for all components
-        from simtk.openmm.app import PDBFile, Modeller
+        from simtk.openmm.app import PDBFile
         topologies = dict()
         positions = dict()
         for component in components:
@@ -1305,7 +1300,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
                 system_generators[environment] = system_generators[solvent]
 
         # Load topologies and positions for all components
-        from simtk.openmm.app import PDBFile, Modeller
+        from simtk.openmm.app import PDBFile
         topologies = dict()
         positions = dict()
         for component in components:
@@ -1524,7 +1519,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
                 system_generators[environment] = system_generators[solvent]
 
         # Load topologies and positions for all components
-        from simtk.openmm.app import PDBFile, Modeller
+        from simtk.openmm.app import PDBFile
         topologies = dict()
         positions = dict()
         for component in components:
@@ -1731,8 +1726,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         positions = dict()
 
         # # Parametrize and generate residue templates for small molecule set
-        from openmoltools.forcefield_generators import generateForceFieldFromMolecules, generateTopologyFromOEMol, gaffTemplateGenerator
-        from io import StringIO
+        from openmoltools.forcefield_generators import generateTopologyFromOEMol
         from perses.utils.openeye import smiles_to_oemol, extractPositionsFromOEMol, has_undefined_stereocenters
 
         # skipping molecules with undefined stereocenters
@@ -1958,7 +1952,6 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         # Create a system generator for our desired forcefields.
 
         system_generators = dict()
-        from pkg_resources import resource_filename
         from perses.utils.openeye import smiles_to_oemol,extractPositionsFromOEMol
         system_generators['vacuum'] = SystemGenerator(forcefields = forcefield_files,
                                                         forcefield_kwargs = {'implicitSolvent' : None}, nonperiodic_forcefield_kwargs={ 'nonbondedMethod':app.NoCutoff},

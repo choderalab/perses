@@ -113,8 +113,6 @@ class Simulation(object):
         None
 
         """
-        from pymbar import MBAR
-        from perses.analysis import utils
         import os
         from openmmtools.multistate import MultiStateReporter, MultiStateSamplerAnalyzer
         from simtk import unit
@@ -176,8 +174,6 @@ class Simulation(object):
         None
 
         """
-        from pymbar import timeseries
-        from pymbar import MBAR
         from perses.analysis import utils
         from simtk import unit
         import os

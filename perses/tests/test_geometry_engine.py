@@ -29,7 +29,7 @@ from perses.rjmc import coordinate_numba
 from perses.rjmc.geometry import check_dimensionality
 from perses.utils.openeye import smiles_to_oemol, OEMol_to_omm_ff
 from openmmforcefields.generators import SystemGenerator
-from openforcefield.topology import Molecule
+from openff.toolkit.topology import Molecule
 
 #global variables
 forcefield_files = ['amber14/protein.ff14SB.xml', 'amber/tip3p_standard.xml']
@@ -914,8 +914,6 @@ def test_mutate_from_all_to_all(): # TODO: fix protein mutations
     """
     import perses.rjmc.topology_proposal as topology_proposal
     import perses.rjmc.geometry as geometry
-    from perses.tests.utils import compute_potential_components
-    from openmmtools import testsystems as ts
     geometry_engine = geometry.FFAllAngleGeometryEngine()
 
     aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
@@ -1252,8 +1250,6 @@ def run_logp_reverse():
     print(logp_reverse-logp_proposal)
 
 def _get_capped_amino_acid(amino_acid='ALA'):
-    import tempfile
-    import shutil
     tleapstr = """
     source oldff/leaprc.ff99SBildn
     system = sequence {{ ACE {amino_acid} NME }}
@@ -1866,7 +1862,6 @@ def test_AnalyticalBeadSystems(transformation=[[3,4], [4,5], [3,5]], num_iterati
     num_iterations: int
         number of iid conformations from which to conduct rjmc
     """
-    import mdtraj as md
 
     for pair in transformation:
         test = AnalyticalBeadSystems(pair, num_iterations)
@@ -1912,16 +1907,13 @@ def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'pro
     new_positions : np.array, unit-bearing
         The positions of the new system
     """
-    from openmoltools import forcefield_generators
-    from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
     from perses.utils.openeye import createSystemFromIUPAC, iupac_to_oemol
     from openmoltools.openeye import generate_conformers
-    from perses.utils.data import get_data_filename
     from perses.rjmc import geometry
     from perses.utils.smallmolecules import render_atom_mapping
     import tqdm
-    from openmmforcefields.generators import SystemGenerator
-    from openforcefield.topology import Molecule
+    from openff.toolkit.topology import Molecule
 
     current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name,title=current_mol_name[0:4])
     proposed_mol = iupac_to_oemol(proposed_mol_name)

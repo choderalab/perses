@@ -9,7 +9,7 @@ __author__ = 'John D. Chodera'
 
 from openeye import oechem, oegraphsim
 from openmoltools.openeye import generate_conformers
-from simtk import openmm, unit
+from simtk import unit
 from simtk.openmm import app
 import simtk.unit as unit
 import numpy as np
@@ -49,7 +49,7 @@ def system_generator_wrapper(oemols,
     -------
     system_generator : openmmforcefields.generators.SystemGenerator
     """
-    from openforcefield.topology import Molecule
+    from openff.toolkit.topology import Molecule
     from openmmforcefields.generators import SystemGenerator
     system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
                                          small_molecule_forcefield = small_molecule_forcefield, molecules=[Molecule.from_openeye(oemol) for oemol in oemols], cache=None)
@@ -420,7 +420,10 @@ def generate_unique_atom_names(molecule):
     else:
         # generating new atom names
         from collections import defaultdict
-        from simtk.openmm.app.element import Element
+        try:
+            from openmm.app.element import Element
+        except ModuleNotFoundError:  # <=7.5.0
+            from simtk.openmm.app.element import Element
         _logger.info(f'molecule {molecule.GetTitle()} \
                      does not have unique atom names. Generating now...')
         element_counts = defaultdict(int)

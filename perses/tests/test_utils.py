@@ -119,7 +119,7 @@ def test_OEMol_to_omm_ff(molecule=smiles_to_oemol('CC')):
     from perses.utils.openeye import OEMol_to_omm_ff
     from simtk import openmm
     from openmmforcefields.generators import SystemGenerator
-    from openforcefield.topology import Molecule
+    from openff.toolkit.topology import Molecule
 
     #default arguments for SystemGenerators
     barostat = None

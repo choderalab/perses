@@ -15,15 +15,9 @@ __author__ = 'John D. Chodera'
 # IMPORTS
 ################################################################################
 
-import os, os.path
-import sys, math
 import numpy as np
-import copy
-import time
 import netCDF4 as netcdf
 import pickle
-import json
-import mdtraj
 from simtk import unit
 import codecs
 

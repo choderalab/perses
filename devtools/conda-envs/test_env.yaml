@@ -7,6 +7,7 @@ channels:
   - openeye
 dependencies:
   - python >=3.6
+  - pip
   - setuptools
   - fire
   - joblib
@@ -28,13 +29,19 @@ dependencies:
   - networkx >=2.0
   - openeye-toolkits
   - dask
+  - dask-jobqueue
   - distributed
   - progressbar2
   - parmed # may need to sort out ambermini/ambertools/parmed dependencies
   - tqdm
-  - nose
-  - nose-timer
+  - pytest
+  - pytest-cov
   - coverage
-  - openforcefield >=0.7.1
+  - openff-toolkit
   - sphinx
   - dicttoxml
+  - openmmforcefields >=0.9.0
+  - dicttoxml
+  - tinydb
+  - pip:
+    - pytest-attrib

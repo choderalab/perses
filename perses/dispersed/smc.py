@@ -3,12 +3,10 @@ import os
 import copy
 from perses.dispersed.utils import *
 
-import openmmtools.mcmc as mcmc
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
 import numpy as np
 import mdtraj as md
 import simtk.unit as unit
-import tqdm
 import logging
 import time
 from collections import namedtuple
@@ -582,7 +580,6 @@ class SequentialMonteCarlo():
                     #the cumulative works are unchanged
                     #we do not return particle ancestries if no resampling is conducted
                     _logger.debug(f"not resampling.  omitting sMC updates")
-                    pass
 
             #attempt to trailblaze lambdas and launch workers
             _logger.debug(f"\tincrementing lambdas...")
