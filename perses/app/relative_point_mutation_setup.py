@@ -2,8 +2,9 @@ from __future__ import absolute_import
 
 from perses.utils.openeye import createOEMolFromSDF, extractPositionsFromOEMol, oechem
 from perses.annihilation.relative import HybridTopologyFactory, RepartitionedHybridTopologyFactory
-from perses.rjmc.topology_proposal import PointMutationEngine
+from perses.rjmc.topology_proposal import PointMutationEngine, PointMutationEngineRBD
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
+from perses.utils.rbd import edit_pdb_for_tleap, edit_tleap_in_inputs, edit_tleap_in_ions, generate_tleap_system
 
 import simtk.openmm as openmm
 import simtk.openmm.app as app
@@ -15,6 +16,7 @@ from openmmtools.constants import kB
 from perses.tests.utils import validate_endstate_energies
 from openff.toolkit.topology import Molecule
 from openmmforcefields.generators import SystemGenerator
+import os
 
 ENERGY_THRESHOLD = 1e-2
 temperature = 300 * unit.kelvin
@@ -486,8 +488,8 @@ class PointMutationExecutorRBD(PointMutationExecutor):
         
         # Correct the topologies
         _logger.info("Correcting tleap topologies")
-        apo_topology_corrected = correct_topology(apo_topology)
-        complex_topology_corrected = correct_topology(complex_topology, is_apo=False)
+        apo_topology_corrected = self._correct_topology(apo_topology)
+        complex_topology_corrected = self._correct_topology(complex_topology, is_apo=False)
         
         # Format inputs for pipeline
         inputs = [[apo_topology_corrected, apo_positions, apo_system, apo_tleap_prefix, False], [complex_topology_corrected, complex_positions, complex_system, complex_tleap_prefix, True]]
@@ -576,7 +578,7 @@ class PointMutationExecutorRBD(PointMutationExecutor):
     def get_apo_rhtf_1(self):
         return self.apo_rhtf_1
     
-    def correct_topology(original_topology, is_apo=True):
+    def _correct_topology(self, original_topology, is_apo=True):
     
         """
         Correct topology to use the right RBD:ACE2 chain and residue ids.
