@@ -2274,7 +2274,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
             force_names = getattr(self, '_{}_system_forces'.format(system_name)).keys()
             unknown_forces = set(force_names) - set(self._known_forces)
             if len(unknown_forces) > 0:
-                raise ValueError("Unkown forces {} encountered in {} system" % (unknown_forces, system_name))
+                raise ValueError(f"Unkown forces {unknown_forces} encountered in {system_name} system")
         _logger.info("No unknown forces.")
 
         # Get and store the nonbonded method from the system:
