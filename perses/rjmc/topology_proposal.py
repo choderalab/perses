@@ -2880,6 +2880,538 @@ class PointMutationEngine(PolymerProposalEngine):
             mutant_key = 'WT'
         return mutant_key
 
+class PointMutationEngineRBD(PointMutationEngine):
+    """
+    ProposalEngine for generating point mutation variants of RBD:ACE2. Uses tleap to parametrize the glycosylated systems.
+   
+    """
+    def propose(self,
+                current_system,
+                current_topology,
+                current_positions,
+                tleap_prefix,
+                is_complex,
+                current_metadata=None):
+        """
+        Generate a TopologyProposal
+        Parameters
+        ----------
+        current_system : simtk.openmm.System object
+            The current system object
+        current_topology : simtk.openmm.app.Topology object
+            The current topology
+        current_positions : np.array
+            The current positions
+        tleap_prefix : str
+            Prefix for tleap input and output files
+        is_complex : boolean
+            Indicates whether the current system is apo or complex
+        current_metadata : dict -- OPTIONAL
+        Returns
+        -------
+        topology_proposal : TopologyProposal
+            NamedTuple of type TopologyProposal containing forward and reverse
+            probabilities, as well as old and new topologies and atom
+            mapping
+        local_atom_map_stereo_sidechain : dict
+            chirality-corrected map of new_oemol_res to old_oemol_res
+        old_oemol_res : openeye.oechem.oemol object
+            oemol of the old residue sidechain
+        new_oemol_res : openeye.oechem.oemol object
+            oemol of the new residue sidechain
+        """
+        
+        _logger.info(f"\tConducting polymer point mutation proposal...")
+        old_topology = app.Topology()
+        append_topology(old_topology, current_topology)
+
+        # new_topology : simtk.openmm.app.Topology
+        new_topology = app.Topology()
+        append_topology(new_topology, current_topology)
+                
+        # Check that old_topology and old_system have same number of atoms.
+        old_system = current_system
+        old_topology_natoms = old_topology.getNumAtoms()  # number of topology atoms
+        old_system_natoms = old_system.getNumParticles()
+        if old_topology_natoms != old_system_natoms:
+            msg = 'PolymerProposalEngine: old_topology has %d atoms, while old_system has %d atoms' % (old_topology_natoms, old_system_natoms)
+            raise Exception(msg)
+
+        # metadata : dict, key = 'chain_id' , value : str
+        metadata = current_metadata
+        if metadata is None:
+            metadata = dict()
+
+        # old_chemical_state_key : str
+        _logger.debug(f"\tcomputing state key of old topology...")
+        old_chemical_state_key = self.compute_state_key(old_topology)
+        _logger.debug(f"\told chemical state key for chain {self._chain_id}: {old_chemical_state_key}")
+
+        # index_to_new_residues : dict, key : int (index) , value : str (three letter name of proposed residue)
+        _logger.debug(f"\tchoosing mutant...")
+        index_to_new_residues, metadata = self._choose_mutant(old_topology, metadata)
+        _logger.debug(f"\t\tindex to new residues: {index_to_new_residues}")
+
+        # residue_map : list(tuples : simtk.openmm.app.topology.Residue (existing residue), str (three letter name of proposed residue))
+        _logger.debug(f"\tgenerating residue map...")
+        residue_map = self._generate_residue_map(old_topology, index_to_new_residues)
+        _logger.debug(f"\t\tresidue map: {residue_map}")
+
+        for (res, new_name) in residue_map:
+            if res.name == new_name:
+                #remove the index_to_new_residues entries where the topology is already mutated
+                del(index_to_new_residues[res.index])
+        if len(index_to_new_residues) == 0:
+            _logger.debug(f"\t\tno mutation detected in this proposal; generating old proposal")
+            atom_map = dict()
+            for atom in old_topology.atoms():
+                atom_map[atom.index] = atom.index
+            _logger.debug('PolymerProposalEngine: No changes to topology proposed, returning old system and topology')
+            topology_proposal = TopologyProposal(new_topology=old_topology, new_system=old_system, old_topology=old_topology, old_system=old_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=old_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
+            return topology_proposal
+
+        elif len(index_to_new_residues) > 1:
+            raise Exception("Attempting to mutate more than one residue at once: ", index_to_new_residues, " The geometry engine cannot handle this.")
+
+        chosen_res_index = list(index_to_new_residues.keys())[0]
+        # Add modified_aa property to residues in old topology
+        for res in old_topology.residues():
+            res.modified_aa = True if res.index in index_to_new_residues.keys() else False
+
+        _logger.debug(f"\tfinal index_to_new_residues: {index_to_new_residues}")
+        _logger.debug(f"\tfinding excess and missing atoms/bonds...")
+        # Identify differences between old topology and proposed changes
+        # excess_atoms : list(simtk.openmm.app.topology.Atom) atoms from existing residue not in new residue
+        # excess_bonds : list(tuple (simtk.openmm.app.topology.Atom, simtk.openmm.app.topology.Atom)) bonds from existing residue not in new residue
+        # missing_bonds : list(tuple (simtk.openmm.app.topology._TemplateAtomData, simtk.openmm.app.topology._TemplateAtomData)) bonds from new residue not in existing residue
+        excess_atoms, excess_bonds, missing_atoms, missing_bonds = self._identify_differences(old_topology, residue_map)
+
+        # Delete excess atoms and bonds from old topology
+        excess_atoms_bonds = excess_atoms + excess_bonds
+        _logger.debug(f"\t excess atoms bonds: {excess_atoms_bonds}")
+        new_topology = self._delete_atoms(old_topology, excess_atoms_bonds)
+
+        # Add missing atoms and bonds to new topology
+        new_topology = self._add_new_atoms(new_topology, missing_atoms, missing_bonds, residue_map)
+
+        # index_to_new_residues : dict, key : int (index) , value : str (three letter name of proposed residue)
+        _logger.debug(f"\tconstructing atom map for TopologyProposal...")
+        atom_map, old_res_to_oemol_map, new_res_to_oemol_map, local_atom_map_stereo_sidechain, current_oemol_sidechain, proposed_oemol_sidechain, old_oemol_res_copy, new_oemol_res_copy  = self._construct_atom_map(residue_map, old_topology, index_to_new_residues, new_topology)
+
+        _logger.debug(f"\tadding indices of the 'C' backbone atom in the next residue and the 'N' atom in the previous")
+        _logger.debug(f"\t{list(index_to_new_residues.keys())[0]}")
+        extra_atom_map = self._find_adjacent_residue_atoms(old_topology, new_topology, list(index_to_new_residues.keys())[0])
+        _logger.debug(f"\tfound extra atom map: {extra_atom_map}")
+
+        #now to add all of the other residue atoms to the atom map...
+        all_other_residues_new = [res for res in new_topology.residues() if res.index != list(index_to_new_residues.keys())[0]]
+        all_other_residues_old = [res for res in old_topology.residues() if res.index != list(index_to_new_residues.keys())[0]]
+
+        all_other_atoms_map = {}
+        for res_new, res_old in zip(all_other_residues_new, all_other_residues_old):
+            assert res_new.name == res_old.name, f"all other residue names do not match"
+            all_other_atoms_map.update({atom_new.index: atom_old.index for atom_new, atom_old in zip(res_new.atoms(), res_old.atoms())})
+
+        # new_chemical_state_key : str
+        new_chemical_state_key = self.compute_state_key(new_topology)
+        # new_system : simtk.openmm.System
+
+        # Copy periodic box vectors from current topology
+        new_topology.setPeriodicBoxVectors(current_topology.getPeriodicBoxVectors())
+
+        # Build system
+        new_positions, new_system = self._generate_new_tleap_system(tleap_prefix, old_topology, new_topology, current_positions, is_complex)
+        
+        _logger.info("Finishing up topology proposal")
+        
+        #make constraint repairs
+        atom_map = SmallMoleculeSetProposalEngine._constraint_repairs(atom_map, old_system, new_system, old_topology, new_topology)
+        _logger.debug(f"\tafter constraint repairs, the atom map is as such: {atom_map}")
+
+        _logger.debug(f"\tadding all env atoms to the atom map...")
+        atom_map.update(all_other_atoms_map)
+
+        old_res_names = [res.name for res in old_topology.residues() if res.index == list(index_to_new_residues.keys())[0]]
+        assert len(old_res_names) == 1, f"no old res name match found"
+        old_res_name = old_res_names[0]
+        _logger.debug(f"\told res name: {old_res_name}")
+        new_res_name = list(index_to_new_residues.values())[0]
+
+        # Adjust logp_propose based on HIS presence
+        # his_residues = ['HID', 'HIE']
+        # old_residue = residue_map[0][0]
+        # proposed_residue = residue_map[0][1]
+        # if old_residue.name in his_residues and proposed_residue not in his_residues:
+        #     logp_propose = math.log(2)
+        # elif old_residue.name not in his_residues and proposed_residue in his_residues:
+        #     logp_propose = math.log(0.5)
+        # else:
+        #     logp_propose = 0.0
+
+        #we should be able to check the system to make sure that all of the core atoms
+        
+        # Create TopologyProposal.
+        current_res = [res for res in current_topology.residues() if res.index == chosen_res_index][0]
+        proposed_res = [res for res in new_topology.residues() if res.index == chosen_res_index][0]
+        augment_openmm_topology(topology = old_topology, residue_oemol = old_oemol_res_copy, residue_topology = current_res, residue_to_oemol_map = old_res_to_oemol_map)
+        augment_openmm_topology(topology = new_topology, residue_oemol = new_oemol_res_copy, residue_topology = proposed_res, residue_to_oemol_map = new_res_to_oemol_map)
+        
+        topology_proposal = TopologyProposal(logp_proposal = 0.,
+                                             new_to_old_atom_map = atom_map,
+                                             old_topology = old_topology,
+                                             new_topology  = new_topology,
+                                             old_system = old_system,
+                                             new_system = new_system,
+                                             old_alchemical_atoms = [atom.index for atom in current_res.atoms()] + list(extra_atom_map.values()),
+                                             old_chemical_state_key = old_chemical_state_key,
+                                             new_chemical_state_key = new_chemical_state_key,
+                                             old_residue_name = old_res_name,
+                                             new_residue_name = new_res_name)
+                
+        # Check that old_topology and old_system have same number of atoms.
+        old_topology_natoms = old_topology.getNumAtoms()  # number of topology atoms
+        old_system_natoms = old_system.getNumParticles()
+        if old_topology_natoms != old_system_natoms:
+            msg = 'PolymerProposalEngine: old_topology has %d atoms, while old_system has %d atoms' % (old_topology_natoms, old_system_natoms)
+            raise Exception(msg)
+
+        # Check that new_topology and new_system have same number of atoms.
+        new_topology_natoms = new_topology.getNumAtoms()  # number of topology atoms
+        new_system_natoms = new_system.getNumParticles()
+        if new_topology_natoms != new_system_natoms:
+            msg = 'PolymerProposalEngine: new_topology has %d atoms, while new_system has %d atoms' % (new_topology_natoms, new_system_natoms)
+            raise Exception(msg)
+
+        # Check to make sure no out-of-bounds atoms are present in new_to_old_atom_map
+        natoms_old = topology_proposal.old_system.getNumParticles()
+        natoms_new = topology_proposal.new_system.getNumParticles()
+        if not set(topology_proposal.new_to_old_atom_map.values()).issubset(range(natoms_old)):
+            msg = "Some new atoms in TopologyProposal.new_to_old_atom_map are not in span of new atoms (1..%d):\n" % natoms_new
+            msg += str(topology_proposal.new_to_old_atom_map)
+            raise Exception(msg)
+        if not set(topology_proposal.new_to_old_atom_map.keys()).issubset(range(natoms_new)):
+            msg = "Some new atoms in TopologyProposal.new_to_old_atom_map are not in span of old atoms (1..%d):\n" % natoms_new
+            msg += str(topology_proposal.new_to_old_atom_map)
+            raise Exception(msg)
+
+        #validate the old/new system matches
+        # TODO: create more rigorous checks for this validation either in TopologyProposal or in the HybridTopologyFactory
+        #assert PolymerProposalEngine.validate_core_atoms_with_system(topology_proposal)
+
+        
+        return topology_proposal, new_positions
+    
+    def _add_new_atoms(self, topology, missing_atoms, missing_bonds, residue_map):
+        """
+        Add new atoms (and corresponding bonds) to new residues
+        Parameters
+        ----------
+        topology : simtk.openmm.app.Topology
+            extra atoms from old residue have been deleted, missing atoms in new residue not yet added
+        missing_atoms : dict
+            key : simtk.openmm.app.topology.Residue
+            value : list(simtk.openmm.app.topology._TemplateAtomData)
+        missing_bonds : list(tuple (simtk.openmm.app.topology._TemplateAtomData, simtk.openmm.app.topology._TemplateAtomData))
+            bonds from new residue not in existing residue
+        residue_map : list(tuples)
+            simtk.openmm.app.topology.Residue, str (three letter residue name of new residue)
+        Returns
+        -------
+        topology : simtk.openmm.app.Topology
+            new residues have all correct atoms and bonds for desired mutation
+        """
+        _logger.info("Adding new atoms")
+        old_residue = residue_map[0][0]
+        new_residue_name = residue_map[0][1]
+        template = self._templates[residue_map[0][1]] # Assume that residue_map has only one mutation
+        template_atoms = list(template.atoms)
+        
+        new_topology = app.Topology()
+        new_topology.setPeriodicBoxVectors(topology.getPeriodicBoxVectors())
+        # new_atoms : dict, key : simtk.openmm.app.topology.Atom, value : simtk.openmm.app.topology.Atom maps old atoms to the corresponding Atom in the new residue
+        new_atoms = {}
+        # new_atom_names : dict, key : str new atom name, value : simtk.openmm.app.topology.Atom maps name of new atom to the corresponding Atom in the new residue (only contains map for missing residue)
+        new_atom_names = {}
+        # old_residues : list(simtk.openmm.app.topology.Residue)
+        old_residues = [old.index for old, new in residue_map]
+        for chain in topology.chains():
+            new_chain = new_topology.addChain(chain.id)
+            for residue in chain.residues():
+                new_residue = new_topology.addResidue(residue.name, new_chain, residue.id)
+                # Add modified property to residues in new topology
+                new_residue.modified_aa = True if residue.index in old_residues else False
+                # Copy over atoms from old residue to new residue
+                if self._is_residue_equal(residue, old_residue):
+                    old_atom_map = {atom.name : atom for atom in residue.atoms()}
+                    for atom in template_atoms:
+                        if atom in missing_atoms[old_residue]:
+                            new_atom = new_topology.addAtom(atom.name, atom.element, new_residue)
+                            new_atoms[atom] = new_atom
+                            new_atom_names[new_atom.name] = new_atom
+                        else:
+                            old_atom = old_atom_map[atom.name]
+                            new_atom = new_topology.addAtom(old_atom.name, old_atom.element, new_residue)
+                            new_atom.old_index = old_atom.old_index
+                            new_atoms[old_atom] = new_atom
+                            if new_residue.modified_aa:
+                                new_atom_names[new_atom.name] = new_atom
+                    new_residue.name = residue_map[0][1]
+                else:
+                    for atom in residue.atoms():
+                        # new_atom : simtk.openmm.app.topology.Atom
+                        new_atom = new_topology.addAtom(atom.name, atom.element, new_residue)
+                        new_atom.old_index = atom.old_index
+                        new_atoms[atom] = new_atom
+                        if new_residue.modified_aa:
+                            new_atom_names[new_atom.name] = new_atom
+
+        # Copy over bonds from topology to new topology
+        for bond in topology.bonds():
+            new_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
+        
+        for bond in missing_bonds:
+            new_topology.addBond(new_atom_names[bond[0].name], new_atom_names[bond[1].name])
+
+        return new_topology
+    
+    def _generate_new_tleap_system(self, tleap_prefix, old_topology, new_topology, current_positions, is_complex):
+        """
+        Generates new system by: 1) mutating in pymol to get the new positions, 2) rearranging positions to match
+        the atom order in the new_topology and copying solvent atoms from the old positions, 3) parametrizing the
+        new system using tleap.
+        
+        Parameters
+        ----------
+        tleap_prefix : str
+            Prefix for tleap input and output files
+        old_topology : simtk.openmm.app.Topology object
+            The old topology
+        new_topology : simtk.openmm.app.Topology object
+            The new topology
+        current_positions : np.array
+            The current positions
+        is_complex : boolean
+            Indicates whether the current system is apo or complex
+        Returns
+        -------
+        new_positions : np.array
+            The new positions
+        new_system : simtk.openmm.System object
+            The new system object        
+        """
+        
+        # Prepare PDB for mutation by removing solvent and renumbering the tleap coordinates
+        _logger.info("Prepping for mutation")
+        self._prep_for_mutation(tleap_prefix, is_complex)
+
+        # Generate PDB of new topology/positions using pymol
+        _logger.info("Mutating")
+        name = 'rbd_ace2' if is_complex else 'rbd'
+        mutant_position = self._allowed_mutations[0][0] # assume only allowed_mutations only has one mutation
+        mutant_residue = self._allowed_mutations[0][1] # assume only allowed_mutations only has one mutation
+        self._mutate(f"2_{name}_for_mutation.pdb", f'{self._chain_id}/{mutant_position}/', mutant_residue, name)
+#         os.system(f"python 3_mutate.py 2_{name}_for_mutation.pdb {self._chain_id}/{mutant_position}/ {mutant_residue} {name}")
+        
+        # Prep PDBs for tleap
+        _logger.info("Prepping PDBs for tleap")
+        self._prep_for_tleap(old_topology, new_topology, current_positions, is_complex)
+        
+        # Edit tleap in file
+        # Note: Make sure 5_{name}_mutant_tleap.in files are present before running
+#         edit_tleap_in_ions(f"5_{name}_mutant_tleap")
+        
+        # Generate system using tleap 
+        _logger.info("Generating new system")
+        _, new_positions, new_system = generate_tleap_system(f"5_{name}_mutant_tleap")
+       
+        return new_positions, new_system
+    
+    def _prep_for_mutation(self, tleap_prefix, is_complex):
+        """
+        Prepare a PDB for mutation in PyMOL: 1) Load the tleap files for the old system, 2) Rename the chains/residues
+        to match the canonical renumbering, 3) Remove solvent
+        
+        Parameters
+        ----------
+        tleap_prefix : str
+            Prefix for tleap input and output files
+        is_complex : boolean
+            Indicates whether the current system is apo or complex
+        """
+        
+        import MDAnalysis as mda
+        
+        prmtop_file = f"{tleap_prefix}.prmtop"
+        inpcrd_file = f"{tleap_prefix}.inpcrd"
+        ref_file = f"{tleap_prefix}.pdb"
+
+        # Load in the topology from tleap output files
+        u = mda.Universe(prmtop_file, inpcrd_file)
+
+        u_dim = mda.Universe(ref_file)
+        dimensions = u_dim.dimensions
+
+        # RBD
+        rbd = u.select_atoms("index 0-3000")
+        new_rbd_resids = [i for i in range(332, 528)]
+        rbd.residues.resids = new_rbd_resids
+
+        rbd_glycans = u.select_atoms("index 3001-3234")
+        new_rbd_glycan_resids = [527 + i for i in range(1, len(rbd_glycans.residues.resids) + 1)]
+        rbd_glycans.residues.resids = new_rbd_glycan_resids
+        
+        if is_complex:
+            # ACE2
+            ace2 = u.select_atoms("index 3235-14584")
+            new_ace2_resids = [i for i in range(18, 727)]
+            ace2.residues.resids = new_ace2_resids
+
+            ace2_glycans = u.select_atoms("index 14585-15971")
+            new_ace2_glycan_resids = [726 + i for i in range(1, len(ace2_glycans.residues.resids) + 1)]
+            ace2_glycans.residues.resids = new_ace2_glycan_resids
+
+            ace2_ions = u.select_atoms("index 15972-15973")
+            new_ace2_ion_resids = [i for i in range(1, len(ace2_ions.residues.resids) + 1)]
+            ace2_ions.residues.resids = new_ace2_ion_resids
+
+            # Create the new system by merging each universe
+            new_system = mda.Merge(rbd, rbd_glycans, ace2, ace2_glycans, ace2_ions)
+    
+            # Name each chain
+            new_system.segments.segids = ['R', 'X', 'C', 'D', 'E']
+            
+            name = "rbd_ace2"
+        else:
+            # Create the new system by merging each universe
+            new_system = mda.Merge(rbd, rbd_glycans)
+    
+            # Name each chain
+            new_system.segments.segids = ['R', 'X']
+            
+            name = "rbd"
+            
+        new_system.dimensions = dimensions
+
+        # Write out the new system
+        new_system.atoms.write(f"2_{name}_for_mutation.pdb")
+        
+    def _mutate(self, input_pdb, mutation_selection, mutant_residue, name):
+        """
+        Given a WT PDB and a desired mutation, mutate the PDB in pymol.
+        
+        Parameters
+        ----------
+        input_pdb : str
+            Path to PDB to be mutated
+        mutation_selection : str
+            Pymol selection string for the residue to be mutated. Example: For Chain R Residue 439, use 'R/439/'
+        mutant_residue : str
+            Three-letter code for the residue to mutate to. Example: For lysine, use 'LYS'
+        name : str
+            Name of the system to be used in the output file. Example: 'rbd_ace2'
+   
+        """
+        
+        import pymol
+        from pymol import cmd
+        import sys
+        
+        d = {'CYS': 'C', 'ASP': 'D', 'SER': 'S', 'GLN': 'Q', 'LYS': 'K',
+             'ILE': 'I', 'PRO': 'P', 'THR': 'T', 'PHE': 'F', 'ASN': 'N',
+             'GLY': 'G', 'HIS': 'H', 'LEU': 'L', 'ARG': 'R', 'TRP': 'W',
+             'ALA': 'A', 'VAL':'V', 'GLU': 'E', 'TYR': 'Y', 'MET': 'M'}
+
+        # Launch pymol session
+        pymol.pymol_argv = ["pymol", "-qc"] + sys.argv[1:]
+        pymol.finish_launching()
+
+        # Load RBD (no solvent)
+        cmd.load(input_pdb)
+
+        # Mutate
+        cmd.wizard("mutagenesis")
+        cmd.do("refresh_wizard")
+        cmd.get_wizard().set_mode(mutant_residue)
+        cmd.get_wizard().do_select(mutation_selection)
+
+        # Apply the mutation
+        cmd.get_wizard().apply()
+        cmd.set_wizard() # Equivalent to clicking "Done" in the GUI
+
+        # Save
+        cmd.save(f"3_{name}_mutant.pdb")
+        cmd.refresh()
+    
+    def _prep_for_tleap(self, old_topology, new_topology, current_positions, is_complex):
+        """
+        Given a mutated PDB, prepare a PDB for tleap input: 1) Rearrange the mutated PDB positions such that they 
+        match the atom ordering in new_topology, 2) Copy the solvent positions from current_positions, 3) Save apo 
+        RBD, apo ACE2 (for complex), solvent as separate PDBs.
+        
+        Parameters
+        ----------
+        tleap_prefix : str
+            Prefix for tleap input and output files
+        old_topology : simtk.openmm.app.Topology object
+            The old topology
+        new_topology : simtk.openmm.app.Topology object
+            The new topology
+        current_positions : np.array
+            The current positions
+        is_complex : boolean
+            Indicates whether the current system is apo or complex
+     
+        """
+        
+        # Load mutated (protonated) PDB
+        name = 'rbd_ace2' if is_complex else 'rbd'
+        mutated_pdb = app.PDBFile(f"3_{name}_mutant.pdb")
+        mutated_n_atoms = mutated_pdb.topology.getNumAtoms()
+        
+        # Map atom indices from pymol PDB to atom indices in new_topology
+        d_omm = {} # key: (atom name, residue id, chain id), value: atom index
+        for atom_omm in tqdm_notebook(new_topology.atoms()):
+            d_omm[(atom_omm.name, atom_omm.residue.id, atom_omm.residue.chain.id)] = atom_omm.index
+
+        d_map = {} # key: atom index from pymol mutated PDB, value: atom index in new_topology
+        for atom_pymol in tqdm_notebook(mutated_pdb.topology.atoms()):
+            match_index = d_omm[(atom_pymol.name, atom_pymol.residue.id, atom_pymol.residue.chain.id)]
+            d_map[atom_pymol.index] = match_index
+
+        # Rearrange positions based on new_topology and add units to positions
+        dim_1, dim_2 = np.array(mutated_pdb.positions).shape
+        mutated_positions = unit.Quantity(np.zeros(shape=(dim_1, dim_2)), unit=unit.nanometers)
+        positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in mutated_pdb.positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
+        for k, v in d_map.items():
+            mutated_positions[v] = positions[k]
+        
+        # Copy solvent positions from old positions
+        solvent_atoms = [atom for atom in old_topology.atoms() if atom.residue.chain.id == 'Y']
+        first_solvent_atom = solvent_atoms[0].index
+        new_positions = unit.Quantity(np.zeros([mutated_n_atoms + len(solvent_atoms), 3]), unit=unit.nanometers)
+        new_positions[:mutated_n_atoms, :] = mutated_positions
+        new_positions[mutated_n_atoms:, :] = current_positions[first_solvent_atom:]
+                
+        def save_apo(topology, positions, chains_to_keep, name, apo_name):
+            modeller = app.Modeller(topology, positions)
+            to_delete = []
+            for chain in modeller.topology.chains():
+                if chain.id not in chains_to_keep:
+                    to_delete.append(chain)
+            modeller.delete(to_delete)
+            app.PDBFile.writeFile(modeller.topology, modeller.positions, open(f"3_{name}_mutant_{apo_name}_tleap.pdb", "w"), keepIds=True)
+
+        # Save apo solute PDBs and then correct for tleap
+        save_apo(new_topology, new_positions, ['R', 'X'], name, "rbd")
+        edit_pdb_for_tleap(f'3_{name}_mutant_rbd_tleap.pdb', f'4_{name}_mutant_rbd_tleap_final.pdb')
+        
+        save_apo(new_topology, new_positions, ['Y'], name, "solvent")
+        edit_pdb_for_tleap(f'3_{name}_mutant_solvent_tleap.pdb', f'4_{name}_mutant_solvent_tleap_final.pdb')
+        
+        if is_complex:
+            save_apo(new_topology, new_positions, ['C', 'D', 'E'], name, "ace2")
+            edit_pdb_for_tleap(f'3_{name}_mutant_ace2_tleap.pdb', f'4_{name}_mutant_ace2_tleap_final.pdb', is_ace2=True)
+
 class PeptideLibraryEngine(PolymerProposalEngine):
     """
     Note: The PeptideLibraryEngine currently doesn't work because PolymerProposalEngine has been modified to handle
