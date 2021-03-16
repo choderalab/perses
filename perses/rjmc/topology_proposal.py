@@ -3319,8 +3319,30 @@ class PointMutationEngineRBD(PointMutationEngine):
      
         """
         
+	name = 'rbd_ace2' if is_complex else 'rbd'
+        
+        # Correct atom names in mutated PDB
+        # Read lines
+        with open(f"3_{name}_mutant.pdb", "r") as f:
+            lines = f.readlines()
+
+        # Iterate through lines, copying them over to new list of lines
+        new_lines = []
+        for line in lines:
+            if 'TER' not in line and 'END' not in line and 'REMARK' not in line and 'TITLE' not in line and 'CRYST1' not in line and 'CONECT' not in line:
+                current_res_name = line[17:20]
+                current_res_id = int(line[23:26])
+                if current_res_name == mutant_residue and current_res_id == mutant_position: # Fix atom names in mutant residue
+                    atom = line[12:16]
+                    if atom[0].isdigit():
+                        line = line[:12] + ' ' + line[13:15] + line[12] + line[16:]
+                new_lines.append(line)
+
+        # Update mutated PDB with corrected atom lines
+        with open(f"3_{name}_mutant.pdb", 'w') as f:
+            f.writelines(new_lines)
+
         # Load mutated (protonated) PDB
-        name = 'rbd_ace2' if is_complex else 'rbd'
         mutated_pdb = app.PDBFile(f"3_{name}_mutant.pdb")
         mutated_n_atoms = mutated_pdb.topology.getNumAtoms()
         
