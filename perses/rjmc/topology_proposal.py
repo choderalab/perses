@@ -17,6 +17,7 @@ from perses.storage import NetCDFStorageView
 from perses.rjmc.geometry import NoTorsionError
 from perses.utils.rbd import edit_pdb_for_tleap, edit_tleap_in_inputs, edit_tleap_in_ions, generate_tleap_system
 from functools import partial
+from pkg_resources import resource_filename
 
 try:
     from subprocess import getoutput  # If python 3
@@ -2894,6 +2895,7 @@ class PointMutationEngineRBD(PointMutationEngine):
                 current_positions,
                 tleap_prefix,
                 is_complex,
+                debug_dir,
                 current_metadata=None):
         """
         Generate a TopologyProposal
@@ -2909,6 +2911,8 @@ class PointMutationEngineRBD(PointMutationEngine):
             Prefix for tleap input and output files
         is_complex : boolean
             Indicates whether the current system is apo or complex
+        debug_dir : str
+            if specified, debug output files will be saved here
         current_metadata : dict -- OPTIONAL
         Returns
         -------
@@ -3023,7 +3027,7 @@ class PointMutationEngineRBD(PointMutationEngine):
         new_topology.setPeriodicBoxVectors(current_topology.getPeriodicBoxVectors())
 
         # Build system
-        new_positions, new_system = self._generate_new_tleap_system(tleap_prefix, old_topology, new_topology, current_positions, is_complex)
+        new_positions, new_system = self._generate_new_tleap_system(tleap_prefix, debug_dir, old_topology, new_topology, current_positions, is_complex)
         
         _logger.info("Finishing up topology proposal")
         
@@ -3177,7 +3181,7 @@ class PointMutationEngineRBD(PointMutationEngine):
 
         return new_topology
     
-    def _generate_new_tleap_system(self, tleap_prefix, old_topology, new_topology, current_positions, is_complex):
+    def _generate_new_tleap_system(self, tleap_prefix, debug_dir, old_topology, new_topology, current_positions, is_complex):
         """
         Generates new system by: 1) mutating in pymol to get the new positions, 2) rearranging positions to match
         the atom order in the new_topology and copying solvent atoms from the old positions, 3) parametrizing the
@@ -3187,6 +3191,8 @@ class PointMutationEngineRBD(PointMutationEngine):
         ----------
         tleap_prefix : str
             Prefix for tleap input and output files
+        debug_dir : str
+            if specified, debug output files will be saved here
         old_topology : simtk.openmm.app.Topology object
             The old topology
         new_topology : simtk.openmm.app.Topology object
@@ -3205,31 +3211,36 @@ class PointMutationEngineRBD(PointMutationEngine):
         
         # Prepare PDB for mutation by removing solvent and renumbering the tleap coordinates
         _logger.info("Prepping for mutation")
-        self._prep_for_mutation(tleap_prefix, is_complex)
+        name = 'rbd_ace2' if is_complex else 'rbd'
+        prepped_pdb = os.path.join(debug_dir, f"2_{name}_for_mutation.pdb")
+        self._prep_for_mutation(tleap_prefix, prepped_pdb, is_complex)
 
         # Generate PDB of new topology/positions using pymol
         _logger.info("Mutating")
-        name = 'rbd_ace2' if is_complex else 'rbd'
         mutant_position = self._allowed_mutations[0][0] # assume only allowed_mutations only has one mutation
         mutant_residue = self._allowed_mutations[0][1] # assume only allowed_mutations only has one mutation
+        mutant_pdb = os.path.join(debug_dir, f"3_{name}_mutant.pdb")
+        if os.path.exists(mutant_pdb):
+            os.system(f"rm {mutant_pdb}") # Otherwise, pymol will load this file in
+        mutate_script = resource_filename('perses', 'data/rbd-ace2/3_mutate.py')
         #self._mutate(f"2_{name}_for_mutation.pdb", f'{self._chain_id}/{mutant_position}/', mutant_residue, name)
-        os.system(f"python 3_mutate.py 2_{name}_for_mutation.pdb {self._chain_id}/{mutant_position}/ {mutant_residue} {name}")
-        
+        os.system(f"python {mutate_script} {prepped_pdb} {mutant_pdb} {self._chain_id}/{mutant_position}/ {mutant_residue}")       
         # Prep PDBs for tleap
         _logger.info("Prepping PDBs for tleap")
-        self._prep_for_tleap(old_topology, new_topology, current_positions, is_complex)
+        self._prep_for_tleap(debug_dir, old_topology, new_topology, current_positions, is_complex)
         
         # Edit tleap in file
-        # Note: Make sure 5_{name}_mutant_tleap.in files are present before running
-#         edit_tleap_in_ions(f"5_{name}_mutant_tleap")
-        
+        tleap_prefix = os.path.join(debug_dir, f"5_{name}_mutant_tleap")
+        mutant_template = resource_filename('perses', f'data/rbd-ace2/5_{name}_mutant_template_tleap.in')
+        edit_tleap_in_inputs(mutant_template, tleap_prefix, debug_dir)
+
         # Generate system using tleap 
         _logger.info("Generating new system")
-        _, new_positions, new_system = generate_tleap_system(f"5_{name}_mutant_tleap")
+        _, new_positions, new_system = generate_tleap_system(os.path.join(debug_dir, f"5_{name}_mutant_tleap"))
        
         return new_positions, new_system
     
-    def _prep_for_mutation(self, tleap_prefix, is_complex):
+    def _prep_for_mutation(self, tleap_prefix, output_pdb, is_complex):
         """
         Prepare a PDB for mutation in PyMOL: 1) Load the tleap files for the old system, 2) Rename the chains/residues
         to match the canonical renumbering, 3) Remove solvent
@@ -3238,6 +3249,8 @@ class PointMutationEngineRBD(PointMutationEngine):
         ----------
         tleap_prefix : str
             Prefix for tleap input and output files
+        output_pdb : str
+            Path to output PDB (prepped for mutation)
         is_complex : boolean
             Indicates whether the current system is apo or complex
         """
@@ -3296,9 +3309,9 @@ class PointMutationEngineRBD(PointMutationEngine):
         new_system.dimensions = dimensions
 
         # Write out the new system
-        new_system.atoms.write(f"2_{name}_for_mutation.pdb")
+        new_system.atoms.write(output_pdb)
         
-    def _prep_for_tleap(self, old_topology, new_topology, current_positions, is_complex):
+    def _prep_for_tleap(self, debug_dir, old_topology, new_topology, current_positions, is_complex):
         """
         Given a mutated PDB, prepare a PDB for tleap input: 1) Rearrange the mutated PDB positions such that they 
         match the atom ordering in new_topology, 2) Copy the solvent positions from current_positions, 3) Save apo 
@@ -3306,6 +3319,8 @@ class PointMutationEngineRBD(PointMutationEngine):
         
         Parameters
         ----------
+        debug_dir : str
+            If specified, debug output files will be saved here
         tleap_prefix : str
             Prefix for tleap input and output files
         old_topology : simtk.openmm.app.Topology object
@@ -3319,11 +3334,12 @@ class PointMutationEngineRBD(PointMutationEngine):
      
         """
         
-	name = 'rbd_ace2' if is_complex else 'rbd'
+        name = 'rbd_ace2' if is_complex else 'rbd'
         
         # Correct atom names in mutated PDB
         # Read lines
-        with open(f"3_{name}_mutant.pdb", "r") as f:
+        mutant_pdb = os.path.join(debug_dir, f"3_{name}_mutant.pdb")
+        with open(mutant_pdb, "r") as f:
             lines = f.readlines()
 
         # Iterate through lines, copying them over to new list of lines
@@ -3339,11 +3355,11 @@ class PointMutationEngineRBD(PointMutationEngine):
                 new_lines.append(line)
 
         # Update mutated PDB with corrected atom lines
-        with open(f"3_{name}_mutant.pdb", 'w') as f:
+        with open(mutant_pdb, 'w') as f:
             f.writelines(new_lines)
 
         # Load mutated (protonated) PDB
-        mutated_pdb = app.PDBFile(f"3_{name}_mutant.pdb")
+        mutated_pdb = app.PDBFile(mutant_pdb)
         mutated_n_atoms = mutated_pdb.topology.getNumAtoms()
         
         # Map atom indices from pymol PDB to atom indices in new_topology
@@ -3370,25 +3386,31 @@ class PointMutationEngineRBD(PointMutationEngine):
         new_positions[:mutated_n_atoms, :] = mutated_positions
         new_positions[mutated_n_atoms:, :] = current_positions[first_solvent_atom:]
                 
-        def save_apo(topology, positions, chains_to_keep, name, apo_name):
+        def save_apo(output_pdb, topology, positions, chains_to_keep):
             modeller = app.Modeller(topology, positions)
             to_delete = []
             for chain in modeller.topology.chains():
                 if chain.id not in chains_to_keep:
                     to_delete.append(chain)
             modeller.delete(to_delete)
-            app.PDBFile.writeFile(modeller.topology, modeller.positions, open(f"3_{name}_mutant_{apo_name}_tleap.pdb", "w"), keepIds=True)
+            app.PDBFile.writeFile(modeller.topology, modeller.positions, open(output_pdb, "w"), keepIds=True)
 
         # Save apo solute PDBs and then correct for tleap
-        save_apo(new_topology, new_positions, ['R', 'X'], name, "rbd")
-        edit_pdb_for_tleap(f'3_{name}_mutant_rbd_tleap.pdb', f'4_{name}_mutant_rbd_tleap_final.pdb')
+        rbd_pdb = os.path.join(debug_dir, f"3_{name}_mutant_rbd_tleap.pdb")
+        rbd_pdb_final = os.path.join(debug_dir, f'4_{name}_mutant_rbd_tleap_final.pdb')
+        save_apo(rbd_pdb, new_topology, new_positions, ['R', 'X'])
+        edit_pdb_for_tleap(rbd_pdb, rbd_pdb_final)
         
-        save_apo(new_topology, new_positions, ['Y'], name, "solvent")
-        edit_pdb_for_tleap(f'3_{name}_mutant_solvent_tleap.pdb', f'4_{name}_mutant_solvent_tleap_final.pdb')
+        solvent_pdb = os.path.join(debug_dir, f"3_{name}_mutant_solvent_tleap.pdb")
+        solvent_pdb_final = os.path.join(debug_dir, f'4_{name}_mutant_solvent_tleap_final.pdb')
+        save_apo(solvent_pdb, new_topology, new_positions, ['Y'])
+        edit_pdb_for_tleap(solvent_pdb, solvent_pdb_final)
         
         if is_complex:
-            save_apo(new_topology, new_positions, ['C', 'D', 'E'], name, "ace2")
-            edit_pdb_for_tleap(f'3_{name}_mutant_ace2_tleap.pdb', f'4_{name}_mutant_ace2_tleap_final.pdb', is_ace2=True)
+            ace2_pdb = os.path.join(debug_dir, f"3_{name}_mutant_ace2_tleap.pdb")
+            ace2_pdb_final = os.path.join(debug_dir, f'4_{name}_mutant_ace2_tleap_final.pdb')
+            save_apo(ace2_pdb, new_topology, new_positions, ['C', 'D', 'E'])
+            edit_pdb_for_tleap(ace2_pdb, ace2_pdb_final, is_ace2=True)
 
 class PeptideLibraryEngine(PolymerProposalEngine):
     """
