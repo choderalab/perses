@@ -3353,7 +3353,11 @@ class PointMutationEngineRBD(PointMutationEngine):
                 if current_res_name == mutant_residue and current_res_id == mutant_position: # Fix atom names in mutant residue
                     atom = line[12:16]
                     if atom[0].isdigit():
-                        line = line[:12] + ' ' + line[13:15] + line[12] + line[16:]
+                        atom_chars = len(atom[1:].strip(" "))
+                        if atom_chars == 2: # if atom name is 2 characters
+                            line = line[:12] + ' ' + line[13:15] + line[12] + line[16:]
+                        elif atom_chars == 3:
+                            line = line[:12] + line[13:16] + line[12] + " " + line[17:]  
                 new_lines.append(line)
 
         # Update mutated PDB with corrected atom lines
