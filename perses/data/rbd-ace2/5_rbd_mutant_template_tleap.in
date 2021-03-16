@@ -1,0 +1,41 @@
+source leaprc.GLYCAM_06j-1 #  Source leaprc file for GLYCAM force field
+source leaprc.protein.ff14SB #  Source leaprc file for ff14SB protein force field
+source leaprc.water.tip3p #  Source leaprc file for TIP3P water model (and ions)
+
+
+######### RBD #########
+
+mol1 = loadpdb 4_rbd_mutant_rbd_tleap_final.pdb
+#  Add disulphide bridges
+
+bond mol1.336.SG mol1.361.SG
+bond mol1.379.SG mol1.432.SG
+bond mol1.391.SG mol1.525.SG
+bond mol1.480.SG mol1.488.SG
+
+#  N343 glycans
+
+bond mol1.343.ND2 mol1.528.C1 #  Bond N343 to GlcNAc
+bond mol1.528.O6 mol1.537.C1
+bond mol1.528.O4 mol1.529.C1
+bond mol1.529.O4 mol1.530.C1
+bond mol1.530.O6 mol1.531.C1
+bond mol1.531.O2 mol1.532.C1
+bond mol1.532.O4 mol1.533.C1
+bond mol1.530.O3 mol1.534.C1
+bond mol1.534.O2 mol1.535.C1
+bond mol1.535.O4 mol1.536.C1
+
+######### Solvent #########
+mol2 = loadpdb 4_rbd_mutant_solvent_tleap_final.pdb
+
+# Combine both molecules to make solvated RBD
+complex = combine {mol1 mol2}
+
+# Add box dimensions
+set complex box {114.609 118.869 170.037}
+
+# Save everything
+savepdb complex 5_rbd_mutant_tleap.pdb
+saveamberparm complex 5_rbd_mutant_tleap.prmtop 5_rbd_mutant_tleap.inpcrd
+quit #  Quit tleap program
