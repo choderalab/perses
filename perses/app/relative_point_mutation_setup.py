@@ -17,6 +17,8 @@ from perses.tests.utils import validate_endstate_energies
 from openff.toolkit.topology import Molecule
 from openmmforcefields.generators import SystemGenerator
 import os
+from pkg_resources import resource_filename
+import shutil
 
 ENERGY_THRESHOLD = 1e-2
 temperature = 300 * unit.kelvin
@@ -401,6 +403,7 @@ class PointMutationExecutorRBD(PointMutationExecutor):
                  flatten_exceptions=False,
                  vanilla=True,
                  repartitioned=True,
+                 debug_dir=None,
                  **kwargs):
         """
         arguments
@@ -455,14 +458,24 @@ class PointMutationExecutorRBD(PointMutationExecutor):
                 whether to generate a vanilla HybridTopologyFactory
             repartitioned : bool, default True
                 whether to generate a RepartitionedHybridTopologyFactory
+            debug_dir : str, default None
+                if specified, debug output files will be saved here
         TODO : allow argument for spectator ligands besides the 'ligand_file'
         """
-        
+        # Make debug directory
+        is_temp = False
+        if debug_dir:
+            if not os.path.exists(debug_dir):
+                os.system(f"mkdir {debug_dir}")
+        else:
+            debug_dir = tempfile.mkdtemp()
+            is_temp = True        
+
         ## Generate the old topology, positions, and system
         # Prep PDBs for tleap
         _logger.info("Editing PDBs for tleap")
-        protein_tleap = f"{protein_filename[:-4]}_tleap.pdb"
-        ligand_tleap = f"{ligand_input[:-4]}_tleap.pdb"
+        protein_tleap = os.path.join(debug_dir, f"{protein_filename[:-4]}_tleap.pdb")
+        ligand_tleap = os.path.join(debug_dir, f"{ligand_input[:-4]}_tleap.pdb")
         if clean:
             edit_pdb_for_tleap(protein_filename, protein_tleap)
             edit_pdb_for_tleap(ligand_input, ligand_tleap)
@@ -472,11 +485,13 @@ class PointMutationExecutorRBD(PointMutationExecutor):
         
         # Edit tleap files
         _logger.info("Editing tleap.in input files")
-        apo_tleap_prefix = "1_rbd_tleap"
-        complex_tleap_prefix = "1_rbd_ace2_tleap"
-        edit_tleap_in_inputs("1_rbd_template_tleap.in", apo_tleap_prefix, input_pdb=protein_tleap)
-        edit_tleap_in_inputs("1_rbd_ace2_template_tleap.in", complex_tleap_prefix, input_pdb=protein_tleap)
-        
+        apo_tleap_prefix = os.path.join(debug_dir, "1_rbd_tleap")
+        complex_tleap_prefix = os.path.join(debug_dir, "1_rbd_ace2_tleap")
+        apo_template = resource_filename('perses', 'data/rbd-ace2/1_rbd_template_tleap.in')
+        complex_template = resource_filename('perses', 'data/rbd-ace2/1_rbd_ace2_template_tleap.in')
+        edit_tleap_in_inputs(apo_template, apo_tleap_prefix, debug_dir)
+        edit_tleap_in_inputs(complex_template, complex_tleap_prefix, debug_dir)
+ 
         _logger.info("Editing tleap.in number of ions")
         edit_tleap_in_ions(apo_tleap_prefix)
         edit_tleap_in_ions(complex_tleap_prefix)
@@ -527,6 +542,9 @@ class PointMutationExecutorRBD(PointMutationExecutor):
             if repartitioned:
                 for repartitioned_endstate in [0, 1]:
                     self.generate_htf(RepartitionedHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
+
+        if temp:
+            shutil.rmtree(debug_dir)
                 
     def generate_htf(self, factory, topology_proposal, old_positions, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex):
         htf = factory(topology_proposal=topology_proposal,
