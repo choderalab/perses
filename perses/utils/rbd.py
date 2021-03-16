@@ -69,7 +69,7 @@ def edit_pdb_for_tleap(input_pdb, output_pdb, is_ace2=False):
     with open(output_pdb, 'w') as f:
         f.writelines(new_lines)
 
-def edit_tleap_in_inputs(tleap_in_template, tleap_prefix, input_pdb=None):
+def edit_tleap_in_inputs(tleap_in_template, tleap_prefix, debug_dir=None):
     """
     Edit the input and output files in the tleap.in file 
 
@@ -79,8 +79,8 @@ def edit_tleap_in_inputs(tleap_in_template, tleap_prefix, input_pdb=None):
         Template tleap.in file to edit
     tleap_prefix : str
         Prefix for output tleap.in and output tleap files
-    input_pdb : str, default None
-        Path to input PDB file. If not specified, it will not be edited in the tleap.in file.
+    debug_dir : str, default None
+        If specified, dir to prepend to path of input files
     """
     
     with open(tleap_in_template, "r") as f:
@@ -89,15 +89,23 @@ def edit_tleap_in_inputs(tleap_in_template, tleap_prefix, input_pdb=None):
     new_lines = []
     for line in lines_in:
         if "mol1 = loadpdb" in line:
-            if input_pdb:
+            if debug_dir:
                 linesplit = line.split(" ")
-                line = ' '.join(linesplit[:-1]) + f" {input_pdb}"
-        elif "savepdb" in line:
+                line = ' '.join(linesplit[:-1]) + f" {os.path.join(debug_dir, linesplit[-1])}"
+        if "mol2 = loadpdb" in line:
+            if debug_dir:
+                linesplit = line.split(" ")
+                line = ' '.join(linesplit[:-1]) + f" {os.path.join(debug_dir, linesplit[-1])}"
+        if "mol3 = loadpdb" in line:
+            if debug_dir:
+                linesplit = line.split(" ")
+                line = ' '.join(linesplit[:-1]) + f" {os.path.join(debug_dir, linesplit[-1])}"
+        if "savepdb" in line:
             linesplit = line.split(" ")
-            line = ' '.join(linesplit[:-1]) + f" {tleap_prefix}.pdb"
-        elif "saveamberparm" in line:
+            line = ' '.join(linesplit[:-1]) + f" {tleap_prefix}.pdb\n"
+        if "saveamberparm" in line:
             linesplit = line.split(" ")
-            line = ' '.join(linesplit[:-2]) + f" {tleap_prefix}.prmtop {tleap_prefix}.inpcrd"
+            line = ' '.join(linesplit[:-2]) + f" {tleap_prefix}.prmtop {tleap_prefix}.inpcrd\n"
         new_lines.append(line)
 
     with open(f"{tleap_prefix}.in", 'w') as f:
