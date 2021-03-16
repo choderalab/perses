@@ -546,7 +546,7 @@ class PointMutationExecutorRBD(PointMutationExecutor):
                 for repartitioned_endstate in [0, 1]:
                     self.generate_htf(RepartitionedHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
 
-        if temp:
+        if is_temp:
             shutil.rmtree(debug_dir)
                 
     def generate_htf(self, factory, topology_proposal, old_positions, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex):
