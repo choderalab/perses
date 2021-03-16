@@ -3311,7 +3311,7 @@ class PointMutationEngineRBD(PointMutationEngine):
         # Write out the new system
         new_system.atoms.write(output_pdb)
         
-    def _prep_for_tleap(self, debug_dir, old_topology, new_topology, current_positions, is_complex):
+    def _prep_for_tleap(self, debug_dir, old_topology, new_topology, current_positions, mutant_position, mutant_residue, is_complex):
         """
         Given a mutated PDB, prepare a PDB for tleap input: 1) Rearrange the mutated PDB positions such that they 
         match the atom ordering in new_topology, 2) Copy the solvent positions from current_positions, 3) Save apo 
@@ -3321,14 +3321,16 @@ class PointMutationEngineRBD(PointMutationEngine):
         ----------
         debug_dir : str
             If specified, debug output files will be saved here
-        tleap_prefix : str
-            Prefix for tleap input and output files
         old_topology : simtk.openmm.app.Topology object
             The old topology
         new_topology : simtk.openmm.app.Topology object
             The new topology
         current_positions : np.array
             The current positions
+        mutant_position : int
+            Position to mutate
+        mutant_residue : str
+            Three-letter code for the residue to mutate to. Example: For lysine, use 'LYS'
         is_complex : boolean
             Indicates whether the current system is apo or complex
      
