@@ -3227,7 +3227,7 @@ class PointMutationEngineRBD(PointMutationEngine):
         os.system(f"python {mutate_script} {prepped_pdb} {mutant_pdb} {self._chain_id}/{mutant_position}/ {mutant_residue}")       
         # Prep PDBs for tleap
         _logger.info("Prepping PDBs for tleap")
-        self._prep_for_tleap(debug_dir, old_topology, new_topology, current_positions, is_complex)
+        self._prep_for_tleap(debug_dir, old_topology, new_topology, current_positions, int(mutant_position), mutant_residue, is_complex)
         
         # Edit tleap in file
         tleap_prefix = os.path.join(debug_dir, f"5_{name}_mutant_tleap")
