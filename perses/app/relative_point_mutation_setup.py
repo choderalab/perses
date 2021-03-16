@@ -19,6 +19,7 @@ from openmmforcefields.generators import SystemGenerator
 import os
 from pkg_resources import resource_filename
 import shutil
+import tempfile
 
 ENERGY_THRESHOLD = 1e-2
 temperature = 300 * unit.kelvin
@@ -474,8 +475,10 @@ class PointMutationExecutorRBD(PointMutationExecutor):
         ## Generate the old topology, positions, and system
         # Prep PDBs for tleap
         _logger.info("Editing PDBs for tleap")
-        protein_tleap = os.path.join(debug_dir, f"{protein_filename[:-4]}_tleap.pdb")
-        ligand_tleap = os.path.join(debug_dir, f"{ligand_input[:-4]}_tleap.pdb")
+        protein_name = os.path.basename(protein_filename)
+        ligand_name = os.path.basename(ligand_input)
+        protein_tleap = os.path.join(debug_dir, f"{protein_name[:-4]}_tleap.pdb")
+        ligand_tleap = os.path.join(debug_dir, f"{ligand_name[:-4]}_tleap.pdb")
         if clean:
             edit_pdb_for_tleap(protein_filename, protein_tleap)
             edit_pdb_for_tleap(ligand_input, ligand_tleap)
@@ -533,7 +536,7 @@ class PointMutationExecutorRBD(PointMutationExecutor):
                                                          allowed_mutations=[(mutation_residue_id, proposed_residue)], # The residue ids allowed to mutate with the three-letter code allowed to change
                                                          aggregate=True) # Always allow aggregation
 
-            topology_proposal, new_positions = point_mutation_engine.propose(sys, top, pos, tleap_prefix, is_complex)
+            topology_proposal, new_positions = point_mutation_engine.propose(sys, top, pos, tleap_prefix, is_complex, debug_dir)
                         
             factories = []
             if vanilla:
