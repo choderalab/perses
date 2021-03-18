@@ -3227,7 +3227,7 @@ class PointMutationEngineRBD(PointMutationEngine):
         os.system(f"python {mutate_script} {prepped_pdb} {mutant_pdb} {self._chain_id}/{mutant_position}/ {mutant_residue}")       
         # Prep PDBs for tleap
         _logger.info("Prepping PDBs for tleap")
-        self._prep_for_tleap(debug_dir, old_topology, new_topology, current_positions, int(mutant_position), mutant_residue, is_complex)
+        new_positions = self._prep_for_tleap(debug_dir, old_topology, new_topology, current_positions, int(mutant_position), mutant_residue, is_complex)
         
         # Edit tleap in file
         tleap_prefix = os.path.join(debug_dir, f"5_{name}_mutant_tleap")
@@ -3236,7 +3236,7 @@ class PointMutationEngineRBD(PointMutationEngine):
 
         # Generate system using tleap 
         _logger.info("Generating new system")
-        _, new_positions, new_system = generate_tleap_system(os.path.join(debug_dir, f"5_{name}_mutant_tleap"))
+        _, _, new_system = generate_tleap_system(os.path.join(debug_dir, f"5_{name}_mutant_tleap"))
        
         return new_positions, new_system
     
@@ -3333,7 +3333,10 @@ class PointMutationEngineRBD(PointMutationEngine):
             Three-letter code for the residue to mutate to. Example: For lysine, use 'LYS'
         is_complex : boolean
             Indicates whether the current system is apo or complex
-     
+        Returns
+        -------
+        new_positions : np.array
+            The new positions
         """
         
         name = 'rbd_ace2' if is_complex else 'rbd'
@@ -3417,6 +3420,8 @@ class PointMutationEngineRBD(PointMutationEngine):
             ace2_pdb_final = os.path.join(debug_dir, f'4_{name}_mutant_ace2_tleap_final.pdb')
             save_apo(ace2_pdb, new_topology, new_positions, ['C', 'D', 'E'])
             edit_pdb_for_tleap(ace2_pdb, ace2_pdb_final, is_ace2=True)
+
+        return new_positions
 
 class PeptideLibraryEngine(PolymerProposalEngine):
     """
