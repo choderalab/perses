@@ -3,7 +3,13 @@ import tempfile
 import re
 from math import floor
 from simtk.openmm import app
-from simtk import unit
+from simtk import unit, openmm
+
+import logging 
+
+# Set up logger
+_logger = logging.getLogger()
+_logger.setLevel(logging.INFO)
 
 """
 Utility functions for prepping RBD and RBD:ACE2 systems in tleap.
@@ -226,6 +232,10 @@ def generate_tleap_system(tleap_prefix,
         removeCMMotion=remove_cm_motion,
         hydrogenMass=hydrogen_mass
     )
+
+    # Add barostat
+    _logger.info("Added barostat!")
+    system.addForce(openmm.MonteCarloBarostat(1.0 * unit.atmosphere, 300 * unit.kelvin, 50))
 
     return prmtop.topology, inpcrd.positions, system
 
