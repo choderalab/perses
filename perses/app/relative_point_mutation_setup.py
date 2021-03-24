@@ -254,6 +254,7 @@ class PointMutationExecutor(object):
             #check for charge change...
             charge_diff = point_mutation_engine._get_charge_difference(current_resname = topology_proposal._old_topology.residue_topology.name,
                                                                        new_resname = topology_proposal._new_topology.residue_topology.name)
+            _logger.info(f"charge diff: {charge_diff}")
             if charge_diff != 0:
                 new_ion_indices_to_neutralize = point_mutation_engine.get_counterion_indices(charge_diff,
                                                                        old_res = topology_proposal._old_topology.residue_topology,
@@ -263,6 +264,7 @@ class PointMutationExecutor(object):
                                                                        positive_ion_name='NA',
                                                                        negative_ion_name='CL',
                                                                        radius=0.3)
+                _logger.info(f"new ion indices to neutralize {new_ion_indices_to_neutralize}")
                 PointMutationExecutor._modify_new_system(new_ion_indices_to_neutralize, topology_proposal._new_system)
 
 
@@ -351,6 +353,8 @@ class PointMutationExecutor(object):
         if 'NonbondedForce' in [i for i in force_dict.keys()]:
             nbf = force_dict['NonbondedForce']
             for idx in counterions_to_neutralize:
+                _logger.info(f"idx: {idx} of type {type(idx)}")
+                idx = int(idx)
                 charge, sigma, eps = nbf.getParticleParameters(idx)
                 nbf.setParticleParameters(idx, charge*0.0, sigma, eps*0.0)
 
