@@ -24,7 +24,7 @@ ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS']
 
 # Set up logger
 import logging
-_logger = logging.getLogger()
+_logger = logging.getLogger("setup")
 _logger.setLevel(logging.INFO)
 
 class PointMutationExecutor(object):
@@ -266,7 +266,7 @@ class PointMutationExecutor(object):
                                                                        radius=0.3)
                 _logger.info(f"new ion indices to neutralize {new_ion_indices_to_neutralize}")
                 PointMutationExecutor._modify_new_system(new_ion_indices_to_neutralize, topology_proposal._new_system)
-
+                PointMutationExecutor._modify_atom_classes(new_ion_indices_to_neutralize, topology_proposal)
 
 
             logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta,
@@ -358,9 +358,28 @@ class PointMutationExecutor(object):
                 charge, sigma, eps = nbf.getParticleParameters(idx)
                 nbf.setParticleParameters(idx, charge*0.0, sigma, eps*0.0)
 
-
-
-
+    @staticmethod
+    def _modify_atom_classes(counterions_to_neutralize, topology_proposal):
+        """
+        Modifies:
+        - topology proposal._core_new_to_old_atom_map - add the ion(s) to neutralize
+        - topology_proposal._new_environment_atoms - remove the ion(s) to neutralize
+        - topology_proposal._old_environment_atoms - remove the ion(s) to neutralize
+        
+        Parameters
+        ----------
+        counterions_to_neutralize : np.array(int)
+            integers corresponding to particle indices to neutralize
+        topology_proposal : perses.rjmc.TopologyProposal
+            topology_proposal to modify
+ 
+        """
+        for new_index in counterions_to_neutralize:
+            old_index = topology_proposal._new_to_old_atom_map[new_index]
+            topology_proposal._core_new_to_old_atom_map[new_index] = old_index
+            topology_proposal._new_environment_atoms.remove(new_index)
+            topology_proposal._old_environment_atoms.remove(old_index)
+        
     def _solvate(self,
                topology,
                positions,
