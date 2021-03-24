@@ -2175,7 +2175,9 @@ class PolymerProposalEngine(ProposalEngine):
 
         #now we can get the mol atom map of the sidechain
         #NOTE: since the sidechain oemols are NOT zero-indexed anymore, we need to match by name (since they are unique identifiers)
-        break_bool = False if old_res_name == 'TRP' or new_res_name == 'TRP' else True # Set allow_ring_breaking to be False if the transformation involves TRP
+        ring_aas = ['TRP', 'TYR', 'PHE']
+        break_bool = False if old_res_name in ring_aas or new_res_name in ring_aas else True
+        #break_bool = False if old_res_name == 'TRP' or new_res_name == 'TRP' else True # Set allow_ring_breaking to be False if the transformation involves TRP
         _logger.debug(f"\t\t\t allow ring breaking: {break_bool}")
         local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength='strong', matching_criterion='name', map_strategy='matching_criterion', allow_ring_breaking=break_bool)
 
@@ -2205,13 +2207,15 @@ class PolymerProposalEngine(ProposalEngine):
 
 
         #make sure that CB is mapped; otherwise the residue will not be contiguous
-        found_CB = False
+        #found_CB = False
         if any(item[0] == 'CB' and item[1] == 'CB' for item in mapped_names):
-            found_CB = True
+            index = new_oemol_name_idx['CB']
+            del[sidechain_fixed_map[index]]
+        #    found_CB = True
 
-        if not found_CB:
-            _logger.debug(f"\t\t\tno 'CB' found!!!.  removing local atom map stereo sidechain...")
-            sidechain_fixed_map = {}
+        #if not found_CB:
+        #    _logger.debug(f"\t\t\tno 'CB' found!!!.  removing local atom map stereo sidechain...")
+        #    sidechain_fixed_map = {}
 
         _logger.debug(f"\t\t\tthe local atom map (backbone) is {local_atom_map}")
         #update the local map
