@@ -356,7 +356,7 @@ class PointMutationExecutor(object):
                 _logger.info(f"idx: {idx} of type {type(idx)}")
                 idx = int(idx)
                 charge, sigma, eps = nbf.getParticleParameters(idx)
-                nbf.setParticleParameters(idx, charge*0.0, sigma, eps*0.0)
+                nbf.setParticleParameters(idx, charge*0.0, sigma, eps*0.001)
 
     @staticmethod
     def _modify_atom_classes(counterions_to_neutralize, topology_proposal):
