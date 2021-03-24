@@ -1574,7 +1574,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         # index_to_new_residues : dict, key : int (index) , value : str (three letter name of proposed residue)
         _logger.debug(f"\tconstructing atom map for TopologyProposal...")
-        atom_map, old_res_to_oemol_map, new_res_to_oemol_map, local_atom_map_stereo_sidechain, current_oemol_sidechain, proposed_oemol_sidechain, old_oemol_res_copy, new_oemol_res_copy  = self._construct_atom_map(residue_map, old_topology, index_to_new_residues, new_topology)
+        atom_map, old_res_to_oemol_map, new_res_to_oemol_map, local_atom_map_stereo_sidechain, current_oemol_sidechain, proposed_oemol_sidechain, old_oemol_res_copy, new_oemol_res_copy  = self._construct_atom_map(residue_map, old_topology, index_to_new_residues, new_topology, ignore_sidechain_atoms=True)
 
         _logger.debug(f"\tadding indices of the 'C' backbone atom in the next residue and the 'N' atom in the previous")
         _logger.debug(f"\t{list(index_to_new_residues.keys())[0]}")
@@ -2013,7 +2013,8 @@ class PolymerProposalEngine(ProposalEngine):
                             residue_map,
                             old_topology,
                             index_to_new_residues,
-                            new_topology):
+                            new_topology,
+                            ignore_sidechain_atoms=False):
         """
         Construct atom map (key: index to new residue, value: index to old residue) to supply as an argument to the TopologyProposal.
 
@@ -2027,6 +2028,8 @@ class PolymerProposalEngine(ProposalEngine):
             key : int (index) , value : str (three letter name of proposed residue)
         new_topology : simtk.openmm.app.Topology
             topology of new system
+        ignore_sidechain_atoms : bool, default False
+            whether to ignore sidechain atoms in the atom map
 
         Returns
         -------
@@ -2197,20 +2200,25 @@ class PolymerProposalEngine(ProposalEngine):
         #fix the sidechain indices w.r.t. full oemol
         sidechain_fixed_map = {}
         mapped_names = []
+        backbone_atoms = ['N', 'H', 'C', 'O', 'CA', 'HA']
+        sidechain_atom_indices = []
         for new_sidechain_idx, old_sidechain_idx in local_atom_map_stereo_sidechain.items():
             new_name, old_name = new_sidechain_oemol_indices_to_name[new_sidechain_idx], old_sidechain_oemol_indices_to_name[old_sidechain_idx]
             mapped_names.append((new_name, old_name))
             new_full_oemol_idx, old_full_oemol_idx = new_oemol_name_idx[new_name], old_oemol_name_idx[old_name]
+            if new_name not in backbone_atoms:
+                sidechain_atom_indices.append(new_full_oemol_idx)
             sidechain_fixed_map[new_full_oemol_idx] = old_full_oemol_idx
 
         _logger.debug(f"\t\t\toemol sidechain fixed map: {sidechain_fixed_map}")
 
+        if ignore_sidechain_atoms:
+            for index in sidechain_atom_indices:
+                del[sidechain_fixed_map[index]]
 
         #make sure that CB is mapped; otherwise the residue will not be contiguous
         #found_CB = False
-        if any(item[0] == 'CB' and item[1] == 'CB' for item in mapped_names):
-            index = new_oemol_name_idx['CB']
-            del[sidechain_fixed_map[index]]
+        #if any(item[0] == 'CB' and item[1] == 'CB' for item in mapped_names):
         #    found_CB = True
 
         #if not found_CB:
@@ -3007,8 +3015,8 @@ class PointMutationEngineRBD(PointMutationEngine):
 
         # index_to_new_residues : dict, key : int (index) , value : str (three letter name of proposed residue)
         _logger.debug(f"\tconstructing atom map for TopologyProposal...")
-        atom_map, old_res_to_oemol_map, new_res_to_oemol_map, local_atom_map_stereo_sidechain, current_oemol_sidechain, proposed_oemol_sidechain, old_oemol_res_copy, new_oemol_res_copy  = self._construct_atom_map(residue_map, old_topology, index_to_new_residues, new_topology)
-
+        atom_map, old_res_to_oemol_map, new_res_to_oemol_map, local_atom_map_stereo_sidechain, current_oemol_sidechain, proposed_oemol_sidechain, old_oemol_res_copy, new_oemol_res_copy  = self._construct_atom_map(residue_map, old_topology, index_to_new_residues, new_topology, ignore_sidechain_atoms=True)
+        _logger.info(f"atom map: {local_atomo_map_stereo_sidechain}")
         _logger.debug(f"\tadding indices of the 'C' backbone atom in the next residue and the 'N' atom in the previous")
         _logger.debug(f"\t{list(index_to_new_residues.keys())[0]}")
         extra_atom_map = self._find_adjacent_residue_atoms(old_topology, new_topology, list(index_to_new_residues.keys())[0])
