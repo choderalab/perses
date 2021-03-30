@@ -103,7 +103,8 @@ class PointMutationExecutor(object):
                  apo_box_dimensions=None,
                  flatten_torsions=False,
                  flatten_exceptions=False,
-                 repartitioned_endstate=None,
+                 vanilla=True,
+                 repartitioned=False,
                  **kwargs):
         """
         arguments
@@ -120,7 +121,7 @@ class PointMutationExecutor(object):
             conduct_endstate_validation : bool, default True
                 whether to conduct an endstate validation of the HybridTopologyFactory. If using the RepartitionedHybridTopologyFactory,
                 endstate validation cannot and will not be conducted.
-            ligand_file : str, default None
+            ligand_input : str, default None
                 path to ligand of interest (i.e. small molecule or protein); .sdf or .pdb
             ligand_index : int, default 0
                 which ligand to use
@@ -152,9 +153,10 @@ class PointMutationExecutor(object):
                 in the htf, flatten torsions involving unique new atoms at lambda = 0 and unique old atoms are lambda = 1
             flatten_exceptions : bool, default False
                 in the htf, flatten exceptions involving unique new atoms at lambda = 0 and unique old atoms at lambda = 1
-            repartitioned_endstate : int, default None
-                the endstate (0 or 1) at which to build the RepartitionedHybridTopologyFactory. By default, this is None,
-                meaning a vanilla HybridTopologyFactory will be built.
+            vanilla : bool, default True
+                whether to generate a vanilla HybridTopologyFactory
+            repartitioned : bool, default False
+                whether to generate a RepartitionedHybridTopologyFactory
         TODO : allow argument for spectator ligands besides the 'ligand_file'
 
         """
@@ -234,7 +236,7 @@ class PointMutationExecutor(object):
 
         # Run pipeline...
         htfs = []
-        for (top, pos, sys) in inputs:
+        for is_complex, (top, pos, sys) in enumerate(inputs):
             point_mutation_engine = PointMutationEngine(wildtype_topology=top,
                                                                  system_generator=self.system_generator,
                                                                  chain_id=mutation_chain_id, # Denote the chain id allowed to mutate (it's always a string variable)
@@ -271,32 +273,12 @@ class PointMutationExecutor(object):
 
             logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta,
                                                         validate_energy_bookkeeping=validate_bool)
-
-            if repartitioned_endstate is None:
-                factory = HybridTopologyFactory
-            elif repartitioned_endstate in [0, 1]:
-                factory = RepartitionedHybridTopologyFactory
-
-            forward_htf = factory(topology_proposal=topology_proposal,
-                                  current_positions=pos,
-                                  new_positions=new_positions,
-                                  use_dispersion_correction=False,
-                                  functions=None,
-                                  softcore_alpha=None,
-                                  bond_softening_constant=1.0,
-                                  angle_softening_constant=1.0,
-                                  soften_only_new=False,
-                                  neglected_new_angle_terms=[],
-                                  neglected_old_angle_terms=[],
-                                  softcore_LJ_v2=True,
-                                  softcore_electrostatics=True,
-                                  softcore_LJ_v2_alpha=0.85,
-                                  softcore_electrostatics_alpha=0.3,
-                                  softcore_sigma_Q=1.0,
-                                  interpolate_old_and_new_14s=flatten_exceptions,
-                                  omitted_terms=None,
-                                  endstate=repartitioned_endstate,
-                                  flatten_torsions=flatten_torsions)
+            if vanilla:
+                repartitioned_endstate = None
+                self.generate_htf(HybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
+            if repartitioned:
+                 for repartitioned_endstate in [0, 1]:
+                    self.generate_htf(RepartitionedHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
 
             if not topology_proposal.unique_new_atoms:
                 assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
@@ -319,18 +301,63 @@ class PointMutationExecutor(object):
                 if one_state_error > ENERGY_THRESHOLD:
                     _logger.warning(f"Reduced potential difference of the nonalchemical and alchemical Lambda = 1 state is above the threshold ({ENERGY_THRESHOLD}): {one_state_error}")
             else:
-                pass
+                pass            
 
-            htfs.append(forward_htf)
-
-        self.apo_htf = htfs[0]
-        self.complex_htf = htfs[1] if ligand_input else None
+    def generate_htf(self, factory, topology_proposal, old_positions, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex):
+        htf = factory(topology_proposal=topology_proposal,
+                                      current_positions=old_positions,
+                                      new_positions=new_positions,
+                                      use_dispersion_correction=False,
+                                      functions=None,
+                                      softcore_alpha=None,
+                                      bond_softening_constant=1.0,
+                                      angle_softening_constant=1.0,
+                                      soften_only_new=False,
+                                      neglected_new_angle_terms=[],
+                                      neglected_old_angle_terms=[],
+                                      softcore_LJ_v2=True,
+                                      softcore_electrostatics=True,
+                                      softcore_LJ_v2_alpha=0.85,
+                                      softcore_electrostatics_alpha=0.3,
+                                      softcore_sigma_Q=1.0,
+                                      interpolate_old_and_new_14s=flatten_exceptions,
+                                      omitted_terms=None,
+                                      endstate=repartitioned_endstate,
+                                      flatten_torsions=flatten_torsions)
+        if is_complex:
+            if factory == HybridTopologyFactory:
+                self.complex_htf = htf
+            elif factory == RepartitionedHybridTopologyFactory:
+                if repartitioned_endstate == 0:
+                    self.complex_rhtf_0 = htf
+                elif repartitioned_endstate == 1:
+                    self.complex_rhtf_1 = htf
+        else:
+            if factory == HybridTopologyFactory:
+                self.apo_htf = htf
+            elif factory == RepartitionedHybridTopologyFactory:
+                if repartitioned_endstate == 0:
+                    self.apo_rhtf_0 = htf
+                elif repartitioned_endstate == 1:
+                    self.apo_rhtf_1 = htf
 
     def get_complex_htf(self):
         return self.complex_htf
 
     def get_apo_htf(self):
         return self.apo_htf
+
+    def get_complex_rhtf_0(self):
+        return self.complex_rhtf_0
+
+    def get_apo_rhtf_0(self):
+        return self.apo_rhtf_0
+    
+    def get_complex_rhtf_1(self):
+        return self.complex_rhtf_1
+
+    def get_apo_rhtf_1(self):
+        return self.apo_rhtf_1
 
     @staticmethod
     def _modify_new_system(counterions_to_neutralize, system):
