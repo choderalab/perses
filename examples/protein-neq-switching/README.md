@@ -1,5 +1,6 @@
-# Run neq switching for a protein mutation
-1. First generate a pickled htf
+# Run neq switching for a protein mutation (ALA->ASP dipeptide)
+1. First generate a pickled htf. 
+An example htf is present in `2/`. The code to generate one:
 ```python
 import pickle
 import os
