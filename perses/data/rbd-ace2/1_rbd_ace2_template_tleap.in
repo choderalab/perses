@@ -120,7 +120,7 @@ complex = combine {mol1 mol2}
 
 # Solvate the system and add ions
 charge complex
-solvateBox complex TIP3PBOX 15 #  Add some solvent with padding = 15
+solvateoct complex TIP3PBOX 9 #  Add some solvent with padding = 9
 addionsrand complex Na+ 187 Cl- 167 #  Randomly replace waters with ions, waters = 61736, see README for how No. ions chosen
 
 # Save everything

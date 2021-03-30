@@ -29,7 +29,7 @@ bond mol1.535.O4 mol1.536.C1
 
 # Solvate the system and add ions
 charge mol1
-solvateBox mol1 TIP3PBOX 15 #  Add some solvent with padding = 15
+solvateoct mol1 TIP3PBOX 9 #  Add some solvent with padding = 9
 addionsrand mol1 Na+ 50 Cl- 52 #  Randomly replace waters with ions, waters = 18534, see README for how No. ions chosen
 
 # Save everything
