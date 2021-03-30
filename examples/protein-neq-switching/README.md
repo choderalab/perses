@@ -21,7 +21,7 @@ with open(os.path.join(outdir, f"2_solvent.pickle"), "wb") as f:
     pickle.dump(apo_htf, f)
 
 ```
-2. Run neq switching: (copied from as bash script)
+2. Run neq switching: (copied from a bash script)
 ```bash
 old_aa="ala"
 new_aa="asp"
