@@ -1402,6 +1402,10 @@ class PolymerProposalEngine(ProposalEngine):
 
     This base class is not meant to be invoked directly.
     """
+    _aminos = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'PHE', 'SER', 'THR', 'TRP', 'TYR', 'VAL'] # common naturally-occurring amino acid names
+    _positive_aminos = ['ARG', 'HIS', 'LYS']
+    _negative_aminos = ['ASP', 'GLU']
+    _neutral_aminos =  [amino for amino in _aminos if amino not in ['ARG', 'HIS', 'LYS', 'ASP', 'GLU']]
 
     # TODO: Document meaning of 'aggregate'
     def __init__(self, system_generator, chain_id, proposal_metadata=None, always_change=True, aggregate=False):
@@ -1469,6 +1473,77 @@ class PolymerProposalEngine(ProposalEngine):
                 name_without_spaces = name_without_spaces[1:] + name_without_spaces[0]
             atom.SetName(name_without_spaces)
         return current_oemol
+
+    @staticmethod
+    def _get_charge_difference(current_resname, new_resname):
+        """
+        return the charge of the old res - charge new res
+        Parameters
+        ----------
+        current_resname : str
+            three letter identifier for original residue
+        new_resnme : str
+            three letter identifier for new residue
+        Returns
+        -------
+        chargediff : int
+            charge(new_res) - charge(old_res)
+        """
+        assert new_resname in PolymerProposalEngine._aminos
+        assert current_resname in PolymerProposalEngine._aminos
+
+        new_rescharge, current_rescharge = 0,0
+        resname_to_charge = {current_resname: 0, new_resname: 0}
+        for resname in [new_resname, current_resname]:
+            if resname in PolymerProposalEngine._negative_aminos:
+                 resname_to_charge[resname] -= 1
+            elif resname in PolymerProposalEngine._positive_aminos:
+                resname_to_charge[resname] += 1
+
+        return resname_to_charge[current_resname] - resname_to_charge[new_resname]
+
+    @staticmethod
+    def get_water_indices(charge_diff,
+                               new_positions,
+                               new_topology,
+                               radius=0.8):
+        """
+        Choose random water(s) (at least `radius` nm away from the protein) to turn into ion(s). Returns the atom indices of the water(s) (index w.r.t. new_topology)
+        Parameters
+        ----------
+        charge_diff : int
+            the charge difference between the old_system - new_system
+        new_positions : np.ndarray(N, 3)
+            positions of atoms corresponding to new_topology
+        new_topology : openmm.Topology
+            topology of new system
+        radius : float, default 0.8
+            minimum distance (in nm) that all candidate waters must be from 'protein atoms'
+        Returns
+        -------
+        ion_indices : np.array(abs(charge_diff)*3)
+            indices of water atoms to be turned into ions
+        """
+
+        import mdtraj as md
+        # Create trajectory
+        traj = md.Trajectory(new_positions[np.newaxis, ...], md.Topology.from_openmm(new_topology))
+        water_atoms = list(traj.topology.select(f"water"))
+        query_atoms = traj.top.select('protein')
+
+        # Get water atoms within radius of protein
+        neighboring_atoms = md.compute_neighbors(traj, radius, query_atoms, haystack_indices=water_atoms)[0]
+
+        # Get water atoms outside of radius of protein
+        nonneighboring_residues = set([atom.residue.index for atom in traj.topology.atoms if atom.index not in  neighboring_atoms])
+        assert len(nonneighboring_residues) > 0, "there are no available nonneighboring waters"
+        # Choose N random nonneighboring waters, where N is determined based on the charge_diff
+        choice_residues = np.random.choice(list(nonneighboring_residues), size=abs(charge_diff), replace=False)
+
+        # Get the atom indices in the water(s)
+        choice_indices = np.array([[atom.index for atom in traj.topology.residue(res).atoms] for res in choice_residues])
+
+        return np.ndarray.flatten(choice_indices)
 
     def propose(self,
                 current_system,
