@@ -400,7 +400,7 @@ class PointMutationExecutor(object):
                     raise Exception(f"Trying to modify an atom that is not part of a water residue. Atom index: {idx}")
 
     @staticmethod
-    def _modify_atom_classes(counterions_to_neutralize, topology_proposal):
+    def _modify_atom_classes(water_atoms, topology_proposal):
         """
         Modifies:
         - topology proposal._core_new_to_old_atom_map - add the ion(s) to neutralize
@@ -409,13 +409,13 @@ class PointMutationExecutor(object):
         
         Parameters
         ----------
-        counterions_to_neutralize : np.array(int)
-            integers corresponding to particle indices to neutralize
+        water_atoms : np.array(int)
+            integers corresponding to particle indices to turn into ions
         topology_proposal : perses.rjmc.TopologyProposal
             topology_proposal to modify
  
         """
-        for new_index in counterions_to_neutralize:
+        for new_index in water_atoms:
             old_index = topology_proposal._new_to_old_atom_map[new_index]
             topology_proposal._core_new_to_old_atom_map[new_index] = old_index
             topology_proposal._new_environment_atoms.remove(new_index)

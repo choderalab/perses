@@ -1477,7 +1477,7 @@ class PolymerProposalEngine(ProposalEngine):
     @staticmethod
     def _get_charge_difference(current_resname, new_resname):
         """
-        return the charge of the new res - charge old res
+        return the charge of the old res - charge new res
 
         Parameters
         ----------
