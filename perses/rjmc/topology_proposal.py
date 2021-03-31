@@ -1502,67 +1502,52 @@ class PolymerProposalEngine(ProposalEngine):
             elif resname in PolymerProposalEngine._positive_aminos:
                 resname_to_charge[resname] += 1
 
-        return resname_to_charge[new_resname] - resname_to_charge[current_resname]
+        return resname_to_charge[current_resname] - resname_to_charge[new_resname]
 
     @staticmethod
-    def get_counterion_indices(charge_diff,
-                               old_res,
-                               new_res,
+    def get_water_indices(charge_diff,
                                new_positions,
                                new_topology,
-                               positive_ion_name='NA',
-                               negative_ion_name='CL',
-                               radius=0.3):
+                               radius=0.8):
         """
-        return a randomized counterion index to neutralize (index w.r.t. new_topology)
+        Choose random water(s) (at least `radius` nm away from the protein) to turn into ion(s). Returns the atom indices of the water(s) (index w.r.t. new_topology)
 
         Parameters
         ----------
         charge_diff : int
-            the charge difference between the new_system - old_system
-        old_res : openmm.Topology.residue
-            old mutating residue
-        new_res : openmm.Topology.residue
-            new mutating residue
+            the charge difference between the old_system - new_system
         new_positions : np.ndarray(N, 3)
             positions of atoms corresponding to new_topology
         new_topology : openmm.Topology
-            topology of new system (with new_res)
-        positive_ion_name : str, default 'NA'
-            name of positive ions to identify as candidates for neutralization (mdtraj naming convention)
-        negative_ion_name : str, default 'CL'
-            name of negative ions to identify as candidates for neutralization (mdtraj naming convention)
-        radius : float, default 0.3
-            minimum distance (in nm) that all candidate ions must be from 'protein atoms'
+            topology of new system
+        radius : float, default 0.8
+            minimum distance (in nm) that all candidate waters must be from 'protein atoms'
 
         Returns
         -------
-        ion_idx : np.array(abs(charge_diff))
-            index of counterion(s) that are identified for neutralization
+        ion_indices : np.array(abs(charge_diff)*3)
+            indices of water atoms to be turned into ions
         """
 
         import mdtraj as md
         # Create trajectory
         traj = md.Trajectory(new_positions[np.newaxis, ...], md.Topology.from_openmm(new_topology))
+        water_atoms = list(traj.topology.select(f"water"))
+        query_atoms = traj.top.select('protein')
 
-        # Get ion atom indices
-        if charge_diff < 0:
-            ion_name = negative_ion_name
-        elif charge_diff > 0:
-            ion_name = positive_ion_name
+        # Get water atoms within radius of protein
+        neighboring_atoms = md.compute_neighbors(traj, radius, query_atoms, haystack_indices=water_atoms)[0]
 
-        atoms = list(traj.topology.select(f"resname {ion_name}"))
+        # Get water atoms outside of radius of protein
+        nonneighboring_residues = set([atom.residue.index for atom in traj.topology.atoms if atom.index not in  neighboring_atoms])
+        assert len(nonneighboring_residues) > 0, "there are no available nonneighboring waters"
+        # Choose N random nonneighboring waters, where N is determined based on the charge_diff
+        choice_residues = np.random.choice(list(nonneighboring_residues), size=abs(charge_diff), replace=False)
 
-        query_indices = traj.top.select('protein')
+        # Get the atom indices in the water(s)
+        choice_indices = np.array([[atom.index for atom in traj.topology.residue(res).atoms] for res in choice_residues])
 
-        # Get ion indices within radius of mutated residue
-        neighboring_ions = list(md.compute_neighbors(traj, radius, query_indices, haystack_indices=atoms))
-
-        # Get ion indices outside of radius of mutated residue
-        nonneighboring_ions = [atom for atom in atoms if atom not in neighboring_ions]
-        assert len(nonneighboring_ions) > 0, f"there are no available nonneighboring ions"
-        choice_idx = np.random.choice(nonneighboring_ions, size=abs(charge_diff), replace=False)
-        return choice_idx
+        return np.ndarray.flatten(choice_indices)
 
 
 

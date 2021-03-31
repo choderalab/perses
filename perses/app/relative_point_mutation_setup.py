@@ -21,6 +21,14 @@ temperature = 300 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS']
+CL_CHARGE = unit.Quantity(value=-1.0, unit=unit.elementary_charge)
+CL_SIGMA = unit.Quantity(value=0.4477656957373345, unit=unit.nanometer)
+CL_EPSILON = unit.Quantity(value=0.14891274399999999, unit=unit.kilojoule_per_mole)
+NA_CHARGE = unit.Quantity(value=1.0, unit=unit.elementary_charge)
+NA_SIGMA = unit.Quantity(value=0.2439280690268249, unit=unit.nanometer)
+NA_EPSILON = unit.Quantity(value=0.3658460312, unit=unit.kilojoule_per_mole)
+O_CHARGE = unit.Quantity(value=-0.834, unit=unit.elementary_charge)
+H_CHARGE = unit.Quantity(value=0.417, unit=unit.elementary_charge)
 
 # Set up logger
 import logging
@@ -258,17 +266,10 @@ class PointMutationExecutor(object):
                                                                        new_resname = topology_proposal._new_topology.residue_topology.name)
             _logger.info(f"charge diff: {charge_diff}")
             if charge_diff != 0:
-                new_ion_indices_to_neutralize = point_mutation_engine.get_counterion_indices(charge_diff,
-                                                                       old_res = topology_proposal._old_topology.residue_topology,
-                                                                       new_res = topology_proposal._new_topology.residue_topology,
-                                                                       new_positions = new_positions,
-                                                                       new_topology = topology_proposal._new_topology,
-                                                                       positive_ion_name='NA',
-                                                                       negative_ion_name='CL',
-                                                                       radius=0.3)
-                _logger.info(f"new ion indices to neutralize {new_ion_indices_to_neutralize}")
-                PointMutationExecutor._modify_new_system(new_ion_indices_to_neutralize, topology_proposal._new_system)
-                PointMutationExecutor._modify_atom_classes(new_ion_indices_to_neutralize, topology_proposal)
+                new_water_indices_to_ionize = point_mutation_engine.get_counterion_indices(charge_diff, new_positions, topology_proposal._new_topology, radius=0.8)
+                _logger.info(f"new water indices to ionize {new_water_indices_to_ionize}")
+                PointMutationExecutor._modify_new_system(new_water_indices_to_ionize, topology_proposal._new_system, charge_diff)
+                PointMutationExecutor._modify_atom_classes(new_water_indices_to_ionize, topology_proposal)
 
 
             logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta,
@@ -360,30 +361,43 @@ class PointMutationExecutor(object):
         return self.apo_rhtf_1
 
     @staticmethod
-    def _modify_new_system(counterions_to_neutralize, system):
+    def _modify_new_system(water_atoms, system, charge_diff):
         """
-        given a system and an array of ints (corresponding to atoms to neutralize), neutralize the nonbonded particle parameters in the system
+        given a system and an array of ints (corresponding to atoms to turn into ions), modify the nonbonded particle parameters in the system such that the Os are turned into the ion of interest and the charges of the Hs are zeroed.
 
         Parameters
         ----------
-        counterions_to_neutralize : np.array(int)
+        water_atoms : np.array(int)
             integers corresponding to particle indices to neutralize
         system : simtk.openmm.System
             system to modify
+        charge_diff : int
+            the charge difference between the old_system - new_system
 
         Returns
         -------
         modify system in place
 
         """
+        # Determine which ion to turn the water into
+        if charge_diff < 0: # Turn water into Cl-
+            ion_charge, ion_sigma, ion_epsilon = CL_CHARGE, CL_SIGMA, CL_EPSILON
+        elif charge_diff > 0: # Turn water into Na+
+            ion_charge, ion_sigma, ion_epsilon = NA_CHARGE, NA_SIGMA, NA_EPSILON
+
+        # Scale the nonbonded terms of the water atoms
         force_dict = {i.__class__.__name__: i for i in system.getForces()}
         if 'NonbondedForce' in [i for i in force_dict.keys()]:
             nbf = force_dict['NonbondedForce']
-            for idx in counterions_to_neutralize:
-                _logger.info(f"idx: {idx} of type {type(idx)}")
+            for idx in water_atoms:
                 idx = int(idx)
-                charge, sigma, eps = nbf.getParticleParameters(idx)
-                nbf.setParticleParameters(idx, charge*0.0, sigma, eps*0.001)
+                charge, sigma, epsilon = nbf.getParticleParameters(idx)
+                if charge == O_CHARGE:
+                    nbf.setParticleParameters(idx, ion_charge, ion_sigma, ion_epsilon)
+                elif charge == H_CHARGE:
+                    nbf.setParticleParameters(idx, charge*0.0, sigma, epsilon)
+                else:
+                    raise Exception(f"Trying to modify an atom that is not part of a water residue. Atom index: {idx}")
 
     @staticmethod
     def _modify_atom_classes(counterions_to_neutralize, topology_proposal):
