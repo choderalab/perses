@@ -907,17 +907,17 @@ def test_simple_heterocycle_mapping(iupac_pairs = [('benzene', 'pyridine')]):
 
 def test_protein_counterion_topology_fix():
     """
-    mutate alanine dipeptide into ASP dipeptide and assert that the appropriate counterion is being neutralized
+    mutate alanine dipeptide into ASP dipeptide and assert that the appropriate number oof water indices are identified
     """
     from perses.rjmc.topology_proposal import PolymerProposalEngine
     new_res = 'ASP'
-    counterion_name = 'Cl'
-    charge_diff = -1
+    counterion_name = 'Na+'
+    charge_diff = 1
 
-    #make a vacuum system
+    # Make a vacuum system
     atp, system_generator = generate_atp(phase='vacuum')
 
-    #make a solvated system/topology/positions with modeller
+    # Make a solvated system/topology/positions with modeller
     modeller = app.Modeller(atp.topology, atp.positions)
     modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9*unit.angstroms, ionicStrength=0.15*unit.molar)
     solvated_topology = modeller.getTopology()
@@ -929,8 +929,8 @@ def test_protein_counterion_topology_fix():
 
     atp.system = system_generator.create_system(atp.topology)
 
-    #make a topology proposal and generate new positions
-    top_proposal, _new_pos, _, _ = generate_dipeptide_top_pos_sys(topology = atp.topology,
+    # Make a topology proposal and generate new positions
+    top_proposal, new_pos, _, _ = generate_dipeptide_top_pos_sys(topology = atp.topology,
                                    new_res = new_res,
                                    system = atp.system,
                                    positions = atp.positions,
@@ -940,25 +940,18 @@ def test_protein_counterion_topology_fix():
                                    validate_energy_bookkeeping=True,
                                    )
 
-    #get the charge difference
-    charge_diffs = PolymerProposalEngine._get_charge_difference(top_proposal._old_topology.residue_topology.name,
+    # Get the charge difference
+    charge_diff_test = PolymerProposalEngine._get_charge_difference(top_proposal._old_topology.residue_topology.name,
                                                                 top_proposal._new_topology.residue_topology.name)
-    assert charge_diffs == charge_diff
+    assert charge_diff_test == charge_diff
 
-    #get the array of counterion indices (w.r.t. new topology) to neutralize
-    new_idx_to_neutralize = PolymerProposalEngine.get_counterion_indices(charge_diff = charge_diffs,
-                                             old_res = 'ALA',
-                                             new_res = new_res,
-                                             new_positions = _new_pos,
+    # Get the array of water indices (w.r.t. new topology) to turn into ions
+    water_indices = PolymerProposalEngine.get_counterion_indices(charge_diff = charge_diffs,
+                                             new_positions = new_pos,
                                              new_topology = top_proposal._new_topology,
-                                             positive_ion_name='NA',
-                                             negative_ion_name='CL',
-                                             radius=0.3)
+                                             radius=0.8)
 
-    assert len(new_idx_to_neutralize) == 1
-
-    atoms = [atom for atom in top_proposal._new_topology.atoms()]
-    assert atoms[new_idx_to_neutralize[0]].name == counterion_name
+    assert len(water_indices) == 3
 
 #if __name__ == "__main__":
 
