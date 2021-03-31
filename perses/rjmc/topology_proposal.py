@@ -1407,27 +1407,6 @@ class PolymerProposalEngine(ProposalEngine):
     _positive_aminos = ['ARG', 'HIS', 'LYS']
     _negative_aminos = ['ASP', 'GLU']
     _neutral_aminos =  [amino for amino in _aminos if amino not in ['ARG', 'HIS', 'LYS', 'ASP', 'GLU']]
-    _aminos_3letter_to_1letter_map = {'ALA' : 'A' ,
-                                            'ARG' : 'R' ,
-                                            'ASN' : 'N' ,
-                                            'ASP' : 'D' ,
-                                            'CYS' : 'C' ,
-                                            'GLN' : 'Q' ,
-                                            'GLU' : 'E' ,
-                                            'GLY' : 'G' ,
-                                            'HIS' : 'H' ,
-                                            'ILE' : 'I' ,
-                                            'LEU' : 'L' ,
-                                            'LYS' : 'K' ,
-                                            'MET' : 'M' ,
-                                            'PHE' : 'F' ,
-                                            'PRO' : 'P' ,
-                                            'SER' : 'S' ,
-                                            'THR' : 'T' ,
-                                            'TRP' : 'W' ,
-                                            'TYR' : 'Y' ,
-                                            'VAL' : 'V' }
-
 
     # TODO: Document meaning of 'aggregate'
     def __init__(self, system_generator, chain_id, proposal_metadata=None, always_change=True, aggregate=False):
