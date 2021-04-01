@@ -552,10 +552,10 @@ class PointMutationExecutorRBD(PointMutationExecutor):
                                                                        new_resname = topology_proposal._new_topology.residue_topology.name)
             _logger.info(f"charge diff: {charge_diff}")
             if charge_diff != 0:
-                new_water_indices_to_ionize = point_mutation_engine.get_counterion_indices(charge_diff, new_positions, topology_proposal._new_topology, radius=0.8)
+                new_water_indices_to_ionize = point_mutation_engine.get_water_indices(charge_diff, new_positions, topology_proposal._new_topology, radius=0.8)
                 _logger.info(f"new water indices to ionize {new_water_indices_to_ionize}")
-                PointMutationExecutor._modify_new_system(new_water_indices_to_ionize, topology_proposal._new_system, charge_diff)
-                PointMutationExecutor._modify_atom_classes(new_water_indices_to_ionize, topology_proposal)
+                PointMutationExecutorRBD._modify_new_system(new_water_indices_to_ionize, topology_proposal._new_system, charge_diff)
+                PointMutationExecutorRBD._modify_atom_classes(new_water_indices_to_ionize, topology_proposal)
                   
             factories = []
             if vanilla:
