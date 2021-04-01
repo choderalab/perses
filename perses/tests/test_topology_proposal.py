@@ -946,7 +946,7 @@ def test_protein_counterion_topology_fix():
     assert charge_diff_test == charge_diff
 
     # Get the array of water indices (w.r.t. new topology) to turn into ions
-    water_indices = PolymerProposalEngine.get_counterion_indices(charge_diff = charge_diffs,
+    water_indices = PolymerProposalEngine.get_water_indices(charge_diff = charge_diffs,
                                              new_positions = new_pos,
                                              new_topology = top_proposal._new_topology,
                                              radius=0.8)
