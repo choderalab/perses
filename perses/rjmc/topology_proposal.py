@@ -3014,7 +3014,7 @@ class PointMutationEngineRBD(PointMutationEngine):
         new_oemol_res : openeye.oechem.oemol object
             oemol of the new residue sidechain
         """
-        
+
         _logger.info(f"\tConducting polymer point mutation proposal...")
         old_topology = app.Topology()
         append_topology(old_topology, current_topology)
@@ -3354,25 +3354,27 @@ class PointMutationEngineRBD(PointMutationEngine):
         dimensions = u_dim.dimensions
 
         # RBD
-        rbd = u.select_atoms("index 0-3000")
+        rbd = u.select_atoms("resid 1-196")
         new_rbd_resids = [i for i in range(332, 528)]
         rbd.residues.resids = new_rbd_resids
 
-        rbd_glycans = u.select_atoms("index 3001-3234")
+        rbd_glycans = u.select_atoms("resid 197-206")
         new_rbd_glycan_resids = [527 + i for i in range(1, len(rbd_glycans.residues.resids) + 1)]
         rbd_glycans.residues.resids = new_rbd_glycan_resids
         
         if is_complex:
             # ACE2
-            ace2 = u.select_atoms("index 3235-14584")
+            u_ace2 = mda.Universe(prmtop_file, inpcrd_file) # Create a new universe otherwise the next line will include RBD residues
+
+            ace2 = u_ace2.select_atoms("resid 207-915")
             new_ace2_resids = [i for i in range(18, 727)]
             ace2.residues.resids = new_ace2_resids
 
-            ace2_glycans = u.select_atoms("index 14585-15971")
+            ace2_glycans = u_ace2.select_atoms("resid 916-973")
             new_ace2_glycan_resids = [726 + i for i in range(1, len(ace2_glycans.residues.resids) + 1)]
             ace2_glycans.residues.resids = new_ace2_glycan_resids
 
-            ace2_ions = u.select_atoms("index 15972-15973")
+            ace2_ions = u_ace2.select_atoms("resid 974-975")
             new_ace2_ion_resids = [i for i in range(1, len(ace2_ions.residues.resids) + 1)]
             ace2_ions.residues.resids = new_ace2_ion_resids
 
