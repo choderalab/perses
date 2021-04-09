@@ -179,12 +179,14 @@ def edit_tleap_in_ions(tleap_prefix):
     with open(f"{tleap_prefix}.in", 'w') as f:
         f.writelines(new_lines)
         
-def generate_tleap_system(tleap_prefix, 
-                        temperature=300 * unit.kelvin, 
+def generate_tleap_system(tleap_prefix,
+                        temperature=298 * unit.kelvin,
                         nonbonded_method=app.PME, 
                         constraints=app.HBonds, 
                         remove_cm_motion=False, 
-                        hydrogen_mass=4.0 * unit.amu):
+                        hydrogen_mass=4.0 * unit.amu,
+                        pressure=1.0 * unit.atmosphere,
+                        barostat_update_frequency=50):
 
     """
     Generate a tleap system by 1) running tleap and 2) loading the tleap output prmtop and inpcrd files into openmm
@@ -193,7 +195,7 @@ def generate_tleap_system(tleap_prefix,
     ----------
     tleap_prefix : str
         Prefix for tleap input and output files
-    temperature : unit.kelvin, default 300 * unit.kelvin
+    temperature : unit.kelvin, default 298 * unit.kelvin
         Temperature
     nonbonded_method : simtk.openmm.app.Forcefield subclass object default app.PME
         Nonbonded method
@@ -203,6 +205,10 @@ def generate_tleap_system(tleap_prefix,
         Indicates whether to remove center of mass motion
     hydrogen_mass : unit.amu, default 4.0 * unit.amu
         Hydrogen mass
+    pressure : unit.atmosphere, default 1.0
+        Pressure
+    barostat_update_frequency : int, default 50
+        The frequency at which Monte Carlo pressure changes should be attempted (in time steps)
     Returns
     -------
     prmtop.topology : simtk.openmm.app.Topology object
@@ -235,7 +241,8 @@ def generate_tleap_system(tleap_prefix,
 
     # Add barostat
     _logger.info("Added barostat!")
-    system.addForce(openmm.MonteCarloBarostat(1.0 * unit.atmosphere, 300 * unit.kelvin, 50))
+    barostat = openmm.MonteCarloBarostat(pressure, temperature, barostat_update_frequency)
+    system.addForce(barostat)
 
     return prmtop.topology, inpcrd.positions, system
 
