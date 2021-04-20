@@ -2259,11 +2259,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
 
         # Combine alchemical regions
         default_alchemical_region = set(chain(self._atom_classes['core_atoms'], self._atom_classes['unique_new_atoms'], self._atom_classes['unique_old_atoms']))
-        if alchemical_region is None:
-            self._alchemical_region = default_alchemical_region
-        else:
-            assert default_alchemical_region.issubset(set(alchemical_region)), f"the given alchemical region must include _all_ atoms in the default alchemical region"
-            self._alchemical_region = set(alchemical_region).union(default_alchemical_region)
+        self._alchemical_region = default_alchemical_region
 
         # First thing to do is to copy over all of the standard valence force objects into the hybrid system
         self._handle_bonds()
@@ -2541,3 +2537,269 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
                 else:
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(hybrid_p1, hybrid_p2, chargeprod, sigma, epsilon)
 
+class RxnHybridTopologyFactory(HybridTopologyFactory):
+    """
+    a subclass of `HybridTopologyFactory` that will treat nonbondeds with a `CustomNonbondedForce`,
+    support multiple alchemical regions as well as externally-scaleable lambda regions (e.g. REST).
+    """
+    def __init__(self,
+                 topology_proposal,
+                 current_positions,
+                 new_positions,
+                 scale_region=None,
+                 **kwargs):
+        """
+        TODO : define a hybrid-indexed `self._scale_region` and a `self._nonscale_region`
+
+        TODO : define `topology_proposal._num_alchemical_regions` and `topology_proposal._alchemical_regions` as int and sets of disjoint ints, respectively
+        """
+        _logger.info("Beginning nonbonded method, total particle, barostat, and exceptions retrieval...")
+        self._topology_proposal = topology_proposal
+        self._num_alchemical_regions = self._topology_proposal._num_alchemical_regions
+        self._old_system = copy.deepcopy(topology_proposal.old_system)
+        self._new_system = copy.deepcopy(topology_proposal.new_system)
+        self._old_to_hybrid_map = {}
+        self._new_to_hybrid_map = {}
+        self._hybrid_system_forces = dict()
+        self._old_positions = current_positions
+        self._new_positions = new_positions
+
+        #prepare a dict that will query the
+
+        # Prepare dicts of forces, which will be useful later
+        # TODO: Store this as self._system_forces[name], name in ('old', 'new', 'hybrid') for compactness
+        self._old_system_forces = {type(force).__name__ : force for force in self._old_system.getForces()}
+        self._new_system_forces = {type(force).__name__ : force for force in self._new_system.getForces()}
+        _logger.info(f"Old system forces: {self._old_system_forces.keys()}")
+        _logger.info(f"New system forces: {self._new_system_forces.keys()}")
+
+        # Check that there are no unknown forces in the new and old systems:
+        for system_name in ('old', 'new'):
+            force_names = getattr(self, '_{}_system_forces'.format(system_name)).keys()
+            unknown_forces = set(force_names) - set(self._known_forces)
+            if len(unknown_forces) > 0:
+                raise ValueError(f"Unknown forces {unknown_forces} encountered in {system_name} system")
+        _logger.info("No unknown forces.")
+
+        # Get and store the nonbonded method from the system:
+        self._nonbonded_method = self._old_system_forces['NonbondedForce'].getNonbondedMethod()
+        _logger.info(f"Nonbonded method to be used (i.e. from old system): {self._nonbonded_method}")
+
+        # Start by creating an empty system. This will become the hybrid system.
+        self._hybrid_system = openmm.System()
+
+        # Begin by copying all particles in the old system to the hybrid system. Note that this does not copy the
+        # interactions. It does, however, copy the particle masses. In general, hybrid index and old index should be
+        # the same.
+        # TODO: Refactor this into self._add_particles()
+        _logger.info("Adding and mapping old atoms to hybrid system...")
+        for particle_idx in range(self._topology_proposal.n_atoms_old):
+            particle_mass = self._old_system.getParticleMass(particle_idx)
+            hybrid_idx = self._hybrid_system.addParticle(particle_mass)
+            self._old_to_hybrid_map[particle_idx] = hybrid_idx
+
+            # If the particle index in question is mapped, make sure to add it to the new to hybrid map as well.
+            if particle_idx in self._topology_proposal.old_to_new_atom_map.keys():
+                particle_index_in_new_system = self._topology_proposal.old_to_new_atom_map[particle_idx]
+                self._new_to_hybrid_map[particle_index_in_new_system] = hybrid_idx
+
+        # Next, add the remaining unique atoms from the new system to the hybrid system and map accordingly.
+        # As before, this does not copy interactions, only particle indices and masses.
+        _logger.info("Adding and mapping new atoms to hybrid system...")
+        for particle_idx in self._topology_proposal.unique_new_atoms:
+            particle_mass = self._new_system.getParticleMass(particle_idx)
+            hybrid_idx = self._hybrid_system.addParticle(particle_mass)
+            self._new_to_hybrid_map[particle_idx] = hybrid_idx
+
+        # Check that if there is a barostat in the original system, it is added to the hybrid.
+        # We copy the barostat from the old system.
+        if "MonteCarloBarostat" in self._old_system_forces.keys():
+            barostat = copy.deepcopy(self._old_system_forces["MonteCarloBarostat"])
+            self._hybrid_system.addForce(barostat)
+            _logger.info("Added MonteCarloBarostat.")
+        else:
+            _logger.info("No MonteCarloBarostat added.")
+
+        # Copy over the box vectors:
+        box_vectors = self._old_system.getDefaultPeriodicBoxVectors()
+        self._hybrid_system.setDefaultPeriodicBoxVectors(*box_vectors)
+        _logger.info(f"getDefaultPeriodicBoxVectors added to hybrid: {box_vectors}")
+
+        # Create the opposite atom maps for use in nonbonded force processing; let's omit this from logger
+        self._hybrid_to_old_map = {value : key for key, value in self._old_to_hybrid_map.items()}
+        self._hybrid_to_new_map = {value : key for key, value in self._new_to_hybrid_map.items()}
+
+        # Assign atoms to one of the classes described in the class docstring
+        self._atom_classes = self._determine_atom_classes()
+        _logger.info("Determined atom classes.")
+
+        # Construct dictionary of exceptions in old and new systems
+        _logger.info("Generating old system exceptions dict...")
+        self._old_system_exceptions = self._generate_dict_from_exceptions(self._old_system_forces['NonbondedForce'])
+        _logger.info("Generating new system exceptions dict...")
+        self._new_system_exceptions = self._generate_dict_from_exceptions(self._new_system_forces['NonbondedForce'])
+
+        self._validate_disjoint_sets()
+
+        # Copy constraints, checking to make sure they are not changing
+        _logger.info("Handling constraints...")
+        self._handle_constraints()
+
+        # Copy over relevant virtual sites
+        _logger.info("Handling virtual sites...")
+        self._handle_virtual_sites()
+
+        # Call each of the methods to add the corresponding force terms and prepare the forces:
+        self._transcribe_bonds()
+        self._transcribe_angles()
+        self._transcribe_torsions()
+
+        if 'NonbondedForce' in self._old_system_forces or 'NonbondedForce' in self._new_system_forces:
+            self._transcribe_nonbonded()
+            self._transcribe_exceptions()
+
+        # Get positions for the hybrid
+        self._hybrid_positions = self._compute_hybrid_positions()
+
+        # Generate the topology representation
+        self._hybrid_topology = self._create_topology()
+
+        # define the scale and nonscale region
+        self._make_scale_regions(scale_region)
+
+    def get_scale_identifier(self,
+                             particles):
+        """
+        return a bool based on whether the particles in a set are inside/outside/or straddling an alchemical region;
+        if nonbonded, particles is a hybrid integer, 1 indicates it is in scale region. otherwise, 0;
+
+        if bonded, particles is a hybrid-indexed set, [1,0,0] indicates scale region, [0,1,0] otherwise. if it straddles the region, gives [0,0,1].
+        """
+        assert type(particles) in [type(set()), int], f"`particles` must be an integer or a set, got {type(particles)}."
+        if type(particles) == int:
+            out = 1 if particles in self._scale_region else 0
+            return out
+
+        if particles.issubset(self._scale_region):
+            out = [1,0,0]
+        elif particles.issubset(self._nonscale_region):
+            out = [0,1,0]
+        else:
+            assert particles.issubset(self._scale_region.union(self._nonscale_region)), f"the union of the scale region and nonregion is all regions"
+            out = [0,0,1]
+        return out
+
+    def get_alch_identifier(self,
+                            particles):
+        """
+        return a list of integers that specifies whether a term is environment or alchemical (if alchemical, specifies which region, too)
+        """
+        template = [0 for i in range(self._topology_proposal._num_alchemical_regions + 1)]
+        template[0] = 1
+        for idx, _set in enumerate(self._topology_proposal._alchemical_regions):
+            if particles.intersection(_set) != {}: #allow for particles that straddle alchemical regions
+                template[idx+1] += 1 #update the template
+                template[0] = 0 #remove env default
+
+        assert sum(template) == 1, f"the alchemical regions must be disjoint; got {template}"
+        return template
+
+    @staticmethod
+    def render_bool_string(bool_variable_prefixes, bool_variable_names):
+        selections = [f"{bool_variable_prefix} * {bool_variable_name}" for bool_variable_prefix, bool_variable_name in zip(bool_variable_prefixes, bool_variable_names)]
+        return '( ' + '+'.join(selections) + ' )'
+
+
+    def _transcribe_bonds(self):
+        """
+        handle the harmonic bonds...
+        """
+        scale_bool_string = RxnHybridTopologyFactory.render_bool_string(['1', 'scale_lambda', 'interscale_lambda'],
+                                                                    ['nonscale_region', 'scale_region', 'interscale_region'])
+        core_bond_expression = f"{scale_bool_string} * (K/2)*(r-length)^2;"
+        bool_string = RxnHybridTopologyFactory.render_bool_string([''] + [f"lambda_{i}_bonds" for i in range(self._num_alchemical_regions)],
+                                                                    ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
+
+        core_bond_expression += f"K = (1 - {bool_string}) * K1 + {bool_string} * K2;"
+        core_bond_expression += f"length = (1 - {bool_string})*length1 + {bool_string}*length2;"
+
+        custom_bond_force = openmm.CustomBondForce(core_bond_expression)
+
+        #add global parameters
+        for i in range(self._num_alchemical_regions):
+            custom_bond_force.addGlobalParameter(f"lambda_{i}_bonds", 0.0)
+
+        for i in ['scale_lambda', 'interscale_lambda']:
+            custom_bond_force.addGlobalParameter(i, 1.0)
+
+        #add per-bond parameter
+        for i in ['scale_region', 'nonscale_region', 'interscale_region']:
+            custom_bond_force.addPerBondParameter(i)
+
+        for i in ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)]:
+            custom_bond_force.addPerBondParameter(i)
+
+        custom_bond_force.addPerBondParameter('length1') # old bond length
+        custom_bond_force.addPerBondParameter('K1') # old spring constant
+        custom_bond_force.addPerBondParameter('length2') # new bond length
+        custom_bond_force.addPerBondParameter('K2') # new spring constant
+
+        #now add the parameters
+        #there can only be a _single_ term for each atom pair, right?
+        
+        old_system_bond_force = self._old_system_forces['HarmonicBondForce']
+        new_system_bond_force = self._new_system_forces['HarmonicBondForce']
+
+        #make a list of hybrid-indexed bond terms
+        passed_old_terms, passed_new_terms = [], []
+        old_term_collector = {}
+        new_term_collector = {}
+
+        #gather the old system bond force terms into a dict
+        for term_idx in old_system_bond_force.getNumBonds():
+            p1, p2, r0, k = old_system_bond_force.getBondParameters(term_idx) #grab the parameters
+            hybrid_p1, hybrid_p2 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2] #make hybrid indices
+            sorted_list = sorted([hybrid_p1, hybrid_p2]) #sort the indices
+            assert not sorted_list in passed_old_terms, f"this bond already exists"
+            old_term_collector[sorted_list] = [r0, k]
+
+        # repeat for the new system bond force
+        for term_idx in new_system_bond_force.getNumBonds():
+            p1, p2, r0, k = new_system_bond_force.getBondParameters(term_idx)
+            hybrid_p1, hybrid_p2 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2]
+            sorted_list = sorted([hybrid_p1, hybrid_p2])
+            assert not sorted_list in passed_new_terms, f"this bond already exists"
+            new_term_collector[sorted_list] = [r0, k]
+
+        # iterate over the old_term_collector and add appropriate bonds
+        for hybrid_index_pair in old_term_collector.keys():
+            idx_set = set(hybrid_index_pair)
+            scale_id = self.get_scale_identifier(idx_set)
+            alch_id = self.get_alch_identifier(idx_set)
+            if alch_id[0] == 1: #if the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
+                assert new_term_collector[hybrid_index_pair] == old_term_collector[hybrid_index_pair]
+            r0_old, k_old = old_term_collector[hybrid_index_pair]
+            try:
+                r0_new, k_new = new_term_collector[hybrid_index_pair]
+            except Exception as e: #this might be a unique old term
+                r0_new, k_new = r0_old, k_old
+
+            #TODO : do these need to be unitless? check; also check if these terms are in the right order
+            bond_term = (hybrid_index_pair[0], hybrid_index_pair[1], scale_id + alch_id + [r0_old, k_old, r0_new, k_new])
+            custom_bond_force.addBond(*bond_term)
+
+        #make a modified new_term_collector that omits the terms that are previously handled
+        mod_new_term_collector = {key: val for key, val in new_term_collector.items() if key not in list(old_term_collector.keys())}
+
+        #now iterate over the modified new term collector and add appropriate bonds. these should only be unique new, right?
+        for hybrid_index_pair in mod_new_term_collector.keys():
+            idx_set = set(hybrid_index_pair)
+            scale_id = self.get_scale_identifier(idx_set)
+            alch_id = self.get_alch_identifier(idx_set)
+
+            #these terms are unchanged if they are unique new terms. preserve all valence terms
+            r0_old, k_old = mod_new_term_collector[hybrid_index_pair]
+            r0_new, k_new = r0_old, k_old
+
+            bond_term = (hybrid_index_pair[0], hybrid_index_pair[1], scale_id + alch_id + [r0_old, k_old, r0_new, k_new])
+            custom_bond_force.addBond(*bond_term)
