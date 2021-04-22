@@ -2546,12 +2546,40 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                  topology_proposal,
                  current_positions,
                  new_positions,
-                 scale_region=None,
+                 scale_regions=[],
                  **kwargs):
         """
-        TODO : define a hybrid-indexed `self._scale_region` and a `self._nonscale_region`
+        TODO : how do we want to support tautomerization/protonation state/etc? (maybe we can handle this later with a subclass)
+
+        TODO : how do we want to support the definition of different scale regions?
+
+        TODO : it might be best to define the following attributes in the `topology_proposal`:
+                1. TopologyProposal.old_to_new_atom_maps: a list of dicts that map old atom indices to new atom indices for each alchemical region (numbered by the index of the list)
+                2. TopologyProposal.unique_new_atoms: a list of lists. in corresponding order to the `old_to_new_atom_maps`, each entry is a list of unique new atoms corresponding to that (zero-indexed) alchemical region
+                3. TopologyProposal.unique_old_atoms : a list of lists (see number 2, except these are for unique old atoms)
+                for each list entry index i in the above 3 attributes, the union of the 3 entries must define _all_ of the atoms in the alchemical region i;
+                also, each list, of course, must be disjoint.
 
         TODO : define `topology_proposal._num_alchemical_regions` and `topology_proposal._alchemical_regions` as int and sets of disjoint ints, respectively
+
+        alchemical region methodology:
+            1. Each valence term (bond/angle/torsion/nonbond_exception) must exist as a subset of `alchemical_region_i` or `alchemical_region_i`.union(environment).
+                Importantly, valence terms may not belong in an intersection of two alchemical regions.
+            2. Each particle can exist as a nonbonded term in either `alchemical_region_i` or `environment`
+            3. Each alchemical region has a separate set of (bond, angle, torsion, nonbonded) lambdas enslaved to it. the `environment` particles are not enslaved to lambdas.
+            4. We should be able to throw away the notion of unique new/old and core atoms within the hybrid system by simply querying
+                the old-to-hybrid/new-to-hybrid atom maps?
+
+            5. other considerations
+                a. it is vital that the alchemical regions are defined in such a way that the valence terms are disjoint
+                b. it is also important that the environment terms are not changing (do we need an assert statement for that?)
+
+        scale region methodology:
+        much like alchemical regions, we also want to support scale regions (regions by which terms may be scaled by a multiplying factor, like in REST2)
+            1. unlike the alchemical region, each valence term (bond/angle/torsion/nonbonded_exception) must exist in either scale_region_i, interscale_region_i, or nonscale region (all sets are disjoint)
+            2. for nonbonded terms, every particle must exist in either nonscale_region or scale_region_i
+
+
         """
         _logger.info("Beginning nonbonded method, total particle, barostat, and exceptions retrieval...")
         self._topology_proposal = topology_proposal
@@ -2709,6 +2737,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         selections = [f"{bool_variable_prefix} * {bool_variable_name}" for bool_variable_prefix, bool_variable_name in zip(bool_variable_prefixes, bool_variable_names)]
         return '( ' + '+'.join(selections) + ' )'
 
+    def _validate_disjoint_terms()
+
 
     def _transcribe_bonds(self):
         """
@@ -2746,7 +2776,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         #now add the parameters
         #there can only be a _single_ term for each atom pair, right?
-        
+
         old_system_bond_force = self._old_system_forces['HarmonicBondForce']
         new_system_bond_force = self._new_system_forces['HarmonicBondForce']
 
