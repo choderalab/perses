@@ -2566,7 +2566,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             1. Each valence term (bond/angle/torsion/nonbond_exception) must exist as a subset of `alchemical_region_i` or `alchemical_region_i`.union(environment).
                 Importantly, valence terms may not belong in an intersection of two alchemical regions.
             2. Each particle can exist as a nonbonded term in either `alchemical_region_i` or `environment`
-            3. Each alchemical region has a separate set of (bond, angle, torsion, nonbonded) lambdas enslaved to it. the `environment` particles are not enslaved to lambdas.
+            3. Each alchemical region has a separate set of (bond, angle, torsion, nonbonded) lambdas tethered to to it. the `environment` particles are not tethered to to lambdas.
             4. We should be able to throw away the notion of unique new/old and core atoms within the hybrid system by simply querying
                 the old-to-hybrid/new-to-hybrid atom maps?
 
