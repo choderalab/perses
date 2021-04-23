@@ -2759,7 +2759,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         #generate a list of alchemical regions
         self._alchemical_regions = []
-        self._alchemical_regions_by_type = {key: set(chain(*[val for val in atom_classes[key].values()]))}
+        self._alchemical_regions_by_type = {key: set(chain(*[val for val in atom_classes[key].values()])) for key in atom_classes.keys()}
         for alch_region_idx in self._num_alchemical_regions:
             self._alchemical_regions.append(set(
                                                 chain(
@@ -2844,13 +2844,29 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         """
         template = [0 for i in range(self._num_alchemical_regions + 1)]
         template[0] = 1
+        str_identifier = 'environment_atom'
         for idx, _set in enumerate(self._alchemical_regions):
             if particles.intersection(_set) != {}: #allow for particles that straddle alchemical regions
                 template[idx+1] += 1 #update the template
                 template[0] = 0 #remove env default
 
+                #get whether it is core or unique_old/new
+                if particles.intersection(self._alchemical_regions_by_type['unique_old_atoms']):
+                    assert not particles.intersection(self._alchemical_regions_by_type['unique_new_atoms'])
+                    str_identifier = 'unique_old_atoms'
+                elif particles.intersection(self._alchemical_regions_by_type['unique_new_atoms']):
+                    assert not particles.intersection(self._alchemical_regions_by_type['unique_old_atoms'])
+                    str_identifier = 'unique_new_atoms'
+                elif particles.issubset(self._alchemical_regions_by_type['core_atoms']):
+                    str_identifier = 'core_atoms'
+                else:
+                    raise Exception(f"hybrid indices {particles} are identified as non-environment alchemical-region atoms but do not match unique_old/new/core ")
+
+        if template[0] == 1: #if this is in environemnt
+            assert particles.issubset(self._alchemical_regions_by_type['environment_atoms']), f"there is a discrepancy between template environment trigger and the environment atoms in `self._alchemical_regions_by_type`"
+
         assert sum(template) == 1, f"the alchemical regions must be disjoint; got {template}"
-        return template
+        return template, str_identifier
 
     @staticmethod
     def render_bool_string(bool_variable_prefixes, bool_variable_names):
@@ -2860,9 +2876,40 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
     def _transcribe_bonds(self):
         """
-        handle the harmonic bonds...
+        handle the harmonic bonds...this serves as a template for how to transcribe the old/new system `HarmonicBondForce` to the
+        hybrid system's `CustomBondForce`.
+
+        Each bond term in the old system corresponds to a core, unique_old, or environment bond term.
+            - core: any term wherein both particles constituting a bond are defined in the topology_proposal._core_new_to_old_atom_map
+                    or one of the particles is in topology_proposal._core_new_to_old_atom_map and the other is environment
+            - unique_old : at least one of the two particles constitutes a unique old atom (i.e. there are no new terms to interpolate w.r.t. the new system)
+            - unique_new : at least of the two particles constitutes a unique new atom (i.e. there are no old terms to interpolate w.r.t. the old system)
+            - environment : both particles are in the environment region (i.e. the old/new terms are identical; this is asserted and will raise an issue if not True)
+
+        In order to validate the `CustomBondForce` w.r.t. the old system:
+            1. set all `scale_lambda_{i}`, `interscale_lambda_{i}` to 1 (default values are 1, also)
+            2. set all `lambda_{i}_bonds` to 0 (lambda value constituting old system)
+            3. query self._hybrid_to_new_bond_indices, which is a dictionary of [custom_bond_force_bond_idx : new_bond_force_bond_idx] and contains all of the `unique_new_bonds`.
+                iterate through the keys and set the `CustomBondForce`'s third-to-last parameter to 0 (setting the old spring constant to zero, mimicking turning off the unique new bond altogether)
+
+                Example:
+                >>> mod_hybrid_system = copy.deepcopy(htf._hybrid_system)
+                >>> new_bond_force = htf._new_system_forces['HarmonicBondForce']
+                >>> force_names = {force.__name__: force for force in mod_hybrid_system.getForces()}
+                >>> custom_bond_force = force_names['CustomBondForce']
+                >>> for hybrid_idx, new_idx in htf._hybrid_to_new_bond_indices.items():
+                >>>     hybrid_params = custom_bond_force.getBondParameters(hybrid_idx)
+                >>>     hybrid_params[-1][-3] *= 0.
+                >>>     custom_bond_force.setBondParameters(hybrid_idx, *hybrid_params)
+            4. now, it should be the case that the reduced potential of the old system's `HarmonicBondForce` (at fixed positions) should be equal to the hybrid system's `CustomBondForce`
+
+        #TODO: test this on small molecules/protein transforms.
+
+        this sets the template for how to transcribe angles and torsion, as well (and nonbonded exceptions). if this can be debugged as it stands and vlaidated for bonds,
+        it should be straightforward to transcribe angles/torsions, nonbonded exceptions in much the same way.
+
+
         """
-        scale_template =
         scale_bool_string = RxnHybridTopologyFactory.render_bool_string(*self._scale_templates)
         core_bond_expression = f"{scale_bool_string} * (K/2)*(r-length)^2;"
         bool_string = RxnHybridTopologyFactory.render_bool_string([''] + [f"lambda_{i}_bonds" for i in range(self._num_alchemical_regions)],
@@ -2899,7 +2946,6 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         new_system_bond_force = self._new_system_forces['HarmonicBondForce']
 
         #make a list of hybrid-indexed bond terms
-        passed_old_terms, passed_new_terms = [], []
         old_term_collector = {}
         new_term_collector = {}
 
@@ -2908,33 +2954,48 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             p1, p2, r0, k = old_system_bond_force.getBondParameters(term_idx) #grab the parameters
             hybrid_p1, hybrid_p2 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2] #make hybrid indices
             sorted_list = sorted([hybrid_p1, hybrid_p2]) #sort the indices
-            assert not sorted_list in passed_old_terms, f"this bond already exists"
-            old_term_collector[sorted_list] = [r0, k]
+            assert not sorted_list in old_term_collector.keys(), f"this bond already exists"
+            old_term_collector[sorted_list] = [term_idx, r0, k]
 
         # repeat for the new system bond force
         for term_idx in new_system_bond_force.getNumBonds():
             p1, p2, r0, k = new_system_bond_force.getBondParameters(term_idx)
             hybrid_p1, hybrid_p2 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2]
             sorted_list = sorted([hybrid_p1, hybrid_p2])
-            assert not sorted_list in passed_new_terms, f"this bond already exists"
-            new_term_collector[sorted_list] = [r0, k]
+            assert not sorted_list in new_term_collector.keys(), f"this bond already exists"
+            new_term_collector[sorted_list] = [term_idx, r0, k]
+
+        #build generator for debugging purposes
+        self._hybrid_to_old_bond_indices = {}
+        self._hybrid_to_new_bond_indices = {}
+        self._hybrid_to_core_bond_indices = {}
+        self._hybrid_to_environment_bond_indices = {}
 
         # iterate over the old_term_collector and add appropriate bonds
         for hybrid_index_pair in old_term_collector.keys():
             idx_set = set(hybrid_index_pair)
             scale_id = self.get_scale_identifier(idx_set)
-            alch_id = self.get_alch_identifier(idx_set)
+            alch_id, string_identifier = self.get_alch_identifier(idx_set)
             if alch_id[0] == 1: #if the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
-                assert new_term_collector[hybrid_index_pair] == old_term_collector[hybrid_index_pair]
-            r0_old, k_old = old_term_collector[hybrid_index_pair]
+                assert new_term_collector[hybrid_index_pair] == old_term_collector[hybrid_index_pair], f"hybrid_index_pair bond termterm was identified as "
+            old_bond_idx, r0_old, k_old = old_term_collector[hybrid_index_pair]
             try:
-                r0_new, k_new = new_term_collector[hybrid_index_pair]
+                new_bond_idx, r0_new, k_new = new_term_collector[hybrid_index_pair]
             except Exception as e: #this might be a unique old term
                 r0_new, k_new = r0_old, k_old
 
             #TODO : do these need to be unitless? check; also check if these terms are in the right order
             bond_term = (hybrid_index_pair[0], hybrid_index_pair[1], scale_id + alch_id + [r0_old, k_old, r0_new, k_new])
-            custom_bond_force.addBond(*bond_term)
+            hybrid_bond_idx = custom_bond_force.addBond(*bond_term)
+
+            if string_identifier == 'unique_old_atoms':
+                self._hybrid_to_old_bond_indices[hybrid_bond_idx] = old_bond_idx
+            elif string_identifier == 'core_atoms':
+                self._hybrid_to_core_bond_indices[hybrid_bond_idx] = old_bond_idx
+            elif string_identifier == 'environment_atoms':
+                self._hybrid_to_environment_bond_indices[hybrid_bond_idx] = old_bond_idx
+            else:
+                raise Exception(f"old bond index {old_bond_idx} cannot be a unique new bond index")
 
         #make a modified new_term_collector that omits the terms that are previously handled
         mod_new_term_collector = {key: val for key, val in new_term_collector.items() if key not in list(old_term_collector.keys())}
@@ -2943,11 +3004,13 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         for hybrid_index_pair in mod_new_term_collector.keys():
             idx_set = set(hybrid_index_pair)
             scale_id = self.get_scale_identifier(idx_set)
-            alch_id = self.get_alch_identifier(idx_set)
+            alch_id, string_identifier = self.get_alch_identifier(idx_set)
+            assert string_identifier == 'unique_new_atoms', f"we are iterating over modified new term collector, but the string identifier returned {string_identifier}"
 
             #these terms are unchanged if they are unique new terms. preserve all valence terms
-            r0_old, k_old = mod_new_term_collector[hybrid_index_pair]
+            new_bond_idx, r0_old, k_old = mod_new_term_collector[hybrid_index_pair]
             r0_new, k_new = r0_old, k_old
 
             bond_term = (hybrid_index_pair[0], hybrid_index_pair[1], scale_id + alch_id + [r0_old, k_old, r0_new, k_new])
-            custom_bond_force.addBond(*bond_term)
+            hybrid_bond_idx = custom_bond_force.addBond(*bond_term)
+            self._hybrid_to_new_bond_indices[hybrid_bond_idx] = new_bond_idx
