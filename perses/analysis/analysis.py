@@ -14,7 +14,6 @@ __author__ = 'John D. Chodera'
 ################################################################################
 
 import numpy as np
-from openeye import oeiupac, oechem
 import itertools
 import pymbar
 from perses import storage
@@ -85,6 +84,8 @@ class Analysis(object):
         state_transition_iupac : [str, str]
             The pair of molecules in IUPAC names
         """
+        from openeye import oeiupac, oechem
+
         state_transition_iupac = []
         for state in state_transition:
             mol = oechem.OEMol()
