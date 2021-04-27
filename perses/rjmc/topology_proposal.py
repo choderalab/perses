@@ -8,7 +8,6 @@ import copy
 import logging
 import itertools
 import os
-import openeye.oechem as oechem
 import numpy as np
 import networkx as nx
 import openmoltools.forcefield_generators as forcefield_generators
@@ -24,32 +23,36 @@ except ImportError:
 # CONSTANTS
 ################################################################################
 
-OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
+try:
+    import openeye.oechem as oechem
+    OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
 
-# TODO write a mapping-protocol class to handle these options
+    # TODO write a mapping-protocol class to handle these options
 
-# weak requirements for mapping atoms == more atoms mapped, more in core
-# atoms need to match in aromaticity. Same with bonds.
-# maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
-WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic #| oechem.OEExprOpts_IntType
-WEAK_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+    # weak requirements for mapping atoms == more atoms mapped, more in core
+    # atoms need to match in aromaticity. Same with bonds.
+    # maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
+    WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic #| oechem.OEExprOpts_IntType
+    WEAK_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
-# default atom expression, requires same aromaticitiy and hybridization
-# bonds need to match in bond order
-# ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
-DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_IntType
-DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+    # default atom expression, requires same aromaticitiy and hybridization
+    # bonds need to match in bond order
+    # ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
+    DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_IntType
+    DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
-# strong requires same hybridization AND the same atom type
-# bonds are same as default, require them to match in bond order
-STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms
-STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+    # strong requires same hybridization AND the same atom type
+    # bonds are same as default, require them to match in bond order
+    STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms
+    STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
-# specific to proteins
-# PROTEIN_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_EqAromatic
-# PROTEIN_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity
-PROTEIN_ATOM_EXPRESSION = DEFAULT_ATOM_EXPRESSION
-PROTEIN_BOND_EXPRESSION = DEFAULT_BOND_EXPRESSION
+    # specific to proteins
+    # PROTEIN_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_EqAromatic
+    # PROTEIN_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity
+    PROTEIN_ATOM_EXPRESSION = DEFAULT_ATOM_EXPRESSION
+    PROTEIN_BOND_EXPRESSION = DEFAULT_BOND_EXPRESSION
+except(ImportError):
+    print("Openeye is required to use this module")
 
 
 ################################################################################
