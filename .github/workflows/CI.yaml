@@ -25,6 +25,8 @@ jobs:
           - { os: ubuntu-latest, python-version: 3.8, openmm: nightly }
           - { os: ubuntu-latest, python-version: 3.7, openmm: conda-forge }
           - { os: ubuntu-latest, python-version: 3.8, openmm: conda-forge }
+          - { os: ubuntu-latest, python-version: 3.7, openmm: rc }
+          - { os: ubuntu-latest, python-version: 3.8, openmm: rc }
 
     env:
       OPENMM: ${{ matrix.cfg.openmm }}
@@ -58,9 +60,9 @@ jobs:
             latest)
               echo "Using latest release OpenMM."
               conda install --quiet -c conda-forge openmm;;
-           #rc) # We can uncomment this case when we have this label on conda-forge
-             #echo "Using OpenMM rc" 
-             #conda install --quiet -c conda-forge/label/openmm_rc openmm;;
+           rc)
+             echo "Using OpenMM rc"
+             conda install --quiet -c conda-forge/label/openmm_rc openmm;;
             nightly)
               echo "Using OpenMM nightly dev build."
               conda install --quiet -c omnia-dev openmm;;
