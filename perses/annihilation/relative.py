@@ -2654,14 +2654,15 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         # Generate the topology representation
         self._hybrid_topology = self._create_topology()
 
+    @property
+    def num_scale_regions(self):
+        return 0 if self._scale_regions is None else len(self._scale_regions)
+
     def _handle_scale_regions(self, scale_regions):
-        num_scale_regions = None
         if scale_regions is None:
-            self._num_scale_regions = 0
             self._scale_regions = None
         else:
             assert type(scale_regions) == list
-            num_scale_regions = len(scale_regions)
             for entry in scale_regions:
                 assert type(entry) == list
 
@@ -2674,8 +2675,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         #get the scale template
         self._scale_templates = [
-                                    list(itertools.chain.from_iterable(['1'] + [[f"scale_lambda_{i}", f"interscale_lambda_{i}"] for i in range(self._num_scale_regions)])),
-                                    list(itertools.chain.from_iterable(['nonscale_region'] + [[f"scale_region_{i}", f"interscale_region_{i}"] for i in range(self._num_scale_regions)]))
+                                    list(itertools.chain.from_iterable(['1'] + [[f"scale_lambda_{i}", f"interscale_lambda_{i}"] for i in range(self.num_scale_regions)])),
+                                    list(itertools.chain.from_iterable(['nonscale_region'] + [[f"scale_region_{i}", f"interscale_region_{i}"] for i in range(self.num_scale_regions)]))
         ]
 
 
@@ -2705,8 +2706,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             self._num_alchemical_regions = len_list
 
         atom_classes = {
-                        'unique_old_atoms' : {i: set() for i in range(len_list)},
-                        'unique_new_atoms' : {i: set() for i in range(len_list)},
+                        'unique_old_atoms' : {i: set() for i in range(self._num_alchemical_regions)},
+                        'unique_new_atoms' : {i: set() for i in range(self._num_alchemical_regions)},
                         'core_atoms' : None,
                         'environment_atoms' : None
                         }
@@ -2739,7 +2740,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             for new_idx, old_idx in self._topology_proposal._core_new_to_old_atom_map.items():
                 new_to_hybrid_idx, old_to_hybrid_index = self._new_to_hybrid_map[new_idx], self._old_to_hybrid_map[old_idx]
                 assert new_to_hybrid_idx == old_to_hybrid_index, f"there is a -to_hybrid naming collision in topology proposal core atom map: {self._topology_proposal._core_new_to_old_atom_map}"
-                core_atoms.append(new_to_hybrid_idx)
+                core_atoms.add(new_to_hybrid_idx)
         else:
             core_atoms = {i: {} for i in range(len_list)}
             for main_idx, entry in enumerate(self._topology_proposal._core_new_to_old_atom_map):
@@ -2805,9 +2806,9 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         """
         assert type(particles) in [type(set()), int], f"`particles` must be an integer or a set, got {type(particles)}."
         if type(particles) == int:
-            template = [0 for i in range(self._num_scale_regions + 1)]
+            template = [0 for i in range(self.num_scale_regions + 1)]
             template[0] = 1
-            if self._num_scale_regions == 0:
+            if self.num_scale_regions == 0:
                 return template
             else:
                 for idx, _set in enumerate(self._scale_regions):
@@ -2817,22 +2818,28 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             return template
 
         elif type(particles) == set():
-            template = [0 for i in range(2 * self._num_scale_regions + 1)]
-            template[0] = 1
+            template = [0 for i in range(2 * self.num_scale_regions)]
+            env_counter = 0 #make an environment counter. add 1 to this every time the particles is not in the intersection with a scale region.
             for idx, _set in enumerate(self._scale_regions):
                 if particles.intersection(_set) != {}: # at least one of the particles is in the idx_th scale region
                     #assert that it does not intersect with any other scale region...
-                    further_indices = range(idx+1, self._num_scale_regions)
+                    further_indices = range(idx+1, self.num_scale_regions)
                     intersections = [particles.intersection(self._scale_regions[q]) for q in further_indices]
                     for region_label, val in zip(further_indices, intersections):
                         assert val == {}, f"term containing particles {particles} intersects with scale regions {idx} and {region_label}"
                     if particles.issubset(_set): #then this term is wholly in the scale region
-                        template[idx+1] = 1
-                        template[0] = 0
+                        template[2*idx] = 1 #double the index (and add 1) so that we
                     else: #it is interscale region
-                        template[idx+2] = 1
-                        template[0] = 0
-            return template
+                        template[2*idx+1] = 1
+                else:
+                    env_counter += 1
+
+            if env_counter == len(self._scale_regions): #then there was no match and it is an env atom
+                out_template = [1] + template
+            else: #there was a scale match and it is not an env atom.
+                out_template = [0] + template
+
+            return out_template
 
         else:
             raise Exception(f"particles is of type {type(particles)}, but only `int` and `set` are allowable")
