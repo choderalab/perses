@@ -2642,18 +2642,18 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         # Call each of the methods to add the corresponding force terms and prepare the forces:
         self._transcribe_bonds()
-        self._transcribe_angles()
-        self._transcribe_torsions()
+        #self._transcribe_angles()
+        #self._transcribe_torsions()
 
-        if 'NonbondedForce' in self._old_system_forces or 'NonbondedForce' in self._new_system_forces:
-            self._transcribe_nonbonded()
-            self._transcribe_exceptions()
+        #if 'NonbondedForce' in self._old_system_forces or 'NonbondedForce' in self._new_system_forces:
+        #    self._transcribe_nonbonded()
+        #    self._transcribe_exceptions()
 
         # Get positions for the hybrid
         self._hybrid_positions = self._compute_hybrid_positions()
 
         # Generate the topology representation
-        self._hybrid_topology = self._create_topology()
+        #self._hybrid_topology = self._create_topology()
 
     @property
     def num_scale_regions(self):
@@ -2929,7 +2929,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         core_bond_expression += f"length = (1 - {bool_string})*length1 + {bool_string}*length2;"
 
         custom_bond_force = openmm.CustomBondForce(core_bond_expression)
-
+        self._hybrid_system.addForce(custom_bond_force)
+        
         #add global parameters
         for i in range(self._num_alchemical_regions):
             custom_bond_force.addGlobalParameter(f"lambda_{i}_bonds", 0.0)
