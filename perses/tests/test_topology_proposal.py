@@ -232,6 +232,7 @@ def generate_dipeptide_top_pos_sys(topology,
                                    conduct_htf_prop = False,
                                    validate_energy_bookkeeping=True,
                                    repartitioned=False,
+                                   rxn_field=False,
                                    endstate=None,
                                    flatten_torsions=False,
                                    flatten_exceptions=False,
@@ -286,8 +287,12 @@ def generate_dipeptide_top_pos_sys(topology,
     if conduct_htf_prop:
         # Create a hybrid topology factory
         if not repartitioned:
-            from perses.annihilation.relative import HybridTopologyFactory
-            factory = HybridTopologyFactory
+            if not rxn_field:
+                from perses.annihilation.relative import HybridTopologyFactory
+                factory = HybridTopologyFactory
+            else:
+                from perses.annihilation.relative import RxnHybridTopologyFactory
+                factory = RxnHybridTopologyFactory
         else:
             from perses.annihilation.relative import RepartitionedHybridTopologyFactory
             factory = RepartitionedHybridTopologyFactory
