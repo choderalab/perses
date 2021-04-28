@@ -2523,7 +2523,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                  topology_proposal,
                  current_positions,
                  new_positions,
-                 scale_regions = None,
+                 scale_regions=None,
                  **kwargs):
         """
         TODO : remove hybrid-indexing from HybridTopologyFactory (this should be given directly to the RxnHybridTopologyFactory via the topology_proposal)
@@ -2562,7 +2562,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         """
         _logger.info("Beginning nonbonded method, total particle, barostat, and exceptions retrieval...")
         self._topology_proposal = topology_proposal
-        self._num_alchemical_regions = self._topology_proposal._num_alchemical_regions
+        #self._num_alchemical_regions = self._topology_proposal._num_alchemical_regions
+        self._num_alchemical_regions = 1
         self._old_system = copy.deepcopy(topology_proposal.old_system)
         self._new_system = copy.deepcopy(topology_proposal.new_system)
         self._old_to_hybrid_map = {}
@@ -2599,7 +2600,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         self._build_hybrid_particles()
 
         #define scale regions
-        self._handle_scale_regions()
+        self._handle_scale_regions(scale_regions)
 
         # Check that if there is a barostat in the original system, it is added to the hybrid.
         # We copy the barostat from the old system.
@@ -2659,6 +2660,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         return 0 if self._scale_regions is None else len(self._scale_regions)
 
     def _handle_scale_regions(self, scale_regions):
+        import itertools
         if scale_regions is None:
             self._scale_regions = None
         else:
@@ -2668,7 +2670,6 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
             #the last bit is to ensure that the scale regions are disjoint
             num_scaled_particles = sum([len(i) for i in scale_regions])
-            import itertools
             num_combined_scaled_particles = len(list(itertools.chain.from_iterable(scale_regions)))
             assert num_scaled_particles == num_combined_scaled_particles, f"each scale region must be disjoint"
             self._scale_regions = [set(i) for i in scale_regions]
@@ -2748,6 +2749,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                     new_to_hybrid_idx, old_to_hybrid_index = self._new_to_hybrid_map[new_idx], self._old_to_hybrid_map[old_idx]
                     assert new_to_hybrid_idx == old_to_hybrid_index, f"there is a -to_hybrid naming collision in topology proposal core atom map: {self._topology_proposal._core_new_to_old_atom_map}"
                     core_atoms[main_idx].add(new_to_hybrid_idx)
+        atom_classes['core_atoms'] = core_atoms
 
         new_to_hybrid_environment_atoms = set([self._new_to_hybrid_map[idx] for idx in self._topology_proposal._new_environment_atoms])
         old_to_hybrid_environment_atoms = set([self._old_to_hybrid_map[idx] for idx in self._topology_proposal._old_environment_atoms])
