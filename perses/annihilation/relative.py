@@ -2901,7 +2901,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             1. set all `scale_lambda_{i}`, `interscale_lambda_{i}` to 1 (default values are 1, also)
             2. set all `lambda_{i}_bonds` to 0 (lambda value constituting old system)
             3. query self._hybrid_to_new_bond_indices, which is a dictionary of [custom_bond_force_bond_idx : new_bond_force_bond_idx] and contains all of the `unique_new_bonds`.
-                iterate through the keys and set the `CustomBondForce`'s last parameter to 0 (setting the old spring constant to zero, mimicking turning off the unique new bond altogether)
+                iterate through the keys and set the `CustomBondForce`'s third to last parameter to 0 (setting the old spring constant to zero, mimicking turning off the unique new bond altogether)
 
                 Example:
                 >>> mod_hybrid_system = copy.deepcopy(htf._hybrid_system)
@@ -2910,7 +2910,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                 >>> custom_bond_force = force_names['CustomBondForce']
                 >>> for hybrid_idx, new_idx in htf._hybrid_to_new_bond_indices.items():
                 >>>     p1, p2, hybrid_params = custom_bond_force.getBondParameters(hybrid_idx)
-                >>>     hybrid_params = list(hybrid_params[:5]) + [hybrid_params[5]*0]
+                >>>     hybrid_params = list(hybrid_params)
+                >>>     hybrid_params[-3] *= 0
                 >>>     custom_bond_force.setBondParameters(hybrid_idx, p1, p2, hybrid_params)
             4. now, it should be the case that the reduced potential of the old system's `HarmonicBondForce` (at fixed positions) should be equal to the hybrid system's `CustomBondForce`
 
@@ -2928,7 +2929,6 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         core_bond_expression += f"K = (1 - {bool_string}) * K1 + {bool_string} * K2;"
         core_bond_expression += f"length = (1 - {bool_string})*length1 + {bool_string}*length2;"
-
         custom_bond_force = openmm.CustomBondForce(core_bond_expression)
         self._hybrid_system.addForce(custom_bond_force)
         
