@@ -2805,7 +2805,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         """
         assert type(particles) in [type(set()), int], f"`particles` must be an integer or a set, got {type(particles)}."
-        if type(particles) == int:
+        if isinstance(particles, int):
             template = [0 for i in range(self.num_scale_regions + 1)]
             template[0] = 1
             if self.num_scale_regions == 0:
@@ -2817,29 +2817,32 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                         template[0] = 0 #remove env default
             return template
 
-        elif type(particles) == set():
+        elif isinstance(particles, set):
             template = [0 for i in range(2 * self.num_scale_regions)]
             env_counter = 0 #make an environment counter. add 1 to this every time the particles is not in the intersection with a scale region.
-            for idx, _set in enumerate(self._scale_regions):
-                if particles.intersection(_set) != {}: # at least one of the particles is in the idx_th scale region
-                    #assert that it does not intersect with any other scale region...
-                    further_indices = range(idx+1, self.num_scale_regions)
-                    intersections = [particles.intersection(self._scale_regions[q]) for q in further_indices]
-                    for region_label, val in zip(further_indices, intersections):
-                        assert val == {}, f"term containing particles {particles} intersects with scale regions {idx} and {region_label}"
-                    if particles.issubset(_set): #then this term is wholly in the scale region
-                        template[2*idx] = 1 #double the index (and add 1) so that we
-                    else: #it is interscale region
-                        template[2*idx+1] = 1
-                else:
-                    env_counter += 1
+            if self.num_scale_regions == 0:
+                return template
+            else:
+                for idx, _set in enumerate(self._scale_regions):
+                    if particles.intersection(_set) != {}: # at least one of the particles is in the idx_th scale region
+                        #assert that it does not intersect with any other scale region...
+                        further_indices = range(idx+1, self.num_scale_regions)
+                        intersections = [particles.intersection(self._scale_regions[q]) for q in further_indices]
+                        for region_label, val in zip(further_indices, intersections):
+                            assert val == {}, f"term containing particles {particles} intersects with scale regions {idx} and {region_label}"
+                        if particles.issubset(_set): #then this term is wholly in the scale region
+                            template[2*idx] = 1 #double the index (and add 1) so that we
+                        else: #it is interscale region
+                            template[2*idx+1] = 1
+                    else:
+                        env_counter += 1
 
-            if env_counter == len(self._scale_regions): #then there was no match and it is an env atom
-                out_template = [1] + template
-            else: #there was a scale match and it is not an env atom.
-                out_template = [0] + template
+                if env_counter == len(self._scale_regions): #then there was no match and it is an env atom
+                    out_template = [1] + template
+                else: #there was a scale match and it is not an env atom.
+                    out_template = [0] + template
 
-            return out_template
+                return out_template
 
         else:
             raise Exception(f"particles is of type {type(particles)}, but only `int` and `set` are allowable")
@@ -2957,18 +2960,18 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         new_term_collector = {}
 
         #gather the old system bond force terms into a dict
-        for term_idx in old_system_bond_force.getNumBonds():
+        for term_idx in range(old_system_bond_force.getNumBonds()):
             p1, p2, r0, k = old_system_bond_force.getBondParameters(term_idx) #grab the parameters
             hybrid_p1, hybrid_p2 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2] #make hybrid indices
-            sorted_list = sorted([hybrid_p1, hybrid_p2]) #sort the indices
+            sorted_list = tuple(sorted([hybrid_p1, hybrid_p2])) #sort the indices
             assert not sorted_list in old_term_collector.keys(), f"this bond already exists"
             old_term_collector[sorted_list] = [term_idx, r0, k]
 
         # repeat for the new system bond force
-        for term_idx in new_system_bond_force.getNumBonds():
+        for term_idx in range(new_system_bond_force.getNumBonds()):
             p1, p2, r0, k = new_system_bond_force.getBondParameters(term_idx)
             hybrid_p1, hybrid_p2 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2]
-            sorted_list = sorted([hybrid_p1, hybrid_p2])
+            sorted_list = tuple(sorted([hybrid_p1, hybrid_p2]))
             assert not sorted_list in new_term_collector.keys(), f"this bond already exists"
             new_term_collector[sorted_list] = [term_idx, r0, k]
 
@@ -2980,7 +2983,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         # iterate over the old_term_collector and add appropriate bonds
         for hybrid_index_pair in old_term_collector.keys():
-            idx_set = set(hybrid_index_pair)
+            idx_set = set(list(hybrid_index_pair))
             scale_id = self.get_scale_identifier(idx_set)
             alch_id, string_identifier = self.get_alch_identifier(idx_set)
             if alch_id[0] == 1: #if the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
@@ -3009,7 +3012,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         #now iterate over the modified new term collector and add appropriate bonds. these should only be unique new, right?
         for hybrid_index_pair in mod_new_term_collector.keys():
-            idx_set = set(hybrid_index_pair)
+            idx_set = set(list(hybrid_index_pair))
             scale_id = self.get_scale_identifier(idx_set)
             alch_id, string_identifier = self.get_alch_identifier(idx_set)
             assert string_identifier == 'unique_new_atoms', f"we are iterating over modified new term collector, but the string identifier returned {string_identifier}"
