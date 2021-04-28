@@ -2700,7 +2700,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             assert type(self._topology_proposal._unique_new_atoms) == list
             self._num_alchemical_regions = 1
         else:
-            len_list =len(self._topology_proposal._core_new_to_old_atom_map)
+            len_list = len(self._topology_proposal._core_new_to_old_atom_map)
             for entry in [self._topology_proposal._core_new_to_old_atom_map, self._topology_proposal._unique_old_atoms, self._topology_proposal._unique_new_atoms]:
                 assert entry == list
                 assert len(entry) == len_list
@@ -2709,7 +2709,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         atom_classes = {
                         'unique_old_atoms' : {i: set() for i in range(self._num_alchemical_regions)},
                         'unique_new_atoms' : {i: set() for i in range(self._num_alchemical_regions)},
-                        'core_atoms' : None,
+                        'core_atoms' : {i: set() for i in range(self._num_alchemical_regions)},
                         'environment_atoms' : None
                         }
 
@@ -2737,19 +2737,17 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         # The core atoms:
         if is_single_alch_region:
-            core_atoms = set()
             for new_idx, old_idx in self._topology_proposal._core_new_to_old_atom_map.items():
                 new_to_hybrid_idx, old_to_hybrid_index = self._new_to_hybrid_map[new_idx], self._old_to_hybrid_map[old_idx]
                 assert new_to_hybrid_idx == old_to_hybrid_index, f"there is a -to_hybrid naming collision in topology proposal core atom map: {self._topology_proposal._core_new_to_old_atom_map}"
-                core_atoms.add(new_to_hybrid_idx)
+                atom_classes['core_atoms'][0].add(new_to_hybrid_idx)
+              
         else:
-            core_atoms = {i: {} for i in range(len_list)}
             for main_idx, entry in enumerate(self._topology_proposal._core_new_to_old_atom_map):
                 for new_idx, old_idx in entry.items():
                     new_to_hybrid_idx, old_to_hybrid_index = self._new_to_hybrid_map[new_idx], self._old_to_hybrid_map[old_idx]
                     assert new_to_hybrid_idx == old_to_hybrid_index, f"there is a -to_hybrid naming collision in topology proposal core atom map: {self._topology_proposal._core_new_to_old_atom_map}"
-                    core_atoms[main_idx].add(new_to_hybrid_idx)
-        atom_classes['core_atoms'] = core_atoms
+                    atom_classes['core_atoms'][main_idx].add(new_to_hybrid_idx)
 
         new_to_hybrid_environment_atoms = set([self._new_to_hybrid_map[idx] for idx in self._topology_proposal._new_environment_atoms])
         old_to_hybrid_environment_atoms = set([self._old_to_hybrid_map[idx] for idx in self._topology_proposal._old_environment_atoms])
@@ -2762,8 +2760,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         #generate a list of alchemical regions
         self._alchemical_regions = []
-        self._alchemical_regions_by_type = {key: set(chain(*[val for val in atom_classes[key].values()])) for key in atom_classes.keys()}
-        for alch_region_idx in self._num_alchemical_regions:
+        self._alchemical_regions_by_type = {key: set(chain(*[val for val in atom_classes[key].values()])) for key in atom_classes.keys() if key != 'environment_atoms'}
+        for alch_region_idx in range(self._num_alchemical_regions):
             self._alchemical_regions.append(set(
                                                 chain(
                                                         self._atom_classes['core_atoms'][alch_region_idx],
