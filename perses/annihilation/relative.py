@@ -2676,10 +2676,10 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         #get the scale template
         self._scale_templates = [
-                                    list(itertools.chain.from_iterable(['1'] + [[f"scale_lambda_{i}", f"interscale_lambda_{i}"] for i in range(self.num_scale_regions)])),
-                                    list(itertools.chain.from_iterable(['nonscale_region'] + [[f"scale_region_{i}", f"interscale_region_{i}"] for i in range(self.num_scale_regions)]))
+                                    list(itertools.chain.from_iterable([['nonscale_lambda']] + [[f"scale_lambda_{i}", f"interscale_lambda_{i}"] for i in range(self.num_scale_regions)])),
+                                    list(itertools.chain.from_iterable([['nonscale_region']] + [[f"scale_region_{i}", f"interscale_region_{i}"] for i in range(self.num_scale_regions)]))
         ]
-
+        _logger.info(f"scale_templates: {self._scale_templates}")
 
     def _determine_atom_classes(self):
         """
@@ -2818,7 +2818,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             return template
 
         elif isinstance(particles, set):
-            template = [0 for i in range(2 * self.num_scale_regions)]
+            template = [0 for i in range(2 * self.num_scale_regions + 1)]
+            template[0] = 1
             env_counter = 0 #make an environment counter. add 1 to this every time the particles is not in the intersection with a scale region.
             if self.num_scale_regions == 0:
                 return template
@@ -2900,7 +2901,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             1. set all `scale_lambda_{i}`, `interscale_lambda_{i}` to 1 (default values are 1, also)
             2. set all `lambda_{i}_bonds` to 0 (lambda value constituting old system)
             3. query self._hybrid_to_new_bond_indices, which is a dictionary of [custom_bond_force_bond_idx : new_bond_force_bond_idx] and contains all of the `unique_new_bonds`.
-                iterate through the keys and set the `CustomBondForce`'s third-to-last parameter to 0 (setting the old spring constant to zero, mimicking turning off the unique new bond altogether)
+                iterate through the keys and set the `CustomBondForce`'s last parameter to 0 (setting the old spring constant to zero, mimicking turning off the unique new bond altogether)
 
                 Example:
                 >>> mod_hybrid_system = copy.deepcopy(htf._hybrid_system)
@@ -2908,9 +2909,9 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                 >>> force_names = {force.__name__: force for force in mod_hybrid_system.getForces()}
                 >>> custom_bond_force = force_names['CustomBondForce']
                 >>> for hybrid_idx, new_idx in htf._hybrid_to_new_bond_indices.items():
-                >>>     hybrid_params = custom_bond_force.getBondParameters(hybrid_idx)
-                >>>     hybrid_params[-1][-3] *= 0.
-                >>>     custom_bond_force.setBondParameters(hybrid_idx, *hybrid_params)
+                >>>     p1, p2, hybrid_params = custom_bond_force.getBondParameters(hybrid_idx)
+                >>>     hybrid_params = list(hybrid_params[:5]) + [hybrid_params[5]*0]
+                >>>     custom_bond_force.setBondParameters(hybrid_idx, p1, p2, hybrid_params)
             4. now, it should be the case that the reduced potential of the old system's `HarmonicBondForce` (at fixed positions) should be equal to the hybrid system's `CustomBondForce`
 
         #TODO: test this on small molecules/protein transforms.
@@ -2922,7 +2923,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         """
         scale_bool_string = RxnHybridTopologyFactory.render_bool_string(*self._scale_templates)
         core_bond_expression = f"{scale_bool_string} * (K/2)*(r-length)^2;"
-        bool_string = RxnHybridTopologyFactory.render_bool_string([''] + [f"lambda_{i}_bonds" for i in range(self._num_alchemical_regions)],
+        bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_bonds" for i in range(self._num_alchemical_regions)],
                                                                     ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
 
         core_bond_expression += f"K = (1 - {bool_string}) * K1 + {bool_string} * K2;"
@@ -2935,11 +2936,11 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         for i in range(self._num_alchemical_regions):
             custom_bond_force.addGlobalParameter(f"lambda_{i}_bonds", 0.0)
 
-        for i in self._scale_templates[0][1:]: #add the scaling global parameters
+        for i in self._scale_templates[0]: #add the scaling global parameters
             custom_bond_force.addGlobalParameter(i, 1.0)
 
         #add per-bond parameter
-        for i in self._scale_templates[1][1:]: #add the scaling per bond parameters
+        for i in self._scale_templates[1]: #add the scaling per bond parameters
             custom_bond_force.addPerBondParameter(i)
 
         for i in ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)]:
