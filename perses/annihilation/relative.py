@@ -2653,7 +2653,81 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         self._hybrid_positions = self._compute_hybrid_positions()
 
         # Generate the topology representation
-        #self._hybrid_topology = self._create_topology()
+        self._hybrid_topology = self._create_topology()
+
+    def _create_topology(self):
+        """
+        Create an mdtraj topology corresponding to the hybrid system.
+        This is purely for writing out trajectories--it is not expected to be parameterized.
+        Returns
+        -------
+        hybrid_topology : mdtraj.Topology
+        """
+        # First, make an md.Topology of the old system:
+        old_topology = md.Topology.from_openmm(self._topology_proposal.old_topology)
+
+        # Now make a copy for the hybrid:
+        hybrid_topology = copy.deepcopy(old_topology)
+
+        # Next, make a topology of the new system:
+        new_topology = md.Topology.from_openmm(self._topology_proposal.new_topology)
+
+        added_atoms = dict()
+
+        # Get the core atoms in the new index system (as opposed to the hybrid index system). We will need this later
+        core_atoms_new_indices = {self._hybrid_to_new_map[core_atom] for core_atom in self._alchemical_regions_by_type['core_atoms']}
+
+        # Now, add each unique new atom to the topology (this is the same order as the system)
+        for particle_idx in self._topology_proposal.unique_new_atoms:
+            new_particle_hybrid_idx = self._new_to_hybrid_map[particle_idx]
+            new_system_atom = new_topology.atom(particle_idx)
+
+            # First, we get the residue in the new system associated with this atom
+            new_system_residue = new_system_atom.residue
+
+            # Next, we have to enumerate the other atoms in that residue to find mapped atoms
+            new_system_atom_set = {atom.index for atom in new_system_residue.atoms}
+
+            # Now, we find the subset of atoms that are mapped. These must be in the "core" category, since they are mapped
+            # and part of a changing residue
+            mapped_new_atom_indices = core_atoms_new_indices.intersection(new_system_atom_set)
+
+            # Now get the old indices of the above atoms so that we can find the appropriate residue in the old system
+            # for this we can use the new to old atom map
+            mapped_old_atom_indices = [self._topology_proposal.new_to_old_atom_map[atom_idx] for atom_idx in mapped_new_atom_indices]
+
+            # We can just take the first one--they all have the same residue
+            first_mapped_old_atom_index = mapped_old_atom_indices[0]
+
+            # Get the atom object corresponding to this index from the hybrid (which is a deepcopy of the old)
+            mapped_hybrid_system_atom = hybrid_topology.atom(first_mapped_old_atom_index)
+
+            # Get the residue that is relevant to this atom
+            mapped_residue = mapped_hybrid_system_atom.residue
+
+            # Add the atom using the mapped residue
+            added_atoms[new_particle_hybrid_idx] = hybrid_topology.add_atom(new_system_atom.name, new_system_atom.element, mapped_residue)
+
+        # Now loop through the bonds in the new system, and if the bond contains a unique new atom, then add it to the hybrid topology
+        for (atom1, atom2) in new_topology.bonds:
+            atom1_index_in_hybrid = self._new_to_hybrid_map[atom1.index]
+            atom2_index_in_hybrid = self._new_to_hybrid_map[atom2.index]
+
+            # If at least one atom is in the unique new class, we need to add it to the hybrid system
+            if atom1_index_in_hybrid in self._alchemical_regions_by_type['unique_new_atoms'] or atom2_index_in_hybrid in self._alchemical_regions_by_type['unique_new_atoms']:
+                if atom1.index in self._alchemical_regions_by_type['unique_new_atoms']:
+                    atom1_to_bond = added_atoms[atom1.index]
+                else:
+                    atom1_to_bond = atom1
+
+                if atom2.index in self._alchemical_regions_by_type['unique_new_atoms']:
+                    atom2_to_bond = added_atoms[atom2.index]
+                else:
+                    atom2_to_bond = atom2
+
+                hybrid_topology.add_bond(atom1_to_bond, atom2_to_bond)
+
+        return hybrid_topology
 
     @property
     def num_scale_regions(self):
