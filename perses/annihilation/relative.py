@@ -2519,11 +2519,48 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     a subclass of `HybridTopologyFactory` that will treat nonbondeds with a `CustomNonbondedForce`,
     support multiple alchemical regions as well as externally-scaleable lambda regions (e.g. REST).
     """
+    _default_RF_expr_list = ["U_electrostatics;", # add {scale_logic} with formatting
+                                          "U_electrostatics = c_RF * u_RF_mod;",
+                                          "c_RF = chargeProd * ONE_4PI_EPS0;",
+                                          "chargeProd = (1 - {alchemical_region_logic}) * (q_old1 * {p1_scale_region_logic} * q_old2 * {p2_scale_region_logic}) + {alchemical_region_logic} * (q_old1 * {p1_scale_region_logic} * q_old2 * {p2_scale_region_logic});",
+                                          "u_RF_mod = select(step(r - delta_RF), u_RF_SW, u_RF);",
+                                          "u_RF_SW = (1/4) * b_RF_4 * r^4 + (1/3) * b_RF_3 * r^3 + (1/2) * b_RF_2 * r^2 + b_RF_1 * r + b_RF_0;",
+                                          "b_RF_0 = u_RF_set - ((1/4) * b_RF_4 * (R_cutoff - delta_RF)^4 + (1/3) * b_RF_3 * (R_cutoff - delta_RF)^3 + (1/2) * b_RF_2 * (R_cutoff - delta_RF)^2 + b_RF_1 * (R_cutoff - delta_RF));"
+                                          "b_RF_4 = ((1/delta_RF)^3) * (2 * u_RF_prime + delta_RF * u_RF_prime_prime);",
+                                          "b_RF_3 = ((1/delta_RF)^3) * (3 * (delta_RF - 2 * R_cutoff) * u_RF_prime + delta_RF * (delta_RF - 3 * R_cutoff) * u_RF_prime_prime);",
+                                          "b_RF_2 = R_cutoff * ((1/delta_RF)^3) * (6 * (R_cutoff - delta_RF) * u_RF_prime + delta_RF * (3 * R_cutoff - 2 * delta_RF) * u_RF_prime_prime);",
+                                          "b_RF_1 = R_cutoff^2 * ((1/delta_RF)^3) * ((3 * delta_RF - 2 * R_cutoff) * u_RF_prime + delta_RF * (delta_RF - R_cutoff) * u_RF_prime_prime);",
+                                          "u_RF = 1 / r_eff + (eps_RF - 1) * (r_eff^2 / (R_cut^3)) / (1 + 2 * eps_RF);",
+                                          "r_eff = sqrt(r^2 + w^2);",
+                                          "w = select(step({alchemical_region_logic} - 1/2), 2 * R_cutoff * (1 - {alchemical_region_logic}), {alchemical_region_logic} * 2 * R_cutoff);", #this is wrong...ask what the protoocl should be
+                                          ""
+                                          # hardcode the definition of u_RF at (R_cutoff - delta_RF), its first and second derivatives
+                                          "u_RF_set = ",
+                                          "u_RF_prime = ",
+                                          "u_RF_prime_prime = ",
+
+                                          #
+                                          ""
+                        ]
+    _default_RF_expression = ' '.join(_default_RF_expr_list)
     def __init__(self,
                  topology_proposal,
                  current_positions,
                  new_positions,
-                 scale_regions=None,
+
+                 #scaling arguments
+                 scale_regions = None,
+
+                 #electrostatics
+                 electrostatic_nonbonded_expression = None,
+                 electrostatic_nonbonded_global_parameters = None,
+                 electrostatic_nonbonded_per_particle_parameters = None,
+
+                 #sterics
+                 steric_nonbonded_expression = None,
+                 steric_nonbonded_global_parameters = None,
+                 steric_nonbonded_per_particle_parameters = None
+
                  **kwargs):
         """
         TODO : remove hybrid-indexing from HybridTopologyFactory (this should be given directly to the RxnHybridTopologyFactory via the topology_proposal)
@@ -2815,7 +2852,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                 new_to_hybrid_idx, old_to_hybrid_index = self._new_to_hybrid_map[new_idx], self._old_to_hybrid_map[old_idx]
                 assert new_to_hybrid_idx == old_to_hybrid_index, f"there is a -to_hybrid naming collision in topology proposal core atom map: {self._topology_proposal._core_new_to_old_atom_map}"
                 atom_classes['core_atoms'][0].add(new_to_hybrid_idx)
-              
+
         else:
             for main_idx, entry in enumerate(self._topology_proposal._core_new_to_old_atom_map):
                 for new_idx, old_idx in entry.items():
@@ -3005,7 +3042,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         core_bond_expression += f"length = (1 - {bool_string})*length1 + {bool_string}*length2;"
         custom_bond_force = openmm.CustomBondForce(core_bond_expression)
         self._hybrid_system.addForce(custom_bond_force)
-        
+
         #add global parameters
         for i in range(self._num_alchemical_regions):
             custom_bond_force.addGlobalParameter(f"lambda_{i}_bonds", 0.0)
@@ -3100,3 +3137,19 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             bond_term = (hybrid_index_pair[0], hybrid_index_pair[1], scale_id + alch_id + [r0_old, k_old, r0_new, k_new])
             hybrid_bond_idx = custom_bond_force.addBond(*bond_term)
             self._hybrid_to_new_bond_indices[hybrid_bond_idx] = new_bond_idx
+
+    def _transcribe_nonbonded_exceptions(self):
+        """
+        transcribe nonbonded exceptions as two separate CustomBondForces (one for electrostatics, one for sterics)
+
+        """
+
+    def _make_electrostatics_force(self):
+        """
+        make the electrostatic force
+        """
+
+    def _transcribe_nonbonded_terms(self):
+        """
+        transcribe nonbonded particles as two separate CustomBondForces (one for electrostatics, one for sterics)
+        """
