@@ -515,13 +515,19 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         ne_fep = dict()
         for phase in phases:
             _logger.info(f"\t\tphase: {phase}")
-            hybrid_factory = HybridTopologyFactory(top_prop['%s_topology_proposal' % phase],
+            if setup_options['rxn_field']:
+                from perses.annihilation.relative import RxnHybridTopologyFactory
+                factory = RxnHybridTopologyFactory
+            else:
+                factory = HybridTopologyFactory
+            hybrid_factory = factory(top_prop['%s_topology_proposal' % phase],
                                                top_prop['%s_old_positions' % phase],
                                                top_prop['%s_new_positions' % phase],
                                                neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
                                                neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
                                                softcore_LJ_v2 = setup_options['softcore_v2'],
-                                               interpolate_old_and_new_14s = setup_options['anneal_1,4s'])
+                                               interpolate_old_and_new_14s = setup_options['anneal_1,4s'],
+                                               scale_regions=setup_options['scale_regions'])
 
             if build_samplers:
                 ne_fep[phase] = SequentialMonteCarlo(factory = hybrid_factory,
