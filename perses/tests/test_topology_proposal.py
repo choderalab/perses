@@ -228,15 +228,16 @@ def generate_dipeptide_top_pos_sys(topology,
                                    system,
                                    positions,
                                    system_generator,
-                                   conduct_geometry_prop = True,
-                                   conduct_htf_prop = False,
+                                   conduct_geometry_prop=True,
+                                   conduct_htf_prop=False,
                                    validate_energy_bookkeeping=True,
                                    repartitioned=False,
                                    rxn_field=False,
                                    endstate=None,
                                    flatten_torsions=False,
                                    flatten_exceptions=False,
-                                   validate_endstate_energy=True
+                                   validate_endstate_energy=True,
+                                   scale_regions=None
                                    ):
     """generate point mutation engine, geometry_engine, and conduct topology proposal, geometry propsal, and hybrid factory generation"""
     from perses.tests.utils import validate_endstate_energies
@@ -316,7 +317,8 @@ def generate_dipeptide_top_pos_sys(topology,
                      interpolate_old_and_new_14s=flatten_exceptions,
                      omitted_terms=None,
                      endstate=endstate,
-                     flatten_torsions=flatten_torsions)
+                     flatten_torsions=flatten_torsions,
+                     scale_regions=scale_regions)
 
         if not validate_endstate_energy:
             return forward_htf
