@@ -3051,7 +3051,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                                                                     ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
 
         core_bond_expression += f"K = {old_bool_string} * K1 + {new_bool_string} * K2;"
-        core_bond_expression += f"length = {old_bool_string}) * length1 + {new_bool_string} * length2;"
+        core_bond_expression += f"length = {old_bool_string} * length1 + {new_bool_string} * length2;"
         custom_bond_force = openmm.CustomBondForce(core_bond_expression)
         self._hybrid_system.addForce(custom_bond_force)
 
