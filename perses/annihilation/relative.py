@@ -2519,6 +2519,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     a subclass of `HybridTopologyFactory` that will treat nonbondeds with a `CustomNonbondedForce`,
     support multiple alchemical regions as well as externally-scaleable lambda regions (e.g. REST).
     """
+    # TODO : add sterics
+    # TODO : add U_off, U_slf (we only need these for endstates, so put in force group 1!)
     # RF defaults
     _default_RF_expr_list = ["U_electrostatics;", # add {scale_logic} with formatting
                                           "U_electrostatics = c_RF * u_RF_mod;",
@@ -2531,19 +2533,66 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                                           "b_RF_3 = ((1/delta_RF)^3) * (3 * (delta_RF - 2 * R_cutoff) * u_RF_prime + delta_RF * (delta_RF - 3 * R_cutoff) * u_RF_prime_prime);",
                                           "b_RF_2 = R_cutoff * ((1/delta_RF)^3) * (6 * (R_cutoff - delta_RF) * u_RF_prime + delta_RF * (3 * R_cutoff - 2 * delta_RF) * u_RF_prime_prime);",
                                           "b_RF_1 = R_cutoff^2 * ((1/delta_RF)^3) * ((3 * delta_RF - 2 * R_cutoff) * u_RF_prime + delta_RF * (delta_RF - R_cutoff) * u_RF_prime_prime);",
-                                          "u_RF = 1 / r_eff + (eps_RF - 1) * (r_eff^2 / (R_cut^3)) / (1 + 2 * eps_RF);",
-                                          "r_eff = sqrt(r^2 + w^2);",
-                                          "w = select(step({alchemical_region_logic} - 1/2), 2 * R_cutoff * (1 - {alchemical_region_logic}), {alchemical_region_logic} * 2 * R_cutoff);", #this is wrong...ask what the protoocl should be
+                                          "u_RF = 1 / r_eff + (eps_RF - 1) * (r_eff^2 / (R_cutoff^3)) / (1 + 2 * eps_RF);",
                                           ""
-                                          # hardcode the definition of u_RF at (R_cutoff - delta_RF), its first and second derivatives
-                                          "u_RF_set = ",
-                                          "u_RF_prime = ",
-                                          "u_RF_prime_prime = ",
 
-                                          #
-                                          ""
+                                          # hardcode the definition of u_RF at (R_cutoff - delta_RF), its first and second derivatives
+                                          "u_RF_set = 1 / (r_mod_eff) + eps_coeff * r_mod_eff^2 / (R_cutoff^3);",
+                                          "u_RF_prime = - r_mod_eff_prime / (r_mod_eff^2) + (eps_coeff / (R_cutoff^3)) * 2 * r_mod_eff * r_mod_eff_prime;",
+                                          "u_RF_prime_prime = (r_mod_eff_prime * (2 * (r_mod_eff^(-3)) * r_mod_eff_prime) - (r_mod_eff_prime_prime / (r_mod_eff)^2)) + (2 * eps_coeff / (R_cutoff^3)) * (r_mod_eff_prime^2 + r_mod_eff * r_mod_eff_prime_prime);",
+
+                                          # hardcode variables
+                                          "r_mod_eff = sqrt(r_mod_cut^2 + w^2);",
+                                          "r_mod_eff_prime = r_mod_cut / sqrt(r_mod_cut^2 + w^2);",
+                                          "r_mod_eff_prime_prime = 1 / sqrt(r_mod_cut^2 + w^2) - (r_mod_cut^2) * (r_mod_cut^2 + w^2)^(-3/2);",
+                                          "r_mod_cut = (R_cutoff - delta_RF);",
+                                          "eps_coeff = ((eps_RF - 1) / (1 + 2*eps_RF));"
+                                          "w = select(step({alchemical_region_logic} - 1/2), 2 * R_cutoff * (1 - {alchemical_region_logic}), {alchemical_region_logic} * 2 * R_cutoff);",
+                                          "delta_RF = select(step( (1/2) - delta_scl_RF), 2 * delta_scl_RF * delta_RF_mid, delta_RF_mid + (2 * delta_scl_RF - 1) * (delta_RF_max - delta_RF_mid));" #check this
                         ]
+
     _default_RF_expression = ' '.join(_default_RF_expr_list)
+
+    def u_RF_prime(r, R_cutoff, eps_RF, w):
+        """
+        a numpy function to get a pairwise energy from RXN field. This is NOT guaranteed to be concomitant with `_default_RF_expr_list`
+        u_RF = 1 / r_eff + ((eps_RF - 1) / (1 + 2*eps_RF)) * r_eff^2
+        """
+        scale = (eps_RF - 1) / ((R_cutoff**3) * (1 + 2*eps_RF))
+        r_eff = np.sqrt(r**2 + w**2)
+        r_eff_prime = r / r_eff
+        term = -r_eff_prime * (1./r_eff)**2 + scale * 2 * r_eff * r_eff_prime
+        return term
+
+    def u_RF_prime_prime(r, R_cutoff, eps_RF, w):
+        scale = (eps_RF - 1) / ((R_cutoff**3) * (1 + 2*eps_RF))
+        r_eff = np.sqrt(r**2 + w**2)
+        r_eff_prime = r / r_eff
+        r_eff_prime_prime = 1 / np.sqrt(r**2 + w**2) - (r**2) * (r**2 + w**2)**(-3/2)
+
+        term = (2 * r_eff_prime**2 * (1/(r_eff**3)) - r_eff_prime_prime / (r_eff**2)) + 2 * scale * (r_eff_prime**2 + r_eff * r_eff_prime_prime)
+        return term
+
+    # TODO: is there a way to solve these in openmm implicitly?
+    # NOTE : stricly speaking, these values are lambda-dependent...we will only define these for the real endstates. (will this cause convergence issues?)
+    def solve_delta_RF_mid(guess_delta_RF_mid, R_cutoff, eps_RF, w):
+        """all distances in nm"""
+        from scipy.optimize import fsolve
+        def implicit(delta_RF_mid):
+            return -(3/2) * u_RF_prime(R_cutoff - delta_RF_mid, R_cutoff, eps_RF, w) / u_RF_prime_prime(R_cutoff - delta_RF_mid, R_cutoff, eps_RF, w) - delta_RF_mid
+        solved_delta_RF_mid = fsolve(implicit, guess_delta_RF_mid)
+        return solved_delta_RF_mid.flatten()
+
+    def solve_delta_RF_max(guess_delta_RF_max, R_cutoff, eps_RF, w):
+        """all distances in nm"""
+        from scipy.optimize import fsolve
+        def implicit(delta_RF_max):
+            return -3 * u_RF_prime(R_cutoff - delta_RF_max, R_cutoff, eps_RF, w) / u_RF_prime(R_cutoff - delta_RF_max, R_cutoff, eps_RF, w)
+        solved_delta_RF_max = fsolve(implicit, guess_delta_RF_max)
+        return solved_delta_RF_max.flatten()
+
+
+
 
     def __init__(self,
                  topology_proposal,
