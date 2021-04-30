@@ -2519,6 +2519,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     a subclass of `HybridTopologyFactory` that will treat nonbondeds with a `CustomNonbondedForce`,
     support multiple alchemical regions as well as externally-scaleable lambda regions (e.g. REST).
     """
+    # RF defaults
     _default_RF_expr_list = ["U_electrostatics;", # add {scale_logic} with formatting
                                           "U_electrostatics = c_RF * u_RF_mod;",
                                           "c_RF = chargeProd * ONE_4PI_EPS0;",
@@ -2543,6 +2544,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                                           ""
                         ]
     _default_RF_expression = ' '.join(_default_RF_expr_list)
+
     def __init__(self,
                  topology_proposal,
                  current_positions,
@@ -2583,6 +2585,12 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                 Importantly, valence terms may not belong in an intersection of two alchemical regions.
             2. Each particle can exist as a nonbonded term in either `alchemical_region_i` or `environment`
             3. Each alchemical region has a separate set of (bond, angle, torsion, nonbonded) lambdas tethered to to it. the `environment` particles are not tethered to to lambdas.
+                In particular, each alchemical region valence force has a separate alchemical lambda value that controls the `old` parameters and the `new` parameters.
+                For example, the `old` bond terms of alchemical region i are controlled by `lambda_{i}_bonds_old` which scales from 1 (on) to 0 (off).
+                This is a bit tricky because of the different treatment of `new`, `core`, and `old` terms.
+                    a. `unique_old/new`: have the same `length1` and `length2`, `K1` and `K2`
+                    b. `core`: _may_ have different `length1`, `length2`, `K1`, `K2` depending on the forcefield parameterization
+
             4. We should be able to throw away the notion of unique new/old and core atoms within the hybrid system by simply querying
                 the old-to-hybrid/new-to-hybrid atom maps?
 
@@ -2594,6 +2602,10 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         much like alchemical regions, we also want to support scale regions (regions by which terms may be scaled by a multiplying factor, like in REST2)
             1. unlike the alchemical region, each valence term (bond/angle/torsion/nonbonded_exception) must exist in either scale_region_i, interscale_region_i, or nonscale region (all sets are disjoint)
             2. for nonbonded terms, every particle must exist in either nonscale_region or scale_region_i
+            3. each force term in scale region {i} is controlled by a multiplicative
+                `nonscale_lambda` (default 1, shouldnt be scaled for REST2),
+                `scale_lambda_{bonds/angles/torsions}` (default 1, controls intra-scale region),
+                `interscale_lambda_{bonds/angles/torsions}` (default 1, controls inter-scale region)
 
 
         """
@@ -2935,8 +2947,9 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             - environment : both particles are in the environment region (i.e. the old/new terms are identical; this is asserted and will raise an issue if not True)
 
         In order to validate the `CustomBondForce` w.r.t. the old system:
-            1. set all `scale_lambda_{i}`, `interscale_lambda_{i}` to 1 (default values are 1, also)
-            2. set all `lambda_{i}_bonds` to 0 (lambda value constituting old system)
+            1. set all `scale_lambda_{i}_bonds`, `interscale_lambda_{i}_bonds` to 1 (default values are 1, also)
+            2. set all `lambda_{i}_bonds_old` to 1 (lambda value constituting old system)
+            3. set all `lambda_{i}_bonds_new` to 0 (lambda value constituting new system)
             3. query self._hybrid_to_new_bond_indices, which is a dictionary of [custom_bond_force_bond_idx : new_bond_force_bond_idx] and contains all of the `unique_new_bonds`.
                 iterate through the keys and set the `CustomBondForce`'s third to last parameter to 0 (setting the old spring constant to zero, mimicking turning off the unique new bond altogether)
 
@@ -2959,22 +2972,27 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
 
         """
-        scale_bool_string = RxnHybridTopologyFactory.render_bool_string(*self._scale_templates)
+        scale_bool_string = RxnHybridTopologyFactory.render_bool_string([i + "_bonds" for i in self._scale_templates[0]],
+                                                                        self._scale_templates[1]
+                                                                        )
         core_bond_expression = f"{scale_bool_string} * (K/2)*(r-length)^2;"
-        bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_bonds" for i in range(self._num_alchemical_regions)],
+        old_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_bonds_old" for i in range(self._num_alchemical_regions)],
+                                                                    ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
+        new_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_bonds_new" for i in range(self._num_alchemical_regions)],
                                                                     ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
 
-        core_bond_expression += f"K = (1 - {bool_string}) * K1 + {bool_string} * K2;"
-        core_bond_expression += f"length = (1 - {bool_string})*length1 + {bool_string}*length2;"
+        core_bond_expression += f"K = {old_bool_string} * K1 + {new_bool_string} * K2;"
+        core_bond_expression += f"length = {old_bool_string}) * length1 + {new_bool_string} * length2;"
         custom_bond_force = openmm.CustomBondForce(core_bond_expression)
         self._hybrid_system.addForce(custom_bond_force)
 
         #add global parameters
         for i in range(self._num_alchemical_regions):
-            custom_bond_force.addGlobalParameter(f"lambda_{i}_bonds", 0.0)
+            custom_bond_force.addGlobalParameter(f"lambda_{i}_bonds_old", 1.0)
+            custom_bond_force.addGlobalParameter(f"lambda_{i}_bonds_new", 0.0)
 
         for i in self._scale_templates[0]: #add the scaling global parameters
-            custom_bond_force.addGlobalParameter(i, 1.0)
+            custom_bond_force.addGlobalParameter(i + '_bonds', 1.0)
 
         #add per-bond parameter
         for i in self._scale_templates[1]: #add the scaling per bond parameters
