@@ -515,13 +515,19 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         ne_fep = dict()
         for phase in phases:
             _logger.info(f"\t\tphase: {phase}")
-            hybrid_factory = HybridTopologyFactory(top_prop['%s_topology_proposal' % phase],
+            if setup_options['rxn_field']:
+                from perses.annihilation.relative import RxnHybridTopologyFactory
+                factory = RxnHybridTopologyFactory
+            else:
+                factory = HybridTopologyFactory
+            hybrid_factory = factory(top_prop['%s_topology_proposal' % phase],
                                                top_prop['%s_old_positions' % phase],
                                                top_prop['%s_new_positions' % phase],
                                                neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
                                                neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
                                                softcore_LJ_v2 = setup_options['softcore_v2'],
-                                               interpolate_old_and_new_14s = setup_options['anneal_1,4s'])
+                                               interpolate_old_and_new_14s = setup_options['anneal_1,4s'],
+                                               scale_regions=setup_options['scale_regions'])
 
             if build_samplers:
                 ne_fep[phase] = SequentialMonteCarlo(factory = hybrid_factory,
@@ -551,13 +557,19 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
             _logger.info(f"\t\tphase: {phase}:")
             #TODO write a SAMSFEP class that mirrors NonequilibriumSwitchingFEP
             _logger.info(f"\t\twriting HybridTopologyFactory for phase {phase}...")
-            htf[phase] = HybridTopologyFactory(top_prop['%s_topology_proposal' % phase],
+            if setup_options['rxn_field']:
+                from perses.annihilation.relative import RxnHybridTopologyFactory
+                factory = RxnHybridTopologyFactory
+            else:
+                factory = HybridTopologyFactory
+            htf[phase] = factory(top_prop['%s_topology_proposal' % phase],
                                                top_prop['%s_old_positions' % phase],
                                                top_prop['%s_new_positions' % phase],
                                                neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
                                                neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
                                                softcore_LJ_v2 = setup_options['softcore_v2'],
-                                               interpolate_old_and_new_14s = setup_options['anneal_1,4s'])
+                                               interpolate_old_and_new_14s = setup_options['anneal_1,4s'],
+                                               scale_regions=setup_options['scale_regions'])
 
         for phase in phases:
            # Define necessary vars to check energy bookkeeping
@@ -566,7 +578,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
             _forward_added_valence_energy = top_prop['%s_added_valence_energy' % phase]
             _reverse_subtracted_valence_energy = top_prop['%s_subtracted_valence_energy' % phase]
 
-            if not use_given_geometries:
+            if (not use_given_geometries) and setup_options['validate_endstate_energies']:
                 zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD)#, trajectory_directory=f'{xml_directory}{phase}')
                 _logger.info(f"\t\terror in zero state: {zero_state_error}")
                 _logger.info(f"\t\terror in one state: {one_state_error}")
