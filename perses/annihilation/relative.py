@@ -3130,6 +3130,10 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         old_system_bond_force = self._old_system_forces['HarmonicBondForce']
         new_system_bond_force = self._new_system_forces['HarmonicBondForce']
 
+        #set periodicity
+        if old_system_bond_force.usesPeriodicBoundaryConditions():
+            custom_bond_force.setUsesPeriodicBoundaryConditions(True)
+
         #make a list of hybrid-indexed bond terms
         old_term_collector = {}
         new_term_collector = {}
@@ -3199,6 +3203,134 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             bond_term = (hybrid_index_pair[0], hybrid_index_pair[1], scale_id + alch_id + [r0_old, k_old, r0_new, k_new])
             hybrid_bond_idx = custom_bond_force.addBond(*bond_term)
             self._hybrid_to_new_bond_indices[hybrid_bond_idx] = new_bond_idx
+
+    def _transcribe_angles(self):
+        """
+        handle the harmonic angles...this serves as a template for how to transcribe the old/new system `HarmonicAngleForce` to the
+        hybrid system's `CustomAngleForce`.
+        """
+        scale_bool_string = RxnHybridTopologyFactory.render_bool_string([i + "_angles" for i in self._scale_templates[0]],
+                                                                        self._scale_templates[1]
+                                                                        )
+        core_angle_expression = f"{scale_bool_string} * (K/2)*(theta-theta0)^2;"
+        old_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_angles_old" for i in range(self._num_alchemical_regions)],
+                                                                    ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
+        new_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_angles_new" for i in range(self._num_alchemical_regions)],
+                                                                    ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
+
+        core_angle_expression += f"K = {old_bool_string} * K1 + {new_bool_string} * K2;"
+        core_angle_expression += f"theta0 = {old_bool_string} * theta0_1 + {new_bool_string} * theta0_2;"
+        custom_angle_force = openmm.CustomAngleForce(core_angle_expression)
+        self._hybrid_system.addForce(custom_angle_force)
+
+        #add global parameters
+        for i in range(self._num_alchemical_regions):
+            custom_angle_force.addGlobalParameter(f"lambda_{i}_angles_old", 1.0)
+            custom_angle_force.addGlobalParameter(f"lambda_{i}_angles_new", 0.0)
+
+        for i in self._scale_templates[0]: #add the scaling global parameters
+            custom_angle_force.addGlobalParameter(i + '_angles', 1.0)
+
+        #add per-angle parameter
+        for i in self._scale_templates[1]: #add the scaling per angle parameters
+            custom_angle_force.addPerAngleParameter(i)
+
+        for i in ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)]:
+            custom_angle_force.addPerAngleParameter(i)
+
+        custom_angle_force.addPerAngleParameter('theta0_1') # old angle length
+        custom_angle_force.addPerAngleParameter('K1') # old spring constant
+        custom_angle_force.addPerAngleParameter('theta0_2') # new angle length
+        custom_angle_force.addPerAngleParameter('K2') # new spring constant
+
+        #now add the parameters
+        #there can only be a _single_ term for each atom triple, right?
+
+        old_system_angle_force = self._old_system_forces['HarmonicAngleForce']
+        new_system_angle_force = self._new_system_forces['HarmonicAngleForce']
+
+        #set periodicity
+        if old_system_angle_force.usesPeriodicBoundaryConditions():
+            custom_angle_force.setUsesPeriodicBoundaryConditions(True)
+
+        #make a list of hybrid-indexed angle terms
+        old_term_collector = {}
+        new_term_collector = {}
+
+        #gather the old system angle force terms into a dict
+        for term_idx in range(old_system_angle_force.getNumAngles()):
+            p1, p2, p3, theta0, k = old_system_angle_force.getAngleParameters(term_idx) #grab the parameters
+            hybrid_p1, hybrid_p2, hybrid_p3 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2], self._old_to_hybrid_map[p3] #make hybrid indices
+            sorted_list = tuple([hybrid_p1, hybrid_p2, hybrid_p3]) if hybrid_p1 < hybrid_p2 else tuple([hybrid_p3, hybrid_p2, hybrid_p1])
+            assert not sorted_list in old_term_collector.keys(), f"this angle already exists"
+            old_term_collector[sorted_list] = [term_idx, theta0, k]
+
+        # repeat for the new system angle force
+        for term_idx in range(new_system_angle_force.getNumAngles()):
+            p1, p2, p3, theta0, k = new_system_angle_force.getAngleParameters(term_idx) #grab the parameters
+            hybrid_p1, hybrid_p2, hybrid_p3 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2], self._new_to_hybrid_map[p3] #make hybrid indices
+            sorted_list = tuple([hybrid_p1, hybrid_p2, hybrid_p3]) if hybrid_p1 < hybrid_p2 else tuple([hybrid_p3, hybrid_p2, hybrid_p1])
+            assert not sorted_list in new_term_collector.keys(), f"this angle already exists"
+            new_term_collector[sorted_list] = [term_idx, theta0, k]
+
+        #build generator for debugging purposes
+        self._hybrid_to_old_angle_indices = {}
+        self._hybrid_to_new_angle_indices = {}
+        self._hybrid_to_core_angle_indices = {}
+        self._hybrid_to_environment_angle_indices = {}
+
+        # iterate over the old_term_collector and add appropriate angles
+        for hybrid_index_pair in old_term_collector.keys():
+            idx_set = set(list(hybrid_index_pair))
+            scale_id = self.get_scale_identifier(idx_set)
+            alch_id, string_identifier = self.get_alch_identifier(idx_set)
+            if alch_id[0] == 1: #if the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
+                assert new_term_collector[hybrid_index_pair] == old_term_collector[hybrid_index_pair], f"hybrid_index_pair angle term was identified as "
+            old_angle_idx, theta0_old, k_old = old_term_collector[hybrid_index_pair]
+            try:
+                new_angle_idx, theta0_new, k_new = new_term_collector[hybrid_index_pair]
+            except Exception as e: #this might be a unique old term
+                theta0_new, k_new = theta0_old, k_old
+
+            #TODO : do these need to be unitless? check; also check if these terms are in the right order
+            angle_term = (hybrid_index_pair[0],
+                          hybrid_index_pair[1],
+                          hybrid_index_pair[2],
+                          scale_id + alch_id + [theta0_old, k_old, theta0_new, k_new])
+            hybrid_angle_idx = custom_angle_force.addAngle(*angle_term)
+
+            if string_identifier == 'unique_old_atoms':
+                self._hybrid_to_old_angle_indices[hybrid_angle_idx] = old_angle_idx
+            elif string_identifier == 'core_atoms':
+                self._hybrid_to_core_angle_indices[hybrid_angle_idx] = old_angle_idx
+            elif string_identifier == 'environment_atoms':
+                self._hybrid_to_environment_angle_indices[hybrid_angle_idx] = old_angle_idx
+            else:
+                raise Exception(f"old angle index {old_angle_idx} cannot be a unique new angle index")
+
+        #make a modified new_term_collector that omits the terms that are previously handled
+        mod_new_term_collector = {key: val for key, val in new_term_collector.items() if key not in list(old_term_collector.keys())}
+
+        #now iterate over the modified new term collector and add appropriate angles. these should only be unique new, right?
+        for hybrid_index_pair in mod_new_term_collector.keys():
+            idx_set = set(list(hybrid_index_pair))
+            scale_id = self.get_scale_identifier(idx_set)
+            alch_id, string_identifier = self.get_alch_identifier(idx_set)
+            assert string_identifier == 'unique_new_atoms', f"we are iterating over modified new term collector, but the string identifier returned {string_identifier}"
+
+            #these terms are unchanged if they are unique new terms. preserve all valence terms
+            new_angle_idx, theta0_old, k_old = mod_new_term_collector[hybrid_index_pair]
+            theta0_new, k_new = theta0_old, k_old
+
+            angle_term = (hybrid_index_pair[0],
+                          hybrid_index_pair[1],
+                          hybrid_index_pair[2],
+                          scale_id + alch_id + [r0_old, k_old, r0_new, k_new])
+            hybrid_angle_idx = custom_angle_force.addAngle(*angle_term)
+            self._hybrid_to_new_angle_indices[hybrid_angle_idx] = new_angle_idx
+
+
+
 
     def _transcribe_nonbonded_exceptions(self):
         """
