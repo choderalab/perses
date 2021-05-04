@@ -3462,7 +3462,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             assert string_identifier in ['unique_new_atoms', 'core_atoms'], f"we are iterating over modified new term collector, but the string identifier returned {string_identifier}"
 
             #these terms are unchanged if they are unique new terms. preserve all valence terms
-            for counter, torsion_term in enumerate(new_term_collector[hybrid_index_pair]):
+            for counter, torsion_term in enumerate(mod_new_term_collector[hybrid_index_pair]):
                 new_torsion_idx, periodicity_new, phase_new, k_new = torsion_term
 
                 #TODO : do these need to be unitless? check; also check if these terms are in the right order
@@ -3473,6 +3473,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                               scale_id + alch_id + [periodicity_new, phase_new, k_new, periodicity_new, phase_new, k_new])
 
                 hybrid_torsion_idx = custom_torsion_force.addTorsion(*torsion_term)
+                self._hybrid_to_new_torsion_indices[hybrid_torsion_idx] = new_torsion_idx
 
 
     def _transcribe_nonbonded_exceptions(self):
