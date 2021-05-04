@@ -2737,8 +2737,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         # Call each of the methods to add the corresponding force terms and prepare the forces:
         self._transcribe_bonds()
-        #self._transcribe_angles()
-        #self._transcribe_torsions()
+        self._transcribe_angles()
+        self._transcribe_torsions()
 
         #if 'NonbondedForce' in self._old_system_forces or 'NonbondedForce' in self._new_system_forces:
         #    self._transcribe_nonbonded()
@@ -3325,7 +3325,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             angle_term = (hybrid_index_pair[0],
                           hybrid_index_pair[1],
                           hybrid_index_pair[2],
-                          scale_id + alch_id + [r0_old, k_old, r0_new, k_new])
+                          scale_id + alch_id + [theta0_old, k_old, theta0_new, k_new])
             hybrid_angle_idx = custom_angle_force.addAngle(*angle_term)
             self._hybrid_to_new_angle_indices[hybrid_angle_idx] = new_angle_idx
 
