@@ -3427,27 +3427,34 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             if alch_id[0] == 1: #if the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
                 # TODO : write a test for this...
                 # it must be the case that the list of old terms must be equal to the list of new terms
-                pass
+                is_env = True
+            else:
+                is_env = False
                 #assert new_term_collector[hybrid_index_pair] == old_term_collector[hybrid_index_pair], f"hybrid_index_pair angle term was identified as "
             for counter, torsion_term in enumerate(old_term_collector[hybrid_index_pair]):
                 old_torsion_idx, periodicity_old, phase_old, k_old = torsion_term
 
-                #TODO : do these need to be unitless? check; also check if these terms are in the right order
+                #if this is an env term, then we have to multiply each k term by 0.5 so they add to 1.
+                torsion_params_scalar = 0.5 if is_env else 1.
                 torsion_term = (hybrid_index_pair[0],
                               hybrid_index_pair[1],
                               hybrid_index_pair[2],
                               hybrid_index_pair[3],
-                              scale_id + alch_id + [periodicity_old, phase_old, k_old, periodicity_old, phase_old, k_old])
+                              scale_id + alch_id + [periodicity_old,
+                                                    phase_old,
+                                                    torsion_params_scalar * k_old,
+                                                    periodicity_old,
+                                                    phase_old,
+                                                    torsion_params_scalar * k_old])
 
                 hybrid_torsion_idx = custom_torsion_force.addTorsion(*torsion_term)
-            is_env=False
+
             if string_identifier == 'unique_old_atoms':
                 self._hybrid_to_old_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
             elif string_identifier == 'core_atoms':
                 self._hybrid_to_core_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
             elif string_identifier == 'environment_atoms':
                 self._hybrid_to_environment_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
-                is_env=True
             else:
                 raise Exception(f"old torsion index {old_torsion_idx} cannot be a unique new torsion index")
 
