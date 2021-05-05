@@ -3434,8 +3434,6 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                 #assert new_term_collector[hybrid_index_pair] == old_term_collector[hybrid_index_pair], f"hybrid_index_pair angle term was identified as "
             for counter, torsion_term in enumerate(old_term_collector[hybrid_index_pair]):
                 old_torsion_idx, periodicity_old, phase_old, k_old = torsion_term
-
-                #if this is an env term, then we have to multiply each k term by 0.5 so they add to 1.
                 torsion_term = (hybrid_index_pair[0],
                               hybrid_index_pair[1],
                               hybrid_index_pair[2],
@@ -3485,7 +3483,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                                                     k_new])
 
                 hybrid_torsion_idx = custom_torsion_force.addTorsion(*torsion_term)
-                self._hybrid_to_new_torsion_indices[hybrid_torsion_idx] = new_torsion_idx
+                if string_identifier == 'unique_new_atoms':
+                    self._hybrid_to_new_torsion_indices[hybrid_torsion_idx] = new_torsion_idx
 
 
     def _transcribe_nonbonded_exceptions(self):
