@@ -3436,7 +3436,6 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                 old_torsion_idx, periodicity_old, phase_old, k_old = torsion_term
 
                 #if this is an env term, then we have to multiply each k term by 0.5 so they add to 1.
-                new_torsion_params_scalar = 0. if is_env else 1.
                 torsion_term = (hybrid_index_pair[0],
                               hybrid_index_pair[1],
                               hybrid_index_pair[2],
@@ -3446,7 +3445,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                                                     k_old,
                                                     periodicity_old,
                                                     phase_old,
-                                                    new_torsion_params_scalar * k_old])
+                                                    0. * k_old])
 
                 hybrid_torsion_idx = custom_torsion_force.addTorsion(*torsion_term)
 
@@ -3478,7 +3477,12 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                               hybrid_index_pair[1],
                               hybrid_index_pair[2],
                               hybrid_index_pair[3],
-                              scale_id + alch_id + [periodicity_new, phase_new, k_new, periodicity_new, phase_new, k_new])
+                              scale_id + alch_id + [periodicity_new,
+                                                    phase_new,
+                                                    0. * k_new, 
+                                                    periodicity_new,
+                                                    phase_new,
+                                                    k_new])
 
                 hybrid_torsion_idx = custom_torsion_force.addTorsion(*torsion_term)
                 self._hybrid_to_new_torsion_indices[hybrid_torsion_idx] = new_torsion_idx
