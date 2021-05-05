@@ -3345,7 +3345,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         new_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_torsions_new" for i in range(self._num_alchemical_regions)],
                                                                     ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
 
-        core_torsion_expression  = f"{old_bool_string}*U1 + {new_bool_string} * U2;"
+        core_torsion_expression = f"{scale_bool_string} * ({old_bool_string} * U1 + {new_bool_string} * U2);"
+        #core_torsion_expression  = f"{old_bool_string}*U1 + {new_bool_string} * U2;"
         core_torsion_expression += 'U1 = K1*(1+cos(periodicity1*theta-phase1));'
         core_torsion_expression += 'U2 = K2*(1+cos(periodicity2*theta-phase2));'
 
@@ -3435,28 +3436,28 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                 old_torsion_idx, periodicity_old, phase_old, k_old = torsion_term
 
                 #if this is an env term, then we have to multiply each k term by 0.5 so they add to 1.
-                torsion_params_scalar = 0.5 if is_env else 1.
+                new_torsion_params_scalar = 0. if is_env else 1.
                 torsion_term = (hybrid_index_pair[0],
                               hybrid_index_pair[1],
                               hybrid_index_pair[2],
                               hybrid_index_pair[3],
                               scale_id + alch_id + [periodicity_old,
                                                     phase_old,
-                                                    torsion_params_scalar * k_old,
+                                                    k_old,
                                                     periodicity_old,
                                                     phase_old,
-                                                    torsion_params_scalar * k_old])
+                                                    new_torsion_params_scalar * k_old])
 
                 hybrid_torsion_idx = custom_torsion_force.addTorsion(*torsion_term)
 
-            if string_identifier == 'unique_old_atoms':
-                self._hybrid_to_old_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
-            elif string_identifier == 'core_atoms':
-                self._hybrid_to_core_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
-            elif string_identifier == 'environment_atoms':
-                self._hybrid_to_environment_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
-            else:
-                raise Exception(f"old torsion index {old_torsion_idx} cannot be a unique new torsion index")
+                if string_identifier == 'unique_old_atoms':
+                    self._hybrid_to_old_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
+                elif string_identifier == 'core_atoms':
+                    self._hybrid_to_core_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
+                elif string_identifier == 'environment_atoms':
+                    self._hybrid_to_environment_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
+                else:
+                    raise Exception(f"old torsion index {old_torsion_idx} cannot be a unique new torsion index")
 
             if is_env: #remove the entry in the new term
                 mod_new_term_collector[hybrid_index_pair] = []
