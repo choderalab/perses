@@ -2737,8 +2737,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         # Call each of the methods to add the corresponding force terms and prepare the forces:
         self._transcribe_bonds()
-        #self._transcribe_angles()
-        #self._transcribe_torsions()
+        self._transcribe_angles()
+        self._transcribe_torsions()
 
         #if 'NonbondedForce' in self._old_system_forces or 'NonbondedForce' in self._new_system_forces:
         #    self._transcribe_nonbonded()
@@ -3325,7 +3325,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             angle_term = (hybrid_index_pair[0],
                           hybrid_index_pair[1],
                           hybrid_index_pair[2],
-                          scale_id + alch_id + [r0_old, k_old, r0_new, k_new])
+                          scale_id + alch_id + [theta0_old, k_old, theta0_new, k_new])
             hybrid_angle_idx = custom_angle_force.addAngle(*angle_term)
             self._hybrid_to_new_angle_indices[hybrid_angle_idx] = new_angle_idx
 
@@ -3469,7 +3469,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             assert string_identifier in ['unique_new_atoms', 'core_atoms'], f"we are iterating over modified new term collector, but the string identifier returned {string_identifier}"
 
             #these terms are unchanged if they are unique new terms. preserve all valence terms
-            for counter, torsion_term in enumerate(new_term_collector[hybrid_index_pair]):
+            for counter, torsion_term in enumerate(mod_new_term_collector[hybrid_index_pair]):
                 new_torsion_idx, periodicity_new, phase_new, k_new = torsion_term
 
                 #TODO : do these need to be unitless? check; also check if these terms are in the right order
@@ -3480,6 +3480,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                               scale_id + alch_id + [periodicity_new, phase_new, k_new, periodicity_new, phase_new, k_new])
 
                 hybrid_torsion_idx = custom_torsion_force.addTorsion(*torsion_term)
+                self._hybrid_to_new_torsion_indices[hybrid_torsion_idx] = new_torsion_idx
 
 
     def _transcribe_nonbonded_exceptions(self):
