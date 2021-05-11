@@ -2738,7 +2738,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         # Call each of the methods to add the corresponding force terms and prepare the forces:
         self._transcribe_bonds()
         self._transcribe_angles()
-        #self._transcribe_torsions()
+        self._transcribe_torsions()
 
         #if 'NonbondedForce' in self._old_system_forces or 'NonbondedForce' in self._new_system_forces:
         #    self._transcribe_nonbonded()
@@ -3183,14 +3183,15 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             idx_set = set(list(hybrid_index_pair))
             scale_id = self.get_scale_identifier(idx_set)
             alch_id, string_identifier = self.get_alch_identifier(idx_set)
-            if alch_id[0] == 1: #if the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
-                assert new_term_collector[hybrid_index_pair][1:] == old_term_collector[hybrid_index_pair][1:], f"hybrid_index_pair {hybrid_index_pair} bond term was identified in old term collector as {old_term_collector[hybrid_index_pair][1:]}, but in new term collector as {new_term_collector[hybrid_index_pair][1:]}"
             old_bond_idx, r0_old, k_old = old_term_collector[hybrid_index_pair]
             try:
                 new_bond_idx, r0_new, k_new = new_term_collector[hybrid_index_pair]
             except Exception as e: #this might be a unique old term
                 r0_new, k_new = r0_old, k_old
-
+            if alch_id[0] == 1: #if the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
+                assert new_term_collector[hybrid_index_pair][1:] == old_term_collector[hybrid_index_pair][1:], f"hybrid_index_pair {hybrid_index_pair} bond term was identified in old term collector as {old_term_collector[hybrid_index_pair][1:]}, but in new term collector as {new_term_collector[hybrid_index_pair][1:]}"
+                r0_new = 0
+                k_new = 0
             #TODO : do these need to be unitless? check; also check if these terms are in the right order
             bond_term = (hybrid_index_pair[0], hybrid_index_pair[1], scale_id + alch_id + [r0_old, k_old, r0_new, k_new])
             hybrid_bond_idx = custom_bond_force.addBond(*bond_term)
@@ -3302,14 +3303,15 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             idx_set = set(list(hybrid_index_pair))
             scale_id = self.get_scale_identifier(idx_set)
             alch_id, string_identifier = self.get_alch_identifier(idx_set)
-            if alch_id[0] == 1: #if the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
-                assert new_term_collector[hybrid_index_pair][1:] == old_term_collector[hybrid_index_pair][1:], f"hybrid_index_pair {hybrid_index_pair} angle term was identified in old_term_collector as {old_term_collector[hybrid_index_pair]} but in the new_term_collector as {new_term_collector[hybrid_index_pair]}"
             old_angle_idx, theta0_old, k_old = old_term_collector[hybrid_index_pair]
             try:
                 new_angle_idx, theta0_new, k_new = new_term_collector[hybrid_index_pair]
             except Exception as e: #this might be a unique old term
                 theta0_new, k_new = theta0_old, k_old
-
+            if alch_id[0] == 1: #if the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
+                assert new_term_collector[hybrid_index_pair][1:] == old_term_collector[hybrid_index_pair][1:], f"hybrid_index_pair {hybrid_index_pair} angle term was identified in old_term_collector as {old_term_collector[hybrid_index_pair]} but in the new_term_collector as {new_term_collector[hybrid_index_pair]}"
+                theta0_new = 0
+                k_new = 0
             #TODO : do these need to be unitless? check; also check if these terms are in the right order
             angle_term = (hybrid_index_pair[0],
                           hybrid_index_pair[1],
@@ -3346,6 +3348,17 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                           scale_id + alch_id + [theta0_old, k_old, theta0_new, k_new])
             hybrid_angle_idx = custom_angle_force.addAngle(*angle_term)
             self._hybrid_to_new_angle_indices[hybrid_angle_idx] = new_angle_idx
+
+    def _find_torsion_match(self, hybrid_index_pair, terms, new_term_collector):
+        for k, v in new_term_collector.items():
+            if set(k) == set(hybrid_index_pair):
+                #_logger.info(f"hybrid index pair: {hybrid_index_pair}, terms: {terms}, new term collector key: {k}, term: {v}")
+                v = np.array(v)
+                terms = np.array(terms)
+                if np.array_equal(v[:,1:], terms[:,1:]):
+                    #if k != hybrid_index_pair:
+                    #    _logger.info("Warning: order of atoms does not match")
+                    return k
 
     def _transcribe_torsions(self):
         """
@@ -3475,8 +3488,9 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                     raise Exception(f"old torsion index {old_torsion_idx} cannot be a unique new torsion index")
 
             if is_env: #remove the entry in the new term
-                mod_new_term_collector.pop(hybrid_index_pair, None)
-
+                k = self._find_torsion_match(hybrid_index_pair, old_term_collector[hybrid_index_pair], new_term_collector)
+                mod_new_term_collector.pop(k)
+ 
         #now iterate over the modified new term collector and add appropriate torsions. these should only be unique new or core, right?
         for hybrid_index_pair in mod_new_term_collector.keys():
             idx_set = set(list(hybrid_index_pair))
