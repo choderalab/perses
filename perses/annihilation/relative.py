@@ -2724,7 +2724,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         self._old_system_exceptions = self._generate_dict_from_exceptions(self._old_system_forces['NonbondedForce'])
         _logger.info("Generating new system exceptions dict...")
         self._new_system_exceptions = self._generate_dict_from_exceptions(self._new_system_forces['NonbondedForce'])
-
+        
         self._validate_disjoint_sets()
 
         # Copy constraints, checking to make sure they are not changing
@@ -2738,7 +2738,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         # Call each of the methods to add the corresponding force terms and prepare the forces:
         self._transcribe_bonds()
         self._transcribe_angles()
-        self._transcribe_torsions()
+        #self._transcribe_torsions()
 
         #if 'NonbondedForce' in self._old_system_forces or 'NonbondedForce' in self._new_system_forces:
         #    self._transcribe_nonbonded()
@@ -2930,12 +2930,29 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         #generate a list of alchemical regions
         self._alchemical_regions = []
         self._alchemical_regions_by_type = {key: set(chain(*[val for val in atom_classes[key].values()])) for key in atom_classes.keys() if key != 'environment_atoms'}
+        self._alchemical_regions_by_type['environment_atoms'] = self._atom_classes['environment_atoms']
         for alch_region_idx in range(self._num_alchemical_regions):
             self._alchemical_regions.append(set(
                                                 chain(
                                                         self._atom_classes['core_atoms'][alch_region_idx],
                                                         self._atom_classes['unique_new_atoms'][alch_region_idx],
                                                         self._atom_classes['unique_old_atoms'][alch_region_idx])))
+
+    def _validate_disjoint_sets(self):
+        """
+        Conduct a sanity check to make sure that the hybrid maps of the old and new system exception dict keys do not contain both environment and unique_old/new atoms
+        """
+        for old_indices in self._old_system_exceptions.keys():
+            hybrid_indices = (self._old_to_hybrid_map[old_indices[0]], self._old_to_hybrid_map[old_indices[1]])
+            if set(old_indices).intersection(self._atom_classes['environment_atoms']) != set():
+                assert set(old_indices).intersection(self._alchemical_regions_by_type['unique_old_atoms']) == set(), f"old index exceptions {old_indices} include unique old and environment atoms, which is disallowed"
+
+        for new_indices in self._new_system_exceptions.keys():
+            hybrid_indices = (self._new_to_hybrid_map[new_indices[0]], self._new_to_hybrid_map[new_indices[1]])
+            if set(hybrid_indices).intersection(self._atom_classes['environment_atoms']) != set():
+                assert set(hybrid_indices).intersection(self._alchemical_regions_by_type['unique_new_atoms']) == set(), f"new index exceptions {new_indices} include unique new and environment atoms, which is disallowed"
+
+
 
     def _build_hybrid_particles(self):
         """
@@ -3022,7 +3039,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         """
         template = [0 for i in range(self._num_alchemical_regions + 1)]
         template[0] = 1
-        str_identifier = 'environment_atom'
+        str_identifier = 'environment_atoms'
         for idx, _set in enumerate(self._alchemical_regions):
             if particles.intersection(_set) != set(): #allow for particles that straddle alchemical regions
                 template[idx+1] += 1 #update the template
@@ -3035,7 +3052,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                 elif particles.intersection(self._alchemical_regions_by_type['unique_new_atoms']):
                     assert not particles.intersection(self._alchemical_regions_by_type['unique_old_atoms'])
                     str_identifier = 'unique_new_atoms'
-                elif particles.issubset(self._alchemical_regions_by_type['core_atoms']):
+                elif particles.intersection(self._alchemical_regions_by_type['core_atoms']):
                     str_identifier = 'core_atoms'
                 else:
                     raise Exception(f"hybrid indices {particles} are identified as non-environment alchemical-region atoms but do not match unique_old/new/core ")
@@ -3101,6 +3118,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         core_bond_expression += f"K = {old_bool_string} * K1 + {new_bool_string} * K2;"
         core_bond_expression += f"length = {old_bool_string} * length1 + {new_bool_string} * length2;"
+        print(core_bond_expression)
         custom_bond_force = openmm.CustomBondForce(core_bond_expression)
         self._hybrid_system.addForce(custom_bond_force)
 
@@ -3166,7 +3184,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             scale_id = self.get_scale_identifier(idx_set)
             alch_id, string_identifier = self.get_alch_identifier(idx_set)
             if alch_id[0] == 1: #if the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
-                assert new_term_collector[hybrid_index_pair] == old_term_collector[hybrid_index_pair], f"hybrid_index_pair bond termterm was identified as "
+                assert new_term_collector[hybrid_index_pair][1:] == old_term_collector[hybrid_index_pair][1:], f"hybrid_index_pair {hybrid_index_pair} bond term was identified in old term collector as {old_term_collector[hybrid_index_pair][1:]}, but in new term collector as {new_term_collector[hybrid_index_pair][1:]}"
             old_bond_idx, r0_old, k_old = old_term_collector[hybrid_index_pair]
             try:
                 new_bond_idx, r0_new, k_new = new_term_collector[hybrid_index_pair]
@@ -3285,7 +3303,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             scale_id = self.get_scale_identifier(idx_set)
             alch_id, string_identifier = self.get_alch_identifier(idx_set)
             if alch_id[0] == 1: #if the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
-                assert new_term_collector[hybrid_index_pair] == old_term_collector[hybrid_index_pair], f"hybrid_index_pair angle term was identified as "
+                assert new_term_collector[hybrid_index_pair][1:] == old_term_collector[hybrid_index_pair][1:], f"hybrid_index_pair {hybrid_index_pair} angle term was identified in old_term_collector as {old_term_collector[hybrid_index_pair]} but in the new_term_collector as {new_term_collector[hybrid_index_pair]}"
             old_angle_idx, theta0_old, k_old = old_term_collector[hybrid_index_pair]
             try:
                 new_angle_idx, theta0_new, k_new = new_term_collector[hybrid_index_pair]
@@ -3457,7 +3475,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                     raise Exception(f"old torsion index {old_torsion_idx} cannot be a unique new torsion index")
 
             if is_env: #remove the entry in the new term
-                mod_new_term_collector[hybrid_index_pair] = []
+                mod_new_term_collector.pop(hybrid_index_pair, None)
 
         #now iterate over the modified new term collector and add appropriate torsions. these should only be unique new or core, right?
         for hybrid_index_pair in mod_new_term_collector.keys():
