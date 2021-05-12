@@ -3349,16 +3349,16 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             hybrid_angle_idx = custom_angle_force.addAngle(*angle_term)
             self._hybrid_to_new_angle_indices[hybrid_angle_idx] = new_angle_idx
 
-    def _find_torsion_match(self, hybrid_index_pair, terms, new_term_collector):
-        for k, v in new_term_collector.items():
-            if set(k) == set(hybrid_index_pair):
-                #_logger.info(f"hybrid index pair: {hybrid_index_pair}, terms: {terms}, new term collector key: {k}, term: {v}")
-                v = np.array(v)
-                terms = np.array(terms)
-                if np.array_equal(v[:,1:], terms[:,1:]):
-                    #if k != hybrid_index_pair:
-                    #    _logger.info("Warning: order of atoms does not match")
-                    return k
+    def _find_torsion_match(self, hybrid_index_pair_old, old_terms, new_term_collector):
+        for hybrid_index_pair_new, new_terms in new_term_collector.items():
+            if set(hybrid_index_pair_new) == set(hybrid_index_pair_old):
+                new_terms = np.array(new_terms)
+                old_terms = np.array(old_terms)
+                if np.array_equal(new_terms[:,1:], old_terms[:,1:]):
+                    _logger.info(f"hybrid_index_pair {hybrid_index_pair_old} was not found in the new_term_collector, but {hybrid_index_pair_new} has the same atoms and terms, so {hybrid_index_pair_new} will be removed from the new term collector")
+                    return hybrid_index_pair_new
+        _logger.info(f"No matching key in new_term_collector was found for hybrid_index_pair {hybrid_index_pair_old}!")
+        return None
 
     def _transcribe_torsions(self):
         """
@@ -3488,18 +3488,19 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                     raise Exception(f"old torsion index {old_torsion_idx} cannot be a unique new torsion index")
 
             if is_env: #remove the entry in the new term
-                k = self._find_torsion_match(hybrid_index_pair, old_term_collector[hybrid_index_pair], new_term_collector)
-                mod_new_term_collector.pop(k)
+                if hybrid_index_pair not in mod_new_term_collector:
+                    hybrid_index_pair = self._find_torsion_match(hybrid_index_pair, old_term_collector[hybrid_index_pair], new_term_collector)
+                mod_new_term_collector[hybrid_index_pair] = [] # Setting this to an empty list is sufficient (the key doesn't need to be popped) because the torsion terms are added by iterating over the list  
  
         #now iterate over the modified new term collector and add appropriate torsions. these should only be unique new or core, right?
         for hybrid_index_pair in mod_new_term_collector.keys():
             idx_set = set(list(hybrid_index_pair))
             scale_id = self.get_scale_identifier(idx_set)
             alch_id, string_identifier = self.get_alch_identifier(idx_set)
-            assert string_identifier in ['unique_new_atoms', 'core_atoms'], f"we are iterating over modified new term collector, but the string identifier returned {string_identifier}"
 
             #these terms are unchanged if they are unique new terms. preserve all valence terms
             for counter, torsion_term in enumerate(mod_new_term_collector[hybrid_index_pair]):
+                assert string_identifier in ['unique_new_atoms', 'core_atoms'], f"we are iterating over modified new term collector, but the string identifier returned {string_identifier}"
                 new_torsion_idx, periodicity_new, phase_new, k_new = torsion_term
 
                 #TODO : do these need to be unitless? check; also check if these terms are in the right order
