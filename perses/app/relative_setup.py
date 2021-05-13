@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 from perses.dispersed import feptasks
-from perses.utils.openeye import createOEMolFromSDF, createSystemFromSMILES, extractPositionsFromOEMol, generate_unique_atom_names, oechem
+from perses.utils.openeye import createOEMolFromSDF, createSystemFromSMILES, extractPositionsFromOEMol, generate_unique_atom_names
 from perses.utils.data import load_smi
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
 from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine
@@ -142,6 +142,8 @@ class RelativeFEPSetup(object):
             whether to extract the positions of ligand B and set the unique_new atom positions deterministically;
             if True, `complex` must be in `phases` and .sdf or .mol2 file of ligand must be provided
         """
+        from openeye import oechem
+
         self._pressure = pressure
         self._temperature = temperature
         self._barostat_period = 50

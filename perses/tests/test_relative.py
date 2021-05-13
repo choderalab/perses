@@ -407,12 +407,13 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene",atom_express
     """
     Make an atom map where the molecule at either lambda endpoint is identical, and check that the energies are also the same.
     """
+    from openmoltools.openeye import generate_conformers
     from openmmtools.constants import kB
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
     from perses.annihilation.relative import HybridTopologyFactory
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     import simtk.openmm as openmm
-    from perses.utils.openeye import iupac_to_oemol, extractPositionsFromOEMol, generate_conformers
+    from perses.utils.openeye import iupac_to_oemol, extractPositionsFromOEMol
     from perses.utils.openeye import generate_expression
     from openmmforcefields.generators import SystemGenerator
     from openmoltools.forcefield_generators import generateTopologyFromOEMol

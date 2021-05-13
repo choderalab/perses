@@ -1,7 +1,6 @@
 __author__ = 'Patrick B. Grinaway'
 
 import simtk.openmm as openmm
-import openeye.oechem as oechem
 import openmoltools
 import simtk.openmm.app as app
 import simtk.unit as unit
@@ -887,6 +886,8 @@ def align_molecules(mol1, mol2):
     """
     MCSS two OEmols. Return the mapping of new : old atoms
     """
+    import openeye.oechem as oechem
+
     mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
     atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_AtomicNumber | oechem.OEExprOpts_HvyDegree
     bondexpr = oechem.OEExprOpts_Aromaticity
@@ -1914,6 +1915,7 @@ def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'pro
     from perses.utils.smallmolecules import render_atom_mapping
     import tqdm
     from openff.toolkit.topology import Molecule
+    import openeye.oechem as oechem
 
     current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name,title=current_mol_name[0:4])
     proposed_mol = iupac_to_oemol(proposed_mol_name)
