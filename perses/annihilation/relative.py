@@ -2519,77 +2519,81 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     a subclass of `HybridTopologyFactory` that will treat nonbondeds with a `CustomNonbondedForce`,
     support multiple alchemical regions as well as externally-scaleable lambda regions (e.g. REST).
     """
-    # TODO : add sterics
-    # TODO : add U_off, U_slf (we only need these for endstates, so put in force group 1!)
-    # RF defaults
-    _default_RF_expr_list = ["U_electrostatics;", # add {scale_logic} with formatting
-                                          "U_electrostatics = c_RF * u_RF_mod;",
-                                          "c_RF = chargeProd * ONE_4PI_EPS0;",
-                                          "chargeProd = (1 - {alchemical_region_logic}) * (q_old1 * {p1_scale_region_logic} * q_old2 * {p2_scale_region_logic}) + {alchemical_region_logic} * (q_old1 * {p1_scale_region_logic} * q_old2 * {p2_scale_region_logic});",
-                                          "u_RF_mod = select(step(r - delta_RF), u_RF_SW, u_RF);",
-                                          "u_RF_SW = (1/4) * b_RF_4 * r^4 + (1/3) * b_RF_3 * r^3 + (1/2) * b_RF_2 * r^2 + b_RF_1 * r + b_RF_0;",
-                                          "b_RF_0 = u_RF_set - ((1/4) * b_RF_4 * (R_cutoff - delta_RF)^4 + (1/3) * b_RF_3 * (R_cutoff - delta_RF)^3 + (1/2) * b_RF_2 * (R_cutoff - delta_RF)^2 + b_RF_1 * (R_cutoff - delta_RF));"
-                                          "b_RF_4 = ((1/delta_RF)^3) * (2 * u_RF_prime + delta_RF * u_RF_prime_prime);",
-                                          "b_RF_3 = ((1/delta_RF)^3) * (3 * (delta_RF - 2 * R_cutoff) * u_RF_prime + delta_RF * (delta_RF - 3 * R_cutoff) * u_RF_prime_prime);",
-                                          "b_RF_2 = R_cutoff * ((1/delta_RF)^3) * (6 * (R_cutoff - delta_RF) * u_RF_prime + delta_RF * (3 * R_cutoff - 2 * delta_RF) * u_RF_prime_prime);",
-                                          "b_RF_1 = R_cutoff^2 * ((1/delta_RF)^3) * ((3 * delta_RF - 2 * R_cutoff) * u_RF_prime + delta_RF * (delta_RF - R_cutoff) * u_RF_prime_prime);",
-                                          "u_RF = 1 / r_eff + (eps_RF - 1) * (r_eff^2 / (R_cutoff^3)) / (1 + 2 * eps_RF);",
-                                          ""
 
-                                          # hardcode the definition of u_RF at (R_cutoff - delta_RF), its first and second derivatives
-                                          "u_RF_set = 1 / (r_mod_eff) + eps_coeff * r_mod_eff^2 / (R_cutoff^3);",
-                                          "u_RF_prime = - r_mod_eff_prime / (r_mod_eff^2) + (eps_coeff / (R_cutoff^3)) * 2 * r_mod_eff * r_mod_eff_prime;",
-                                          "u_RF_prime_prime = (r_mod_eff_prime * (2 * (r_mod_eff^(-3)) * r_mod_eff_prime) - (r_mod_eff_prime_prime / (r_mod_eff)^2)) + (2 * eps_coeff / (R_cutoff^3)) * (r_mod_eff_prime^2 + r_mod_eff * r_mod_eff_prime_prime);",
+    """
+    Here, I attempt to create a RF implementation of electrostatics using a polynomial switching function that turns on at some
+    r_switch = r_cutoff * switching_ratio. thr r_cutoff is a cutoff distance (in nm) beyond which electrostatics are not calculated and the switching ratio is a
+    scalar between 0 and 1 where the switching polynomial begins to decrease the effective electrostatic potential. both are free parameters.
 
-                                          # hardcode variables
-                                          "r_mod_eff = sqrt(r_mod_cut^2 + w^2);",
-                                          "r_mod_eff_prime = r_mod_cut / sqrt(r_mod_cut^2 + w^2);",
-                                          "r_mod_eff_prime_prime = 1 / sqrt(r_mod_cut^2 + w^2) - (r_mod_cut^2) * (r_mod_cut^2 + w^2)^(-3/2);",
-                                          "r_mod_cut = (R_cutoff - delta_RF);",
-                                          "eps_coeff = ((eps_RF - 1) / (1 + 2*eps_RF));"
-                                          "w = select(step({alchemical_region_logic} - 1/2), 2 * R_cutoff * (1 - {alchemical_region_logic}), {alchemical_region_logic} * 2 * R_cutoff);",
-                                          "delta_RF = select(step( (1/2) - delta_scl_RF), 2 * delta_scl_RF * delta_RF_mid, delta_RF_mid + (2 * delta_scl_RF - 1) * (delta_RF_max - delta_RF_mid));" #check this
-                        ]
+    in order to avoid singularities in the alchemical region (specifically in interactions of unique new/old atoms),
+    we introduce a decoupling in the 4th dimensional distance. decoupling does not affect core or env atoms.
 
+    NOTE : we need to add add rxn field electrostatic configuration-independent offsets (U^{off}, U^{slf}) given in eqs 5,6 in DOI: 10.1039/D0CP03835K
+    """
+    from openmmtools.constants import ONE_4PI_EPS0
+    _default_RF_expr_list = [
+                             "{scale_bool_string} * U_electrostatics;", # define scaled electrostatic term
+                             "U_electrostatics = switch * c_RF * u_RF;", # define product electrostatic term
+
+                             #define switching function
+                             "switch = step(-t) + step(t) * step(1-t) * ((1 + (t^3) * (-10 + t * (15 - 6 * t)));",
+                             "t = (r_eff - r_switch) / (r_cutoff - r_switch);",
+
+                             #define topological term
+                             f"c_RF = {ONE_4PI_EPS0} * chargeProd;",
+                             "chargeProd = charge1 * charge2;",
+                             "charge1 = select(1 - both_environment, charge_old1 * {old_bool_string} + charge_new1 * {new_bool_string}, charge_old1);",
+                             "charge2 = select(1 - both_environment, charge_old2 * {old_bool_string} + charge_new2 * {new_bool_string}, charge_old2);",
+                             "both_environment = environment_region1 * environment_region2",
+
+                             #define reaction field u_RF
+                             "u_RF = 1 / r_eff + (eps_RF - 1) * (r_eff^2 / (r_cutoff^3)) / (1 + 2 * eps_RF);",
+
+                             #r_eff
+                             "r_eff = sqrt(r^2 + w^2);",
+
+                             #4th dimension:
+                             "w = step(unique_new1 + unique_new2 + unique_old1 + unique_old2 - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string});"
+
+                             # switch parameter
+                             "r_switch = r_cutoff * {switching_ratio};",
+
+                             # reaction field parameters
+                             "eps_RF = {eps_RF}";
+                             "r_cutoff = {r_cutoff};"
+                             ]
+    # RF per_particle_parameters: [scale_bools, old/new_bool_string, unique_old, unique_new, core]
     _default_RF_expression = ' '.join(_default_RF_expr_list)
 
-    def u_RF_prime(r, R_cutoff, eps_RF, w):
-        """
-        a numpy function to get a pairwise energy from RXN field. This is NOT guaranteed to be concomitant with `_default_RF_expr_list`
-        u_RF = 1 / r_eff + ((eps_RF - 1) / (1 + 2*eps_RF)) * r_eff^2
-        """
-        scale = (eps_RF - 1) / ((R_cutoff**3) * (1 + 2*eps_RF))
-        r_eff = np.sqrt(r**2 + w**2)
-        r_eff_prime = r / r_eff
-        term = -r_eff_prime * (1./r_eff)**2 + scale * 2 * r_eff * r_eff_prime
-        return term
+    _default_sterics_expr_list = ["{scale_bool_string} * U_sterics;",
 
-    def u_RF_prime_prime(r, R_cutoff, eps_RF, w):
-        scale = (eps_RF - 1) / ((R_cutoff**3) * (1 + 2*eps_RF))
-        r_eff = np.sqrt(r**2 + w**2)
-        r_eff_prime = r / r_eff
-        r_eff_prime_prime = 1 / np.sqrt(r**2 + w**2) - (r**2) * (r**2 + w**2)**(-3/2)
+                                  "U_sterics = 4 * epsilon * x * (x - 1.0);",
+                                  "x = (sigma / reff_sterics)^6;",
 
-        term = (2 * r_eff_prime**2 * (1/(r_eff**3)) - r_eff_prime_prime / (r_eff**2)) + 2 * scale * (r_eff_prime**2 + r_eff * r_eff_prime_prime)
-        return term
+                                  # sigma
+                                  "sigma = (sigma1 + sigma2) / 2;",
+                                  "sigma1 = select(1 - both_environment, sigma_old1 * {old_bool_string} + sigma_new1 * {new_bool_string}, sigma_old1);",
+                                  "sigma2 = select(1 - both_environment, sigma_old2 * {old_bool_string} + sigma_new2 * {new_bool_string}, sigma_old2);",
 
-    # TODO: is there a way to solve these in openmm implicitly?
-    # NOTE : stricly speaking, these values are lambda-dependent...we will only define these for the real endstates. (will this cause convergence issues?)
-    def solve_delta_RF_mid(guess_delta_RF_mid, R_cutoff, eps_RF, w):
-        """all distances in nm"""
-        from scipy.optimize import fsolve
-        def implicit(delta_RF_mid):
-            return -(3/2) * u_RF_prime(R_cutoff - delta_RF_mid, R_cutoff, eps_RF, w) / u_RF_prime_prime(R_cutoff - delta_RF_mid, R_cutoff, eps_RF, w) - delta_RF_mid
-        solved_delta_RF_mid = fsolve(implicit, guess_delta_RF_mid)
-        return solved_delta_RF_mid.flatten()
+                                  # epsilon
+                                  "epsilon = sqrt(epsilon1 * epsilon2);",
+                                  "epsilon1 = select(1 - both_environment, epsilon_old1 * {old_bool_string} + epsilon_new1 * {new_bool_string}, epsilon_old1);",
+                                  "epsilon2 = select(1 - both_environment, epsilon_old2 * {old_bool_string} + epsilon_new2 * {new_bool_string}, epsilon_old2);",
+                                  "both_environment = environment_region1 * environment_region2;",
 
-    def solve_delta_RF_max(guess_delta_RF_max, R_cutoff, eps_RF, w):
-        """all distances in nm"""
-        from scipy.optimize import fsolve
-        def implicit(delta_RF_max):
-            return -3 * u_RF_prime(R_cutoff - delta_RF_max, R_cutoff, eps_RF, w) / u_RF_prime(R_cutoff - delta_RF_max, R_cutoff, eps_RF, w)
-        solved_delta_RF_max = fsolve(implicit, guess_delta_RF_max)
-        return solved_delta_RF_max.flatten()
+                                   #r_eff
+                                   "r_eff = sqrt(r^2 + w^2);",
+
+                                   #4th dimension:
+                                   "w = step(unique_new1 + unique_new2 + unique_old1 + unique_old2 - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string});"
+
+                                   # parameters
+                                   "r_cutoff = {r_cutoff};"
+    ]
+    # per_particle_parameters : [scale_bools, old/new_bool_string, unique_old, unique_new, core]
+
+    _default_steric_expression = ' '.join(_default_steric_expr_list)
+
 
 
 
@@ -2724,7 +2728,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         self._old_system_exceptions = self._generate_dict_from_exceptions(self._old_system_forces['NonbondedForce'])
         _logger.info("Generating new system exceptions dict...")
         self._new_system_exceptions = self._generate_dict_from_exceptions(self._new_system_forces['NonbondedForce'])
-        
+
         self._validate_disjoint_sets()
 
         # Copy constraints, checking to make sure they are not changing
@@ -3490,8 +3494,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             if is_env: #remove the entry in the new term
                 if hybrid_index_pair not in mod_new_term_collector:
                     hybrid_index_pair = self._find_torsion_match(hybrid_index_pair, old_term_collector[hybrid_index_pair], new_term_collector)
-                mod_new_term_collector[hybrid_index_pair] = [] # Setting this to an empty list is sufficient (the key doesn't need to be popped) because the torsion terms are added by iterating over the list  
- 
+                mod_new_term_collector[hybrid_index_pair] = [] # Setting this to an empty list is sufficient (the key doesn't need to be popped) because the torsion terms are added by iterating over the list
+
         #now iterate over the modified new term collector and add appropriate torsions. these should only be unique new or core, right?
         for hybrid_index_pair in mod_new_term_collector.keys():
             idx_set = set(list(hybrid_index_pair))
@@ -3510,7 +3514,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                               hybrid_index_pair[3],
                               scale_id + alch_id + [periodicity_new,
                                                     phase_new,
-                                                    0. * k_new, 
+                                                    0. * k_new,
                                                     periodicity_new,
                                                     phase_new,
                                                     k_new])
@@ -3518,6 +3522,12 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                 hybrid_torsion_idx = custom_torsion_force.addTorsion(*torsion_term)
                 if string_identifier == 'unique_new_atoms':
                     self._hybrid_to_new_torsion_indices[hybrid_torsion_idx] = new_torsion_idx
+
+    def _transcribe_electrostatics():
+        """
+        write electrostatics
+        """
+
 
 
     def _transcribe_nonbonded_exceptions(self):
