@@ -2518,15 +2518,43 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     """
     a subclass of `HybridTopologyFactory` that will treat nonbondeds with a `CustomNonbondedForce`,
     support multiple alchemical regions as well as externally-scaleable lambda regions (e.g. REST).
-    """
 
-    """
+
     Here, I attempt to create a RF implementation of electrostatics using a polynomial switching function that turns on at some
     r_switch = r_cutoff * switching_ratio. thr r_cutoff is a cutoff distance (in nm) beyond which electrostatics are not calculated and the switching ratio is a
     scalar between 0 and 1 where the switching polynomial begins to decrease the effective electrostatic potential. both are free parameters.
 
     in order to avoid singularities in the alchemical region (specifically in interactions of unique new/old atoms),
     we introduce a decoupling in the 4th dimensional distance. decoupling does not affect core or env atoms.
+    However, the unique old/new atoms are 'lifted' into the 4th dimension 'w' upon 'alchemification' and the length of the 4th dimension is
+    given by r_cutoff * w_scale. w_scale is, like 'switching_ratio', a user-defined scalar between 0 (non-inclusive) and 1. taking 'switching_ratio' to 1
+    means that once the term is maximally 'lifted' into the 4th dimension, the 4th dimension is effectively of length 'r_cutoff'.
+
+    'scale_bool_string' is a scalar multiplier of the given `U_sterics` (`U_electrostatics`) that implementes REST2-like 'softening'.
+    it is a boolean-type scaling factor that couples the per particle parameters which define which scaling region to which the given particle belongs
+    to the global parameter that defines the scale factor.
+
+    Likewise, the `old/new_bool_string` is a scalar multiplier of the given per particle parameter that defines to which alchemical region (or environment_region)
+    a given (old/new) particle parameter (i.e. charge, sigma, epsilon) belongs. see `get_alch_identifier` for the per particle parameters returned for a given set of hybrid-indexed particles.
+    Once the per particle parameters are defined, each term is (by index) multiplied by the following global parameter.
+    In the case of electrostatics, the bool strings are given by :
+            old_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_electrostatics_old" for i in range(self._num_alchemical_regions)],
+                                                                        ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
+            new_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_electrostatics_new" for i in range(self._num_alchemical_regions)],
+                                                                        ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
+    where 'lambda_{i}_electrostatics_{old/new}' is the global parameter that defines the old/new electrostatic scaling parameter.
+    Sterics are treated in the same manner.
+
+    Since we want to maximize the expressiveness of global parameters, we treat nonbonded exceptions identically to how standard nonbondeds are described above, except the global parameters
+    are defined with `lambda_{i}_{electrostatics/sterics}_exceptions_{old/new}`.
+
+    NOTE : the `render_bool_string` yields lambda-independent environment region per particle parameters.
+           environment region per particle parameters should be old/new system independent.
+           Instead of interpolating between old and new parameters that are identical, we use a select statement that uses the following logic (with electrostatic charges as an example);
+            if both regions are envronment, charge1 is given by charge_old1 (the old system charge of the first particle);
+            otherwise, charge1 is charge_old1 * {old_bool_string} + charge_new1 * {new_bool_string}.
+                notably, this introduces the necessity that the lambda protocol completely turns off (to 0) the charge_old1 (via {old_bool_string}) before charging charge_new1 (via {new_bool_string}).
+    The same strategy is also used for torsions. see `self._transcribe_torsions`
 
     NOTE : we need to add add rxn field electrostatic configuration-independent offsets (U^{off}, U^{slf}) given in eqs 5,6 in DOI: 10.1039/D0CP03835K
     """
@@ -2553,7 +2581,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                              "r_eff = sqrt(r^2 + w^2);",
 
                              #4th dimension:
-                             "w = step(unique_new1 + unique_new2 + unique_old1 + unique_old2 - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string});"
+                             "w = step(unique_new1 + unique_new2 + unique_old1 + unique_old2 - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string}) * {w_scale};"
 
                              # switch parameter
                              "r_switch = r_cutoff * {switching_ratio};",
@@ -2562,8 +2590,10 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                              "eps_RF = {eps_RF}";
                              "r_cutoff = {r_cutoff};"
                              ]
+    # predefined RF parameters (fed to the `expression` via `format`): [scale_bool_string, old_bool_string, new_bool_string, w_scale, switching_ratio, eps_RF, r_cutoff]
     # RF per_particle_parameters: [scale_bools, old/new_bool_string, unique_old, unique_new, core]
     _default_RF_expression = ' '.join(_default_RF_expr_list)
+    _default_RF_
 
     _default_sterics_expr_list = ["{scale_bool_string} * U_sterics;",
 
@@ -2585,12 +2615,13 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                                    "r_eff = sqrt(r^2 + w^2);",
 
                                    #4th dimension:
-                                   "w = step(unique_new1 + unique_new2 + unique_old1 + unique_old2 - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string});"
+                                   "w = step(unique_new1 + unique_new2 + unique_old1 + unique_old2 - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string}) * {w_scale};"
 
                                    # parameters
                                    "r_cutoff = {r_cutoff};"
     ]
     # per_particle_parameters : [scale_bools, old/new_bool_string, unique_old, unique_new, core]
+    # predefined steric parameters (fed to the `expression` via `format`): [scale_bool_string, old_bool_string, new_bool_string, w_scale, switching_ratio, r_cutoff]
 
     _default_steric_expression = ' '.join(_default_steric_expr_list)
 
@@ -2602,18 +2633,58 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                  topology_proposal,
                  current_positions,
                  new_positions,
+
                  #scaling arguments
                  scale_regions = None,
+
                  #electrostatics
-                 electrostatic_nonbonded_expression = None,
-                 electrostatic_nonbonded_global_parameters = None,
-                 electrostatic_nonbonded_per_particle_parameters = None,
+                 RF_switching_ratio = 0.25, # is this okay?
+                 epsilon_RF = 78.8 #this is approximately correct for pure water,
+                 r_RF_cutoff = 1.4 * unit.nanometers,  # default cutoff for reaction field electrostatics
+                 w_RF_scale = 1.
+
                  #sterics
-                 steric_nonbonded_expression = None,
-                 steric_nonbonded_global_parameters = None,
-                 steric_nonbonded_per_particle_parameters = None,
+                 sterics_switching_ratio = 0.25, # same for RF?
+                 r_sterics_cutoff = 1.4 * unit.nanometers # same as RF?
+                 w_sterics_scale = 1.
+                 use_dispersion_correction = False,
                  **kwargs):
         """
+        reimplementation of `HybridTopologyFactory` that supports reaction field electrostatics, multiple alchemical regions, and multiple scaling (e.g. via REST2)
+        by moving most force terms to custom forces.
+
+        arguments
+            topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
+                topology proposal of the old-to-new transformation
+            current_positions : [n,3] np.ndarray of float
+                positions of coordinates of old system
+            new_positions : [m,3] np.ndarray of float
+                positions of coordinates of new system
+            scale_regions : list of list of int
+                each list represents hybrid-indexed particles that exist in the scale region i;
+                i is the ith inded of the scale_regions list.
+                Note that the scale regions must be disjoint. (this is asserted)
+            RF_switching_ratio : float
+                fraction of r_RF_cutoff at which the switching function will take over
+            epsilon_RF : float
+                value of reaction field permittivity
+            r_RF_cutoff : value in units of distance
+                reaction field cutoff
+            w_RF_scale : float
+                fraction of r_RF_cutoff to scale the 4th dimension at maximal decoupling
+            sterics_switching_ratio : float
+                fraction of r_sterics_cutoff at which the switching function will take over
+            r_sterics_cutoff : value in units of distance
+                sterics cutoff
+            w_sterics_scale : float
+                fraction of the r_sterics_cutoff to scale the 4th dimension at maximal decoupling
+            use_dispersion_correction : bool
+                whether to use a steric dispersion correction (not recommended for neq switching)
+
+
+
+
+
         TODO : remove hybrid-indexing from HybridTopologyFactory (this should be given directly to the RxnHybridTopologyFactory via the topology_proposal)
 
         TODO : how do we want to support tautomerization/protonation state/etc? (maybe we can handle this later with a subclass)
@@ -2670,6 +2741,18 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         self._hybrid_system_forces = dict()
         self._old_positions = current_positions
         self._new_positions = new_positions
+
+        #nonbonded parameters : RF
+        self._RF_switching_ratio = RF_switching_ratio
+        self._epsilon_RF = epsilon_RF
+        self._r_RF_cutoff = r_RF_cutoff
+        self._w_RF_scale = w_RF_scale
+
+        #nonbonded parameters : sterics
+        self._sterics_switching_ratio = sterics_switching_ratio
+        self._r_sterics_cutoff = r_sterics_cutoff
+        self._w_sterics_scale = w_sterics_scale
+        self._use_dispersion_correction = use_dispersion_correction
 
         #prepare a dict that will query the
 
@@ -3040,6 +3123,19 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                             particles):
         """
         return a list of integers that specifies whether a term is environment or alchemical (if alchemical, specifies which region, too)
+
+        arguments
+            particles : set
+                a set of hybrid particle indices
+
+        returns
+            template : list
+                list of binaries;
+                template[0] defines whether a given particle belongs to the environment_region.
+                template[i + 1] defines whether a given particle belongs to alchemical_region i
+            str_identifier : str
+                string identifier;
+                one of {'environment_atoms', 'unique_old_atoms', 'unique_new_atoms', 'core_atoms'}
         """
         template = [0 for i in range(self._num_alchemical_regions + 1)]
         template[0] = 1
@@ -3523,10 +3619,148 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                 if string_identifier == 'unique_new_atoms':
                     self._hybrid_to_new_torsion_indices[hybrid_torsion_idx] = new_torsion_idx
 
-    def _transcribe_electrostatics():
+    def _transcribe_nonbondeds(self, type):
+        assert type in ['electrostatics', 'sterics']
+
+        old_system_nbf = self._old_system_forces['NonbondedForce']
+        new_system_nbf = self._new_system_forces['NonbondedForce']
+
+        electrostatics_force, sterics_force = self._get_nonbonded_force('electrostatics'), self._get_nonbonded_force('sterics')
+
+        #get old terms
+        done_indices = []
+        for old_idx in range(old_system_nbf.getNumParticles()):
+            charge_old, sigma_old, epsilon_old = old_system_nbf.getParticleParameters(old_idx) #grab the parameters
+            hybrid_idx = self._old_to_hybrid_map[old_idx]
+            idx_set = {hybrid_idx}
+            scale_id = self.get_scale_identifier(idx_set)
+            alch_id, string_identifier = self.get_alch_identifier(idx_set)
+            if string_identifier in ['core_atoms', 'environment_atoms']: #then it has a 'new' counterpart
+                new_idx = self._hybrid_to_new_map[hybrid_idx]
+                charge_new, sigma_new, epsilon_new = new_system_nbf.getParticleParameters(new_idx)
+            elif string_identifier in ['unique_old_atoms']: # it does not and we just turn the term off
+                charge_new, sigma_new, epsilon_new = charge_old * 0., sigma_old, epsilon_old * 0.
+            else:
+                raise Exception(f"iterating over old terms yielded unique new atom.")
+
+            electrostatics_force.addParticle(scale_id + alch_id + [charge_old, charge_new])
+            sterics_force.addParticle(scale_id + alch_id + [sigma_old, sigma_new, epsilon_old, epsilon_new])
+            done_indices.append(hybrid_idx)
+
+        unique_new_hybrid_indices = set(range(self._hybrid_system.getNumParticles())).difference(set(done_indices))
+
+        for hybrid_idx in list(unique_new_hybrid_indices):
+            new_idx = self._hybrid_to_new_map[hybrid_idx]
+            charge_new, sigma_new, epsilon_new = new_system_nbf.getParticleParameters(new_idx)
+            idx_set = {hybrid_idx}
+            scale_id = self.get_scale_identifier(idx_set)
+            alch_id, string_identifier = self.get_alch_identifier(idx_set)
+            assert string_identifier == 'unique_new_atoms', f"encountered a problem iterating over what should only be unique new atoms; got {string_identifier}"
+            electrostatics_force.addParticle(scale_id + alch_id + [charge_new * 0., charge_new])
+            sterics_force.addParticle(scale_id + alch_id + [sigma_new, sigma_new, epsilon_old * 0., epsilon_new])
+
+        # now remove interactions between unique old/new
+        # now remove all exceptions that are nonzero
+        # now add add all nonzeroed exceptions to custom bond force
+
+
+
+
+
+
+
+
+
+            hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2], self._old_to_hybrid_map[p3], self._old_to_hybrid_map[p4] #make hybrid indices
+
+
+
+
+
+
+
+
+    def _get_nonbonded_force(self, type):
         """
-        write electrostatics
+        write nonbonded terms (either electrostatics/sterics)
         """
+        old_system_nbf = self._old_system_forces['NonbondedForce']
+        new_system_nbf = self._new_system_forces['NonbondedForce']
+
+        assert type in ['electrostatics', 'sterics']
+        scale_bool_string = RxnHybridTopologyFactory.render_bool_string([i + f"_{type}" for i in self._scale_templates[0]],
+                                                                        self._scale_templates[1]
+                                                                        )
+
+        old_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{type}_old" for i in range(self._num_alchemical_regions)],
+                                                                    ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
+        new_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{type}_new" for i in range(self._num_alchemical_regions)],
+                                                                    ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
+
+        expression = self._default_RF_expression if type == 'electrostatics' else self._default_steric_expression
+        if type == 'electrostatics':
+            formatted_expression = expression.format(w_scale = self._w_RF_scale,
+                                                     switching_ratio = self._RF_switching_ratio,
+                                                     eps_RF = self._epsilon_RF,
+                                                     r_cutoff = self._r_RF_cutoff.value_in_unit_system(unit.md_unit_system),
+                                                     scale_bool_string = scale_bool_string,
+                                                     old_bool_string = old_bool_string,
+                                                     new_bool_string = new_bool_string
+                                                    )
+        else:
+            formatted_expression = expression.format(w_scale = self._w_sterics_scale,
+                                                     switching_ratio = self._sterics_switching_ratio,
+                                                     r_cutoff = self._r_sterics_cutoff.value_in_unit_system(unit.md_unit_system),
+                                                     scale_bool_string = scale_bool_string,
+                                                     old_bool_string = old_bool_string,
+                                                     new_bool_string = new_bool_string
+                                                    )
+
+
+        custom_nbf = CustomNonbondedForce(formatted_expression)
+
+        for i in self._scale_templates[0]: #add the scaling global parameters
+            custom_nbf.addGlobalParameter(i + f"_{type}", 1.0)
+
+        #add per-bond parameter
+        for i in self._scale_templates[1]: #add the scaling per bond parameters
+            custom_nbf.addPerParticleParameter(i)
+
+        for i in ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)]:
+            custom_nbf.addPerParticleParameter(i)
+
+        if type == 'electrostatics':
+            custom_nbf.addPerParticleParameter('charge_old')
+            custom_nbf.addPerParticleParameter('charge_new')
+        else:
+            custom_nbf.addPerParticleParameter('sigma_old')
+            custom_nbf.addPerParticleParameter('sigma_new')
+
+            custom_nbf.addPerParticleParameter('epsilon_old')
+            custom_nbf.addPerParticleParameter('epsilon_new')
+
+        #handle some nonbonded attributes
+        standard_nonbonded_method = old_system_nbf.getNonbondedMethod()
+        custom_nbf.setNonbondedMethod(self._translate_nonbonded_method_to_custom(standard_nonbonded_method))
+
+        if standard_nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
+            if type == 'electrostatics': # we use our own switching function
+                custom_nbf.setUseSwitchingFunction(False)
+                custom_nbf.setCutoffDistance(self._r_RF_cutoff)
+            else: # for sterics, set switching function
+                custom_nbf.setUseSwitchingFunction(True)
+                custom_nbf.setSwitchingDistance(self._r_sterics_cutoff * self._sterics_switching_ratio)
+                custom_nbf.setCutoffDistance(self._r_sterics_cutoff)
+                custom_nbf.setUseLongRangeCorrection(self._use_dispersion_correction)
+        else:
+            raise Exception(f"nonbonded method is not recognized")
+
+        return custom_nbf
+
+
+
+
+
 
 
 
