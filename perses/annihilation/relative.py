@@ -2581,7 +2581,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                              "r_eff = sqrt(r^2 + w^2);",
 
                              #4th dimension:
-                             "w = step(unique_new1 + unique_new2 + unique_old1 + unique_old2 - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string}) * {w_scale};"
+                             "w = step(unique_new1 + unique_new2 + unique_old1 + unique_old2 - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string}) * {w_scale};",
 
                              # switch parameter
                              "r_switch = r_cutoff * {switching_ratio};",
@@ -2592,8 +2592,18 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                              ]
     # predefined RF parameters (fed to the `expression` via `format`): [scale_bool_string, old_bool_string, new_bool_string, w_scale, switching_ratio, eps_RF, r_cutoff]
     # RF per_particle_parameters: [scale_bools, old/new_bool_string, unique_old, unique_new, core]
+
+    #electrostatic exception
+    _default_RF_exception_expr_list = _default_RF_expr_list
+    _default_RF_exception_expr_list[5] = "chargeProd = select(1 - environment_region, chargeProd_old * {old_bool_string} + chargeProd_new * {new_bool_string}, chargeProd_old);"
+    _default_RF_exception_expr_list[6] = ''
+    _default_RF_exception_expr_list[7] = ''
+    _default_RF_exception_expr_list[8] = ''
+    _default_RF_exception_expr_list[11] = "w = step(unique_old + unique_new - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string}) * {w_scale};"
+
+
     _default_RF_expression = ' '.join(_default_RF_expr_list)
-    _default_RF_
+    _default_RF_exception_expression = ' '.join(_default_steric_expr_list)
 
     _default_sterics_expr_list = ["{scale_bool_string} * U_sterics;",
 
@@ -2623,7 +2633,21 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     # per_particle_parameters : [scale_bools, old/new_bool_string, unique_old, unique_new, core]
     # predefined steric parameters (fed to the `expression` via `format`): [scale_bool_string, old_bool_string, new_bool_string, w_scale, switching_ratio, r_cutoff]
 
+    #steric exception
+    _default_steric_exception_expr_list
+    _default_steric_exception_expr_list[3] = "select(1 - environment_region, sigma_old * {old_bool_string} + sigma_new * {new_bool_string}, sigma_old);"
+    _default_steric_exception_expr_list[4] = ''
+    _default_steric_exception_expr_list[5] = ''
+    _default_steric_exception_expr_list[6] = "select(1 - environment_region, epsilon_old * {old_bool_string} + epsilon_new * {new_bool_string}, epsilon_old);"
+    _default_steric_exception_expr_list[7] = ''
+    _default_steric_exception_expr_list[8] = ''
+    _default_steric_exception_expr_list[9] = ''
+    _default_steric_exception_expr_list[11] = "w = step(unique_old + unique_new - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string}) * {w_scale};"
+
+
     _default_steric_expression = ' '.join(_default_steric_expr_list)
+    _default_steric_exception_expression = ' '.join(_default_steric_exception_expr_list)
+
 
 
 
@@ -3638,13 +3662,18 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             if string_identifier in ['core_atoms', 'environment_atoms']: #then it has a 'new' counterpart
                 new_idx = self._hybrid_to_new_map[hybrid_idx]
                 charge_new, sigma_new, epsilon_new = new_system_nbf.getParticleParameters(new_idx)
+                if string_identifier == 'core_atoms':
+                    alchemical_type_id = [0,0,1]
+                else:
+                    alchemical_type_id = [0,0,0]
             elif string_identifier in ['unique_old_atoms']: # it does not and we just turn the term off
                 charge_new, sigma_new, epsilon_new = charge_old * 0., sigma_old, epsilon_old * 0.
+                alchemical_type_id = [1,0,0]
             else:
                 raise Exception(f"iterating over old terms yielded unique new atom.")
 
-            electrostatics_force.addParticle(scale_id + alch_id + [charge_old, charge_new])
-            sterics_force.addParticle(scale_id + alch_id + [sigma_old, sigma_new, epsilon_old, epsilon_new])
+            electrostatics_force.addParticle(scale_id + alch_id + alchemical_type_id + [charge_old, charge_new])
+            sterics_force.addParticle(scale_id + alch_id + alchemical_type_id + [sigma_old, sigma_new, epsilon_old, epsilon_new])
             done_indices.append(hybrid_idx)
 
         unique_new_hybrid_indices = set(range(self._hybrid_system.getNumParticles())).difference(set(done_indices))
@@ -3656,12 +3685,107 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             scale_id = self.get_scale_identifier(idx_set)
             alch_id, string_identifier = self.get_alch_identifier(idx_set)
             assert string_identifier == 'unique_new_atoms', f"encountered a problem iterating over what should only be unique new atoms; got {string_identifier}"
-            electrostatics_force.addParticle(scale_id + alch_id + [charge_new * 0., charge_new])
-            sterics_force.addParticle(scale_id + alch_id + [sigma_new, sigma_new, epsilon_old * 0., epsilon_new])
+            alchemical_type_id = [0,1,0]
+            electrostatics_force.addParticle(scale_id + alch_id + alchemical_type_id + [charge_new * 0., charge_new])
+            sterics_force.addParticle(scale_id + alch_id + alchemical_type_id + [sigma_new, sigma_new, epsilon_old * 0., epsilon_new])
 
         # now remove interactions between unique old/new
-        # now remove all exceptions that are nonzero
+        unique_news = self._alchemical_regions_by_type['unique_new_atoms']
+        unique_olds = self._alchemical_regions_by_type['unique_old_atoms']
+
+        for new in unique_news:
+            for old in unique_olds:
+                electrostatics_force.addExclusion(new, old)
+                sterics_force.addExclusion(new, old)
+
+        electrostatics_exception_force, sterics_exception_force = self._get_nonbonded_force('electrostatics', True), self._get_nonbonded_force('sterics', True)
+
         # now add add all nonzeroed exceptions to custom bond force
+        old_term_collector = {}
+        new_term_collector = {}
+
+        #gather the old system bond force terms into a dict
+        for term_idx in range(old_system_nbf.getNumExceptions():
+            p1, p2, chargeProd, sigma, epsilon = old_system_nbf.getExceptionParameters(term_idx) #grab the parameters
+            hybrid_p1, hybrid_p2 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2] #make hybrid indices
+            sorted_list = tuple(sorted([hybrid_p1, hybrid_p2])) #sort the indices
+            assert not sorted_list in old_term_collector.keys(), f"this bond already exists"
+            old_term_collector[sorted_list] = [term_idx, chargeProd, sigma, epsilon]
+
+        # repeat for the new system bond force
+        for term_idx in range(new_system_nbf.getNumExceptions()):
+            p1, p2, chargeProd, sigma, epsilon = new_system_bond_force.getBondParameters(term_idx)
+            hybrid_p1, hybrid_p2 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2]
+            sorted_list = tuple(sorted([hybrid_p1, hybrid_p2]))
+            assert not sorted_list in new_term_collector.keys(), f"this bond already exists"
+            new_term_collector[sorted_list] = [term_idx, chargeProd, sigma, epsilon]
+
+
+        # iterate over the old_term_collector and add appropriate bonds
+        for hybrid_index_pair in old_term_collector.keys():
+            idx_set = set(list(hybrid_index_pair))
+            scale_id = self.get_scale_identifier(idx_set)
+            alch_id, string_identifier = self.get_alch_identifier(idx_set)
+            if string_identifier == 'unique_old_atoms':
+                alchemical_type_id = [1,0,0]
+            elif string_identifier == 'core_atoms':
+                alchemical_type_id = [0,0,1]
+            else:
+                alchemical_type_id = [0,0,0]
+
+            old_idx, chargeProd_old, sigma_old, epsilon_old = old_term_collector[hybrid_index_pair]
+            try:
+                new_bond_idx, chargeProd_new, sigma_new, epsilon_new = new_term_collector[hybrid_index_pair]
+            except Exception as e: #this might be a unique old term
+                chargeProd_new, sigma_new, epsilon_new = chargeProd_old * 0., sigma_old, epsilon_old * 0.
+            if alch_id[0] == 1: #if the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
+                assert new_term_collector[hybrid_index_pair][1:] == old_term_collector[hybrid_index_pair][1:], f"hybrid_index_pair {hybrid_index_pair} bond term was identified in old term collector as {old_term_collector[hybrid_index_pair][1:]}, but in new term collector as {new_term_collector[hybrid_index_pair][1:]}"
+
+            #TODO : do these need to be unitless? check; also check if these terms are in the right order
+            electrostatics_term = (hybrid_index_pair[0], hybrid_index_pair[1], scale_id + alch_id + alchemical_type_id + [chargeProd_old, chargeProd_new])
+            sterics_term = (hybrid_index_pair[0], hybrid_index_pair[1], scale_id + alch_id + alchemical_type_id + [sigma_old, sigma_new, epsilon_old, epsilon_new])
+
+            electrostatics_force.addExclusion(*hybrid_index_pair)
+            sterics_force.addExclusion(*hybrid_index_pair)
+
+            if chargeProd_old.value_in_unit_system(unit.md_unit_system) + chargeProd_new.value_in_unit_system(unit.md_unit_system) + epsilon_old.value_in_unit_system(unit.md_unit_system) + epsilon_new.value_in_unit_system(unit.md_unit_system) == 0.0:
+                pass
+            else:
+                electrostatics_exception_force.addBond(*electrostatics_term)
+                sterics_exception_force.addBond(*sterics_term)
+
+
+        #make a modified new_term_collector that omits the terms that are previously handled
+        mod_new_term_collector = {key: val for key, val in new_term_collector.items() if key not in list(old_term_collector.keys())}
+
+        #now iterate over the modified new term collector and add appropriate bonds. these should only be unique new, right?
+        for hybrid_index_pair in mod_new_term_collector.keys():
+            idx_set = set(list(hybrid_index_pair))
+            scale_id = self.get_scale_identifier(idx_set)
+            alch_id, string_identifier = self.get_alch_identifier(idx_set)
+            assert string_identifier == 'unique_new_atoms', f"we are iterating over modified new term collector, but the string identifier returned {string_identifier}"
+            alchemical_type_id = [0,1,0] # can only be unique new
+            new_bond_idx, chargeProd_new, sigma_new, epsilon_new = new_term_collector[hybrid_index_pair]
+
+            electrostatics_term = (hybrid_index_pair[0], hybrid_index_pair[1], scale_id + alch_id + alchemical_type_id + [chargeProd_new * 0., chargeProd_new])
+            sterics_term = (hybrid_index_pair[0], hybrid_index_pair[1], scale_id + alch_id + alchemical_type_id + [sigma_new, sigma_new, epsilon_new * 0., epsilon_new])
+
+            electrostatics_force.addExclusion(*hybrid_index_pair)
+            sterics_force.addExclusion(*hybrid_index_pair)
+            if chargeProd_new.value_in_unit_system(unit.md_unit_system) + epsilon_new.value_in_unit_system(unit.md_unit_system) == 0.0:
+                pass
+            else:
+                electrostatics_exception_force.addBond(*electrostatics_term)
+                sterics_exception_force.addBond(*sterics_term)
+
+        self._hybrid_system.addForce(electrostatics_force)
+        self._hybrid_system.addForce(sterics_force)
+        self._hybrid_system.addForce(electrostatics_exception_force)
+        self._hybrid_system.addForce(sterics_exception_force)
+
+
+
+
 
 
 
@@ -3680,24 +3804,30 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
 
 
-    def _get_nonbonded_force(self, type):
+    def _get_nonbonded_force(self, type, exception = False):
         """
         write nonbonded terms (either electrostatics/sterics)
         """
+        str_type = type + '_exceptions' if exception else type
+
         old_system_nbf = self._old_system_forces['NonbondedForce']
         new_system_nbf = self._new_system_forces['NonbondedForce']
 
         assert type in ['electrostatics', 'sterics']
-        scale_bool_string = RxnHybridTopologyFactory.render_bool_string([i + f"_{type}" for i in self._scale_templates[0]],
+        scale_bool_string = RxnHybridTopologyFactory.render_bool_string([i + f"_{str_type}" for i in self._scale_templates[0]],
                                                                         self._scale_templates[1]
                                                                         )
 
-        old_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{type}_old" for i in range(self._num_alchemical_regions)],
+        old_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_old" for i in range(self._num_alchemical_regions)],
                                                                     ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
-        new_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{type}_new" for i in range(self._num_alchemical_regions)],
+        new_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_new" for i in range(self._num_alchemical_regions)],
                                                                     ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
 
-        expression = self._default_RF_expression if type == 'electrostatics' else self._default_steric_expression
+        if not exception:
+            expression = self._default_RF_expression if type == 'electrostatics' else self._default_steric_expression
+        else:
+            expression = self._default_RF_exception_expression if type == 'electrostatics' else self._default_steric_exception_expression
+
         if type == 'electrostatics':
             formatted_expression = expression.format(w_scale = self._w_RF_scale,
                                                      switching_ratio = self._RF_switching_ratio,
@@ -3717,10 +3847,16 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                                                     )
 
 
-        custom_nbf = CustomNonbondedForce(formatted_expression)
+        custom_nbf = CustomNonbondedForce(formatted_expression) if not exception else CustomBondForce(formatted_expression)
 
         for i in self._scale_templates[0]: #add the scaling global parameters
-            custom_nbf.addGlobalParameter(i + f"_{type}", 1.0)
+            custom_nbf.addGlobalParameter(i + f"_{str_type}", 1.0)
+
+        for i in [f"lambda_{i}_{str_type}_old" for i in range(self._num_alchemical_regions)]:
+            custom_nbf.addGlobalParameter(i, 1.)
+        for i in [f"lambda_{i}_{str_type}_new" for i in range(self._num_alchemical_regions)]:
+            custom_nbf.addGlobalParameter(i, 0.)
+
 
         #add per-bond parameter
         for i in self._scale_templates[1]: #add the scaling per bond parameters
@@ -3729,29 +3865,50 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         for i in ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)]:
             custom_nbf.addPerParticleParameter(i)
 
-        if type == 'electrostatics':
-            custom_nbf.addPerParticleParameter('charge_old')
-            custom_nbf.addPerParticleParameter('charge_new')
-        else:
-            custom_nbf.addPerParticleParameter('sigma_old')
-            custom_nbf.addPerParticleParameter('sigma_new')
 
-            custom_nbf.addPerParticleParameter('epsilon_old')
-            custom_nbf.addPerParticleParameter('epsilon_new')
+        custom_nbf.addPerParticleParameter('unique_old')
+        custom_nbf.addPerParticleParameter('unique_new')
+        custom_nbf.addPerParticleParameter('core')
+
+        if not exception:
+            if type == 'electrostatics':
+                custom_nbf.addPerParticleParameter('charge_old')
+                custom_nbf.addPerParticleParameter('charge_new')
+            else:
+                custom_nbf.addPerParticleParameter('sigma_old')
+                custom_nbf.addPerParticleParameter('sigma_new')
+
+                custom_nbf.addPerParticleParameter('epsilon_old')
+                custom_nbf.addPerParticleParameter('epsilon_new')
+        else:
+            if type == 'electrostatics':
+                custom_nbf.addPerParticleParameter('chargeProd_old')
+                custom_nbf.addPerParticleParameter('chargeProd_new')
+            else:
+                custom_nbf.addPerParticleParameter('sigma_old')
+                custom_nbf.addPerParticleParameter('sigma_new')
+
+                custom_nbf.addPerParticleParameter('epsilon_old')
+                custom_nbf.addPerParticleParameter('epsilon_new')
+
 
         #handle some nonbonded attributes
         standard_nonbonded_method = old_system_nbf.getNonbondedMethod()
-        custom_nbf.setNonbondedMethod(self._translate_nonbonded_method_to_custom(standard_nonbonded_method))
 
         if standard_nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
-            if type == 'electrostatics': # we use our own switching function
-                custom_nbf.setUseSwitchingFunction(False)
-                custom_nbf.setCutoffDistance(self._r_RF_cutoff)
-            else: # for sterics, set switching function
-                custom_nbf.setUseSwitchingFunction(True)
-                custom_nbf.setSwitchingDistance(self._r_sterics_cutoff * self._sterics_switching_ratio)
-                custom_nbf.setCutoffDistance(self._r_sterics_cutoff)
-                custom_nbf.setUseLongRangeCorrection(self._use_dispersion_correction)
+            if exception:
+                custom_nbf.setUsesPeriodicBoundaryConditions(True)
+            else:
+                custom_nbf.setNonbondedMethod(self._translate_nonbonded_method_to_custom(standard_nonbonded_method))
+
+                if type == 'electrostatics': # we use our own switching function
+                    custom_nbf.setUseSwitchingFunction(False)
+                    custom_nbf.setCutoffDistance(self._r_RF_cutoff)
+                else: # for sterics, set switching function
+                    custom_nbf.setUseSwitchingFunction(True)
+                    custom_nbf.setSwitchingDistance(self._r_sterics_cutoff * self._sterics_switching_ratio)
+                    custom_nbf.setCutoffDistance(self._r_sterics_cutoff)
+                    custom_nbf.setUseLongRangeCorrection(self._use_dispersion_correction)
         else:
             raise Exception(f"nonbonded method is not recognized")
 
