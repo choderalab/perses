@@ -268,7 +268,7 @@ class PointMutationExecutor(object):
             if charge_diff != 0:
                 new_water_indices_to_ionize = point_mutation_engine.get_water_indices(charge_diff, new_positions, topology_proposal._new_topology, radius=0.8)
                 _logger.info(f"new water indices to ionize {new_water_indices_to_ionize}")
-                PointMutationExecutor._neutralize_ions_in_system(new_water_indices_to_ionize, topology_proposal._new_system, charge_diff)
+                PointMutationExecutor._transform_waters_into_ions(new_water_indices_to_ionize, topology_proposal._new_system, charge_diff)
                 PointMutationExecutor._modify_atom_classes(new_water_indices_to_ionize, topology_proposal)
 
 
@@ -361,7 +361,7 @@ class PointMutationExecutor(object):
         return self.apo_rhtf_1
 
     @staticmethod
-    def _neutralize_ions_in_system(water_atoms, system, charge_diff):
+    def _transform_waters_into_ions(water_atoms, system, charge_diff):
         """
         given a system and an array of ints (corresponding to atoms to turn into ions), modify the nonbonded particle parameters in the system such that the Os are turned into the ion of interest and the charges of the Hs are zeroed.
 
