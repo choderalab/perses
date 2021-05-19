@@ -1531,7 +1531,11 @@ class PolymerProposalEngine(ProposalEngine):
         import mdtraj as md
         # Create trajectory
         traj = md.Trajectory(new_positions[np.newaxis, ...], md.Topology.from_openmm(new_topology))
+<<<<<<< HEAD
         water_atoms = traj.topology.select(f"water")
+=======
+        water_atoms = list(traj.topology.select("water"))
+>>>>>>> 323472926b41941ca8c8d618f65034324080293c
         query_atoms = traj.top.select('protein')
 
         # Get water atoms within radius of protein
