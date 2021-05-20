@@ -1406,7 +1406,12 @@ class PolymerProposalEngine(ProposalEngine):
                     # Note this does not include PRO since there's a problem with OpenMM's template DEBUG
     _positive_aminos = ['ARG', 'HIS', 'LYS']
     _negative_aminos = ['ASP', 'GLU']
-    _neutral_aminos =  [amino for amino in _aminos if amino not in (PolymerProposalEngine._positive_aminos + PolymerProposalEngine._negative_aminos)]
+
+    def _get_neutrals(aminos, positive, negative):
+        excluded = positive + negative
+        return [amino for amino in aminos if amino not in excluded]
+
+    _neutral_aminos = _get_neutrals(_aminos, _positive_aminos, _negative_aminos)
 
     # TODO: Document meaning of 'aggregate'
     def __init__(self, system_generator, chain_id, proposal_metadata=None, always_change=True, aggregate=False):
