@@ -911,7 +911,6 @@ def test_protein_counterion_topology_fix():
     """
     from perses.rjmc.topology_proposal import PolymerProposalEngine
     new_res = 'ASP'
-    counterion_name = 'Na+'
     charge_diff = 1
 
     # Make a vacuum system
@@ -946,23 +945,104 @@ def test_protein_counterion_topology_fix():
     assert charge_diff_test == charge_diff
 
     # Get the array of water indices (w.r.t. new topology) to turn into ions
-    water_indices = PolymerProposalEngine.get_water_indices(charge_diff = charge_diffs,
+    water_indices = PolymerProposalEngine.get_water_indices(charge_diff = charge_diff_test,
                                              new_positions = new_pos,
                                              new_topology = top_proposal._new_topology,
                                              radius=0.8)
 
     assert len(water_indices) == 3
 
-#if __name__ == "__main__":
+def test_protein_counterion_topology_fix_negitive():
+    """
+    mutate alanine dipeptide into ARG dipeptide and assert that the appropriate number oof water indices are identified
+    """
+    from perses.rjmc.topology_proposal import PolymerProposalEngine
+    new_res = 'ARG'
+    charge_diff = -1
 
-#    test_run_point_mutation_propose()
-#    test_mutate_from_every_amino_to_every_other()
-#    test_specify_allowed_mutants()
-#    test_propose_self()
-#    test_limiting_allowed_residues()
-#    test_run_peptide_library_engine()
-#    test_small_molecule_proposals()
-#    test_alanine_dipeptide_map()
-#    test_always_change()
-#    test_molecular_atom_mapping()
-# test_no_h_map()
+    # Make a vacuum system
+    atp, system_generator = generate_atp(phase='vacuum')
+
+    # Make a solvated system/topology/positions with modeller
+    modeller = app.Modeller(atp.topology, atp.positions)
+    modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9*unit.angstroms, ionicStrength=0.15*unit.molar)
+    solvated_topology = modeller.getTopology()
+    solvated_positions = modeller.getPositions()
+
+    # Canonicalize the solvated positions: turn tuples into np.array
+    atp.positions = unit.quantity.Quantity(value=np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit=unit.nanometers)
+    atp.topology = solvated_topology
+
+    atp.system = system_generator.create_system(atp.topology)
+
+    # Make a topology proposal and generate new positions
+    top_proposal, new_pos, _, _ = generate_dipeptide_top_pos_sys(topology = atp.topology,
+                                   new_res = new_res,
+                                   system = atp.system,
+                                   positions = atp.positions,
+                                   system_generator = system_generator,
+                                   conduct_geometry_prop = True,
+                                   conduct_htf_prop = False,
+                                   validate_energy_bookkeeping=True,
+                                   )
+
+    # Get the charge difference
+    charge_diff_test = PolymerProposalEngine._get_charge_difference(top_proposal._old_topology.residue_topology.name,
+                                                                top_proposal._new_topology.residue_topology.name)
+    assert charge_diff_test == charge_diff
+
+    # Get the array of water indices (w.r.t. new topology) to turn into ions
+    water_indices = PolymerProposalEngine.get_water_indices(charge_diff = charge_diff_test,
+                                             new_positions = new_pos,
+                                             new_topology = top_proposal._new_topology,
+                                             radius=0.8)
+
+    assert len(water_indices) == 3
+
+
+def test_protein_counterion_topology_fix_zero():
+    """
+    mutate alanine dipeptide into ASN dipeptide and assert that the appropriate number of water indices are identified
+    """
+    from perses.rjmc.topology_proposal import PolymerProposalEngine
+    new_res = 'ASN'
+    charge_diff = 0
+
+    # Make a vacuum system
+    atp, system_generator = generate_atp(phase='vacuum')
+
+    # Make a solvated system/topology/positions with modeller
+    modeller = app.Modeller(atp.topology, atp.positions)
+    modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9*unit.angstroms, ionicStrength=0.15*unit.molar)
+    solvated_topology = modeller.getTopology()
+    solvated_positions = modeller.getPositions()
+
+    # Canonicalize the solvated positions: turn tuples into np.array
+    atp.positions = unit.quantity.Quantity(value=np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit=unit.nanometers)
+    atp.topology = solvated_topology
+
+    atp.system = system_generator.create_system(atp.topology)
+
+    # Make a topology proposal and generate new positions
+    top_proposal, new_pos, _, _ = generate_dipeptide_top_pos_sys(topology = atp.topology,
+                                   new_res = new_res,
+                                   system = atp.system,
+                                   positions = atp.positions,
+                                   system_generator = system_generator,
+                                   conduct_geometry_prop = True,
+                                   conduct_htf_prop = False,
+                                   validate_energy_bookkeeping=True,
+                                   )
+
+    # Get the charge difference
+    charge_diff_test = PolymerProposalEngine._get_charge_difference(top_proposal._old_topology.residue_topology.name,
+                                                                top_proposal._new_topology.residue_topology.name)
+    assert charge_diff_test == charge_diff
+
+    # Get the array of water indices (w.r.t. new topology) to turn into ions
+    water_indices = PolymerProposalEngine.get_water_indices(charge_diff = charge_diff_test,
+                                             new_positions = new_pos,
+                                             new_topology = top_proposal._new_topology,
+                                             radius=0.8)
+
+    assert len(water_indices) == 0
