@@ -905,9 +905,9 @@ def test_simple_heterocycle_mapping(iupac_pairs = [('benzene', 'pyridine')]):
 
         assert num_hetero_maps > 0, f"there are no differences in atomic number mappings in {iupac_pair}"
 
-def test_protein_counterion_topology_fix():
+def test_protein_counterion_topology_fix_positive():
     """
-    mutate alanine dipeptide into ASP dipeptide and assert that the appropriate number oof water indices are identified
+    mutate alanine dipeptide into ASP dipeptide and assert that the appropriate number of water indices are identified
     """
     from perses.rjmc.topology_proposal import PolymerProposalEngine
     new_res = 'ASP'
@@ -954,7 +954,7 @@ def test_protein_counterion_topology_fix():
 
 def test_protein_counterion_topology_fix_negitive():
     """
-    mutate alanine dipeptide into ARG dipeptide and assert that the appropriate number oof water indices are identified
+    mutate alanine dipeptide into ARG dipeptide and assert that the appropriate number of water indices are identified
     """
     from perses.rjmc.topology_proposal import PolymerProposalEngine
     new_res = 'ARG'
