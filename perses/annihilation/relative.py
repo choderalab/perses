@@ -2851,8 +2851,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         self._transcribe_angles()
         self._transcribe_torsions()
 
-        #if 'NonbondedForce' in self._old_system_forces or 'NonbondedForce' in self._new_system_forces:
-        #    self._transcribe_nonbonded()
+        if 'NonbondedForce' in self._old_system_forces or 'NonbondedForce' in self._new_system_forces:
+            self._transcribe_nonbondeds()
         #    self._transcribe_exceptions()
 
         # Get positions for the hybrid
@@ -3643,8 +3643,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                 if string_identifier == 'unique_new_atoms':
                     self._hybrid_to_new_torsion_indices[hybrid_torsion_idx] = new_torsion_idx
 
-    def _transcribe_nonbondeds(self, type):
-        assert type in ['electrostatics', 'sterics']
+    def _transcribe_nonbondeds(self):
+        #assert type in ['electrostatics', 'sterics']
 
         old_system_nbf = self._old_system_forces['NonbondedForce']
         new_system_nbf = self._new_system_forces['NonbondedForce']
@@ -3714,7 +3714,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         # repeat for the new system bond force
         for term_idx in range(new_system_nbf.getNumExceptions()):
-            p1, p2, chargeProd, sigma, epsilon = new_system_bond_force.getBondParameters(term_idx)
+            p1, p2, chargeProd, sigma, epsilon = new_system_nbf.getExceptionParameters(term_idx)
             hybrid_p1, hybrid_p2 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2]
             sorted_list = tuple(sorted([hybrid_p1, hybrid_p2]))
             assert not sorted_list in new_term_collector.keys(), f"this bond already exists"
@@ -3804,7 +3804,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
 
 
-    def _get_nonbonded_force(self, type, exception = False):
+    def _get_nonbonded_force(self, type, exception=False):
         """
         write nonbonded terms (either electrostatics/sterics)
         """
@@ -3847,7 +3847,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                                                     )
 
 
-        custom_nbf = CustomNonbondedForce(formatted_expression) if not exception else CustomBondForce(formatted_expression)
+        custom_nbf = openmm.CustomNonbondedForce(formatted_expression) if not exception else openmm.CustomBondForce(formatted_expression)
 
         for i in self._scale_templates[0]: #add the scaling global parameters
             custom_nbf.addGlobalParameter(i + f"_{str_type}", 1.0)
@@ -3858,19 +3858,19 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             custom_nbf.addGlobalParameter(i, 0.)
 
 
-        #add per-bond parameter
-        for i in self._scale_templates[1]: #add the scaling per bond parameters
-            custom_nbf.addPerParticleParameter(i)
-
-        for i in ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)]:
-            custom_nbf.addPerParticleParameter(i)
-
-
-        custom_nbf.addPerParticleParameter('unique_old')
-        custom_nbf.addPerParticleParameter('unique_new')
-        custom_nbf.addPerParticleParameter('core')
-
         if not exception:
+
+            #add per-particle parameters parameter
+            for i in self._scale_templates[1]: #add the scaling per particle parameters
+                custom_nbf.addPerParticleParameter(i)
+
+            for i in ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)]:
+                custom_nbf.addPerParticleParameter(i)
+
+                custom_nbf.addPerParticleParameter('unique_old')
+                custom_nbf.addPerParticleParameter('unique_new')
+                custom_nbf.addPerParticleParameter('core')
+
             if type == 'electrostatics':
                 custom_nbf.addPerParticleParameter('charge_old')
                 custom_nbf.addPerParticleParameter('charge_new')
@@ -3881,20 +3881,31 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                 custom_nbf.addPerParticleParameter('epsilon_old')
                 custom_nbf.addPerParticleParameter('epsilon_new')
         else:
-            if type == 'electrostatics':
-                custom_nbf.addPerParticleParameter('chargeProd_old')
-                custom_nbf.addPerParticleParameter('chargeProd_new')
-            else:
-                custom_nbf.addPerParticleParameter('sigma_old')
-                custom_nbf.addPerParticleParameter('sigma_new')
+             #add per-bond parameters parameter
+            for i in self._scale_templates[1]: #add the scaling per bond parameters
+                custom_nbf.addPerBondParameter(i)
 
-                custom_nbf.addPerParticleParameter('epsilon_old')
-                custom_nbf.addPerParticleParameter('epsilon_new')
+            for i in ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)]:
+                custom_nbf.addPerBondParameter(i)
+
+                custom_nbf.addPerBondParameter('unique_old')
+                custom_nbf.addPerBondParameter('unique_new')
+                custom_nbf.addPerBondParameter('core')
+
+            if type == 'electrostatics':
+                custom_nbf.addPerBondParameter('chargeProd_old')
+                custom_nbf.addPerBondParameter('chargeProd_new')
+            else:
+                custom_nbf.addPerBondParameter('sigma_old')
+                custom_nbf.addPerBondParameter('sigma_new')
+
+                custom_nbf.addPerBondParameter('epsilon_old')
+                custom_nbf.addPerBondParameter('epsilon_new')
 
 
         #handle some nonbonded attributes
         standard_nonbonded_method = old_system_nbf.getNonbondedMethod()
-
+        print(standard_nonbonded_method)
         if standard_nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
             if exception:
                 custom_nbf.setUsesPeriodicBoundaryConditions(True)
