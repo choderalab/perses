@@ -1517,7 +1517,7 @@ class PolymerProposalEngine(ProposalEngine):
         charge_diff : int
             the charge difference between the old_system - new_system
         new_positions : np.ndarray(N, 3)
-            positions of atoms corresponding to new_topology
+            positions (nm) of atoms corresponding to new_topology
         new_topology : openmm.Topology
             topology of new system
         radius : float, default 0.8
