@@ -1483,7 +1483,7 @@ class PolymerProposalEngine(ProposalEngine):
         ----------
         current_resname : str
             three letter identifier for original residue
-        new_resnme : str
+        new_resname : str
             three letter identifier for new residue
 
         Returns
