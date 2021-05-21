@@ -18,7 +18,6 @@ from perses.utils.smallmolecules import render_atom_mapping
 from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
 from perses.rjmc import topology_proposal
 from collections import defaultdict
-import openeye.oechem as oechem
 from openmmforcefields.generators import SystemGenerator
 from openff.toolkit.topology import Molecule
 from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
@@ -43,6 +42,8 @@ def test_small_molecule_proposals():
     """
     Make sure the small molecule proposal engine generates molecules
     """
+    import openeye.oechem as oechem
+
     list_of_smiles = ['CCCC','CCCCC','CCCCCC']
     list_of_mols = []
     for smi in list_of_smiles:

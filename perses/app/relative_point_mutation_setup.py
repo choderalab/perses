@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 
-from perses.utils.openeye import createOEMolFromSDF, extractPositionsFromOEMol, oechem
+from perses.utils.openeye import createOEMolFromSDF, extractPositionsFromOEMol
 from perses.annihilation.relative import HybridTopologyFactory, RepartitionedHybridTopologyFactory
 from perses.rjmc.topology_proposal import PointMutationEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
@@ -17,7 +17,7 @@ from openff.toolkit.topology import Molecule
 from openmmforcefields.generators import SystemGenerator
 
 ENERGY_THRESHOLD = 1e-2
-temperature = 300 * unit.kelvin
+temperature = 298 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS']
@@ -168,6 +168,7 @@ class PointMutationExecutor(object):
         TODO : allow argument for spectator ligands besides the 'ligand_file'
 
         """
+        from openeye import oechem
 
         # First thing to do is load the apo protein to mutate...
         protein_pdbfile = open(protein_filename, 'r')
