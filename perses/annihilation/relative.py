@@ -2603,9 +2603,9 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
 
     _default_RF_expression = ' '.join(_default_RF_expr_list)
-    _default_RF_exception_expression = ' '.join(_default_steric_expr_list)
+    _default_RF_exception_expression = ' '.join(_default_RF_exception_expr_list)
 
-    _default_sterics_expr_list = ["{scale_bool_string} * U_sterics;",
+    _default_steric_expr_list = ["{scale_bool_string} * U_sterics;",
 
                                   "U_sterics = 4 * epsilon * x * (x - 1.0);",
                                   "x = (sigma / reff_sterics)^6;",
@@ -2634,7 +2634,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     # predefined steric parameters (fed to the `expression` via `format`): [scale_bool_string, old_bool_string, new_bool_string, w_scale, switching_ratio, r_cutoff]
 
     #steric exception
-    _default_steric_exception_expr_list
+    _default_steric_exception_expr_list = _default_steric_expr_list
     _default_steric_exception_expr_list[3] = "select(1 - environment_region, sigma_old * {old_bool_string} + sigma_new * {new_bool_string}, sigma_old);"
     _default_steric_exception_expr_list[4] = ''
     _default_steric_exception_expr_list[5] = ''
@@ -3795,7 +3795,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
 
 
-            hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2], self._old_to_hybrid_map[p3], self._old_to_hybrid_map[p4] #make hybrid indices
+        #    hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2], self._old_to_hybrid_map[p3], self._old_to_hybrid_map[p4] #make hybrid indices
 
 
 
