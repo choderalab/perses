@@ -1,5 +1,3 @@
-import numpy as np
-import os
 import yaml
 import itertools
 from openeye import oechem, oeiupac

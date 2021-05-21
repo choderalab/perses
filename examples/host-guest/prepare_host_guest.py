@@ -1,6 +1,4 @@
 import mdtraj as md
-import numpy as np
-import simtk.openmm as openmm
 import openeye.oechem as oechem
 import openeye.oeiupac as oeiupac
 import tempfile

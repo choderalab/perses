@@ -3,8 +3,6 @@
 Generate ffxml files for ligands in a multi-mole mol2.
 """
 
-import openeye
-import openmoltools
 
 mol2_filename = 'Imatinib-epik-charged.mol2'
 ffxml_filename = 'Imatinib-epik-charged.ffxml'

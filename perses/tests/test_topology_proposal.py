@@ -154,7 +154,6 @@ def create_simple_protein_system_generator():
 
 def create_insulin_topology_engine(chain_id = 'A', allowed_mutations = None, pdbid = "2HIU"):
     import perses.rjmc.topology_proposal as topology_proposal
-    from openmmforcefields.generators import SystemGenerator
 
     topology, positions = load_pdbid_to_openmm(pdbid)
     modeller = app.Modeller(topology, positions)
@@ -782,7 +781,7 @@ def test_ring_breaking_detection():
     Test the detection of ring-breaking transformations.
 
     """
-    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, AtomMapper
+    from perses.rjmc.topology_proposal import AtomMapper
     from openmoltools.openeye import iupac_to_oemol, generate_conformers
     molecule1 = iupac_to_oemol("naphthalene")
     molecule2 = iupac_to_oemol("benzene")
@@ -814,8 +813,7 @@ def test_molecular_atom_mapping():
 
     """
     from openeye import oechem
-    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, AtomMapper
-    from itertools import combinations
+    from perses.rjmc.topology_proposal import AtomMapper
 
     # Test mappings for JACS dataset ligands
     for dataset_name in ['CDK2']: #, 'p38', 'Tyk2', 'Thrombin', 'PTP1B', 'MCL1', 'Jnk1', 'Bace']:
@@ -854,8 +852,7 @@ def test_map_strategy():
 
     """
     from openeye import oechem
-    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, AtomMapper
-    from itertools import combinations
+    from perses.rjmc.topology_proposal import AtomMapper
 
     # Test mappings for JACS dataset ligands
     for dataset_name in ['Jnk1']:

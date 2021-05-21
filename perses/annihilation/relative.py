@@ -1025,7 +1025,6 @@ class HybridTopologyFactory(object):
 
             elif len(index_set.intersection(self._atom_classes['environment_atoms'])) == 1 and len(index_set.intersection(self._atom_classes['core_atoms'])) == 1:
                 _logger.debug(f"\t\thandle_harmonic_bonds: bond_index {bond_index} is an environemnt-core; this has been previously added")
-                pass
 
             else:
                 raise Exception(f"\t\thybrid index set {index_set} does not fit into a canonical atom type")
@@ -2187,7 +2186,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
             force_names = getattr(self, '_{}_system_forces'.format(system_name)).keys()
             unknown_forces = set(force_names) - set(self._known_forces)
             if len(unknown_forces) > 0:
-                raise ValueError("Unkown forces {} encountered in {} system" % (unknown_forces, system_name))
+                raise ValueError(f"Unkown forces {unknown_forces} encountered in {system_name} system")
         _logger.info("No unknown forces.")
 
         # Get and store the nonbonded method from the system:

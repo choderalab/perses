@@ -9,7 +9,7 @@ __author__ = 'John D. Chodera'
 
 from openeye import oechem, oegraphsim
 from openmoltools.openeye import generate_conformers
-from simtk import openmm, unit
+from simtk import unit
 from simtk.openmm import app
 import simtk.unit as unit
 import numpy as np

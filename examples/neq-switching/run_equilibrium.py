@@ -1,19 +1,8 @@
 import numpy as np
 import os
-import tqdm
-from openeye import oechem, oeiupac
-from openmmtools import integrators, states, mcmc, constants
-from openmoltools import forcefield_generators
-from perses.rjmc.topology_proposal import TopologyProposal, SystemGenerator
-from perses.rjmc.geometry import FFAllAngleGeometryEngine
-from perses.annihilation.ncmc_switching import NCMCEngine
-from perses.utils.openeye import extractPositionsFromOEMol
-from simtk import openmm, unit
-from io import StringIO
+from openmmtools import integrators
+from simtk import openmm
 from simtk.openmm import app
-import copy
-from perses.dispersed.feptasks import compute_reduced_potential
-import mdtraj as md
 
 def run_equilibrium(system, topology, configuration, n_steps, report_interval, equilibration_steps, filename):
     from mdtraj.reporters import HDF5Reporter

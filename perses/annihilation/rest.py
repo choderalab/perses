@@ -6,13 +6,8 @@ From a standard simtk.openmm.system, make a REST2-amenable system
 Imports
 """
 import simtk.openmm as openmm
-import simtk.unit as unit
-import mdtraj as md
-import numpy as np
 import copy
-import enum
 from perses.annihilation.relative import HybridTopologyFactory
-import itertools
 
 #######LOGGING#############################
 import logging
