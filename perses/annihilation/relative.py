@@ -2587,7 +2587,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                              "r_switch = r_cutoff * {switching_ratio};",
 
                              # reaction field parameters
-                             "eps_RF = {eps_RF}";
+                             "eps_RF = {eps_RF};"
                              "r_cutoff = {r_cutoff};"
                              ]
     # predefined RF parameters (fed to the `expression` via `format`): [scale_bool_string, old_bool_string, new_bool_string, w_scale, switching_ratio, eps_RF, r_cutoff]
@@ -2659,19 +2659,19 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                  new_positions,
 
                  #scaling arguments
-                 scale_regions = None,
+                 scale_regions=None,
 
                  #electrostatics
-                 RF_switching_ratio = 0.25, # is this okay?
-                 epsilon_RF = 78.8 #this is approximately correct for pure water,
-                 r_RF_cutoff = 1.4 * unit.nanometers,  # default cutoff for reaction field electrostatics
-                 w_RF_scale = 1.
+                 RF_switching_ratio=0.25, # is this okay?
+                 epsilon_RF=78.8, #this is approximately correct for pure water,
+                 r_RF_cutoff=1.4 * unit.nanometers,  # default cutoff for reaction field electrostatics
+                 w_RF_scale=1.,
 
                  #sterics
-                 sterics_switching_ratio = 0.25, # same for RF?
-                 r_sterics_cutoff = 1.4 * unit.nanometers # same as RF?
-                 w_sterics_scale = 1.
-                 use_dispersion_correction = False,
+                 sterics_switching_ratio=0.25, # same for RF?
+                 r_sterics_cutoff=1.4 * unit.nanometers, # same as RF?
+                 w_sterics_scale=1.,
+                 use_dispersion_correction=False,
                  **kwargs):
         """
         reimplementation of `HybridTopologyFactory` that supports reaction field electrostatics, multiple alchemical regions, and multiple scaling (e.g. via REST2)
@@ -3705,7 +3705,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         new_term_collector = {}
 
         #gather the old system bond force terms into a dict
-        for term_idx in range(old_system_nbf.getNumExceptions():
+        for term_idx in range(old_system_nbf.getNumExceptions()):
             p1, p2, chargeProd, sigma, epsilon = old_system_nbf.getExceptionParameters(term_idx) #grab the parameters
             hybrid_p1, hybrid_p2 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2] #make hybrid indices
             sorted_list = tuple(sorted([hybrid_p1, hybrid_p2])) #sort the indices
