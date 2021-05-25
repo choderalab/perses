@@ -8,7 +8,7 @@ Analysis methods for perses simulations.
 Cache objects
 -------------
 
-.. currentmodule:: perses.analysis
+.. currentmodule:: perses.analysis.analysis
 .. autosummary::
     :nosignatures:
     :toctree: api/generated/

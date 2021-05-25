@@ -49,7 +49,7 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
     4
     """
     from openeye import oechem
-    from openeye.oechem import OEGraphMol, OESmilesToMol, OECreateIsoSmiString
+    from openeye.oechem import OEGraphMol, OESmilesToMol
     from perses.tests.utils import has_undefined_stereocenters, enumerate_undefined_stereocenters
     sanitized_smiles_set = set()
     OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens  ## IVY
@@ -121,7 +121,7 @@ def show_topology(topology):
     Outputs bond atoms and bonds in topology object
 
     Paramters
-    ---------
+    ----------
     topology : Topology object
     """
     output = ""
@@ -139,8 +139,8 @@ def render_single_molecule(filename, molecule, width=1200, height=600):
     """
     simple function to create an oemol image
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     filename : str
         The PDF filename to write to.
     molecule : openeye.oechem.OEMol
@@ -150,7 +150,7 @@ def render_single_molecule(filename, molecule, width=1200, height=600):
     height : int, optional, default=1200
         Height in pixels
     """
-    from openeye import oechem, oedepict
+    from openeye import oedepict
     oedepict.OEPrepareDepiction(molecule)
     oedepict.OERenderMolecule(filename, molecule)
 
@@ -269,6 +269,33 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
         oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEGreen),oedepict.OEHighlightStyle_Stick, core_change)
     oedepict.OERenderMolecule(ofs, ext, rdisp)
     ofs.close()
+
+
+def render_protein_residue_atom_mapping(topology_proposal, filename, width = 1200, height=600):
+    """
+    wrap the `render_atom_mapping` method around protein point mutation topologies.
+    TODO : make modification to `render_atom_mapping` so that the backbone atoms are not written in the output.
+
+    arguments
+        topology_proposal : perses.rjmc.topology_proposal.TopologyProposal object
+            topology proposal of protein mutation
+        filename : str
+            filename to write the map
+        width : int
+            width of image
+        height : int
+            height of image 
+    """
+    from perses.utils.smallmolecules import render_atom_mapping
+    oe_res_maps = {}
+    for omm_new_idx, omm_old_idx in topology_proposal._new_to_old_atom_map.items():
+        if omm_new_idx in topology_proposal._new_topology.residue_to_oemol_map.keys():
+            try:
+                oe_res_maps[topology_proposal._new_topology.residue_to_oemol_map[omm_new_idx]] = topology_proposal._old_topology.residue_to_oemol_map[omm_old_idx]
+            except:
+                pass
+
+    render_atom_mapping(filename, topology_proposal._old_topology.residue_oemol, topology_proposal._new_topology.residue_oemol, oe_res_maps)
 
 
 def generate_ligands_figure(molecules,figsize=None,filename='ligands.png'):

@@ -15,15 +15,10 @@ __author__ = 'John D. Chodera'
 # IMPORTS
 ################################################################################
 
-from simtk import openmm, unit
-from simtk.openmm import app
 import mdtraj as md
 import numpy as np
-from openmmtools import testsystems
-import copy
 import time
-from openmmtools.states import SamplerState, ThermodynamicState, CompoundThermodynamicState, group_by_compatibility
-from openmmtools.multistate import sams, replicaexchange
+from openmmtools.states import SamplerState, ThermodynamicState
 from openmmtools import cache, utils
 from perses.dispersed.utils import configure_platform
 cache.global_context_cache.platform = configure_platform(utils.get_fastest_platform().getName())
@@ -134,7 +129,7 @@ class ExpandedEnsembleSampler(object):
 
     """
     def __init__(self, sampler, topology, state_key, proposal_engine, geometry_engine, log_weights=None, options=None, platform=None, envname=None, storage=None, ncmc_write_interval=1):
-        """
+        r"""
         Create an expanded ensemble sampler.
 
         p(x,k) \propto \exp[-u_k(x) + g_k]
@@ -239,8 +234,8 @@ class ExpandedEnsembleSampler(object):
         log_weight : float
             The log weight of the provided state key.
 
-        Note
-        ----
+        Notes
+        -----
         This adds the key to the self.log_weights dict.
 
         """
@@ -253,8 +248,8 @@ class ExpandedEnsembleSampler(object):
         Given an OpenMM system object, create a corresponding ThermodynamicState that has the same
         temperature and pressure as the current thermodynamic state.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         system : openmm.System
             The OpenMM system for which to create the thermodynamic state
 
@@ -385,7 +380,6 @@ class ExpandedEnsembleSampler(object):
         """
         if self.verbose: print("Updating chemical state with geometry-ncmc-geometry scheme...")
 
-        from perses.tests.utils import compute_potential
 
         logP_chemical_proposal = topology_proposal.logp_proposal
 
@@ -632,7 +626,6 @@ class SAMSSampler(object):
 
         """
         from scipy.special import logsumexp
-        from perses.utils.openeye import smiles_to_oemol
 
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
@@ -830,7 +823,7 @@ class MultiTargetDesign(object):
 
     """
     def __init__(self, target_samplers, storage=None, verbose=False):
-        """
+        r"""
         Initialize a multi-objective design sampler with the specified target sampler powers.
 
         Parameters

@@ -42,6 +42,7 @@ requirements:
     - tqdm
     - dask-jobqueue
     - openmmforcefields
+    - dicttoxml
 #  - pip:
 #    - codecov
 

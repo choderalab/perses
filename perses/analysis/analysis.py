@@ -13,22 +13,14 @@ __author__ = 'John D. Chodera'
 # IMPORTS
 ################################################################################
 
-import os, os.path
-import sys, math
 import numpy as np
-import copy
-import time
-import netCDF4 as netcdf
-from openeye import oeiupac, oechem
-import pickle
-import json
 import itertools
 import pymbar
 from perses import storage
+import seaborn as sns
 
 import matplotlib as mpl
 mpl.use('Agg')
-import seaborn as sns
 
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
@@ -92,6 +84,8 @@ class Analysis(object):
         state_transition_iupac : [str, str]
             The pair of molecules in IUPAC names
         """
+        from openeye import oeiupac, oechem
+
         state_transition_iupac = []
         for state in state_transition:
             mol = oechem.OEMol()
@@ -146,7 +140,6 @@ class Analysis(object):
         :param environment:
         :return:
         """
-        pass
 
     def plot_chemical_trajectory(self, environment, filename):
         """
@@ -268,7 +261,6 @@ class Analysis(object):
 
         """
         # TODO
-        pass
 
     def extract_logP_values(self, environment, logP_accept_component, subtract_sams=False):
         """
@@ -413,7 +405,7 @@ class Analysis(object):
         """
         Generate histograms of each component of Expanded Ensemble log acceptance probability
 
-        Arguments:
+        Parameters
         ----------
         environment : str
             The environment to use

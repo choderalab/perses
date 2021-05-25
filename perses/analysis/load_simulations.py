@@ -1,9 +1,3 @@
-import numpy as np
-import matplotlib.pyplot as plt
-import sys
-from openeye import oechem, oegraphsim
-from openmmtools.constants import kB
-
 import logging
 _logger = logging.getLogger()
 _logger.setLevel(logging.INFO)
@@ -119,8 +113,6 @@ class Simulation(object):
         None
 
         """
-        from pymbar import MBAR
-        from perses.analysis import utils
         import os
         from openmmtools.multistate import MultiStateReporter, MultiStateSamplerAnalyzer
         from simtk import unit
@@ -182,8 +174,6 @@ class Simulation(object):
         None
 
         """
-        from pymbar import timeseries
-        from pymbar import MBAR
         from perses.analysis import utils
         from simtk import unit
         import os

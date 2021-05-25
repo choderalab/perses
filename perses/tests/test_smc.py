@@ -1,7 +1,6 @@
 ###########################################
 # IMPORTS
 ###########################################
-from simtk.openmm import app
 from simtk import unit, openmm
 import numpy as np
 import os
@@ -9,14 +8,11 @@ from nose.tools import nottest
 from unittest import skipIf
 from perses.app.setup_relative_calculation import *
 from perses.annihilation.relative import HybridTopologyFactory
-from perses.dispersed import parallel
-from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
 from perses.app.relative_setup import RelativeFEPSetup
 from perses.dispersed.smc import SequentialMonteCarlo
-from simtk import openmm, unit
 from openmmtools.constants import kB
 from perses.dispersed.utils import *
-from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
+from openmmtools.states import ThermodynamicState, CompoundThermodynamicState
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
 #######################
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
@@ -233,7 +229,7 @@ def test_create_endstates():
     """
     test the creation of unsampled endstates
     """
-    from pkg_resources import resource_filename        
+    from pkg_resources import resource_filename
     smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
     fe_setup = RelativeFEPSetup(ligand_input = smiles_filename,
                                 old_ligand_index = 0,

@@ -2,70 +2,22 @@
 This file contains the base classes for topology proposals
 """
 
-from simtk import unit
-
-from simtk import openmm
 from simtk.openmm import app
 
-from collections import namedtuple
 import copy
-import warnings
 import logging
 import itertools
-import json
 import os
-import openeye.oechem as oechem
 import numpy as np
-import openeye.oeomega as oeomega
-import tempfile
 import networkx as nx
-import openeye.oegraphsim as oegraphsim
-from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import openmoltools.forcefield_generators as forcefield_generators
 from perses.storage import NetCDFStorageView
-from io import StringIO
-import openmoltools
-import base64
-import progressbar
-from typing import List, Dict
 from perses.rjmc.geometry import NoTorsionError
 from functools import partial
 try:
     from subprocess import getoutput  # If python 3
 except ImportError:
     from commands import getoutput  # If python 2
-
-################################################################################
-# CONSTANTS
-################################################################################
-
-OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
-
-# TODO write a mapping-protocol class to handle these options
-
-# weak requirements for mapping atoms == more atoms mapped, more in core
-# atoms need to match in aromaticity. Same with bonds.
-# maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
-WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic #| oechem.OEExprOpts_IntType
-WEAK_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
-
-# default atom expression, requires same aromaticitiy and hybridization
-# bonds need to match in bond order
-# ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
-DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_IntType
-DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
-
-# strong requires same hybridization AND the same atom type
-# bonds are same as default, require them to match in bond order
-STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms
-STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
-
-# specific to proteins
-# PROTEIN_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_EqAromatic
-# PROTEIN_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity
-PROTEIN_ATOM_EXPRESSION = DEFAULT_ATOM_EXPRESSION
-PROTEIN_BOND_EXPRESSION = DEFAULT_BOND_EXPRESSION
-
 
 ################################################################################
 # LOGGER
@@ -84,8 +36,8 @@ def add_method(object, function):
         """
         Bind a function to an object instance
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         object : class instance
             object to which function will be bound
         function : function
@@ -100,8 +52,8 @@ def set_residue_oemol_and_openmm_topology_attributes(object, residue_oemol, resi
         openmm.Topology.residue,
         and the corresponding index map.
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     object : class instance
         object to which function will be bound
     residue_oemol : openeye.oechem.OEMol
@@ -127,6 +79,7 @@ def _get_networkx_molecule(self):
     graph : NetworkX.Graph
         networkx representation of the residue
     """
+    import openeye.oechem as oechem
     graph = nx.Graph()
 
     oemol_atom_dict = {atom.GetIdx() : atom for atom in self.residue_oemol.GetAtoms()}
@@ -180,7 +133,6 @@ def _get_networkx_molecule(self):
                 graph.edges[index_rev_a, index_rev_b]['oemol_bond'] = bond
         except Exception as e:
             _logger.debug(f"\tbond oemol loop exception: {e}")
-            pass
 
     _logger.debug(f"\tgraph nodes: {graph.nodes()}")
     return graph
@@ -189,8 +141,8 @@ def augment_openmm_topology(topology, residue_oemol, residue_topology, residue_t
     """
     Add the networkx builder tools as attribute and methods to the specified topology
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     topology : simtk.openmm.topology.Topology
         topology that will be augmented
     residue_oemol : openeye.oechem.OEMol
@@ -252,7 +204,14 @@ def deepcopy_topology(source_topology):
     append_topology(topology, source_topology)
     return topology
 
-def has_h_mapped(atommap, mola: oechem.OEMol, molb: oechem.OEMol):
+def has_h_mapped(atommap, mola, molb):
+    """
+    Parameters
+    mola : oechem.OEMol
+    molb : oechem.OEMol
+    """
+
+    import openeye.oechem as oechem
     for a_atom, b_atom in atommap.items():
         if mola.GetAtom(oechem.OEHasAtomIdx(a_atom)).GetAtomicNum() == 1 or molb.GetAtom(oechem.OEHasAtomIdx(b_atom)).GetAtomicNum() == 1:
             return True
@@ -349,6 +308,26 @@ class AtomMapper(object):
         return all_scores
 
     @staticmethod
+    def _get_mol_atom_map_by_positions(molA, molB, rtol=1e-5, atol=1e-3):
+        """
+        Return an atom map whereby atoms are mapped if the positions of the atoms are overlapping via np.isclose
+        """
+        molA_positions = molA.GetCoords()
+        molB_positions = molB.GetCoords()
+        molB_backward_positions = {val: key for key, val in molB_positions.items()}
+
+        returnable = {}
+        for a_idx, a_pos_tup in molA_positions.items():
+            match_pos = [idx for idx, b_pos in molB_positions.items() if np.allclose(np.array(a_pos_tup), np.array(b_pos), rtol=rtol, atol=atol)]
+            if not len(match_pos) in [0,1]:
+                raise Exception(f"there are multiple molB positions with the same coordinates as molA index {a_idx} (by OEMol indexing)")
+            if len(match_pos) == 1:
+                returnable[match_pos[0]] = a_idx
+                #returnable[a_idx] = match_pos[0]
+
+        return returnable
+
+    @staticmethod
     def _get_mol_atom_map(molA,
                           molB,
                           atom_expr=None,
@@ -403,6 +382,25 @@ class AtomMapper(object):
             dictionary of scores (keys) and maps (dict)
 
         """
+        import openeye.oechem as oechem
+
+        # weak requirements for mapping atoms == more atoms mapped, more in core
+        # atoms need to match in aromaticity. Same with bonds.
+        # maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
+        WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic #| oechem.OEExprOpts_IntType
+        WEAK_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
+        # default atom expression, requires same aromaticitiy and hybridization
+        # bonds need to match in bond order
+        # ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
+        DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_IntType
+        DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
+        # strong requires same hybridization AND the same atom type
+        # bonds are same as default, require them to match in bond order
+        STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms
+        STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
         allowed_map_strategy = ['core','geometry', 'matching_criterion', 'random', 'weighted-random', 'return-all']
         assert map_strategy in allowed_map_strategy, f'map_strategy cannot be {map_strategy}, it must be one of the allowed options {allowed_map_strategy}.'
         _logger.info(f'Using {map_strategy} to chose best atom map')
@@ -440,7 +438,8 @@ class AtomMapper(object):
                                                  atom_expr=oechem.OEExprOpts_RingMember | oechem.OEExprOpts_IntType,
                                                  bond_expr=oechem.OEExprOpts_RingMember,
                                                  external_inttypes=True,
-                                                 unique=False)
+                                                 unique=False,
+                                                 matching_criterion=matching_criterion)
 
 
         _logger.info(f'Scaffold has symmetry of {len(scaffold_maps)}')
@@ -450,10 +449,13 @@ class AtomMapper(object):
             _logger.warning('Proceeding with direct mapping of molecules, but please check atom mapping and the geometry of the ligands.')
 
             # if no commonality with the scaffold, don't use it.
+            # why weren't matching arguments carried to these mapping functions? is there an edge case that i am missing?
+            # it still doesn't fix the protein sidechain mapping problem
             all_molecule_maps = AtomMapper._get_all_maps(molA, molB,
                                                      external_inttypes=external_inttypes,
                                                      atom_expr=atom_expr,
-                                                     bond_expr=bond_expr)
+                                                     bond_expr=bond_expr,
+                                                     matching_criterion=matching_criterion)
             _logger.info(f'len {all_molecule_maps}')
             for x in all_molecule_maps:
                 _logger.info(x)
@@ -467,7 +469,8 @@ class AtomMapper(object):
 
             scaffold_A_maps = AtomMapper._get_all_maps(molA, scaffoldA,
                                      atom_expr=oechem.OEExprOpts_AtomicNumber,
-                                     bond_expr=0)
+                                     bond_expr=0,
+                                     matching_criterion=matching_criterion)
             _logger.info(f'{len(scaffold_A_maps)} scaffold maps for A')
             scaffold_A_map = scaffold_A_maps[0]
             _logger.info(f'Scaffold to molA: {scaffold_A_map}')
@@ -476,7 +479,8 @@ class AtomMapper(object):
 
             scaffold_B_maps = AtomMapper._get_all_maps(molB, scaffoldB,
                                      atom_expr=oechem.OEExprOpts_AtomicNumber,
-                                     bond_expr=0)
+                                     bond_expr=0,
+                                     matching_criterion=matching_criterion)
             _logger.info(f'{len(scaffold_B_maps)} scaffold maps for B')
             scaffold_B_map = scaffold_B_maps[0]
             _logger.info(f'Scaffold to molB: {scaffold_B_map}')
@@ -512,7 +516,8 @@ class AtomMapper(object):
                 molecule_maps = AtomMapper._get_all_maps(molA, molB,
                                                      external_inttypes=True,
                                                      atom_expr=atom_expr,
-                                                     bond_expr=bond_expr)
+                                                     bond_expr=bond_expr,
+                                                     matching_criterion=matching_criterion)
                 all_molecule_maps.extend(molecule_maps)
 
         if not allow_ring_breaking:
@@ -636,6 +641,25 @@ class AtomMapper(object):
             dictionary of scores (keys) and maps (dict)
 
         """
+        import openeye.oechem as oechem
+
+        # weak requirements for mapping atoms == more atoms mapped, more in core
+        # atoms need to match in aromaticity. Same with bonds.
+        # maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
+        WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic #| oechem.OEExprOpts_IntType
+        WEAK_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
+        # default atom expression, requires same aromaticitiy and hybridization
+        # bonds need to match in bond order
+        # ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
+        DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_IntType
+        DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
+        # strong requires same hybridization AND the same atom type
+        # bonds are same as default, require them to match in bond order
+        STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms
+        STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
         map_strength_dict = {'default': [DEFAULT_ATOM_EXPRESSION, DEFAULT_BOND_EXPRESSION],
                              'weak': [WEAK_ATOM_EXPRESSION, WEAK_BOND_EXPRESSION],
                              'strong': [STRONG_ATOM_EXPRESSION, STRONG_BOND_EXPRESSION]}
@@ -777,8 +801,8 @@ class AtomMapper(object):
         """
         Create a dict of {pattern_atom: target_atom}
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         current_mol : openeye.oechem.oemol object
         proposed_mol : openeye.oechem.oemol object
         match : oechem.OEMCSSearch.Match iter
@@ -811,8 +835,8 @@ class AtomMapper(object):
         """
         Returns an atom map that omits hydrogen-to-nonhydrogen atom maps AND X-H to Y-H where element(X) != element(Y)
         or aromatic(X) != aromatic(Y)
-        Arguments
-        ---------
+        Parameters
+        ----------
         old_mol : openeye.oechem.oemol object
         new_mol : openeye.oechem.oemol object
         match : openeye.oechem.OEMatchBase
@@ -823,6 +847,7 @@ class AtomMapper(object):
         new_to_old_atom_map : dict
             map of new to old atom indices
         """
+        import openeye.oechem as oechem
         new_to_old_atom_map = {}
         pattern_to_target_map = AtomMapper._create_pattern_to_target_map(old_mol, new_mol, match, matching_criterion)
         for pattern_atom, target_atom in pattern_to_target_map.items():
@@ -854,6 +879,7 @@ class AtomMapper(object):
         ring_as_base_two : int
             binary integer corresponding to the atoms ring membership
         """
+        import openeye.oechem as oechem
         rings = ''
         for i in range(3, max_ring_size+1): #  smallest feasible ring size is 3
             rings += str(int(oechem.OEAtomIsInRingSize(atom, i)))
@@ -862,6 +888,7 @@ class AtomMapper(object):
 
     @staticmethod
     def _assign_bond_ring_id(bond, max_ring_size=10):
+        import openeye.oechem as oechem
         """ Returns the int type based on the ring occupancy
         of the bond
 
@@ -969,6 +996,7 @@ class AtomMapper(object):
                     if True, flip two
                     else: do nothing
         """
+        import openeye.oechem as oechem
         pattern_atoms = { atom.GetIdx() : atom for atom in current_mol.GetAtoms() }
         target_atoms = { atom.GetIdx() : atom for atom in proposed_mol.GetAtoms() }
         # _logger.warning(f"\t\t\told oemols: {pattern_atoms}")
@@ -1118,6 +1146,7 @@ class AtomMapper(object):
         """
         """
         """
+        import openeye.oechem as oechem
         score_list = {}
         for idx, match in enumerate(matches):
             counter_arom, counter_aliph = 0, 0
@@ -1154,8 +1183,8 @@ class TopologyProposal(object):
     This is a container class with convenience methods to access various objects needed
     for a topology proposal
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     new_topology : simtk.openmm.topology.Topology object (augmented)
         openmm Topology representing the proposed new system
     new_system : simtk.openmm.System object
@@ -1322,8 +1351,8 @@ class ProposalEngine(object):
     This defines a type which, given the requisite metadata, can produce Proposals (namedtuple)
     of new topologies.
 
-    Arguments
-    --------
+    Parameters
+    ----------
     system_generator : SystemGenerator
         The SystemGenerator to use to generate new System objects for proposed Topology objects
     proposal_metadata : dict
@@ -1344,8 +1373,8 @@ class ProposalEngine(object):
         """
         Base interface for proposal method.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         current_system : simtk.openmm.System object
             The current system object
         current_topology : simtk.openmm.app.Topology object
@@ -1376,7 +1405,6 @@ class ProposalEngine(object):
         chemical_state_key : str
             The chemical_state_key
         """
-        pass
 
     @property
     def chemical_state_list(self):
@@ -1392,7 +1420,9 @@ class PolymerProposalEngine(ProposalEngine):
     # TODO: Document meaning of 'aggregate'
     def __init__(self, system_generator, chain_id, proposal_metadata=None, always_change=True, aggregate=False):
         """
-        Create a polymer proposal engine
+        Create a polymer proposal engine.
+
+        This base class is not meant to be invoked directly.
 
         Parameters
         ----------
@@ -1405,12 +1435,10 @@ class PolymerProposalEngine(ProposalEngine):
         always_change : bool, optional, default=True
             If True, will not propose self transitions
         aggregate : bool, optional, default=False
-            ???????
+            (FIXME: Description needed!!)
 
-        This base class is not meant to be invoked directly.
+
         """
-        import pickle
-        from perses.utils.smallmolecules import render_atom_mapping
         _logger.debug(f"Instantiating PolymerProposalEngine")
         super(PolymerProposalEngine,self).__init__(system_generator=system_generator, proposal_metadata=proposal_metadata, always_change=always_change)
         self._chain_id = chain_id # chain identifier defining polymer to be modified
@@ -1463,8 +1491,8 @@ class PolymerProposalEngine(ProposalEngine):
         """
         Generate a TopologyProposal
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         current_system : simtk.openmm.System object
             The current system object
         current_topology : simtk.openmm.app.Topology object
@@ -1672,8 +1700,8 @@ class PolymerProposalEngine(ProposalEngine):
         """
         return the maps of the adjacent residue atoms; here, we will ALWAYS consider the atoms of the residues adjacent to the mutation residue to be core
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         old_topology : simtk.openmm.app.Topology object
             topology of the old system
         new_topology : simtk.openmm.app.Topology object
@@ -1700,7 +1728,7 @@ class PolymerProposalEngine(ProposalEngine):
         old_prev_res = [res for res in old_chain.residues() if res.index == prev_res_index][0]
 
         assert new_prev_res.name == old_prev_res.name, f"the new residue left adjacent to mutation res (name {new_prev_res.name}) is not the name of the old residue left adjacent to mutation res (name {old_prev_res.name})"
-        assert new_next_res.name == new_next_res.name, f"the new residue right adjacent to mutation res (name {new_next_res.name}) is not the name of the old residue right adjacent to mutation res (name {old_next_res.name})"
+        assert new_next_res.name == old_next_res.name, f"the new residue right adjacent to mutation res (name {new_next_res.name}) is not the name of the old residue right adjacent to mutation res (name {old_next_res.name})"
 
         new_next_res_to_old_next_res_map = {new_atom.index : old_atom.index for new_atom, old_atom in zip(new_next_res.atoms(), old_next_res.atoms())}
         new_prev_res_to_old_prev_res_map = {new_atom.index : old_atom.index for new_atom, old_atom in zip(new_prev_res.atoms(), old_prev_res.atoms())}
@@ -1730,8 +1758,8 @@ class PolymerProposalEngine(ProposalEngine):
         """
         Dummy function in parent (PolymerProposalEngine) class to choose a mutant
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
             topology of the protein
         metadata : dict
@@ -1751,8 +1779,8 @@ class PolymerProposalEngine(ProposalEngine):
         """
         generates list to reference residue instance to be edited, because topology.residues() cannot be referenced directly by index
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
         index_to_new_residues : dict
             key : int (index, zero-indexed in chain)
@@ -1771,8 +1799,8 @@ class PolymerProposalEngine(ProposalEngine):
         """
         Identify excess atoms, excess bonds, missing atoms, and missing bonds.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
             The original Topology object to be processed
         residue_map : list(tuples)
@@ -1921,8 +1949,8 @@ class PolymerProposalEngine(ProposalEngine):
     def _add_new_atoms(self, topology, missing_atoms, missing_bonds, residue_map):
         """
         Add new atoms (and corresponding bonds) to new residues
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
             extra atoms from old residue have been deleted, missing atoms in new residue not yet added
         missing_atoms : dict
@@ -1985,8 +2013,8 @@ class PolymerProposalEngine(ProposalEngine):
     def _is_residue_equal(self, residue, other_residue):
         """
             Check if residue is equal to other_residue based on their names, indices, ids, and chain ids.
-            Arguments
-            ---------
+            Parameters
+            ----------
             residue : simtk.openmm.app.topology.Residue
             other_residue : simtk.openmm.app.topology.Residue
             Returns
@@ -2003,8 +2031,8 @@ class PolymerProposalEngine(ProposalEngine):
         """
         Construct atom map (key: index to new residue, value: index to old residue) to supply as an argument to the TopologyProposal.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         residue_map : list(tuples)
             simtk.openmm.app.topology.Residue, str (three letter residue name of new residue)
         old_topology : simtk.openmm.app.Topology
@@ -2033,7 +2061,6 @@ class PolymerProposalEngine(ProposalEngine):
         new_oemol_res_copy : openeye.oechem.oemol object
             copy of modified new oemol
         """
-        import pickle
         from pkg_resources import resource_filename
         import openeye.oechem as oechem #must this be explicit?
 
@@ -2077,8 +2104,11 @@ class PolymerProposalEngine(ProposalEngine):
         new_res = modified_residues[index]
         _logger.debug(f"\t\t\told res: {old_res.name}; new res: {new_res.name}")
 
-        _logger.debug(f"\t\t\told topology res names: {[(atom.index, atom.name) for atom in old_res.atoms()]}")
-        _logger.debug(f"\t\t\tnew topology res names: {[(atom.index, atom.name) for atom in new_res.atoms()]}")
+        new_res_index_to_name = {atom.index: atom.name for atom in new_res.atoms()}
+        old_res_index_to_name = {atom.index: atom.name for atom in old_res.atoms()}
+
+        _logger.debug(f"\t\t\told topology res names: {old_res_index_to_name}")
+        _logger.debug(f"\t\t\tnew topology res names: {new_res_index_to_name}")
 
         old_res_name = old_res.name
         new_res_name = new_res.name
@@ -2101,12 +2131,16 @@ class PolymerProposalEngine(ProposalEngine):
         old_oemol_res_copy = copy.deepcopy(current_oemol)
         new_oemol_res_copy = copy.deepcopy(proposed_oemol)
 
+
         _logger.debug(f"\t\t\told_oemol_res names: {[(atom.GetIdx(), atom.GetName()) for atom in current_oemol.GetAtoms()]}")
         _logger.debug(f"\t\t\tnew_oemol_res names: {[(atom.GetIdx(), atom.GetName()) for atom in proposed_oemol.GetAtoms()]}")
 
         #create bookkeeping dictionaries
         old_res_to_oemol_map = {atom.index: current_oemol.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx() for atom in old_res.atoms()}
         new_res_to_oemol_map = {atom.index: proposed_oemol.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx() for atom in new_res.atoms()}
+
+        old_oemol_name_idx = {atom.GetName(): atom.GetIdx() for atom in current_oemol.GetAtoms()}
+        new_oemol_name_idx = {atom.GetName(): atom.GetIdx() for atom in proposed_oemol.GetAtoms()}
 
         _logger.debug(f"\t\t\told_res_to_oemol_map: {old_res_to_oemol_map}")
         _logger.debug(f"\t\t\tnew_res_to_oemol_map: {new_res_to_oemol_map}")
@@ -2147,12 +2181,19 @@ class PolymerProposalEngine(ProposalEngine):
                 except Exception as e:
                     raise Exception(f"failed to map the backbone separately: {e}")
 
-        current_oemol = copy.deepcopy(current_oemol)
-        proposed_oemol = copy.deepcopy(proposed_oemol)
+
+        _logger.debug(f"\t\t\told_oemol_res names: {[(atom.GetIdx(), atom.GetName()) for atom in current_oemol.GetAtoms()]}")
+        _logger.debug(f"\t\t\tnew_oemol_res names: {[(atom.GetIdx(), atom.GetName()) for atom in proposed_oemol.GetAtoms()]}")
+
+        old_sidechain_oemol_indices_to_name = {atom.GetIdx(): atom.GetName() for atom in current_oemol.GetAtoms()}
+        new_sidechain_oemol_indices_to_name = {atom.GetIdx(): atom.GetName() for atom in proposed_oemol.GetAtoms()}
+
 
         #now we can get the mol atom map of the sidechain
         #NOTE: since the sidechain oemols are NOT zero-indexed anymore, we need to match by name (since they are unique identifiers)
-        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength = 'default', matching_criterion = 'name')
+        break_bool = False if old_res_name == 'TRP' or new_res_name == 'TRP' else True # Set allow_ring_breaking to be False if the transformation involves TRP
+        _logger.debug(f"\t\t\t allow ring breaking: {break_bool}")
+        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength='strong', matching_criterion='name', map_strategy='matching_criterion', allow_ring_breaking=break_bool)
 
         #check the atom map thus far:
         _logger.debug(f"\t\t\tlocal atom map nonstereo sidechain: {local_atom_map_nonstereo_sidechain}")
@@ -2160,57 +2201,61 @@ class PolymerProposalEngine(ProposalEngine):
         #preserve chirality of the sidechain
         # _logger.warning(f"\t\t\told oemols: {[atom.GetIdx() for atom in self.current_molecule.GetAtoms()]}")
         # _logger.warning(f"\t\t\tnew oemols: {[atom.GetIdx() for atom in new_oemol_res.GetAtoms()]}")
-        local_atom_map_stereo_sidechain = AtomMapper.preserve_chirality(current_oemol, proposed_oemol, local_atom_map_nonstereo_sidechain)
+        if local_atom_map_nonstereo_sidechain is not None:
+            local_atom_map_stereo_sidechain = AtomMapper.preserve_chirality(current_oemol, proposed_oemol, local_atom_map_nonstereo_sidechain)
+        else:
+            local_atom_map_stereo_sidechain = {}
 
         _logger.debug(f"\t\t\tlocal atom map stereo sidechain: {local_atom_map_stereo_sidechain}")
+
+        #fix the sidechain indices w.r.t. full oemol
         sidechain_fixed_map = {}
-        for new_oemol_idx, old_oemol_idx in local_atom_map_stereo_sidechain.items():
-            sidechain_fixed_map[new_oemol_to_res_map[new_oemol_idx]] = old_oemol_to_res_map[old_oemol_idx]
-        _logger.debug(f"\t\t\tsidechain fixed map: {sidechain_fixed_map}")
+        mapped_names = []
+        for new_sidechain_idx, old_sidechain_idx in local_atom_map_stereo_sidechain.items():
+            new_name, old_name = new_sidechain_oemol_indices_to_name[new_sidechain_idx], old_sidechain_oemol_indices_to_name[old_sidechain_idx]
+            mapped_names.append((new_name, old_name))
+            new_full_oemol_idx, old_full_oemol_idx = new_oemol_name_idx[new_name], old_oemol_name_idx[old_name]
+            sidechain_fixed_map[new_full_oemol_idx] = old_full_oemol_idx
+
+        _logger.debug(f"\t\t\toemol sidechain fixed map: {sidechain_fixed_map}")
 
 
         #make sure that CB is mapped; otherwise the residue will not be contiguous
         found_CB = False
-        new_atoms = {atom.index: atom.name for atom in new_res.atoms()}
-        old_atoms = {atom.index: atom.name for atom in old_res.atoms()}
+        if any(item[0] == 'CB' and item[1] == 'CB' for item in mapped_names):
+            found_CB = True
 
-        for new_index, old_index in sidechain_fixed_map.items():
-            new_name, old_name = new_atoms[new_index], old_atoms[old_index]
-            if new_name == 'CB' and old_name == 'CB':
-                found_CB = True
         if not found_CB:
             _logger.debug(f"\t\t\tno 'CB' found!!!.  removing local atom map stereo sidechain...")
-            local_atom_map_stereo_sidechain = {}
+            sidechain_fixed_map = {}
 
         _logger.debug(f"\t\t\tthe local atom map (backbone) is {local_atom_map}")
         #update the local map
-        local_atom_map.update(local_atom_map_stereo_sidechain)
+        local_atom_map.update(sidechain_fixed_map)
         _logger.debug(f"\t\t\tthe local atom map (total) is {local_atom_map}")
 
         #correct the map
         #now we have to update the atom map indices
         _logger.debug(f"\t\t\tadjusting the atom map with topology indices...")
-        fixed_map = {}
+        topology_index_map = {}
         for new_oemol_idx, old_oemol_idx in local_atom_map.items():
-            fixed_map[new_oemol_to_res_map[new_oemol_idx]] = old_oemol_to_res_map[old_oemol_idx]
+            topology_index_map[new_oemol_to_res_map[new_oemol_idx]] = old_oemol_to_res_map[old_oemol_idx]
 
-        adjusted_atom_map = fixed_map
-        _logger.debug(f"\t\t\tadjusted_atom_map: {adjusted_atom_map}")
 
-        index_to_name_new = {atom.index: atom.name for atom in new_res.atoms()}
-        index_to_name_old = {atom.index: atom.name for atom in old_res.atoms()}
-        map_atom_names = [(index_to_name_new[new_idx], index_to_name_old[old_idx]) for new_idx, old_idx in adjusted_atom_map.items()]
-        _logger.debug(f"\t\t\tthe mapped atom names are: {map_atom_names}")
+        _logger.debug(f"\t\t\ttopology_atom_map: {topology_index_map}")
+
+        mapped_atoms = [(new_res_index_to_name[new_idx], old_res_index_to_name[old_idx]) for new_idx, old_idx in topology_index_map.items()]
+        _logger.debug(f"\t\t\tthe mapped atom names are: {mapped_atoms}")
 
             #and all of the environment atoms should already be handled
-        return adjusted_atom_map, old_res_to_oemol_map, new_res_to_oemol_map, local_atom_map_stereo_sidechain, current_oemol, proposed_oemol, old_oemol_res_copy, new_oemol_res_copy
+        return topology_index_map, old_res_to_oemol_map, new_res_to_oemol_map, local_atom_map, current_oemol, proposed_oemol, old_oemol_res_copy, new_oemol_res_copy
 
     def _get_mol_atom_matches(self, current_molecule, proposed_molecule, first_atom_index_old, first_atom_index_new):
         """
         Given two molecules, returns the mapping of atoms between them.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         current_molecule : openeye.oechem.oemol object
              The current molecule in the sampler
         proposed_molecule : openeye.oechem.oemol object
@@ -2227,6 +2272,7 @@ class PolymerProposalEngine(ProposalEngine):
         -------
         new_to_old_atom_map : dict, key : index of atom in new residue, value : index of atom in old residue
         """
+        import openeye.oechem as oechem
         # Load current and proposed residues as OEGraphMol objects
         oegraphmol_current = oechem.OEGraphMol(current_molecule)
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
@@ -2308,8 +2354,8 @@ class PolymerProposalEngine(ProposalEngine):
         """
         Utility function to ensure that the valence terms and nonbonded exceptions do not change between alchemical and environment atoms.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology_proposal : TopologyProposal
             topology proposal
 
@@ -2413,10 +2459,8 @@ class PointMutationEngine(PolymerProposalEngine):
     >>> from openmmtools.testsystems import AlanineDipeptideExplicit
     >>> testsystem = AlanineDipeptideExplicit()
     >>> system, topology, positions = testsystem.system, testsystem.topology, testsystem.positions
-
     >>> from topology_proposal import PointMutationEngine
     >>> engine = PointMutationEngine(topology, system_generator, chain_id='A', residues_allowed_to_mutate='max_point_mutants=1)
-
     """
 
     # TODO: Overhaul API to make it easier to specify mutations
@@ -2455,13 +2499,9 @@ class PointMutationEngine(PolymerProposalEngine):
             If not specified, engine assumes all residues (except ACE and NME caps) may be mutated.
         allowed_mutations : list(tuple), optional, default=None
             ('residue id to mutate','desired mutant residue name (3-letter code)')
-            Example:
-                Desired systems are wild type T4 lysozyme, T4 lysozyme L99A, and T4 lysozyme L99A/M102Q
-                allowed_mutations = [
-                    ('99', 'ALA'),
-                    ('102','GLN')
-                ]
-            If this is not specified, the engine will propose a random amino acid at a random location.
+            For example, the desired systems are wild type T4 lysozyme, T4 lysozyme L99A, and T4 lysozyme L99A/M102Q:
+            ``allowed_mutations = [ ('99', 'ALA'), ('102','GLN') ]``. If this is not specified, the engine will propose
+            a random amino acid at a random location.
         always_change : bool, optional, default=True
             Have the proposal engine always propose a state different from the current state.
             If the current state is WT, always propose a mutation.
@@ -2474,7 +2514,6 @@ class PointMutationEngine(PolymerProposalEngine):
             each proposal to contain multiple mutations.
 
         """
-        import pickle
         super(PointMutationEngine, self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata, always_change=always_change, aggregate=aggregate)
 
         assert isinstance(wildtype_topology, app.Topology)
@@ -2501,8 +2540,8 @@ class PointMutationEngine(PolymerProposalEngine):
         """
         Method to choose a mutant.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
             topology of the protein
         metadata : dict
@@ -2548,8 +2587,8 @@ class PointMutationEngine(PolymerProposalEngine):
         """
         Function to find the residue indices in the chain_id with residues that are different from WT.  This is a dict of form {idx : res.name}.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
             topology of the protein
         chain_id : str
@@ -2589,8 +2628,8 @@ class PointMutationEngine(PolymerProposalEngine):
         Used when allowed mutations have been specified
         Assume (for now) uniform probability of selecting each specified mutant
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
         chain_id : str
         allowed_mutations : list(tuple)
@@ -2704,8 +2743,8 @@ class PointMutationEngine(PolymerProposalEngine):
     def _propose_mutation(self, topology, chain_id, index_to_new_residues):
         """
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
         chain_id : str
         index_to_new_residues : dict
@@ -2796,8 +2835,8 @@ class PointMutationEngine(PolymerProposalEngine):
 
     def _save_mutations(self, topology, index_to_new_residues):
         """
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
         index_to_new_residues : dict
             key : int (index, zero-indexed in chain)
@@ -2817,8 +2856,8 @@ class PointMutationEngine(PolymerProposalEngine):
         """
         Compute the key of a mutant topology
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
             topology of the protein
 
@@ -2866,15 +2905,16 @@ class PeptideLibraryEngine(PolymerProposalEngine):
     """
     Note: The PeptideLibraryEngine currently doesn't work because PolymerProposalEngine has been modified to handle
     only one mutation at a time (in accordance with the geometry engine).
-    Arguments
-    --------
+
+    Parameters
+    ----------
     system_generator : SystemGenerator
     library : list of strings
         each string is a 1-letter-code list of amino acid sequence
     chain_id : str
         id of the chain to mutate
         (using the first chain with the id, if there are multiple)
-    proposal_metadata : dict -- OPTIONAL
+    proposal_metadata : dict, optional
         Contains information necessary to initialize proposal engine
     """
 
@@ -2888,8 +2928,8 @@ class PeptideLibraryEngine(PolymerProposalEngine):
         """
         Used when library of pepide sequences has been provided
         Assume (for now) uniform probability of selecting each peptide
-        Arguments
-        ---------
+        Parameters
+        ----------
         topology : simtk.openmm.app.Topology
         chain_id : str
         allowed_mutations : list(list(tuple))
@@ -3024,7 +3064,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 preserve_chirality = True,
                 current_metadata = None,
                 external_inttypes = False,
-                map_strategy='matching_criterion'):
+                map_strategy='matching_criterion',
+                use_given_geometries=False):
         """
         Propose the next state, given the current state
 
@@ -3045,6 +3086,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         current_metadata : dict
             dict containing current smiles as a key
         external_inttypes : bool, default=False
+        use_given_geometries : bool, default False
+            if True, the oemol atom map is generated by atoms that overlap
 
         Returns
         -------
@@ -3109,7 +3152,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         _logger.info(f"determining atom map between old and new molecules...")
         if atom_map is None:
             _logger.info(f"the atom map is not specified; proceeding to generate an atom map...")
-            mol_atom_map = AtomMapper._get_mol_atom_map(self.current_molecule, self.proposed_molecule, atom_expr=atom_expr, bond_expr=bond_expr, map_strength=map_strength, external_inttypes=self._external_inttypes, map_strategy=map_strategy)
+            if use_given_geometries:
+                mol_atom_map = AtomMapper._get_mol_atom_map_by_positions(self.current_molecule, self.proposed_molecule)
+            else:
+                mol_atom_map = AtomMapper._get_mol_atom_map(self.current_molecule, self.proposed_molecule, atom_expr=atom_expr, bond_expr=bond_expr, map_strength=map_strength, external_inttypes=self._external_inttypes, map_strategy=map_strategy)
         else:
             _logger.info(f"atom map is pre-determined as {atom_map}")
             mol_atom_map = atom_map
@@ -3179,6 +3225,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             OpenEye isomeric canonical smiles corresponding to the input
         """
         # TODO can this go in perses/utils/openeye?
+        import openeye.oechem as oechem
+        OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
+
         mol = oechem.OEMol()
         oechem.OESmilesToMol(mol, smiles)
         oechem.OEAddExplicitHydrogens(mol)
@@ -3203,6 +3252,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             molecule
         """
         # TODO can this go in perses/utils/openeye?
+        import openeye.oechem as oechem
+        OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
+
         molecule_name = self._residue_name
         _logger.info(f"\tmolecule name specified from residue: {self._residue_name}.")
 
@@ -3362,8 +3414,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         The current scheme uses a probability matrix computed via _calculate_probability_matrix.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         system : simtk.openmm.System object
             The current system
         topology : simtk.openmm.app.Topology object

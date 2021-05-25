@@ -32,7 +32,6 @@ import numpy as np
 
 import simtk.openmm as mm
 import simtk.unit as units
-from openmmtools import testsystems
 from openmmtools.constants import kB
 
 import logging

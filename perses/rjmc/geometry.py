@@ -5,14 +5,9 @@ for each additional atom that must be added.
 from simtk import unit
 
 import numpy as np
-import collections
-import functools
 import networkx as nx
-from simtk import unit
-import operator
 
-from perses.storage import NetCDFStorage, NetCDFStorageView
-from openeye import oechem, oeomega
+from perses.storage import NetCDFStorageView
 
 ################################################################################
 # Initialize logging
@@ -75,8 +70,8 @@ class GeometryEngine(object):
     """
     This is the base class for the geometry engine.
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     metadata : dict
         GeometryEngine-related metadata as a dict
     """
@@ -89,7 +84,7 @@ class GeometryEngine(object):
         """
         Make a geometry proposal for the appropriate atoms.
 
-        Arguments
+        Parameters
         ----------
         top_proposal : TopologyProposal object
             Object containing the relevant results of a topology proposal
@@ -107,7 +102,7 @@ class GeometryEngine(object):
         """
         Calculate the logp for the given geometry proposal
 
-        Arguments
+        Parameters
         ----------
         top_proposal : TopologyProposal object
             Object containing the relevant results of a topology proposal
@@ -199,7 +194,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         Make a geometry proposal for the appropriate atoms.
 
-        Arguments
+        Parameters
         ----------
         top_proposal : TopologyProposal object
             Object containing the relevant results of a topology proposal
@@ -254,7 +249,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         Calculate the logp for the given geometry proposal
 
-        Arguments
+        Parameters
         ----------
         top_proposal : TopologyProposal object
             Object containing the relevant results of a topology proposal
@@ -451,7 +446,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         if self._storage:
             self._storage.write_object("{}_proposal_order".format(direction), proposal_order_tool, iteration=self.nproposed)
-        
+
         platform_name = 'CUDA'
 
         # Create an OpenMM context
@@ -756,7 +751,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         """
         import copy
-        from simtk import openmm, unit
+        from simtk import unit
         no_nb_system = copy.deepcopy(system)
         _logger.info("\tbeginning construction of no_nonbonded final system...")
         _logger.info(f"\tinitial no-nonbonded final system forces {[force.__class__.__name__ for force in list(no_nb_system.getForces())]}")
@@ -1180,15 +1175,15 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return xyz, detJ
 
     def _bond_log_pmf(self, bond, beta, n_divisions):
-        """
+        r"""
         Calculate the log probability mass function (PMF) of drawing a bond.
 
         .. math ::
 
             p(r; \beta, K_r, r_0) \propto r^2 e^{-\frac{\beta K_r}{2} (r - r_0)^2 }
 
-        Prameters
-        ---------
+        Parameters
+        ----------
         bond : parmed.Structure.Bond modified to use simtk.unit.Quantity
             Valence bond parameters
         beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
@@ -1246,7 +1241,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return r_i, log_p_i, bin_width
 
     def _bond_logp(self, r, bond, beta, n_divisions):
-        """
+        r"""
         Calculate the log-probability of a given bond at a given inverse temperature
 
         Propose dimensionless bond length r from distribution
@@ -1255,8 +1250,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             r \sim p(r; \beta, K_r, r_0) \propto r^2 e^{-\frac{\beta K_r}{2} (r - r_0)^2 }
 
-        Prameters
-        ---------
+        Parameters
+        ----------
         r : float
             bond length, implicitly in nanometers
         bond : parmed.Structure.Bond modified to use simtk.unit.Quantity
@@ -1290,15 +1285,15 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return logp
 
     def _propose_bond(self, bond, beta, n_divisions):
-        """
+        r"""
         Propose dimensionless bond length r from distribution
 
         .. math ::
 
             r \sim p(r; \beta, K_r, r_0) \propto r^2 e^{-\frac{\beta K_r}{2} (r - r_0)^2 }
 
-        Prameters
-        ---------
+        Parameters
+        ----------
         bond : parmed.Structure.Bond modified to use simtk.unit.Quantity
             Valence bond parameters
         beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
@@ -1334,15 +1329,15 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return r
 
     def _angle_log_pmf(self, angle, beta, n_divisions):
-        """
+        r"""
         Calculate the log probability mass function (PMF) of drawing a angle.
 
         .. math ::
 
             p(\theta; \beta, K_\theta, \theta_0) \propto \sin(\theta) e^{-\frac{\beta K_\theta}{2} (\theta - \theta_0)^2 }
 
-        Prameters
-        ---------
+        Parameters
+        ----------
         angle : parmed.Structure.Angle modified to use simtk.unit.Quantity
             Valence bond parameters
         beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
@@ -1402,7 +1397,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return theta_i, log_p_i, bin_width
 
     def _angle_logp(self, theta, angle, beta, n_divisions):
-        """
+        r"""
         Calculate the log-probability of a given angle at a given inverse temperature
 
         Propose dimensionless bond length r from distribution
@@ -1411,8 +1406,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             p(\theta; \beta, K_\theta, \theta_0) \propto \sin(\theta) e^{-\frac{\beta K_\theta}{2} (\theta - \theta_0)^2 }
 
-        Prameters
-        ---------
+        Parameters
+        ----------
         theta : float
             angle, implicitly in radians
         angle : parmed.Structure.Angle modified to use simtk.unit.Quantity
@@ -1446,15 +1441,15 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return logp
 
     def _propose_angle(self, angle, beta, n_divisions):
-        """
+        r"""
         Propose dimensionless angle from distribution
 
         .. math ::
 
             \theta \sim p(\theta; \beta, K_\theta, \theta_0) \propto \sin(\theta) e^{-\frac{\beta K_\theta}{2} (\theta - \theta_0)^2 }
 
-        Prameters
-        ---------
+        Parameters
+        ----------
         angle : parmed.Structure.Angle modified to use simtk.unit.Quantity
             Valence angle parameters
         beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
@@ -2039,7 +2034,6 @@ class GeometrySystemGenerator(object):
                 growth_system.addForce(modified_sterics_force)
 
                 # Translate nonbonded method to the custom nonbonded force
-                import simtk.openmm.app as app
                 _logger.info("\t\tsetting nonbonded method, cutoff, switching function, and switching distance to custom nonbonded force...")
                 if reference_nonbonded_force_method in [0,1]: #if Nonbonded method is NoCutoff or CutoffNonPeriodic
                     modified_sterics_force.setNonbondedMethod(reference_nonbonded_force_method)
@@ -2184,6 +2178,8 @@ class GeometrySystemGenerator(object):
 
         """
         from perses.rjmc import coordinate_numba
+        from openeye import oechem
+
         # Do nothing if there are no atoms to grow.
         if len(growth_indices) == 0:
             return torsion_force
@@ -2196,11 +2192,12 @@ class GeometrySystemGenerator(object):
         rotor = oechem.OEIsRotor()
         torsion_predicate = oechem.OENotBond(rotor)
         non_rotor_torsions = list(oechem.OEGetTorsions(reference_topology.residue_oemol, torsion_predicate))
-        relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
+        #relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
+        relevant_torsion_list = non_rotor_torsions
 
         #now, for each torsion, extract the set of indices and the angle
         periodicity = 1
-        k = 120.0*unit.kilocalories_per_mole # stddev of 12 degrees
+        k = 1200.0*unit.kilocalories_per_mole # stddev of 1.2 degrees
         #print([atom.name for atom in growth_indices])
         _logger.debug(f"\t\t\trelevant torsions for ring restraints being added...")
         for torsion in relevant_torsion_list:
@@ -2344,13 +2341,13 @@ class GeometrySystemGenerator(object):
         """
         Utility function to adjust the phase properly
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         phase : float
             phase angle
 
-        Return
-        ------
+        Returns
+        -------
         adjusted_phase : float * unit.radians
             adjusted phase with convention
         """
@@ -2411,6 +2408,8 @@ class GeometrySystemGenerator(object):
         """
         from simtk import openmm
         import itertools
+        from openeye import oechem, oeomega
+
         if len(growth_indices)==0:
             return
         angle_force_constant = 400.0*unit.kilojoules_per_mole/unit.radians**2
@@ -2425,6 +2424,7 @@ class GeometrySystemGenerator(object):
             print(e)
 
         #get the omega geometry of the molecule:
+
         omega = oeomega.OEOmega()
         omega.SetMaxConfs(1)
         omega.SetStrictStereo(False) #TODO: fix stereochem
@@ -2636,7 +2636,6 @@ class NetworkXProposalOrder(object):
             The contribution to the overall proposal log probability as a list of sequential logps
 
         """
-        from scipy import special
         atom_torsions= []
         logp = []
         assert len(atom_group) == len(set(atom_group)), "There are duplicate atom indices in the list of atom proposal indices"

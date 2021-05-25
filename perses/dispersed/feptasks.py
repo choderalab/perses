@@ -1,6 +1,5 @@
 import simtk.openmm as openmm
 import openmmtools.cache as cache
-from typing import List, Tuple, Union, NamedTuple
 import os
 import copy
 
@@ -11,15 +10,10 @@ import numpy as np
 import mdtraj as md
 from perses.annihilation.relative import HybridTopologyFactory
 import mdtraj.utils as mdtrajutils
-import pickle
 import simtk.unit as unit
 import tqdm
-from perses.tests.utils import compute_potential_components
 from openmmtools.constants import kB
-import pdb
 import logging
-import tqdm
-from sys import getsizeof
 import time
 from collections import namedtuple
 from perses.annihilation.lambda_protocol import LambdaProtocol

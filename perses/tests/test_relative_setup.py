@@ -1,12 +1,10 @@
-import numpy as np
 import os
 from pkg_resources import resource_filename
 from simtk import unit
 from perses.dispersed import feptasks
-from perses.app import relative_setup, setup_relative_calculation
+from perses.app import setup_relative_calculation
 import mdtraj as md
 from openmmtools import states, alchemy, testsystems, cache
-import yaml
 from unittest import skipIf
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
@@ -216,5 +214,48 @@ def test_run_bace_spectator():
                 found_tla = True
         assert found_tla == True, 'Spectator TLA not in old topology'
 
-if __name__=="__main__":
-    test_run_cdk2_iterations_repex()
+
+def test_host_guest_deterministic_geometries():
+    """
+    execute the `RelativeFEPSetup` with geometries specified for a host-guest relative free energy pair
+    """
+    from perses.app.relative_setup import RelativeFEPSetup
+
+    # Setup directory
+    ligand_sdf = resource_filename("perses", "data/given-geometries/ligands.sdf")
+    host_pdb = resource_filename("perses", "data/given-geometries/receptor.pdb")
+
+    setup = RelativeFEPSetup(
+                 ligand_input = ligand_sdf,
+                 old_ligand_index=0,
+                 new_ligand_index=1,
+                 forcefield_files = ['amber/ff14SB.xml','amber/tip3p_standard.xml','amber/tip3p_HFE_multivalent.xml'],
+                 phases = ['complex', 'solvent', 'vacuum'],
+                 protein_pdb_filename=host_pdb,
+                 receptor_mol2_filename=None,
+                 pressure=1.0 * unit.atmosphere,
+                 temperature=300.0 * unit.kelvin,
+                 solvent_padding=9.0 * unit.angstroms,
+                 ionic_strength=0.15 * unit.molar,
+                 atom_map=None,
+                 hmass=4*unit.amus,
+                 neglect_angles=False,
+                 map_strength='default',
+                 atom_expr=None,
+                 bond_expr=None,
+                 anneal_14s=False,
+                 small_molecule_forcefield='gaff-2.11',
+                 small_molecule_parameters_cache=None,
+                 trajectory_directory=None,
+                 trajectory_prefix=None,
+                 spectator_filenames=None,
+                 nonbonded_method = 'PME',
+                 complex_box_dimensions=None,
+                 solvent_box_dimensions=None,
+                 map_strategy='geometry',
+                 remove_constraints=False,
+                 use_given_geometries = True
+                 )
+
+# if __name__=="__main__":
+#     test_run_cdk2_iterations_repex()
