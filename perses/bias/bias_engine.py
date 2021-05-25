@@ -2,10 +2,7 @@
 This is the base class for generating a biasing potential
 for expanded ensemble simulation
 """
-import openeye.oechem as oechem
-import openeye.oeomega as oeomega
 import openmoltools
-import openeye.oeiupac as oeiupac
 import simtk.openmm as openmm
 import simtk.openmm.app as app
 import simtk.unit as units
@@ -78,6 +75,9 @@ class MinimizedPotentialBias(BiasEngine):
         oemol_list : dict of smiles : oemol
             smile : oemols for the simulation
         """
+        import openeye.oechem as oechem
+        import openeye.oeomega as oeomega
+
         oemol_dict ={}
         omega = oeomega.OEOmega()
         omega.SetMaxConfs(1)
@@ -106,6 +106,8 @@ class MinimizedPotentialBias(BiasEngine):
         positions : np.array, Quantity nm
            array of atomic positions
         """
+        import openeye.oeiupac as oeiupac
+
         molecule_name = oeiupac.OECreateIUPACName(mol)
         openmoltools.openeye.enter_temp_directory()
         _ , tripos_mol2_filename = openmoltools.openeye.molecule_to_mol2(mol, tripos_mol2_filename=molecule_name + '.tripos.mol2', conformer=0, residue_name='MOL')
