@@ -2564,7 +2564,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                              "U_electrostatics = switch * c_RF * u_RF;", # define product electrostatic term
 
                              #define switching function
-                             "switch = step(-t) + step(t) * step(1-t) * ((1 + (t^3) * (-10 + t * (15 - 6 * t)));",
+                             "switch = step(-t) + step(t) * step(1-t) * (1 + (t^3) * (-10 + t * (15 - (6 * t))));",
                              "t = (r_eff - r_switch) / (r_cutoff - r_switch);",
 
                              #define topological term
@@ -2587,8 +2587,9 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                              "r_switch = r_cutoff * {switching_ratio};",
 
                              # reaction field parameters
-                             "eps_RF = {eps_RF};"
-                             "r_cutoff = {r_cutoff};"
+                             "eps_RF = {eps_RF};",
+                             "r_cutoff = {r_cutoff};",
+                             "w_scale = {w_scale};"
                              ]
     # predefined RF parameters (fed to the `expression` via `format`): [scale_bool_string, old_bool_string, new_bool_string, w_scale, switching_ratio, eps_RF, r_cutoff]
     # RF per_particle_parameters: [scale_bools, old/new_bool_string, unique_old, unique_new, core]
@@ -2608,7 +2609,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     _default_steric_expr_list = ["{scale_bool_string} * U_sterics;",
 
                                   "U_sterics = 4 * epsilon * x * (x - 1.0);",
-                                  "x = (sigma / reff_sterics)^6;",
+                                  "x = (sigma / r_eff)^6;",
 
                                   # sigma
                                   "sigma = (sigma1 + sigma2) / 2;",
@@ -2625,20 +2626,21 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                                    "r_eff = sqrt(r^2 + w^2);",
 
                                    #4th dimension:
-                                   "w = step(unique_new1 + unique_new2 + unique_old1 + unique_old2 - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string}) * {w_scale};"
+                                   "w = step(unique_new1 + unique_new2 + unique_old1 + unique_old2 - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string}) * {w_scale};",
 
                                    # parameters
-                                   "r_cutoff = {r_cutoff};"
+                                   "r_cutoff = {r_cutoff};",
+                                   "w_scale = {w_scale};"
     ]
     # per_particle_parameters : [scale_bools, old/new_bool_string, unique_old, unique_new, core]
     # predefined steric parameters (fed to the `expression` via `format`): [scale_bool_string, old_bool_string, new_bool_string, w_scale, switching_ratio, r_cutoff]
 
     #steric exception
     _default_steric_exception_expr_list = _default_steric_expr_list
-    _default_steric_exception_expr_list[3] = "select(1 - environment_region, sigma_old * {old_bool_string} + sigma_new * {new_bool_string}, sigma_old);"
+    _default_steric_exception_expr_list[3] = "sigma = select(1 - environment_region, sigma_old * {old_bool_string} + sigma_new * {new_bool_string}, sigma_old);"
     _default_steric_exception_expr_list[4] = ''
     _default_steric_exception_expr_list[5] = ''
-    _default_steric_exception_expr_list[6] = "select(1 - environment_region, epsilon_old * {old_bool_string} + epsilon_new * {new_bool_string}, epsilon_old);"
+    _default_steric_exception_expr_list[6] = "epsilon = select(1 - environment_region, epsilon_old * {old_bool_string} + epsilon_new * {new_bool_string}, epsilon_old);"
     _default_steric_exception_expr_list[7] = ''
     _default_steric_exception_expr_list[8] = ''
     _default_steric_exception_expr_list[9] = ''
@@ -2672,6 +2674,9 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                  r_sterics_cutoff=1.4 * unit.nanometers, # same as RF?
                  w_sterics_scale=1.,
                  use_dispersion_correction=False,
+
+                 # generate htf for testing
+                 generate_htf_for_testing=False,
                  **kwargs):
         """
         reimplementation of `HybridTopologyFactory` that supports reaction field electrostatics, multiple alchemical regions, and multiple scaling (e.g. via REST2)
@@ -2704,7 +2709,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                 fraction of the r_sterics_cutoff to scale the 4th dimension at maximal decoupling
             use_dispersion_correction : bool
                 whether to use a steric dispersion correction (not recommended for neq switching)
-
+            generate_htf_for_testing : bool
+                whether to generate the htf for testing
 
 
 
@@ -2766,19 +2772,26 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         self._old_positions = current_positions
         self._new_positions = new_positions
 
-        #nonbonded parameters : RF
+        # nonbonded parameters : RF
         self._RF_switching_ratio = RF_switching_ratio
         self._epsilon_RF = epsilon_RF
         self._r_RF_cutoff = r_RF_cutoff
         self._w_RF_scale = w_RF_scale
 
-        #nonbonded parameters : sterics
+        # nonbonded parameters : sterics
         self._sterics_switching_ratio = sterics_switching_ratio
         self._r_sterics_cutoff = r_sterics_cutoff
         self._w_sterics_scale = w_sterics_scale
         self._use_dispersion_correction = use_dispersion_correction
 
-        #prepare a dict that will query the
+        # Modify properties for testing:
+        if generate_htf_for_testing:
+            self._default_RF_expr_list[9] = "u_RF = 1 / r_eff;"
+            self._default_RF_expression = ' '.join(self._default_RF_expr_list)
+            self._default_RF_exception_expr_list[9] = "u_RF = 1 / r_eff;"
+            self._default_RF_exception_expression = ' '.join(self._default_RF_exception_expr_list)
+            self._RF_switching_ratio = 1
+            self._sterics_switching_ratio = 1
 
         # Prepare dicts of forces, which will be useful later
         # TODO: Store this as self._system_forces[name], name in ('old', 'new', 'hybrid') for compactness
@@ -2802,10 +2815,10 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         # Start by creating an empty system. This will become the hybrid system.
         self._hybrid_system = openmm.System()
 
-        #build the hybrid system particles...
+        # Build the hybrid system particles...
         self._build_hybrid_particles()
 
-        #define scale regions
+        # Define scale regions
         self._handle_scale_regions(scale_regions)
 
         # Check that if there is a barostat in the original system, it is added to the hybrid.
