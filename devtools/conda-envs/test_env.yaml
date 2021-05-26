@@ -44,3 +44,4 @@ dependencies:
   - dicttoxml
   - tinydb
   - pytest-attrib
+  - pytest-xdist
