@@ -318,7 +318,8 @@ def generate_dipeptide_top_pos_sys(topology,
                      omitted_terms=None,
                      endstate=endstate,
                      flatten_torsions=flatten_torsions,
-                     scale_regions=scale_regions)
+                     scale_regions=scale_regions,
+                     generate_htf_for_testing=True)
 
         if not validate_endstate_energy:
             return forward_htf
