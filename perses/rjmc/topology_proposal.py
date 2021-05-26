@@ -1535,7 +1535,7 @@ class PolymerProposalEngine(ProposalEngine):
         neighboring_atoms = md.compute_neighbors(traj, radius, query_atoms, haystack_indices=water_atoms)[0]
 
         # Get water atoms outside of radius of protein
-        nonneighboring_residues = set([atom.residue.index for atom in traj.topology.atoms if atom.index not in  neighboring_atoms])
+        nonneighboring_residues = set([atom.residue.index for atom in traj.topology.atoms if (atom.index in water_atoms) and (atom.index not in  neighboring_atoms)])
         assert len(nonneighboring_residues) > 0, "there are no available nonneighboring waters"
         # Choose N random nonneighboring waters, where N is determined based on the charge_diff
         choice_residues = np.random.choice(list(nonneighboring_residues), size=abs(charge_diff), replace=False)
