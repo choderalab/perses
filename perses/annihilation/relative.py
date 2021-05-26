@@ -3783,27 +3783,6 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         self._hybrid_system.addForce(electrostatics_exception_force)
         self._hybrid_system.addForce(sterics_exception_force)
 
-
-
-
-
-
-
-
-
-
-
-
-
-        #    hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2], self._old_to_hybrid_map[p3], self._old_to_hybrid_map[p4] #make hybrid indices
-
-
-
-
-
-
-
-
     def _get_nonbonded_force(self, type, exception=False):
         """
         write nonbonded terms (either electrostatics/sterics)
@@ -3867,9 +3846,9 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             for i in ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)]:
                 custom_nbf.addPerParticleParameter(i)
 
-                custom_nbf.addPerParticleParameter('unique_old')
-                custom_nbf.addPerParticleParameter('unique_new')
-                custom_nbf.addPerParticleParameter('core')
+            custom_nbf.addPerParticleParameter('unique_old')
+            custom_nbf.addPerParticleParameter('unique_new')
+            custom_nbf.addPerParticleParameter('core')
 
             if type == 'electrostatics':
                 custom_nbf.addPerParticleParameter('charge_old')
@@ -3888,9 +3867,9 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             for i in ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)]:
                 custom_nbf.addPerBondParameter(i)
 
-                custom_nbf.addPerBondParameter('unique_old')
-                custom_nbf.addPerBondParameter('unique_new')
-                custom_nbf.addPerBondParameter('core')
+            custom_nbf.addPerBondParameter('unique_old')
+            custom_nbf.addPerBondParameter('unique_new')
+            custom_nbf.addPerBondParameter('core')
 
             if type == 'electrostatics':
                 custom_nbf.addPerBondParameter('chargeProd_old')
@@ -3920,17 +3899,15 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                     custom_nbf.setSwitchingDistance(self._r_sterics_cutoff * self._sterics_switching_ratio)
                     custom_nbf.setCutoffDistance(self._r_sterics_cutoff)
                     custom_nbf.setUseLongRangeCorrection(self._use_dispersion_correction)
+        elif standard_nonbonded_method == openmm.NonbondedForce.NoCutoff:
+            if exception:
+                custom_nbf.setUsesPeriodicBoundaryConditions(False)
+            else:
+                custom_nbf.setNonbondedMethod(self._translate_nonbonded_method_to_custom(standard_nonbonded_method))
         else:
             raise Exception(f"nonbonded method is not recognized")
 
         return custom_nbf
-
-
-
-
-
-
-
 
     def _transcribe_nonbonded_exceptions(self):
         """
