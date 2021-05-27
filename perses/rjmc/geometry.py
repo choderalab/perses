@@ -54,7 +54,10 @@ def check_dimensionality(quantity, compatible_units):
 
     """
     if unit.is_quantity(compatible_units) or unit.is_unit(compatible_units):
-        from simtk.unit.quantity import is_dimensionless
+        try:
+            from simtk.unit.quantity import is_dimensionless
+        except ModuleNotFoundError:
+            from openmm.unit.quantity import is_dimensionless
         if not is_dimensionless(quantity / compatible_units):
             raise ValueError('{} does not have units compatible with expected {}'.format(quantity, compatible_units))
     elif compatible_units == float:
