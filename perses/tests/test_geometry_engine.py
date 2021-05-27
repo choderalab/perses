@@ -1604,7 +1604,10 @@ class AnalyticalBeadSystems(object):
         rp: float
             reduced potential
         """
-        from simtk.unit.quantity import is_dimensionless
+        try:
+            from simtk.unit.quantity import is_dimensionless
+        except ModuleNotFoundError:
+            from openmm.unit.quantity import is_dimensionless
         _i = openmm.VerletIntegrator(1.0)
         _ctx = openmm.Context(system, _i, REFERENCE_PLATFORM)
         _ctx.setPositions(positions)
