@@ -8,7 +8,6 @@ import numpy as np
 import networkx as nx
 
 from perses.storage import NetCDFStorageView
-from openeye import oechem, oeomega
 
 ################################################################################
 # Initialize logging
@@ -55,7 +54,10 @@ def check_dimensionality(quantity, compatible_units):
 
     """
     if unit.is_quantity(compatible_units) or unit.is_unit(compatible_units):
-        from simtk.unit.quantity import is_dimensionless
+        try:
+            from simtk.unit.quantity import is_dimensionless
+        except ModuleNotFoundError:
+            from openmm.unit.quantity import is_dimensionless
         if not is_dimensionless(quantity / compatible_units):
             raise ValueError('{} does not have units compatible with expected {}'.format(quantity, compatible_units))
     elif compatible_units == float:
@@ -2179,6 +2181,8 @@ class GeometrySystemGenerator(object):
 
         """
         from perses.rjmc import coordinate_numba
+        from openeye import oechem
+
         # Do nothing if there are no atoms to grow.
         if len(growth_indices) == 0:
             return torsion_force
@@ -2407,6 +2411,8 @@ class GeometrySystemGenerator(object):
         """
         from simtk import openmm
         import itertools
+        from openeye import oechem, oeomega
+
         if len(growth_indices)==0:
             return
         angle_force_constant = 400.0*unit.kilojoules_per_mole/unit.radians**2
@@ -2421,6 +2427,7 @@ class GeometrySystemGenerator(object):
             print(e)
 
         #get the omega geometry of the molecule:
+
         omega = oeomega.OEOmega()
         omega.SetMaxConfs(1)
         omega.SetStrictStereo(False) #TODO: fix stereochem
