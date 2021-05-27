@@ -35,4 +35,5 @@ have concluded.
 * dominic a. rufa
 * Jaime Rodríguez-Guerra
 * Ivy Zhang
+* Mike M. Henry
 * John D. Chodera

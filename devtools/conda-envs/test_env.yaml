@@ -43,5 +43,4 @@ dependencies:
   - openmmforcefields >=0.9.0
   - dicttoxml
   - tinydb
-  - pip:
-    - pytest-attrib
+  - pytest-attrib
