@@ -147,7 +147,7 @@ def minimize(thermodynamic_state,
     sampler_state.update_from_context(context)
 
 def multinomial_resample(total_works, num_resamples):
-    """
+    r"""
     from a numpy array of total works and particle_labels, resample the particle indices N times with replacement
     from a multinomial distribution conditioned on the weights w_i \propto e^{-cumulative_works_i}
     Parameters

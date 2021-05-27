@@ -1,17 +1,14 @@
 import numpy as np
 import os
 import tqdm
-from openeye import oechem, oeiupac
-from openmmtools import integrators, states, mcmc, constants
+from openeye import oechem
+from openmmtools import constants
 from openmoltools import forcefield_generators
 from openmmforcefields.generators import SystemGenerator
-from perses.rjmc.topology_proposal import TopologyProposal
 from perses.utils.openeye import extractPositionsFromOEMol
 from simtk import openmm, unit
-from io import StringIO
 from simtk.openmm import app
 import copy
-from perses.dispersed.feptasks import compute_reduced_potential
 import mdtraj as md
 
 temperature = 300.0*unit.kelvin

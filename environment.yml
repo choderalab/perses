@@ -1,12 +1,9 @@
 name: perses
 channels:
   - conda-forge
-  - defaults
-  - omnia-dev
-  - omnia
   - openeye
 dependencies:
-  - python >=3.6
+  - python >=3.8
   - setuptools
   - fire
   - joblib
@@ -28,11 +25,15 @@ dependencies:
   - networkx >=2.0
   - openeye-toolkits
   - dask
+  - dask-jobqueue
   - distributed
   - progressbar2
   - parmed # may need to sort out ambermini/ambertools/parmed dependencies
   - tqdm
   - nose
   - nose-timer
-  - openforcefield
+  - openff-toolkit
   - sphinx
+  - openmmforcefields # This may not work until on conda-forge, try pip install git+https://github.com/openmm/openmmforcefields.git
+  - dicttoxml 
+  - tinydb

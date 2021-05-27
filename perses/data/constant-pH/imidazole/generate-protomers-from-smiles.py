@@ -7,11 +7,9 @@ Generate protomers using Epik.
 from __future__ import print_function
 import os
 import re
-import csv
 import traceback
 import numpy as np
 
-from openeye import oechem
 from openmoltools import schrodinger
 from perses.utils.openeye import smiles_to_oemol
 
@@ -32,6 +30,7 @@ def read_molecules(filename):
         If no molecules are read, None is returned.
 
     """
+    from openeye import oechem
 
     ifs = oechem.oemolistream(filename)
     molecules = list()
@@ -48,6 +47,8 @@ def read_molecules(filename):
         return molecules
 
 def DumpSDData(mol):
+    from openeye import oechem
+
     print("SD data of", mol.GetTitle())
     #loop over SD data
     for dp in oechem.OEGetSDDataPairs(mol):
@@ -64,6 +65,8 @@ def retrieve_url(url, filename):
     outfile.close()
 
 def read_molecule(filename):
+    from openeye import oechem
+
     ifs = oechem.oemolistream()
     ifs.open(filename)
     molecule = oechem.OEMol()
@@ -82,6 +85,8 @@ def fix_mol2_resname(filename, residue_name):
     outfile.close()
 
 def write_mol2_preserving_atomnames(filename, molecules, residue_name):
+    from openeye import oechem
+
     ofs = oechem.oemolostream()
     ofs.open(filename)
     ofs.SetFlavor(oechem.OEFormat_MOL2, oechem.OEOFlavor_MOL2_GeneralFFFormat)
@@ -105,6 +110,8 @@ def enumerate_conformations(name, smiles=None, pdbname=None):
     pdbname : str
        Three-letter PDB code (e.g. 'DB8')
     """
+    from openeye import oechem
+
     # Create output subfolder
     output_basepath = os.path.join(output_dir, name)
     if not os.path.isdir(output_basepath):

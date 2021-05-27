@@ -3,12 +3,10 @@ import os
 import copy
 from perses.dispersed.utils import *
 
-import openmmtools.mcmc as mcmc
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
 import numpy as np
 import mdtraj as md
 import simtk.unit as unit
-import tqdm
 import logging
 import time
 from collections import namedtuple
@@ -517,7 +515,7 @@ class SequentialMonteCarlo():
         _logger.debug(f"sMC_timers: {sMC_timers}")
 
         sMC_incremental_works = {_direction: None for _direction in directions}
-        _logger.debug(f"\tsMC_incremental_works: {sMC_cumulative_works}")
+        _logger.debug(f"\tsMC_incremental_works: {sMC_incremental_works}")
 
 
         sMC_cumulative_works = {_direction : [np.zeros(num_particles)] for _direction in directions}
@@ -582,7 +580,6 @@ class SequentialMonteCarlo():
                     #the cumulative works are unchanged
                     #we do not return particle ancestries if no resampling is conducted
                     _logger.debug(f"not resampling.  omitting sMC updates")
-                    pass
 
             #attempt to trailblaze lambdas and launch workers
             _logger.debug(f"\tincrementing lambdas...")
@@ -981,7 +978,6 @@ class SequentialMonteCarlo():
             _logger.debug(f"\t\tnormalized observable value ({normalized_observable_value}) > {resample_observable_threshold}.  Skipping resampling.")
             resampled_works = total_works
             resampled_indices = np.arange(num_particles)
-            normalized_observable_value = normalized_observable_value
 
         _logger.debug(f"\t\tfinal resampled normalized observable_value: {normalized_observable_value}")
         return normalized_observable_value, resampled_works, resampled_indices, resample_bool

@@ -8,7 +8,6 @@ import copy
 import logging
 import itertools
 import os
-import openeye.oechem as oechem
 import numpy as np
 import networkx as nx
 import openmoltools.forcefield_generators as forcefield_generators
@@ -19,38 +18,6 @@ try:
     from subprocess import getoutput  # If python 3
 except ImportError:
     from commands import getoutput  # If python 2
-
-################################################################################
-# CONSTANTS
-################################################################################
-
-OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
-
-# TODO write a mapping-protocol class to handle these options
-
-# weak requirements for mapping atoms == more atoms mapped, more in core
-# atoms need to match in aromaticity. Same with bonds.
-# maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
-WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic #| oechem.OEExprOpts_IntType
-WEAK_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
-
-# default atom expression, requires same aromaticitiy and hybridization
-# bonds need to match in bond order
-# ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
-DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_IntType
-DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
-
-# strong requires same hybridization AND the same atom type
-# bonds are same as default, require them to match in bond order
-STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms
-STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
-
-# specific to proteins
-# PROTEIN_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_EqAromatic
-# PROTEIN_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity
-PROTEIN_ATOM_EXPRESSION = DEFAULT_ATOM_EXPRESSION
-PROTEIN_BOND_EXPRESSION = DEFAULT_BOND_EXPRESSION
-
 
 ################################################################################
 # LOGGER
@@ -112,6 +79,7 @@ def _get_networkx_molecule(self):
     graph : NetworkX.Graph
         networkx representation of the residue
     """
+    import openeye.oechem as oechem
     graph = nx.Graph()
 
     oemol_atom_dict = {atom.GetIdx() : atom for atom in self.residue_oemol.GetAtoms()}
@@ -165,7 +133,6 @@ def _get_networkx_molecule(self):
                 graph.edges[index_rev_a, index_rev_b]['oemol_bond'] = bond
         except Exception as e:
             _logger.debug(f"\tbond oemol loop exception: {e}")
-            pass
 
     _logger.debug(f"\tgraph nodes: {graph.nodes()}")
     return graph
@@ -237,7 +204,14 @@ def deepcopy_topology(source_topology):
     append_topology(topology, source_topology)
     return topology
 
-def has_h_mapped(atommap, mola: oechem.OEMol, molb: oechem.OEMol):
+def has_h_mapped(atommap, mola, molb):
+    """
+    Parameters
+    mola : oechem.OEMol
+    molb : oechem.OEMol
+    """
+
+    import openeye.oechem as oechem
     for a_atom, b_atom in atommap.items():
         if mola.GetAtom(oechem.OEHasAtomIdx(a_atom)).GetAtomicNum() == 1 or molb.GetAtom(oechem.OEHasAtomIdx(b_atom)).GetAtomicNum() == 1:
             return True
@@ -408,6 +382,25 @@ class AtomMapper(object):
             dictionary of scores (keys) and maps (dict)
 
         """
+        import openeye.oechem as oechem
+
+        # weak requirements for mapping atoms == more atoms mapped, more in core
+        # atoms need to match in aromaticity. Same with bonds.
+        # maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
+        WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic #| oechem.OEExprOpts_IntType
+        WEAK_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
+        # default atom expression, requires same aromaticitiy and hybridization
+        # bonds need to match in bond order
+        # ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
+        DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_IntType
+        DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
+        # strong requires same hybridization AND the same atom type
+        # bonds are same as default, require them to match in bond order
+        STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms
+        STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
         allowed_map_strategy = ['core','geometry', 'matching_criterion', 'random', 'weighted-random', 'return-all']
         assert map_strategy in allowed_map_strategy, f'map_strategy cannot be {map_strategy}, it must be one of the allowed options {allowed_map_strategy}.'
         _logger.info(f'Using {map_strategy} to chose best atom map')
@@ -648,6 +641,25 @@ class AtomMapper(object):
             dictionary of scores (keys) and maps (dict)
 
         """
+        import openeye.oechem as oechem
+
+        # weak requirements for mapping atoms == more atoms mapped, more in core
+        # atoms need to match in aromaticity. Same with bonds.
+        # maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
+        WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic #| oechem.OEExprOpts_IntType
+        WEAK_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
+        # default atom expression, requires same aromaticitiy and hybridization
+        # bonds need to match in bond order
+        # ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
+        DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_IntType
+        DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
+        # strong requires same hybridization AND the same atom type
+        # bonds are same as default, require them to match in bond order
+        STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms
+        STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
         map_strength_dict = {'default': [DEFAULT_ATOM_EXPRESSION, DEFAULT_BOND_EXPRESSION],
                              'weak': [WEAK_ATOM_EXPRESSION, WEAK_BOND_EXPRESSION],
                              'strong': [STRONG_ATOM_EXPRESSION, STRONG_BOND_EXPRESSION]}
@@ -835,6 +847,7 @@ class AtomMapper(object):
         new_to_old_atom_map : dict
             map of new to old atom indices
         """
+        import openeye.oechem as oechem
         new_to_old_atom_map = {}
         pattern_to_target_map = AtomMapper._create_pattern_to_target_map(old_mol, new_mol, match, matching_criterion)
         for pattern_atom, target_atom in pattern_to_target_map.items():
@@ -866,6 +879,7 @@ class AtomMapper(object):
         ring_as_base_two : int
             binary integer corresponding to the atoms ring membership
         """
+        import openeye.oechem as oechem
         rings = ''
         for i in range(3, max_ring_size+1): #  smallest feasible ring size is 3
             rings += str(int(oechem.OEAtomIsInRingSize(atom, i)))
@@ -874,6 +888,7 @@ class AtomMapper(object):
 
     @staticmethod
     def _assign_bond_ring_id(bond, max_ring_size=10):
+        import openeye.oechem as oechem
         """ Returns the int type based on the ring occupancy
         of the bond
 
@@ -981,6 +996,7 @@ class AtomMapper(object):
                     if True, flip two
                     else: do nothing
         """
+        import openeye.oechem as oechem
         pattern_atoms = { atom.GetIdx() : atom for atom in current_mol.GetAtoms() }
         target_atoms = { atom.GetIdx() : atom for atom in proposed_mol.GetAtoms() }
         # _logger.warning(f"\t\t\told oemols: {pattern_atoms}")
@@ -1130,6 +1146,7 @@ class AtomMapper(object):
         """
         """
         """
+        import openeye.oechem as oechem
         score_list = {}
         for idx, match in enumerate(matches):
             counter_arom, counter_aliph = 0, 0
@@ -1388,7 +1405,6 @@ class ProposalEngine(object):
         chemical_state_key : str
             The chemical_state_key
         """
-        pass
 
     @property
     def chemical_state_list(self):
@@ -1423,8 +1439,6 @@ class PolymerProposalEngine(ProposalEngine):
 
 
         """
-        import pickle
-        from perses.utils.smallmolecules import render_atom_mapping
         _logger.debug(f"Instantiating PolymerProposalEngine")
         super(PolymerProposalEngine,self).__init__(system_generator=system_generator, proposal_metadata=proposal_metadata, always_change=always_change)
         self._chain_id = chain_id # chain identifier defining polymer to be modified
@@ -1714,7 +1728,7 @@ class PolymerProposalEngine(ProposalEngine):
         old_prev_res = [res for res in old_chain.residues() if res.index == prev_res_index][0]
 
         assert new_prev_res.name == old_prev_res.name, f"the new residue left adjacent to mutation res (name {new_prev_res.name}) is not the name of the old residue left adjacent to mutation res (name {old_prev_res.name})"
-        assert new_next_res.name == new_next_res.name, f"the new residue right adjacent to mutation res (name {new_next_res.name}) is not the name of the old residue right adjacent to mutation res (name {old_next_res.name})"
+        assert new_next_res.name == old_next_res.name, f"the new residue right adjacent to mutation res (name {new_next_res.name}) is not the name of the old residue right adjacent to mutation res (name {old_next_res.name})"
 
         new_next_res_to_old_next_res_map = {new_atom.index : old_atom.index for new_atom, old_atom in zip(new_next_res.atoms(), old_next_res.atoms())}
         new_prev_res_to_old_prev_res_map = {new_atom.index : old_atom.index for new_atom, old_atom in zip(new_prev_res.atoms(), old_prev_res.atoms())}
@@ -2047,7 +2061,6 @@ class PolymerProposalEngine(ProposalEngine):
         new_oemol_res_copy : openeye.oechem.oemol object
             copy of modified new oemol
         """
-        import pickle
         from pkg_resources import resource_filename
         import openeye.oechem as oechem #must this be explicit?
 
@@ -2180,7 +2193,7 @@ class PolymerProposalEngine(ProposalEngine):
         #NOTE: since the sidechain oemols are NOT zero-indexed anymore, we need to match by name (since they are unique identifiers)
         break_bool = False if old_res_name == 'TRP' or new_res_name == 'TRP' else True # Set allow_ring_breaking to be False if the transformation involves TRP
         _logger.debug(f"\t\t\t allow ring breaking: {break_bool}")
-        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength='default', matching_criterion='name', map_strategy='matching_criterion', allow_ring_breaking=break_bool)
+        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength='strong', matching_criterion='name', map_strategy='matching_criterion', allow_ring_breaking=break_bool)
 
         #check the atom map thus far:
         _logger.debug(f"\t\t\tlocal atom map nonstereo sidechain: {local_atom_map_nonstereo_sidechain}")
@@ -2259,6 +2272,7 @@ class PolymerProposalEngine(ProposalEngine):
         -------
         new_to_old_atom_map : dict, key : index of atom in new residue, value : index of atom in old residue
         """
+        import openeye.oechem as oechem
         # Load current and proposed residues as OEGraphMol objects
         oegraphmol_current = oechem.OEGraphMol(current_molecule)
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
@@ -2500,7 +2514,6 @@ class PointMutationEngine(PolymerProposalEngine):
             each proposal to contain multiple mutations.
 
         """
-        import pickle
         super(PointMutationEngine, self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata, always_change=always_change, aggregate=aggregate)
 
         assert isinstance(wildtype_topology, app.Topology)
@@ -3212,6 +3225,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             OpenEye isomeric canonical smiles corresponding to the input
         """
         # TODO can this go in perses/utils/openeye?
+        import openeye.oechem as oechem
+        OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
+
         mol = oechem.OEMol()
         oechem.OESmilesToMol(mol, smiles)
         oechem.OEAddExplicitHydrogens(mol)
@@ -3236,6 +3252,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             molecule
         """
         # TODO can this go in perses/utils/openeye?
+        import openeye.oechem as oechem
+        OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
+
         molecule_name = self._residue_name
         _logger.info(f"\tmolecule name specified from residue: {self._residue_name}.")
 

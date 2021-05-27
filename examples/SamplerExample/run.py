@@ -1,6 +1,5 @@
 import yaml 
 import sys
-import itertools
 import os
 
 def run_relative_perturbation(ligA, ligB,tidy=True):

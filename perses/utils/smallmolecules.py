@@ -49,7 +49,7 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
     4
     """
     from openeye import oechem
-    from openeye.oechem import OEGraphMol, OESmilesToMol, OECreateIsoSmiString
+    from openeye.oechem import OEGraphMol, OESmilesToMol
     from perses.tests.utils import has_undefined_stereocenters, enumerate_undefined_stereocenters
     sanitized_smiles_set = set()
     OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens  ## IVY
@@ -150,7 +150,7 @@ def render_single_molecule(filename, molecule, width=1200, height=600):
     height : int, optional, default=1200
         Height in pixels
     """
-    from openeye import oechem, oedepict
+    from openeye import oedepict
     oedepict.OEPrepareDepiction(molecule)
     oedepict.OERenderMolecule(filename, molecule)
 

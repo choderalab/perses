@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
-from perses.utils.openeye import *
-from perses.annihilation.relative import HybridTopologyFactory
+from perses.utils.openeye import createOEMolFromSDF, extractPositionsFromOEMol
+from perses.annihilation.relative import HybridTopologyFactory, RepartitionedHybridTopologyFactory
 from perses.rjmc.topology_proposal import PointMutationEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 
@@ -13,11 +13,11 @@ from openmoltools import forcefield_generators
 import mdtraj as md
 from openmmtools.constants import kB
 from perses.tests.utils import validate_endstate_energies
-from openforcefield.topology import Molecule
+from openff.toolkit.topology import Molecule
 from openmmforcefields.generators import SystemGenerator
 
 ENERGY_THRESHOLD = 1e-2
-temperature = 300 * unit.kelvin
+temperature = 298 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS']
@@ -40,7 +40,7 @@ class PointMutationExecutor(object):
         protein_path = 'data/perses_jacs_systems/thrombin/Thrombin_protein.pdb'
         ligands_path = 'data/perses_jacs_systems/thrombin/Thrombin_ligands.sdf'
         protein_filename = resource_filename('openmmforcefields', protein_path)
-        ligand_file = resource_filename('openmmforcefields', ligands_path)
+        ligand_input = resource_filename('openmmforcefields', ligands_path)
 
         pm_delivery = PointMutationExecutor(protein_filename=protein_filename,
                                     mutation_chain_id='2',
@@ -48,7 +48,7 @@ class PointMutationExecutor(object):
                                      proposed_residue='THR',
                                      phase='complex',
                                      conduct_endstate_validation=False,
-                                     ligand_file=ligand_file,
+                                     ligand_input=ligand_input,
                                      ligand_index=0,
                                      forcefield_files=['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
                                      barostat=openmm.MonteCarloBarostat(1.0 * unit.atmosphere, temperature, 50),
@@ -89,7 +89,7 @@ class PointMutationExecutor(object):
                  proposed_residue,
                  phase='complex',
                  conduct_endstate_validation=True,
-                 ligand_file=None,
+                 ligand_input=None,
                  ligand_index=0,
                  water_model='tip3p',
                  ionic_strength=0.15 * unit.molar,
@@ -101,6 +101,9 @@ class PointMutationExecutor(object):
                  small_molecule_forcefields='gaff-2.11',
                  complex_box_dimensions=None,
                  apo_box_dimensions=None,
+                 flatten_torsions=False,
+                 flatten_exceptions=False,
+                 repartitioned_endstate=None,
                  **kwargs):
         """
         arguments
@@ -115,7 +118,8 @@ class PointMutationExecutor(object):
             phase : str, default complex
                 if phase == vacuum, then the complex will not be solvated with water; else, it will be solvated with tip3p
             conduct_endstate_validation : bool, default True
-                whether to conduct an endstate validation of the hybrid topology factory
+                whether to conduct an endstate validation of the HybridTopologyFactory. If using the RepartitionedHybridTopologyFactory,
+                endstate validation cannot and will not be conducted.
             ligand_file : str, default None
                 path to ligand of interest (i.e. small molecule or protein); .sdf or .pdb
             ligand_index : int, default 0
@@ -140,14 +144,21 @@ class PointMutationExecutor(object):
                 the forcefield string for small molecule parametrization
             complex_box_dimensions : Vec3, default None
                 define box dimensions of complex phase;
-                if none, padding is 1nm
+                if None, padding is 1nm
             apo_box_dimensions :  Vec3, default None
                 define box dimensions of apo phase phase;
                 if None, padding is 1nm
-
+            flatten_torsions : bool, default False
+                in the htf, flatten torsions involving unique new atoms at lambda = 0 and unique old atoms are lambda = 1
+            flatten_exceptions : bool, default False
+                in the htf, flatten exceptions involving unique new atoms at lambda = 0 and unique old atoms at lambda = 1
+            repartitioned_endstate : int, default None
+                the endstate (0 or 1) at which to build the RepartitionedHybridTopologyFactory. By default, this is None,
+                meaning a vanilla HybridTopologyFactory will be built.
         TODO : allow argument for spectator ligands besides the 'ligand_file'
 
         """
+        from openeye import oechem
 
         # First thing to do is load the apo protein to mutate...
         protein_pdbfile = open(protein_filename, 'r')
@@ -159,21 +170,27 @@ class PointMutationExecutor(object):
 
         # Load the ligand, if present
         molecules = []
-        if ligand_file:
-            if ligand_file.endswith('.sdf'): # small molecule
-                ligand_mol = createOEMolFromSDF(ligand_file, index=ligand_index)
-                ligand_mol = generate_unique_atom_names(ligand_mol)
-                molecules.append(Molecule.from_openeye(ligand_mol, allow_undefined_stereo=False))
-                ligand_positions, ligand_topology = extractPositionsFromOEMol(ligand_mol),  forcefield_generators.generateTopologyFromOEMol(ligand_mol)
-                ligand_md_topology = md.Topology.from_openmm(ligand_topology)
-                ligand_n_atoms = ligand_md_topology.n_atoms
+        if ligand_input:
+            if isinstance(ligand_input, str):
+                if ligand_input.endswith('.sdf'): # small molecule
+                        ligand_mol = createOEMolFromSDF(ligand_input, index=ligand_index)
+                        molecules.append(Molecule.from_openeye(ligand_mol, allow_undefined_stereo=False))
+                        ligand_positions, ligand_topology = extractPositionsFromOEMol(ligand_mol),  forcefield_generators.generateTopologyFromOEMol(ligand_mol)
+                        ligand_md_topology = md.Topology.from_openmm(ligand_topology)
+                        ligand_n_atoms = ligand_md_topology.n_atoms
 
-            elif ligand_file.endswith('pdb'): # protein
-                ligand_pdbfile = open(ligand_file, 'r')
-                ligand_pdb = app.PDBFile(ligand_pdbfile)
-                ligand_pdbfile.close()
-                ligand_positions, ligand_topology, ligand_md_topology = ligand_pdb.positions, ligand_pdb.topology, md.Topology.from_openmm(
-                    ligand_pdb.topology)
+                if ligand_input.endswith('pdb'): # protein
+                    ligand_pdbfile = open(ligand_input, 'r')
+                    ligand_pdb = app.PDBFile(ligand_pdbfile)
+                    ligand_pdbfile.close()
+                    ligand_positions, ligand_topology, ligand_md_topology = ligand_pdb.positions, ligand_pdb.topology, md.Topology.from_openmm(
+                        ligand_pdb.topology)
+                    ligand_n_atoms = ligand_md_topology.n_atoms
+
+            elif isinstance(ligand_input, oechem.OEMol): # oemol object
+                molecules.append(Molecule.from_openeye(ligand_input, allow_undefined_stereo=False))
+                ligand_positions, ligand_topology = extractPositionsFromOEMol(ligand_input),  forcefield_generators.generateTopologyFromOEMol(ligand_input)
+                ligand_md_topology = md.Topology.from_openmm(ligand_topology)
                 ligand_n_atoms = ligand_md_topology.n_atoms
 
             else:
@@ -200,7 +217,7 @@ class PointMutationExecutor(object):
         # Solvate apo and complex...
         apo_input = list(self._solvate(protein_topology, protein_positions, water_model, phase, ionic_strength, apo_box_dimensions))
         inputs = [apo_input]
-        if ligand_file:
+        if ligand_input:
             inputs.append(self._solvate(complex_topology, complex_positions, water_model, phase, ionic_strength, complex_box_dimensions))
 
         geometry_engine = FFAllAngleGeometryEngine(metadata=None,
@@ -237,24 +254,31 @@ class PointMutationExecutor(object):
             logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta,
                                                         validate_energy_bookkeeping=validate_bool)
 
-            forward_htf = HybridTopologyFactory(topology_proposal=topology_proposal,
-                                                 current_positions=pos,
-                                                 new_positions=new_positions,
-                                                 use_dispersion_correction=False,
-                                                 functions=None,
-                                                 softcore_alpha=None,
-                                                 bond_softening_constant=1.0,
-                                                 angle_softening_constant=1.0,
-                                                 soften_only_new=False,
-                                                 neglected_new_angle_terms=[],
-                                                 neglected_old_angle_terms=[],
-                                                 softcore_LJ_v2=True,
-                                                 softcore_electrostatics=True,
-                                                 softcore_LJ_v2_alpha=0.85,
-                                                 softcore_electrostatics_alpha=0.3,
-                                                 softcore_sigma_Q=1.0,
-                                                 interpolate_old_and_new_14s=False,
-                                                 omitted_terms=None)
+            if repartitioned_endstate is None:
+                factory = HybridTopologyFactory
+            elif repartitioned_endstate in [0, 1]:
+                factory = RepartitionedHybridTopologyFactory
+
+            forward_htf = factory(topology_proposal=topology_proposal,
+                                  current_positions=pos,
+                                  new_positions=new_positions,
+                                  use_dispersion_correction=False,
+                                  functions=None,
+                                  softcore_alpha=None,
+                                  bond_softening_constant=1.0,
+                                  angle_softening_constant=1.0,
+                                  soften_only_new=False,
+                                  neglected_new_angle_terms=[],
+                                  neglected_old_angle_terms=[],
+                                  softcore_LJ_v2=True,
+                                  softcore_electrostatics=True,
+                                  softcore_LJ_v2_alpha=0.85,
+                                  softcore_electrostatics_alpha=0.3,
+                                  softcore_sigma_Q=1.0,
+                                  interpolate_old_and_new_14s=flatten_exceptions,
+                                  omitted_terms=None,
+                                  endstate=repartitioned_endstate,
+                                  flatten_torsions=flatten_torsions)
 
             if not topology_proposal.unique_new_atoms:
                 assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
@@ -270,7 +294,7 @@ class PointMutationExecutor(object):
                 subtracted_valence_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
 
 
-            if conduct_endstate_validation:
+            if conduct_endstate_validation and repartitioned_endstate is None:
                 zero_state_error, one_state_error = validate_endstate_energies(forward_htf._topology_proposal, forward_htf, added_valence_energy, subtracted_valence_energy, beta=beta, ENERGY_THRESHOLD=ENERGY_THRESHOLD)
                 if zero_state_error > ENERGY_THRESHOLD:
                     _logger.warning(f"Reduced potential difference of the nonalchemical and alchemical Lambda = 0 state is above the threshold ({ENERGY_THRESHOLD}): {zero_state_error}")
@@ -282,7 +306,7 @@ class PointMutationExecutor(object):
             htfs.append(forward_htf)
 
         self.apo_htf = htfs[0]
-        self.complex_htf = htfs[1] if ligand_file else None
+        self.complex_htf = htfs[1] if ligand_input else None
 
     def get_complex_htf(self):
         return self.complex_htf

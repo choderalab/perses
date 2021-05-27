@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 from perses.dispersed import feptasks
-from perses.utils.openeye import *
+from perses.utils.openeye import createOEMolFromSDF, createSystemFromSMILES, extractPositionsFromOEMol, generate_unique_atom_names
 from perses.utils.data import load_smi
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
 from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine
@@ -17,14 +17,11 @@ import numpy as np
 from openmoltools import forcefield_generators
 import copy
 import mdtraj as md
-from io import StringIO
 from openmmtools.constants import kB
 import logging
 import os
 import dask.distributed as distributed
-import parmed as pm
 from collections import namedtuple
-from typing import List, Tuple, Union, NamedTuple
 from collections import namedtuple
 import random
 from scipy.special import logsumexp
@@ -145,6 +142,8 @@ class RelativeFEPSetup(object):
             whether to extract the positions of ligand B and set the unique_new atom positions deterministically;
             if True, `complex` must be in `phases` and .sdf or .mol2 file of ligand must be provided
         """
+        from openeye import oechem
+
         self._pressure = pressure
         self._temperature = temperature
         self._barostat_period = 50
@@ -323,7 +322,7 @@ class RelativeFEPSetup(object):
             _logger.info(f"omitted MonteCarloBarostat because pressure was not specified")
 
         # Create openforcefield Molecule objects for old and new molecules
-        from openforcefield.topology import Molecule
+        from openff.toolkit.topology import Molecule
         molecules = [ Molecule.from_openeye(oemol,allow_undefined_stereo=True) for oemol in [self._ligand_oemol_old, self._ligand_oemol_new] ]
 
         # Handle spectator molecules
@@ -808,7 +807,6 @@ class RelativeFEPSetup(object):
         """
         # DEBUG: Write PDB file being fed into Modeller to check why MOL isn't being matched
         from simtk.openmm.app import PDBFile
-        import os
         modeller = app.Modeller(topology, positions)
         # retaining protein protonation from input files
         #hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
@@ -1582,7 +1580,6 @@ class NonequilibriumSwitchingFEP(DaskClient):
                 self.survival[_direction] = survival
             except Exception as e:
                 _logger.info(f"{e}")
-                pass
 
     def compute_sMC_free_energy(self):
         """
@@ -1722,7 +1719,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
 
     @staticmethod
     def multinomial_resample(cumulative_works, sampler_states, num_resamples, previous_labels):
-        """
+        r"""
         from a list of cumulative works and sampler states, resample the sampler states N times with replacement
         from a multinomial distribution conditioned on the weights w_i \propto e^{-cumulative_works_i}
 
