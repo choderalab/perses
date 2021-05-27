@@ -22,7 +22,7 @@ You can install the latest stable release build of perses via the ``conda`` pack
 
 .. code-block:: none
 
-   $ conda config --add channels conda-forge
+   $ conda config --add channels conda-forge openeye
    $ conda install perses
 
 This version is recommended for all users not actively developing new algorithms for alchemical free energy calculations.
