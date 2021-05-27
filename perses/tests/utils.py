@@ -15,7 +15,6 @@ import sys
 import numpy as np
 from perses.rjmc import geometry
 from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
-from openeye import oechem
 from openmmtools.constants import kB
 from openmmtools import states
 import contextlib

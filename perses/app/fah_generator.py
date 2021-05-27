@@ -208,7 +208,7 @@ def run_neq_fah_setup(ligand_file,
                       phase_project_ids=None,
                       protein_pdb=None,
                       receptor_mol2=None,
-                      small_molecule_forcefield='openff-1.2.0',
+                      small_molecule_forcefield='openff-1.3.0',
                       small_molecule_parameters_cache=None,
                       atom_expression=['IntType'],
                       bond_expression=['DefaultBonds'],
@@ -235,6 +235,7 @@ def run_neq_fah_setup(ligand_file,
                       protein_kwargs=None,
                       ionic_strength=0.15*unit.molar,
                       remove_constraints='not water',
+                      rmsd_restraint=True,
                       **kwargs):
     """
     main execution function that will:
@@ -323,6 +324,8 @@ def run_neq_fah_setup(ligand_file,
             tolerance to use for constraints
         n_steps_per_move_application : int default=250
             number of equilibrium steps to take per move
+        rmsd_restraint : bool, optional, default=False
+            If True, will restraint the core atoms and protein CA atoms within 6.5A of the core atoms
     """
     from perses.utils import data
     if isinstance(temperature,float) or isinstance(temperature,int):
@@ -389,7 +392,7 @@ def run_neq_fah_setup(ligand_file,
 
         #make and serialize an integrator
         integrator = make_neq_integrator(**setup_options)
-        data.serialize(integrator, f"{dir}/integrator.xml")
+        data.serialize(integrator, f"{dir}/integrator.xml.bz2")
 
         #create and serialize a state
         try:
@@ -465,22 +468,31 @@ def run(yaml_filename=None):
     yaml_file.close()
 
     import os
+    from shutil import copyfile
     # make master and run directories
     if 'complex_projid' in setup_options:
         if not os.path.exists(f"{setup_options['complex_projid']}"):
-            os.makedirs(f"{setup_options['complex_projid']}/RUNS/")
-            os.makedirs(f"{setup_options['complex_projid']}/RUNS/{setup_options['trajectory_directory']}")
+            #os.makedirs(f"{setup_options['complex_projid']}/RUNS/")
+            dst = f"{setup_options['complex_projid']}/RUNS/{setup_options['trajectory_directory']}"
+            os.makedirs(dst)
+            copyfile(yaml_filename, dst)
     if 'solvent_projid' in setup_options:
         if not os.path.exists(f"{setup_options['solvent_projid']}"):
-            os.makedirs(f"{setup_options['solvent_projid']}/RUNS/")
-            os.makedirs(f"{setup_options['solvent_projid']}/RUNS/{setup_options['trajectory_directory']}")
+            #os.makedirs(f"{setup_options['solvent_projid']}/RUNS/")
+            dst = f"{setup_options['solvent_projid']}/RUNS/{setup_options['trajectory_directory']}"
+            os.makedirs(dst)
+            copyfile(yaml_filename, dst)
     if 'apo_projid' in setup_options:
         if not os.path.exists(f"{setup_options['apo_projid']}"):
-            os.makedirs(f"{setup_options['apo_projid']}/RUNS/")
-            os.makedirs(f"{setup_options['apo_projid']}/RUNS/{setup_options['trajectory_directory']}")
+            #os.makedirs(f"{setup_options['apo_projid']}/RUNS/")
+            dst = f"{setup_options['apo_projid']}/RUNS/{setup_options['trajectory_directory']}"
+            os.makedirs(dst)        
+            copyfile(yaml_filename, dst)
     if 'vacuum_projid' in setup_options:
         if not os.path.exists(f"{setup_options['vacuum_projid']}"):
-            os.makedirs(f"{setup_options['vacuum_projid']}/RUNS/")
-            os.makedirs(f"{setup_options['vacuum_projid']}/RUNS/{setup_options['trajectory_directory']}")
+            #os.makedirs(f"{setup_options['vacuum_projid']}/RUNS/")
+            dst = f"{setup_options['vacuum_projid']}/RUNS/{setup_options['trajectory_directory']}"
+            os.makedirs(dst)
+            copyfile(yaml_filename, dst)
 
     run_neq_fah_setup(**setup_options)
