@@ -2595,7 +2595,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     # RF per_particle_parameters: [scale_bools, old/new_bool_string, unique_old, unique_new, core]
 
     #electrostatic exception
-    _default_RF_exception_expr_list = _default_RF_expr_list
+    _default_RF_exception_expr_list = copy.deepcopy(_default_RF_expr_list)
     _default_RF_exception_expr_list[0] = "U_electrostatics * {scale_bool_string};"
     _default_RF_exception_expr_list[5] = "chargeProd = select(1 - environment_region, chargeProd_old * {old_bool_string} + chargeProd_new * {new_bool_string}, chargeProd_old);"
     _default_RF_exception_expr_list[6] = ''
@@ -2614,8 +2614,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
                                   # sigma
                                   "sigma = (sigma1 + sigma2) / 2;",
-                                  "sigma1 = select(1 - both_environment, sigma_old1 * {old_bool_string} + sigma_new1 * {new_bool_string}, sigma_old1);",
-                                  "sigma2 = select(1 - both_environment, sigma_old2 * {old_bool_string} + sigma_new2 * {new_bool_string}, sigma_old2);",
+                                  "sigma1 = select(1 - both_environment, sigma_old1 * {old_bool_string1} + sigma_new1 * {new_bool_string1}, sigma_old1);",
+                                  "sigma2 = select(1 - both_environment, sigma_old2 * {old_bool_string2} + sigma_new2 * {new_bool_string2}, sigma_old2);",
 
                                   # epsilon
                                   "epsilon = sqrt(epsilon1 * epsilon2);",
@@ -2637,7 +2637,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     # predefined steric parameters (fed to the `expression` via `format`): [scale_bool_string, old_bool_string, new_bool_string, w_scale, switching_ratio, r_cutoff]
 
     #steric exception
-    _default_steric_exception_expr_list = _default_steric_expr_list
+    _default_steric_exception_expr_list = copy.deepcopy(_default_steric_expr_list)
     _default_steric_exception_expr_list[0] = "U_sterics * {scale_bool_string};"
     _default_steric_exception_expr_list[3] = "sigma = select(1 - environment_region, sigma_old * {old_bool_string} + sigma_new * {new_bool_string}, sigma_old);"
     _default_steric_exception_expr_list[4] = ''
@@ -2984,7 +2984,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                                             params2
         ]
         _logger.info(f"scale_templates: {self._scale_templates}")
-        _logger.info(f"particle (nonbonded) scale_templates: {self._scale_templates}")
+        _logger.info(f"particle (nonbonded) scale_templates: {self._particle_scale_templates}")
 
     def _determine_atom_classes(self):
         """
@@ -3134,9 +3134,9 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                 return template
             else:
                 for idx, _set in enumerate(self._scale_regions):
-                    if particles in _set:
-                        template[index+1] += 1
-                        template[0] = 0
+                    if particles in _set: # here, particles is a single int
+                        template[idx+1] += 1 # update the template
+                        template[0] = 0 # remove nonscale default
             return template
 
         elif isinstance(particles, set):
@@ -3194,6 +3194,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             # determine if the particles is in alchemical region idx
             if type(particles) == int:
                 in_alch = True if particles in _set else False
+                particles = set([particles])
             elif type(particles) == set:
                 in_alch = True if particles.intersection(_set) != set() else False
             else:
@@ -3695,7 +3696,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         for old_idx in range(old_system_nbf.getNumParticles()):
             charge_old, sigma_old, epsilon_old = old_system_nbf.getParticleParameters(old_idx) #grab the parameters
             hybrid_idx = self._old_to_hybrid_map[old_idx]
-            scale_id = self.get_scale_identifier({hybrid_idx})
+            scale_id = self.get_scale_identifier(hybrid_idx)
             alch_id, string_identifier = self.get_alch_identifier(hybrid_idx)
             if string_identifier in ['core_atoms', 'environment_atoms']: #then it has a 'new' counterpart
                 new_idx = self._hybrid_to_new_map[hybrid_idx]
@@ -3720,7 +3721,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             new_idx = self._hybrid_to_new_map[hybrid_idx]
             charge_new, sigma_new, epsilon_new = new_system_nbf.getParticleParameters(new_idx)
             scale_id = self.get_scale_identifier(hybrid_idx)
-            alch_id, string_identifier = self.get_alch_identifier({hybrid_idx})
+            alch_id, string_identifier = self.get_alch_identifier(hybrid_idx)
             assert string_identifier == 'unique_new_atoms', f"encountered a problem iterating over what should only be unique new atoms; got {string_identifier}"
             alchemical_type_id = [0,1,0]
             electrostatics_force.addParticle(scale_id + alch_id + alchemical_type_id + [charge_new * 0., charge_new])
@@ -3824,43 +3825,34 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         """
         write nonbonded terms (either electrostatics/sterics).
         """
+        assert type in ['electrostatics', 'sterics']
+        
         str_type = type + '_exceptions' if exception else type
 
         old_system_nbf = self._old_system_forces['NonbondedForce']
         new_system_nbf = self._new_system_forces['NonbondedForce']
 
-        assert type in ['electrostatics', 'sterics']
-        scale_template = self._scale_templates if exception else self._particle_scale_templates
-        scale_bool_string1 = RxnHybridTopologyFactory.render_bool_string([i + f"_{str_type}" for i in scale_template[0]],
-                                                                        scale_template[1],
-                                                                        )
-        scale_bool_string2 = RxnHybridTopologyFactory.render_bool_string([i + f"_{str_type}" for i in scale_template[0]],
-                                                                        scale_template[2],
-                                                                        )
-        scale_bool_string = RxnHybridTopologyFactory.render_bool_string([i + f"_{str_type}" for i in scale_template[0]],
-                                                                        scale_template[1],
-                                                                        )
-
-        old_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_old" for i in range(self._num_alchemical_regions)],
-                                                                    ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
-        old_bool_string1 = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_old" for i in range(self._num_alchemical_regions)],
-                                                                    ['environment_region1'] + [f"alchemical_region_{i}1" for i in range(self._num_alchemical_regions)])
-        old_bool_string2 = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_old" for i in range(self._num_alchemical_regions)],
-                                                                    ['environment_region2'] + [f"alchemical_region_{i}2" for i in range(self._num_alchemical_regions)])
-
-        new_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_new" for i in range(self._num_alchemical_regions)],
-                                                                    ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
-        new_bool_string1 = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_new" for i in range(self._num_alchemical_regions)],
-                                                                    ['environment_region1'] + [f"alchemical_region_{i}1" for i in range(self._num_alchemical_regions)])
-        new_bool_string2 = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_new" for i in range(self._num_alchemical_regions)],
-                                                                    ['environment_region2'] + [f"alchemical_region_{i}2" for i in range(self._num_alchemical_regions)])
+        _logger.info("expression: ", expression)
 
         if not exception:
-            expression = self._default_RF_expression if type == 'electrostatics' else self._default_steric_expression
-        else:
-            expression = self._default_RF_exception_expression if type == 'electrostatics' else self._default_steric_exception_expression
-        if not exception:
+            scale_template = self._particle_scale_templates
+            scale_bool_string1 = RxnHybridTopologyFactory.render_bool_string([i + f"_{str_type}" for i in scale_template[0]],
+                                                                        scale_template[1]
+                                                                        )
+            scale_bool_string2 = RxnHybridTopologyFactory.render_bool_string([i + f"_{str_type}" for i in scale_template[0]],
+                                                                            scale_template[2]
+                                                                            )
+            old_bool_string1 = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_old" for i in range(self._num_alchemical_regions)],
+                                                            ['environment_region1'] + [f"alchemical_region_{i}1" for i in range(self._num_alchemical_regions)])
+            old_bool_string2 = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_old" for i in range(self._num_alchemical_regions)],
+                                                                        ['environment_region2'] + [f"alchemical_region_{i}2" for i in range(self._num_alchemical_regions)])
+            new_bool_string1 = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_new" for i in range(self._num_alchemical_regions)],
+                                                                    ['environment_region1'] + [f"alchemical_region_{i}1" for i in range(self._num_alchemical_regions)])
+            new_bool_string2 = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_new" for i in range(self._num_alchemical_regions)],
+                                                                        ['environment_region2'] + [f"alchemical_region_{i}2" for i in range(self._num_alchemical_regions)])
+
             if type == 'electrostatics':
+                expression = self._default_RF_expression
                 formatted_expression = expression.format(w_scale = self._w_RF_scale,
                                                          switching_ratio = self._RF_switching_ratio,
                                                          eps_RF = self._epsilon_RF,
@@ -3873,6 +3865,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                                                          new_bool_string2 = new_bool_string2
                                                         )
             else:
+                expression = self._default_steric_expression
                 formatted_expression = expression.format(w_scale = self._w_sterics_scale,
                                                          switching_ratio = self._sterics_switching_ratio,
                                                          r_cutoff = self._r_sterics_cutoff.value_in_unit_system(unit.md_unit_system),
@@ -3883,8 +3876,21 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                                                          old_bool_string2 = old_bool_string2,
                                                          new_bool_string2 = new_bool_string2,
                                                         )
+
+            custom_nbf = openmm.CustomNonbondedForce(formatted_expression)
+
         else:
+            scale_template = self._scale_templates
+            scale_bool_string = RxnHybridTopologyFactory.render_bool_string([i + f"_{str_type}" for i in scale_template[0]],
+                                                                        scale_template[1]
+                                                                        )
+            old_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_old" for i in range(self._num_alchemical_regions)],
+                                                            ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
+            new_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_new" for i in range(self._num_alchemical_regions)],
+                                                                    ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
+
             if type == 'electrostatics':
+                expression = self._default_RF_exception_expression
                 formatted_expression = expression.format(w_scale = self._w_RF_scale,
                                                          switching_ratio = self._RF_switching_ratio,
                                                          eps_RF = self._epsilon_RF,
@@ -3894,6 +3900,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                                                          new_bool_string = new_bool_string,
                                                         )
             else:
+                expression = self._default_steric_exception_expression
                 formatted_expression = expression.format(w_scale = self._w_sterics_scale,
                                                          switching_ratio = self._sterics_switching_ratio,
                                                          r_cutoff = self._r_sterics_cutoff.value_in_unit_system(unit.md_unit_system),
@@ -3902,11 +3909,9 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                                                          new_bool_string = new_bool_string,
                                                         )
 
+            custom_nbf = openmm.CustomBondForce(formatted_expression)
 
 
-        custom_nbf = openmm.CustomNonbondedForce(formatted_expression) if not exception else openmm.CustomBondForce(formatted_expression)
-
-        scale_template = self._scale_templates if exception else self._particle_scale_templates
         for i in scale_template[0]: #add the scaling global parameters
             custom_nbf.addGlobalParameter(i + f"_{str_type}", 1.0)
 
