@@ -2572,7 +2572,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                              "chargeProd = charge1 * charge2;",
                              "charge1 = select(1 - both_environment, charge_old1 * {old_bool_string1} + charge_new1 * {new_bool_string1}, charge_old1) * {scale_bool_string1};",
                              "charge2 = select(1 - both_environment, charge_old2 * {old_bool_string2} + charge_new2 * {new_bool_string2}, charge_old2) * {scale_bool_string2};",
-                             "both_environment = environment_region1 * environment_region2",
+                             "both_environment = environment_region1 * environment_region2;",
 
                              #define reaction field u_RF
                              "u_RF = 1 / r_eff + (eps_RF - 1) * (r_eff^2 / (r_cutoff^3)) / (1 + 2 * eps_RF);",
@@ -3831,8 +3831,6 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         old_system_nbf = self._old_system_forces['NonbondedForce']
         new_system_nbf = self._new_system_forces['NonbondedForce']
-
-        _logger.info("expression: ", expression)
 
         if not exception:
             scale_template = self._particle_scale_templates
