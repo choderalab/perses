@@ -111,8 +111,8 @@ class PointMutationExecutor(object):
                  apo_box_dimensions=None,
                  flatten_torsions=False,
                  flatten_exceptions=False,
-                 vanilla=True,
-                 repartitioned=False,
+                 generate_unmodified_hybrid_topology_factory=True,
+                 generate_rest_capable_hybrid_topology_factory=False,
                  **kwargs):
         """
         arguments
@@ -161,9 +161,9 @@ class PointMutationExecutor(object):
                 in the htf, flatten torsions involving unique new atoms at lambda = 0 and unique old atoms are lambda = 1
             flatten_exceptions : bool, default False
                 in the htf, flatten exceptions involving unique new atoms at lambda = 0 and unique old atoms at lambda = 1
-            vanilla : bool, default True
+            generate_unmodified_hybrid_topology_factory : bool, default True
                 whether to generate a vanilla HybridTopologyFactory
-            repartitioned : bool, default False
+            generate_rest_capable_hybrid_topology_factory : bool, default False
                 whether to generate a RepartitionedHybridTopologyFactory
         TODO : allow argument for spectator ligands besides the 'ligand_file'
 
@@ -275,10 +275,10 @@ class PointMutationExecutor(object):
 
             logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta,
                                                         validate_energy_bookkeeping=validate_bool)
-            if vanilla:
+            if generate_unmodified_hybrid_topology_factory:
                 repartitioned_endstate = None
                 self.generate_htf(HybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
-            if repartitioned:
+            if generate_rest_capable_hybrid_topology_factory::
                  for repartitioned_endstate in [0, 1]:
                     self.generate_htf(RepartitionedHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
 
