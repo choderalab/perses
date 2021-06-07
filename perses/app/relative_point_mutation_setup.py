@@ -259,10 +259,10 @@ class PointMutationExecutor(object):
                                                                        new_resname=topology_proposal.new_topology.residue_topology.name)
             _logger.info(f"charge diff: {charge_diff}")
             if charge_diff != 0:
-                new_water_indices_to_ionize = point_mutation_engine.get_water_indices(charge_diff, new_positions, topology_proposal._new_topology, radius=0.8)
+                new_water_indices_to_ionize = point_mutation_engine.get_water_indices(charge_diff, new_positions, topology_proposal.new_topology, radius=0.8)
                 _logger.info(f"new water indices to ionize {new_water_indices_to_ionize}")
-                PointMutationExecutor._get_ion_and_water_parameters(topology_proposal.old_topology, topology_proposal.new_system)
-                PointMutationExecutor._transform_waters_into_ions(new_water_indices_to_ionize, topology_proposal.new_system, charge_diff)
+                self._get_ion_and_water_parameters(topology_proposal.old_system, topology_proposal.old_topology)
+                self._transform_waters_into_ions(new_water_indices_to_ionize, topology_proposal.new_system, charge_diff)
                 PointMutationExecutor._modify_atom_classes(new_water_indices_to_ionize, topology_proposal)
 
 
@@ -354,10 +354,10 @@ class PointMutationExecutor(object):
     def get_apo_rhtf_1(self):
         return self.apo_rhtf_1
 
-    @staticmethod
-    def _get_ion_and_water_parameters(system, topology, positive_ion_name="NA", negative_ion_name="CL", water_name="HOH"):
+    def _get_ion_and_water_parameters(self, system, topology, positive_ion_name="NA", negative_ion_name="CL", water_name="HOH"):
         '''
-        Get the charge, sigma, and epsilon for the positive and negative ions. Also get the charge of the water atoms.
+        Get the charge, sigma, and epsilon for the positive and negative ions. Also get the charge of the water atoms. Set
+        these parameters as class variables.
           
         Parameters
         ----------
@@ -372,25 +372,6 @@ class PointMutationExecutor(object):
         water_name : str, "HOH"
             the residue name of each water
         
-        Returns
-        -------
-        pos_charge
-            charge of positive ion
-        pos_sigma
-            sigma of positive ion
-        pos_epsilon
-            epsilon of positive ion
-        neg_charge
-            charge of negative ion
-        neg_sigma
-            sigma of negative ion
-        neg_epsilon
-            epsilon of negative ion
-        O_charge
-            charge of O atom in water
-        H_charge
-            charge of H atom in water
-    
         '''
     
         # Get the indices
@@ -422,10 +403,16 @@ class PointMutationExecutor(object):
             O_charge, _, _ = nbf.getParticleParameters(O_index)
             H_charge, _, _ = nbf.getParticleParameters(H_index)
     
-        return pos_charge, pos_sigma, pos_epsilon, neg_charge, neg_sigma, neg_epsilon, O_charge, H_charge
+        self._pos_charge = pos_charge
+        self._pos_sigma = pos_sigma
+        self._pos_epsilon = pos_epsilon
+        self._neg_charge = neg_charge
+        self._neg_sigma = neg_sigma
+        self._neg_epsilon = neg_epsilon
+        self._O_charge = O_charge
+        self._H_charge = H_charge
 
-    @staticmethod
-    def _transform_waters_into_ions(water_atoms, system, charge_diff):
+    def _transform_waters_into_ions(self, water_atoms, system, charge_diff):
         """
         given a system and an array of ints (corresponding to atoms to turn into ions), modify the nonbonded particle parameters in the system such that the Os are turned into the ion of interest and the charges of the Hs are zeroed.
 
@@ -445,9 +432,9 @@ class PointMutationExecutor(object):
         """
         # Determine which ion to turn the water into
         if charge_diff < 0: # Turn water into Cl-
-            ion_charge, ion_sigma, ion_epsilon = CL_CHARGE, CL_SIGMA, CL_EPSILON
+            ion_charge, ion_sigma, ion_epsilon = self._neg_charge, self._neg_sigma, self._neg_epsilon
         elif charge_diff > 0: # Turn water into Na+
-            ion_charge, ion_sigma, ion_epsilon = NA_CHARGE, NA_SIGMA, NA_EPSILON
+            ion_charge, ion_sigma, ion_epsilon = self._pos_charge, self._pos_sigma, self._pos_epsilon
 
         # Scale the nonbonded terms of the water atoms
         force_dict = {i.__class__.__name__: i for i in system.getForces()}
@@ -456,9 +443,9 @@ class PointMutationExecutor(object):
             for idx in water_atoms:
                 idx = int(idx)
                 charge, sigma, epsilon = nbf.getParticleParameters(idx)
-                if charge == O_CHARGE:
+                if charge == self._O_charge:
                     nbf.setParticleParameters(idx, ion_charge, ion_sigma, ion_epsilon)
-                elif charge == H_CHARGE:
+                elif charge == self._H_charge:
                     nbf.setParticleParameters(idx, charge*0.0, sigma, epsilon)
                 else:
                     raise Exception(f"Trying to modify an atom that is not part of a water residue. Atom index: {idx}")
