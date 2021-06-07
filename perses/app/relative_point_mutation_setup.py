@@ -21,14 +21,6 @@ temperature = 300 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS']
-CL_CHARGE = unit.Quantity(value=-1.0, unit=unit.elementary_charge)
-CL_SIGMA = unit.Quantity(value=0.4477656957373345, unit=unit.nanometer)
-CL_EPSILON = unit.Quantity(value=0.14891274399999999, unit=unit.kilojoule_per_mole)
-NA_CHARGE = unit.Quantity(value=1.0, unit=unit.elementary_charge)
-NA_SIGMA = unit.Quantity(value=0.2439280690268249, unit=unit.nanometer)
-NA_EPSILON = unit.Quantity(value=0.3658460312, unit=unit.kilojoule_per_mole)
-O_CHARGE = unit.Quantity(value=-0.834, unit=unit.elementary_charge)
-H_CHARGE = unit.Quantity(value=0.417, unit=unit.elementary_charge)
 
 # Set up logger
 import logging
@@ -362,7 +354,8 @@ class PointMutationExecutor(object):
     def get_apo_rhtf_1(self):
         return self.apo_rhtf_1
 
-    def get_ion_and_water_parameters(system, topology, positive_ion_name="NA", negative_ion_name="CL", water_name="HOH"):
+    @staticmethod
+    def _get_ion_and_water_parameters(system, topology, positive_ion_name="NA", negative_ion_name="CL", water_name="HOH"):
         '''
         Get the charge, sigma, and epsilon for the positive and negative ions. Also get the charge of the water atoms.
           
