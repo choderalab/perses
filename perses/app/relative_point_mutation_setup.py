@@ -263,13 +263,14 @@ class PointMutationExecutor(object):
                                                                    validate_energy_bookkeeping=validate_bool)
 
             #check for charge change...
-            charge_diff = point_mutation_engine._get_charge_difference(current_resname = topology_proposal._old_topology.residue_topology.name,
-                                                                       new_resname = topology_proposal._new_topology.residue_topology.name)
+            charge_diff = point_mutation_engine._get_charge_difference(current_resname=topology_proposal.old_topology.residue_topology.name,
+                                                                       new_resname=topology_proposal.new_topology.residue_topology.name)
             _logger.info(f"charge diff: {charge_diff}")
             if charge_diff != 0:
                 new_water_indices_to_ionize = point_mutation_engine.get_water_indices(charge_diff, new_positions, topology_proposal._new_topology, radius=0.8)
                 _logger.info(f"new water indices to ionize {new_water_indices_to_ionize}")
-                PointMutationExecutor._transform_waters_into_ions(new_water_indices_to_ionize, topology_proposal._new_system, charge_diff)
+                PointMutationExecutor._get_ion_and_water_parameters(topology_proposal.old_topology, topology_proposal.new_system)
+                PointMutationExecutor._transform_waters_into_ions(new_water_indices_to_ionize, topology_proposal.new_system, charge_diff)
                 PointMutationExecutor._modify_atom_classes(new_water_indices_to_ionize, topology_proposal)
 
 
@@ -278,7 +279,7 @@ class PointMutationExecutor(object):
             if generate_unmodified_hybrid_topology_factory:
                 repartitioned_endstate = None
                 self.generate_htf(HybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
-            if generate_rest_capable_hybrid_topology_factory::
+            if generate_rest_capable_hybrid_topology_factory:
                  for repartitioned_endstate in [0, 1]:
                     self.generate_htf(RepartitionedHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
 
@@ -360,6 +361,75 @@ class PointMutationExecutor(object):
 
     def get_apo_rhtf_1(self):
         return self.apo_rhtf_1
+
+    def get_ion_and_water_parameters(system, topology, positive_ion_name="NA", negative_ion_name="CL", water_name="HOH"):
+        '''
+        Get the charge, sigma, and epsilon for the positive and negative ions. Also get the charge of the water atoms.
+          
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            the system from which to retrieve parameters
+        topology : app.Topology
+            the topology corresponding to the above system from which to retrieve atom indices
+        positive_ion_name : str, "NA"
+            the residue name of each positive ion
+        negative_ion_name : str, "CL"
+            the residue name of each negative ion
+        water_name : str, "HOH"
+            the residue name of each water
+        
+        Returns
+        -------
+        pos_charge
+            charge of positive ion
+        pos_sigma
+            sigma of positive ion
+        pos_epsilon
+            epsilon of positive ion
+        neg_charge
+            charge of negative ion
+        neg_sigma
+            sigma of negative ion
+        neg_epsilon
+            epsilon of negative ion
+        O_charge
+            charge of O atom in water
+        H_charge
+            charge of H atom in water
+    
+        '''
+    
+        # Get the indices
+        pos_index = None
+        neg_index = None
+        O_index = None
+        H_index = None
+        for atom in topology.atoms():
+            if atom.residue.name == positive_ion_name and not pos_index:
+                pos_index = atom.index
+            elif atom.residue.name == negative_ion_name and not neg_index:
+                neg_index = atom.index
+            elif atom.residue.name == water_name and (not O_index or not H_index):
+                if atom.name == 'O':
+                    O_index = atom.index
+                elif atom.name == 'H1':
+                    H_index = atom.index
+        assert pos_index is not None, f"Error occurred when trying to turn a water into an ion: No positive ions with residue name {positive_ion_name} found"
+        assert neg_index is not None, f"Error occurred when trying to turn a water into an ion: No negative ions with residue name {negative_ion_name} found"
+        assert O_index is not None, f"Error occurred when trying to turn a water into an ion: No O atoms with residue name {water_name} and atom name O found"
+        assert H_index is not None, f"Error occurred when trying to turn a water into an ion: No water atoms with residue name {water_name} and atom name H1 found" 
+    
+        # Get parameters from nonbonded force
+        force_dict = {i.__class__.__name__: i for i in system.getForces()}
+        if 'NonbondedForce' in [i for i in force_dict.keys()]:
+            nbf = force_dict['NonbondedForce']
+            pos_charge, pos_sigma, pos_epsilon = nbf.getParticleParameters(pos_index)
+            neg_charge, neg_sigma, neg_epsilon = nbf.getParticleParameters(neg_index)
+            O_charge, _, _ = nbf.getParticleParameters(O_index)
+            H_charge, _, _ = nbf.getParticleParameters(H_index)
+    
+        return pos_charge, pos_sigma, pos_epsilon, neg_charge, neg_sigma, neg_epsilon, O_charge, H_charge
 
     @staticmethod
     def _transform_waters_into_ions(water_atoms, system, charge_diff):
