@@ -2792,8 +2792,8 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             self._default_RF_expression = ' '.join(self._default_RF_expr_list)
             self._default_RF_exception_expr_list[9] = "u_RF = 1 / r_eff;"
             self._default_RF_exception_expression = ' '.join(self._default_RF_exception_expr_list)
-            self._RF_switching_ratio = 1
-            self._sterics_switching_ratio = 1
+            self._RF_switching_ratio = 0.99
+            self._sterics_switching_ratio = 0.99
 
         # Prepare dicts of forces, which will be useful later
         # TODO: Store this as self._system_forces[name], name in ('old', 'new', 'hybrid') for compactness
@@ -2976,10 +2976,10 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         ]
 
         #we also have to define a particle scale template for the per_particle_parameters of the `NonbondedForce`
-        params1 = ['nonscale_lambda1'] + [f"scale_lambda_{i}1" for i in range(self.num_scale_regions)]
-        params2 = ['nonscale_lambda2'] + [f"scale_lambda_{i}2" for i in range(self.num_scale_regions)]
+        params1 = ['nonscale_region1'] + [f"scale_region_{i}1" for i in range(self.num_scale_regions)]
+        params2 = ['nonscale_region2'] + [f"scale_region_{i}2" for i in range(self.num_scale_regions)]
         self._particle_scale_templates = [
-                                            list(itertools.chain.from_iterable([['nonscale_lambda']] + [[f"scale_lambda_{i}", f"interscale_lambda_{i}"] for i in range(self.num_scale_regions)])),
+                                            list(itertools.chain.from_iterable([['nonscale_lambda']] + [[f"scale_lambda_{i}"] for i in range(self.num_scale_regions)])),
                                             params1,
                                             params2
         ]
@@ -3825,6 +3825,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         """
         write nonbonded terms (either electrostatics/sterics).
         """
+        import itertools
         assert type in ['electrostatics', 'sterics']
         
         str_type = type + '_exceptions' if exception else type
@@ -3922,7 +3923,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         if not exception:
 
             #add per-particle parameters parameter
-            for i in self._particle_scale_templates[1]: #add the scaling per particle parameters
+            for i in ['nonscale_region'] + [f"scale_region_{i}" for i in range(self.num_scale_regions)]: #add the scaling per particle parameters
                 custom_nbf.addPerParticleParameter(i)
 
             for i in ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)]:
@@ -3943,7 +3944,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                 custom_nbf.addPerParticleParameter('epsilon_new')
         else:
              #add per-bond parameters parameter
-            for i in self._scale_templates[1]: #add the scaling per bond parameters
+            for i in ['nonscale_region'] + list(itertools.chain.from_iterable([[f"scale_region_{i}", f"interscale_region_{i}"] for i in range(self.num_scale_regions)])): #add the scaling per bond parameters
                 custom_nbf.addPerBondParameter(i)
 
             for i in ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)]:
