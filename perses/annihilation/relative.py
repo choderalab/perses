@@ -3725,7 +3725,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             assert string_identifier == 'unique_new_atoms', f"encountered a problem iterating over what should only be unique new atoms; got {string_identifier}"
             alchemical_type_id = [0,1,0]
             electrostatics_force.addParticle(scale_id + alch_id + alchemical_type_id + [charge_new * 0., charge_new])
-            sterics_force.addParticle(scale_id + alch_id + alchemical_type_id + [sigma_new, sigma_new, epsilon_old * 0., epsilon_new])
+            sterics_force.addParticle(scale_id + alch_id + alchemical_type_id + [sigma_new, sigma_new, epsilon_new * 0., epsilon_new])
 
         # now remove interactions between unique old/new
         unique_news = self._alchemical_regions_by_type['unique_new_atoms']
