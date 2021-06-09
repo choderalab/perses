@@ -2570,12 +2570,14 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                              #define topological term
                              f"c_RF = {ONE_4PI_EPS0} * chargeProd;",
                              "chargeProd = charge1 * charge2;",
-                             "charge1 = select(1 - both_environment, charge_old1 * {old_bool_string1} + charge_new1 * {new_bool_string1}, charge_old1) * {scale_bool_string1};",
-                             "charge2 = select(1 - both_environment, charge_old2 * {old_bool_string2} + charge_new2 * {new_bool_string2}, charge_old2) * {scale_bool_string2};",
-                             "both_environment = environment_region1 * environment_region2;",
+                             "charge1 = ((charge_old1 * {old_bool_string1}) + (charge_new1 * {new_bool_string1})) * {scale_bool_string1};", 
+                             "charge2 = ((charge_old2 * {old_bool_string2}) + (charge_new2 * {new_bool_string2})) * {scale_bool_string2};",
+                             #"charge1 = select(1 - both_environment, charge_old1 * {old_bool_string1} + charge_new1 * {new_bool_string1}, charge_old1) * {scale_bool_string1};",
+                             #"charge2 = select(1 - both_environment, charge_old2 * {old_bool_string2} + charge_new2 * {new_bool_string2}, charge_old2) * {scale_bool_string2};",
+                             #"both_environment = environment_region1 * environment_region2;",
 
                              #define reaction field u_RF
-                             "u_RF = 1 / r_eff + (eps_RF - 1) * (r_eff^2 / (r_cutoff^3)) / (1 + 2 * eps_RF);",
+                             "u_RF = (1 / r_eff) + (((eps_RF - 1) * (r_eff^2)) / ((r_cutoff^3) * (1 + (2 * eps_RF)));",
 
                              #r_eff
                              "r_eff = sqrt(r^2 + w^2);",
@@ -2600,8 +2602,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     _default_RF_exception_expr_list[5] = "chargeProd = select(1 - environment_region, chargeProd_old * {old_bool_string} + chargeProd_new * {new_bool_string}, chargeProd_old);"
     _default_RF_exception_expr_list[6] = ''
     _default_RF_exception_expr_list[7] = ''
-    _default_RF_exception_expr_list[8] = ''
-    _default_RF_exception_expr_list[11] = "w = step(unique_old + unique_new - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string}) * {w_scale};"
+    _default_RF_exception_expr_list[10] = "w = step(unique_old + unique_new - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string}) * {w_scale};"
 
 
     _default_RF_expression = ' '.join(_default_RF_expr_list)
@@ -2614,14 +2615,13 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
                                   # sigma
                                   "sigma = (sigma1 + sigma2) / 2;",
-                                  "sigma1 = select(1 - both_environment, sigma_old1 * {old_bool_string1} + sigma_new1 * {new_bool_string1}, sigma_old1);",
-                                  "sigma2 = select(1 - both_environment, sigma_old2 * {old_bool_string2} + sigma_new2 * {new_bool_string2}, sigma_old2);",
+                                  "sigma1 = (sigma_old1 * {old_bool_string1}) + (sigma_new1 * {new_bool_string1});",
+                                  "sigma2 = (sigma_old2 * {old_bool_string2}) + (sigma_new2 * {new_bool_string2});",
 
                                   # epsilon
                                   "epsilon = sqrt(epsilon1 * epsilon2);",
-                                  "epsilon1 = select(1 - both_environment, epsilon_old1 * {old_bool_string1} + epsilon_new1 * {new_bool_string1}, epsilon_old1) * {scale_bool_string1};",
-                                  "epsilon2 = select(1 - both_environment, epsilon_old2 * {old_bool_string2} + epsilon_new2 * {new_bool_string2}, epsilon_old2) * {scale_bool_string2};",
-                                  "both_environment = environment_region1 * environment_region2;",
+                                  "epsilon1 = ((epsilon_old1 * {old_bool_string1}) + (epsilon_new1 * {new_bool_string1})) * {scale_bool_string1};",
+                                  "epsilon2 = ((epsilon_old2 * {old_bool_string2}) + (epsilon_new2 * {new_bool_string2})) * {scale_bool_string2};",
 
                                    #r_eff
                                    "r_eff = sqrt(r^2 + w^2);",
@@ -2645,8 +2645,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     _default_steric_exception_expr_list[6] = "epsilon = select(1 - environment_region, epsilon_old * {old_bool_string} + epsilon_new * {new_bool_string}, epsilon_old);"
     _default_steric_exception_expr_list[7] = ''
     _default_steric_exception_expr_list[8] = ''
-    _default_steric_exception_expr_list[9] = ''
-    _default_steric_exception_expr_list[11] = "w = step(unique_old + unique_new - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string}) * {w_scale};"
+    _default_steric_exception_expr_list[10] = "w = step(unique_old + unique_new - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string}) * {w_scale};"
 
 
     _default_steric_expression = ' '.join(_default_steric_expr_list)
@@ -2788,12 +2787,11 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         # Modify properties for testing:
         if generate_htf_for_testing:
-            self._default_RF_expr_list[9] = "u_RF = 1 / r_eff;"
+            self._default_RF_expr_list[2] = "switch = 1;"
+            self._default_RF_expr_list[8] = "u_RF = 1 / r_eff;"
             self._default_RF_expression = ' '.join(self._default_RF_expr_list)
-            self._default_RF_exception_expr_list[9] = "u_RF = 1 / r_eff;"
+            self._default_RF_exception_expr_list[8] = "u_RF = 1 / r_eff;"
             self._default_RF_exception_expression = ' '.join(self._default_RF_exception_expr_list)
-            self._RF_switching_ratio = 0.99
-            self._sterics_switching_ratio = 0.99
 
         # Prepare dicts of forces, which will be useful later
         # TODO: Store this as self._system_forces[name], name in ('old', 'new', 'hybrid') for compactness
@@ -3282,7 +3280,6 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         core_bond_expression += f"K = {old_bool_string} * K1 + {new_bool_string} * K2;"
         core_bond_expression += f"length = {old_bool_string} * length1 + {new_bool_string} * length2;"
-        print(core_bond_expression)
         custom_bond_force = openmm.CustomBondForce(core_bond_expression)
         self._hybrid_system.addForce(custom_bond_force)
 
@@ -3705,9 +3702,13 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                     alchemical_type_id = [0,0,1]
                 else:
                     alchemical_type_id = [0,0,0]
+                    assert charge_old == charge_new, f"charges do not match: {charge_old} (old) and {charge_new} (new)"
+                    assert sigma_old == sigma_new, f"sigmas do not match: {sigma_old} (old) and {sigma_new} (new)"
+                    assert epsilon_old == epsilon_new, f"epsilons do not match: {epsilon_old} (old) and {epsilon_new} (new)"
+                    charge_new, sigma_new, epsilon_new = charge_old * 0., sigma_old*0., epsilon_old * 0.
             elif string_identifier in ['unique_old_atoms']: # it does not and we just turn the term off
-                charge_new, sigma_new, epsilon_new = charge_old * 0., sigma_old, epsilon_old * 0.
                 alchemical_type_id = [1,0,0]
+                charge_new, sigma_new, epsilon_new = charge_old * 0., sigma_old*0., epsilon_old * 0.
             else:
                 raise Exception(f"iterating over old terms yielded unique new atom.")
 
@@ -3967,7 +3968,6 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         #handle some nonbonded attributes
         standard_nonbonded_method = old_system_nbf.getNonbondedMethod()
-        print(standard_nonbonded_method)
         if standard_nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
             if exception:
                 custom_nbf.setUsesPeriodicBoundaryConditions(True)
