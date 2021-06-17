@@ -5,7 +5,6 @@ from simtk.openmm import app
 from simtk import unit, openmm
 import numpy as np
 import os
-import random
 from nose.tools import nottest
 from pkg_resources import resource_filename
 
@@ -40,6 +39,7 @@ CARBON_MASS = 12.01
 ENERGY_THRESHOLD = 1e-1
 REFERENCE_PLATFORM = openmm.Platform.getPlatformByName("CPU")
 aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
+rng = np.random.RandomState(42)
 
 def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions):
     """
@@ -668,7 +668,7 @@ def RepartitionedHybridTopologyFactory_energies(topology, chain, system, positio
         if res.id == '2':
             wt_res = res.name
     aminos_updated = [amino for amino in aminos if amino not in [wt_res, 'PRO', 'HIS', 'TRP', 'PHE', 'TYR']]
-    mutant = random.choice(aminos_updated)
+    mutant = rng.choice(aminos_updated)
     print(f'Making mutation {wt_res}->{mutant}')
 
     # Create point mutation engine to mutate residue at id 2 to random amino acid
@@ -806,7 +806,7 @@ def flattenedHybridTopologyFactory_energies(topology, chain, system, positions, 
 
     # Create point mutation engine to mutate residue at id 2 to a random amino acid
     aminos_updated = [amino for amino in aminos if amino not in ['ALA', 'PRO', 'HIS', 'TRP', 'PHE', 'TYR']]
-    mutant = random.choice(aminos_updated)
+    mutant = rng.choice(aminos_updated)
     print(f'Making mutation ALA->{mutant}')
     point_mutation_engine = PointMutationEngine(wildtype_topology=topology,
                                                 system_generator=system_generator,

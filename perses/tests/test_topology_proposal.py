@@ -35,6 +35,7 @@ kT = kB * temperature
 beta = 1.0 / kT
 ENERGY_THRESHOLD = 1e-6
 PROHIBITED_RESIDUES = ['CYS']
+rng = np.random.RandomState(42)
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
@@ -391,7 +392,7 @@ def test_specify_allowed_mutants():
     for chain in modeller.topology.chains():
         if chain.id == chain_id:
             residues = chain._residues
-    mutant_res = np.random.choice(residues[1:-1])
+    mutant_res = rng.choice(residues[1:-1])
 
     pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, allowed_mutations=allowed_mutations)
 
@@ -434,7 +435,7 @@ def test_propose_self():
     for chain in modeller.topology.chains():
         if chain.id == chain_id:
             residues = [res for res in chain._residues if res.name not in PROHIBITED_RESIDUES]
-    mutant_res = np.random.choice(residues[1:-1])
+    mutant_res = rng.choice(residues[1:-1])
     allowed_mutations = [(mutant_res.id,mutant_res.name)]
 
     pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, allowed_mutations=allowed_mutations)

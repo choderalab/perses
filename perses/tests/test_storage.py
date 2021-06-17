@@ -80,13 +80,15 @@ def test_write_array():
     view1 = NetCDFStorageView(storage, 'envname1', 'modname')
     view2 = NetCDFStorageView(storage, 'envname2', 'modname')
 
-    from numpy.random import random
+    import numpy as np
+    rng = np.random.RandomState(42)
+
     shape = (10,3)
-    array = random(shape)
+    array = rng.random(shape)
     view1.write_array('singleton', array)
 
     for iteration in range(10):
-        array = random(shape)
+        array = rng.random(shape)
         view1.write_array('varname', array, iteration=iteration)
         view2.write_array('varname', array, iteration=iteration)
 

@@ -14,6 +14,7 @@ beta = 1.0/kT # unit-bearing inverse thermal energy
 CARBON_MASS = 12.01 # float (implicitly in units of AMU)
 REFERENCE_PLATFORM = openmm.Platform.getPlatformByName("Reference")
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
+rng = np.random.RandomState(42)
 #########################################
 # Tests
 #########################################
@@ -27,7 +28,7 @@ def test_coordinate_conversion():
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
     #try to transform random coordinates to and from cartesian
     for i in range(200):
-        indices = np.random.randint(100, size=4)
+        indices = rng.randint(100, size=4)
         atom_position = unit.Quantity(np.array([ 0.80557722 ,-1.10424644 ,-1.08578826]), unit=unit.nanometers)
         bond_position = unit.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=unit.nanometers)
         angle_position = unit.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=unit.nanometers)
@@ -131,7 +132,7 @@ def test_try_random_itoc():
     angle_position = unit.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=unit.nanometers)
     torsion_position = unit.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=unit.nanometers)
     for i in range(1000):
-        atom_position += unit.Quantity(np.random.normal(size=3), unit=unit.nanometers)
+        atom_position += unit.Quantity(rng.normal(size=3), unit=unit.nanometers)
         r, theta, phi = _get_internal_from_omm(atom_position, bond_position, angle_position, torsion_position)
         recomputed_xyz, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
         new_r, new_theta, new_phi = _get_internal_from_omm(recomputed_xyz,bond_position, angle_position, torsion_position)

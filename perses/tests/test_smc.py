@@ -36,6 +36,7 @@ neq_integrator = 'langevin'
 external_parallelism = None
 internal_parallelism = {'library': ('dask', 'LSF'), 'num_processes': 2}
 os.system(f"mkdir {trajectory_directory}")
+rng = np.random.RandomState(42)
 #######################
 
 @nottest
@@ -179,7 +180,7 @@ def test_compute_survival_rate():
         """
         ancestries = [np.arange(10)]
         for i in range(10):
-            new_ancestries = np.random.choice(ancestries[-1], 10)
+            new_ancestries = rng.choice(ancestries[-1], 10)
             ancestries.append(new_ancestries)
         return ancestries
 
@@ -194,7 +195,7 @@ def test_multinomial_resample():
     """
     test the multinomial resampler
     """
-    total_works = np.random.rand(10)
+    total_works = rng.rand(10)
     num_resamples = 10
     resampled_works, resampled_indices = multinomial_resample(total_works, num_resamples)
     assert all(_val == np.average(total_works) for _val in resampled_works), f"the returned resampled works are not a uniform average"
@@ -206,7 +207,7 @@ def test_ESS():
     test the effective sample size computation
     """
     #the ESS already passes with a normalization assertion
-    dummy_prev_works, dummy_works_incremental = np.random.rand(10), np.random.rand(10)
+    dummy_prev_works, dummy_works_incremental = rng.rand(10), rng.rand(10)
     normalized_ESS = ESS(dummy_prev_works, dummy_works_incremental)
 
 def test_CESS():
@@ -214,14 +215,14 @@ def test_CESS():
     test the conditional effective sample size computation
     """
     #the CESS must be guaranteed to be between 0 and 1
-    dummy_prev_works, dummy_works_incremental = np.random.rand(10), np.random.rand(10)
+    dummy_prev_works, dummy_works_incremental = rng.rand(10), rng.rand(10)
     _CESS = CESS(dummy_prev_works, dummy_works_incremental)
 
 def test_compute_timeseries():
     """
     test the compute_timeseries function
     """
-    reduced_potentials = np.random.rand(100)
+    reduced_potentials = rng.rand(100)
     data = compute_timeseries(reduced_potentials)
     assert len(data[3]) <= len(reduced_potentials), f"the length of uncorrelated data is at most the length of the raw data"
 
