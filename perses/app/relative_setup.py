@@ -54,7 +54,6 @@ class RelativeFEPSetup(object):
                  temperature=300.0 * unit.kelvin,
                  solvent_padding=9.0 * unit.angstroms,
                  ionic_strength=0.15 * unit.molar,
-                 atom_map=None,
                  hmass=4*unit.amus,
                  neglect_angles=False,
                  map_strength='default',

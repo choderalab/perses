@@ -17,7 +17,7 @@ from openff.toolkit.topology import Molecule
 from openmmforcefields.generators import SystemGenerator
 
 ENERGY_THRESHOLD = 1e-2
-temperature = 298 * unit.kelvin
+temperature = 300 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS']
