@@ -91,6 +91,7 @@ class PointMutationExecutor(object):
                  conduct_endstate_validation=True,
                  ligand_input=None,
                  ligand_index=0,
+                 allow_undefined_stereo_sdf=False,
                  water_model='tip3p',
                  ionic_strength=0.15 * unit.molar,
                  forcefield_files=['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
@@ -125,6 +126,8 @@ class PointMutationExecutor(object):
                 path to ligand of interest (i.e. small molecule or protein); .sdf or .pdb
             ligand_index : int, default 0
                 which ligand to use
+            allow_undefined_stereo_sdf : bool, default False
+                whether to allow an SDF file to contain undefined stereocenters
             water_model : str, default 'tip3p'
                 solvent model to use for solvation
             ionic_strength : float * unit.molar, default 0.15 * unit.molar
@@ -175,7 +178,7 @@ class PointMutationExecutor(object):
         if ligand_input:
             if isinstance(ligand_input, str):
                 if ligand_input.endswith('.sdf'): # small molecule
-                        ligand_mol = createOEMolFromSDF(ligand_input, index=ligand_index)
+                        ligand_mol = createOEMolFromSDF(ligand_file, index=ligand_index, allow_undefined_stereo=allow_undefined_stereo_sdf)
                         molecules.append(Molecule.from_openeye(ligand_mol, allow_undefined_stereo=False))
                         ligand_positions, ligand_topology = extractPositionsFromOEMol(ligand_mol),  forcefield_generators.generateTopologyFromOEMol(ligand_mol)
                         ligand_md_topology = md.Topology.from_openmm(ligand_topology)
