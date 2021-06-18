@@ -1417,6 +1417,18 @@ class PolymerProposalEngine(ProposalEngine):
     This base class is not meant to be invoked directly.
     """
 
+    _aminos = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'PHE',
+                    'SER', 'THR', 'TRP', 'TYR', 'VAL'] # common naturally-occurring amino acid names
+                    # Note this does not include PRO since there's a problem with OpenMM's template DEBUG
+    _positive_aminos = ['ARG', 'HIS', 'LYS']
+    _negative_aminos = ['ASP', 'GLU']
+
+    def _get_neutrals(aminos, positive, negative):
+        excluded = positive + negative
+        return [amino for amino in aminos if amino not in excluded]
+
+    _neutral_aminos = _get_neutrals(_aminos, _positive_aminos, _negative_aminos)
+
     # TODO: Document meaning of 'aggregate'
     def __init__(self, system_generator, chain_id, proposal_metadata=None, always_change=True, aggregate=False):
         """
@@ -1442,9 +1454,6 @@ class PolymerProposalEngine(ProposalEngine):
         _logger.debug(f"Instantiating PolymerProposalEngine")
         super(PolymerProposalEngine,self).__init__(system_generator=system_generator, proposal_metadata=proposal_metadata, always_change=always_change)
         self._chain_id = chain_id # chain identifier defining polymer to be modified
-        self._aminos = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'PHE',
-                        'SER', 'THR', 'TRP', 'TYR', 'VAL'] # common naturally-occurring amino acid names
-                        # Note this does not include PRO since there's a problem with OpenMM's template DEBUG
         self._aminos_3letter_to_1letter_map = {'ALA' : 'A' ,
                                                 'ARG' : 'R' ,
                                                 'ASN' : 'N' ,
@@ -1465,7 +1474,6 @@ class PolymerProposalEngine(ProposalEngine):
                                                 'TRP' : 'W' ,
                                                 'TYR' : 'Y' ,
                                                 'VAL' : 'V' }
-
         self._aggregate = aggregate # ?????????
 
     @staticmethod
@@ -1483,6 +1491,83 @@ class PolymerProposalEngine(ProposalEngine):
                 name_without_spaces = name_without_spaces[1:] + name_without_spaces[0]
             atom.SetName(name_without_spaces)
         return current_oemol
+
+    @staticmethod
+    def _get_charge_difference(current_resname, new_resname):
+        """
+        return the charge of the old res - charge new res
+
+        Parameters
+        ----------
+        current_resname : str
+            three letter identifier for original residue
+        new_resname : str
+            three letter identifier for new residue
+
+        Returns
+        -------
+        chargediff : int
+            charge(new_res) - charge(old_res)
+        """
+        assert new_resname in PolymerProposalEngine._aminos
+        assert current_resname in PolymerProposalEngine._aminos
+
+        new_rescharge, current_rescharge = 0,0
+        resname_to_charge = {current_resname: 0, new_resname: 0}
+        for resname in [new_resname, current_resname]:
+            if resname in PolymerProposalEngine._negative_aminos:
+                resname_to_charge[resname] -= 1
+            elif resname in PolymerProposalEngine._positive_aminos:
+                resname_to_charge[resname] += 1
+
+        return resname_to_charge[current_resname] - resname_to_charge[new_resname]
+
+    @staticmethod
+    def get_water_indices(charge_diff,
+                               new_positions,
+                               new_topology,
+                               radius=0.8):
+        """
+        Choose random water(s) (at least `radius` nm away from the protein) to turn into ion(s). Returns the atom indices of the water(s) (index w.r.t. new_topology)
+
+        Parameters
+        ----------
+        charge_diff : int
+            the charge difference between the old_system - new_system
+        new_positions : np.ndarray(N, 3)
+            positions (nm) of atoms corresponding to new_topology
+        new_topology : openmm.Topology
+            topology of new system
+        radius : float, default 0.8
+            minimum distance (in nm) that all candidate waters must be from 'protein atoms'
+
+        Returns
+        -------
+        ion_indices : np.array(abs(charge_diff)*3)
+            indices of water atoms to be turned into ions
+        """
+
+        import mdtraj as md
+        # Create trajectory
+        traj = md.Trajectory(new_positions[np.newaxis, ...], md.Topology.from_openmm(new_topology))
+        water_atoms = traj.topology.select(f"water")
+        query_atoms = traj.top.select('protein')
+
+        # Get water atoms within radius of protein
+        neighboring_atoms = md.compute_neighbors(traj, radius, query_atoms, haystack_indices=water_atoms)[0]
+
+        # Get water atoms outside of radius of protein
+        nonneighboring_residues = set([atom.residue.index for atom in traj.topology.atoms if (atom.index in water_atoms) and (atom.index not in neighboring_atoms)])
+        assert len(nonneighboring_residues) > 0, "there are no available nonneighboring waters"
+        # Choose N random nonneighboring waters, where N is determined based on the charge_diff
+        choice_residues = np.random.choice(list(nonneighboring_residues), size=abs(charge_diff), replace=False)
+
+        # Get the atom indices in the water(s)
+        choice_indices = np.array([[atom.index for atom in traj.topology.residue(res).atoms] for res in choice_residues])
+
+        return np.ndarray.flatten(choice_indices)
+
+
 
     def propose(self,
                 current_system,
@@ -1630,20 +1715,6 @@ class PolymerProposalEngine(ProposalEngine):
         old_res_name = old_res_names[0]
         _logger.debug(f"\told res name: {old_res_name}")
         new_res_name = list(index_to_new_residues.values())[0]
-
-
-        # Adjust logp_propose based on HIS presence
-        # his_residues = ['HID', 'HIE']
-        # old_residue = residue_map[0][0]
-        # proposed_residue = residue_map[0][1]
-        # if old_residue.name in his_residues and proposed_residue not in his_residues:
-        #     logp_propose = math.log(2)
-        # elif old_residue.name not in his_residues and proposed_residue in his_residues:
-        #     logp_propose = math.log(0.5)
-        # else:
-        #     logp_propose = 0.0
-
-        #we should be able to check the system to make sure that all of the core atoms
 
         # Create TopologyProposal.
         current_res = [res for res in current_topology.residues() if res.index == chosen_res_index][0]
