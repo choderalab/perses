@@ -24,7 +24,7 @@ ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS']
 
 # Set up logger
 import logging
-_logger = logging.getLogger()
+_logger = logging.getLogger("setup")
 _logger.setLevel(logging.INFO)
 
 class PointMutationExecutor(object):
@@ -104,7 +104,8 @@ class PointMutationExecutor(object):
                  apo_box_dimensions=None,
                  flatten_torsions=False,
                  flatten_exceptions=False,
-                 repartitioned_endstate=None,
+                 generate_unmodified_hybrid_topology_factory=True,
+                 generate_rest_capable_hybrid_topology_factory=False,
                  **kwargs):
         """
         arguments
@@ -121,7 +122,7 @@ class PointMutationExecutor(object):
             conduct_endstate_validation : bool, default True
                 whether to conduct an endstate validation of the HybridTopologyFactory. If using the RepartitionedHybridTopologyFactory,
                 endstate validation cannot and will not be conducted.
-            ligand_file : str, default None
+            ligand_input : str, default None
                 path to ligand of interest (i.e. small molecule or protein); .sdf or .pdb
             ligand_index : int, default 0
                 which ligand to use
@@ -155,9 +156,10 @@ class PointMutationExecutor(object):
                 in the htf, flatten torsions involving unique new atoms at lambda = 0 and unique old atoms are lambda = 1
             flatten_exceptions : bool, default False
                 in the htf, flatten exceptions involving unique new atoms at lambda = 0 and unique old atoms at lambda = 1
-            repartitioned_endstate : int, default None
-                the endstate (0 or 1) at which to build the RepartitionedHybridTopologyFactory. By default, this is None,
-                meaning a vanilla HybridTopologyFactory will be built.
+            generate_unmodified_hybrid_topology_factory : bool, default True
+                whether to generate a vanilla HybridTopologyFactory
+            generate_rest_capable_hybrid_topology_factory : bool, default False
+                whether to generate a RepartitionedHybridTopologyFactory
         TODO : allow argument for spectator ligands besides the 'ligand_file'
 
         """
@@ -238,7 +240,7 @@ class PointMutationExecutor(object):
 
         # Run pipeline...
         htfs = []
-        for (top, pos, sys) in inputs:
+        for is_complex, (top, pos, sys) in enumerate(inputs):
             point_mutation_engine = PointMutationEngine(wildtype_topology=top,
                                                                  system_generator=self.system_generator,
                                                                  chain_id=mutation_chain_id, # Denote the chain id allowed to mutate (it's always a string variable)
@@ -254,34 +256,27 @@ class PointMutationExecutor(object):
             validate_bool = False if old_res.name in ring_amino_acids or proposed_residue in ring_amino_acids else True
             new_positions, logp_proposal = geometry_engine.propose(topology_proposal, pos, beta,
                                                                    validate_energy_bookkeeping=validate_bool)
+
+            #check for charge change...
+            charge_diff = point_mutation_engine._get_charge_difference(current_resname=topology_proposal.old_topology.residue_topology.name,
+                                                                       new_resname=topology_proposal.new_topology.residue_topology.name)
+            _logger.info(f"charge diff: {charge_diff}")
+            if charge_diff != 0:
+                new_water_indices_to_ionize = point_mutation_engine.get_water_indices(charge_diff, new_positions, topology_proposal.new_topology, radius=0.8)
+                _logger.info(f"new water indices to ionize {new_water_indices_to_ionize}")
+                self._get_ion_and_water_parameters(topology_proposal.old_system, topology_proposal.old_topology)
+                self._transform_waters_into_ions(new_water_indices_to_ionize, topology_proposal.new_system, charge_diff)
+                PointMutationExecutor._modify_atom_classes(new_water_indices_to_ionize, topology_proposal)
+
+
             logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta,
                                                         validate_energy_bookkeeping=validate_bool)
-
-            if repartitioned_endstate is None:
-                factory = HybridTopologyFactory
-            elif repartitioned_endstate in [0, 1]:
-                factory = RepartitionedHybridTopologyFactory
-
-            forward_htf = factory(topology_proposal=topology_proposal,
-                                  current_positions=pos,
-                                  new_positions=new_positions,
-                                  use_dispersion_correction=False,
-                                  functions=None,
-                                  softcore_alpha=None,
-                                  bond_softening_constant=1.0,
-                                  angle_softening_constant=1.0,
-                                  soften_only_new=False,
-                                  neglected_new_angle_terms=[],
-                                  neglected_old_angle_terms=[],
-                                  softcore_LJ_v2=True,
-                                  softcore_electrostatics=True,
-                                  softcore_LJ_v2_alpha=0.85,
-                                  softcore_electrostatics_alpha=0.3,
-                                  softcore_sigma_Q=1.0,
-                                  interpolate_old_and_new_14s=flatten_exceptions,
-                                  omitted_terms=None,
-                                  endstate=repartitioned_endstate,
-                                  flatten_torsions=flatten_torsions)
+            if generate_unmodified_hybrid_topology_factory:
+                repartitioned_endstate = None
+                self.generate_htf(HybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
+            if generate_rest_capable_hybrid_topology_factory:
+                 for repartitioned_endstate in [0, 1]:
+                    self.generate_htf(RepartitionedHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
 
             if not topology_proposal.unique_new_atoms:
                 assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
@@ -306,10 +301,43 @@ class PointMutationExecutor(object):
             else:
                 pass
 
-            htfs.append(forward_htf)
-
-        self.apo_htf = htfs[0]
-        self.complex_htf = htfs[1] if ligand_input else None
+    def generate_htf(self, factory, topology_proposal, old_positions, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex):
+        htf = factory(topology_proposal=topology_proposal,
+                                      current_positions=old_positions,
+                                      new_positions=new_positions,
+                                      use_dispersion_correction=False,
+                                      functions=None,
+                                      softcore_alpha=None,
+                                      bond_softening_constant=1.0,
+                                      angle_softening_constant=1.0,
+                                      soften_only_new=False,
+                                      neglected_new_angle_terms=[],
+                                      neglected_old_angle_terms=[],
+                                      softcore_LJ_v2=True,
+                                      softcore_electrostatics=True,
+                                      softcore_LJ_v2_alpha=0.85,
+                                      softcore_electrostatics_alpha=0.3,
+                                      softcore_sigma_Q=1.0,
+                                      interpolate_old_and_new_14s=flatten_exceptions,
+                                      omitted_terms=None,
+                                      endstate=repartitioned_endstate,
+                                      flatten_torsions=flatten_torsions)
+        if is_complex:
+            if factory == HybridTopologyFactory:
+                self.complex_htf = htf
+            elif factory == RepartitionedHybridTopologyFactory:
+                if repartitioned_endstate == 0:
+                    self.complex_rhtf_0 = htf
+                elif repartitioned_endstate == 1:
+                    self.complex_rhtf_1 = htf
+        else:
+            if factory == HybridTopologyFactory:
+                self.apo_htf = htf
+            elif factory == RepartitionedHybridTopologyFactory:
+                if repartitioned_endstate == 0:
+                    self.apo_rhtf_0 = htf
+                elif repartitioned_endstate == 1:
+                    self.apo_rhtf_1 = htf
 
     def get_complex_htf(self):
         return self.complex_htf
@@ -317,6 +345,135 @@ class PointMutationExecutor(object):
     def get_apo_htf(self):
         return self.apo_htf
 
+    def get_complex_rhtf_0(self):
+        return self.complex_rhtf_0
+
+    def get_apo_rhtf_0(self):
+        return self.apo_rhtf_0
+
+    def get_complex_rhtf_1(self):
+        return self.complex_rhtf_1
+
+    def get_apo_rhtf_1(self):
+        return self.apo_rhtf_1
+
+    def _get_ion_and_water_parameters(self, system, topology, positive_ion_name="NA", negative_ion_name="CL", water_name="HOH"):
+        '''
+        Get the charge, sigma, and epsilon for the positive and negative ions. Also get the charge of the water atoms. Set
+        these parameters as class variables.
+          
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            the system from which to retrieve parameters
+        topology : app.Topology
+            the topology corresponding to the above system from which to retrieve atom indices
+        positive_ion_name : str, "NA"
+            the residue name of each positive ion
+        negative_ion_name : str, "CL"
+            the residue name of each negative ion
+        water_name : str, "HOH"
+            the residue name of each water
+        
+        '''
+    
+        # Get the indices
+        pos_index = None
+        neg_index = None
+        O_index = None
+        H_index = None
+        for atom in topology.atoms():
+            if atom.residue.name == positive_ion_name and not pos_index:
+                pos_index = atom.index
+            elif atom.residue.name == negative_ion_name and not neg_index:
+                neg_index = atom.index
+            elif atom.residue.name == water_name and (not O_index or not H_index):
+                if atom.name == 'O':
+                    O_index = atom.index
+                elif atom.name == 'H1':
+                    H_index = atom.index
+        assert pos_index is not None, f"Error occurred when trying to turn a water into an ion: No positive ions with residue name {positive_ion_name} found"
+        assert neg_index is not None, f"Error occurred when trying to turn a water into an ion: No negative ions with residue name {negative_ion_name} found"
+        assert O_index is not None, f"Error occurred when trying to turn a water into an ion: No O atoms with residue name {water_name} and atom name O found"
+        assert H_index is not None, f"Error occurred when trying to turn a water into an ion: No water atoms with residue name {water_name} and atom name H1 found" 
+    
+        # Get parameters from nonbonded force
+        force_dict = {i.__class__.__name__: i for i in system.getForces()}
+        if 'NonbondedForce' in [i for i in force_dict.keys()]:
+            nbf = force_dict['NonbondedForce']
+            pos_charge, pos_sigma, pos_epsilon = nbf.getParticleParameters(pos_index)
+            neg_charge, neg_sigma, neg_epsilon = nbf.getParticleParameters(neg_index)
+            O_charge, _, _ = nbf.getParticleParameters(O_index)
+            H_charge, _, _ = nbf.getParticleParameters(H_index)
+    
+        self._pos_charge = pos_charge
+        self._pos_sigma = pos_sigma
+        self._pos_epsilon = pos_epsilon
+        self._neg_charge = neg_charge
+        self._neg_sigma = neg_sigma
+        self._neg_epsilon = neg_epsilon
+        self._O_charge = O_charge
+        self._H_charge = H_charge
+
+    def _transform_waters_into_ions(self, water_atoms, system, charge_diff):
+        """
+        given a system and an array of ints (corresponding to atoms to turn into ions), modify the nonbonded particle parameters in the system such that the Os are turned into the ion of interest and the charges of the Hs are zeroed.
+
+        Parameters
+        ----------
+        water_atoms : np.array(int)
+            integers corresponding to particle indices to neutralize
+        system : simtk.openmm.System
+            system to modify
+        charge_diff : int
+            the charge difference between the old_system - new_system
+
+        Returns
+        -------
+        modify system in place
+
+        """
+        # Determine which ion to turn the water into
+        if charge_diff < 0: # Turn water into Cl-
+            ion_charge, ion_sigma, ion_epsilon = self._neg_charge, self._neg_sigma, self._neg_epsilon
+        elif charge_diff > 0: # Turn water into Na+
+            ion_charge, ion_sigma, ion_epsilon = self._pos_charge, self._pos_sigma, self._pos_epsilon
+
+        # Scale the nonbonded terms of the water atoms
+        force_dict = {i.__class__.__name__: i for i in system.getForces()}
+        if 'NonbondedForce' in [i for i in force_dict.keys()]:
+            nbf = force_dict['NonbondedForce']
+            for idx in water_atoms:
+                idx = int(idx)
+                charge, sigma, epsilon = nbf.getParticleParameters(idx)
+                if charge == self._O_charge:
+                    nbf.setParticleParameters(idx, ion_charge, ion_sigma, ion_epsilon)
+                elif charge == self._H_charge:
+                    nbf.setParticleParameters(idx, charge*0.0, sigma, epsilon)
+                else:
+                    raise Exception(f"Trying to modify an atom that is not part of a water residue. Atom index: {idx}")
+
+    @staticmethod
+    def _modify_atom_classes(water_atoms, topology_proposal):
+        """
+        Modifies:
+        - topology proposal._core_new_to_old_atom_map - add the ion(s) to neutralize
+        - topology_proposal._new_environment_atoms - remove the ion(s) to neutralize
+        - topology_proposal._old_environment_atoms - remove the ion(s) to neutralize
+
+        Parameters
+        ----------
+        water_atoms : np.array(int)
+            integers corresponding to particle indices to turn into ions
+        topology_proposal : perses.rjmc.TopologyProposal
+            topology_proposal to modify
+
+        """
+        for new_index in water_atoms:
+            old_index = topology_proposal._new_to_old_atom_map[new_index]
+            topology_proposal._core_new_to_old_atom_map[new_index] = old_index
+            topology_proposal._new_environment_atoms.remove(new_index)
+            topology_proposal._old_environment_atoms.remove(old_index)
 
     def _solvate(self,
                topology,
