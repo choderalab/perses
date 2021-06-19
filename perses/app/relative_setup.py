@@ -143,6 +143,10 @@ class RelativeFEPSetup(object):
         """
         from openeye import oechem
 
+        # TODO: Refactor this class into initializer that configures options and factory methods that use them.
+        # QUESTION: Why do we add these as private object attributes?
+        #   If we want users to be able to modify them, they should not be private.
+        #   Also, these are all used immediately within __init__, so it doesn't make sense to store them this way.
         self._pressure = pressure
         self._temperature = temperature
         self._barostat_period = 50
@@ -359,7 +363,14 @@ class RelativeFEPSetup(object):
         _logger.info("successfully created SystemGenerator to create ligand systems")
 
         _logger.info(f"executing SmallMoleculeSetProposalEngine...")
-        self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_oemol_old, self._ligand_oemol_new], self._system_generator, residue_name='MOL')
+        # Create proposal engine
+        proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_oemol_old, self._ligand_oemol_new], self._system_generator, residue_name='MOL')
+        proposal_engine.map_strength = self._map_strength
+        proposal_engine.atom_expr = self._atom_expr
+        proposal_engine.bond_expr = self._bond_expr
+        proposal_engine.map_strategy = self._map_strategy
+        proposal_engine.use_given_geometries = self._use_given_geometries
+        self._proposal_engine = proposal_engine
 
         _logger.info(f"instantiating FFAllAngleGeometryEngine...")
         if self._use_given_geometries:
@@ -383,9 +394,7 @@ class RelativeFEPSetup(object):
             _logger.info(f"creating TopologyProposal...")
             self._complex_topology_proposal = self._proposal_engine.propose(self._complex_system_old_solvated,
                                           self._complex_topology_old_solvated,
-                                          current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr,
-                                          map_strategy=self._map_strategy,
-                                          use_given_geometries=self._use_given_geometries)
+                                          current_mol_id=0, proposed_mol_id=1)
 
             self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
 
@@ -435,7 +444,7 @@ class RelativeFEPSetup(object):
                 _logger.info(f"creating TopologyProposal")
                 self._solvent_topology_proposal = self._proposal_engine.propose(self._ligand_system_old_solvated,
                                                                                 self._ligand_topology_old_solvated,
-                                          current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr,map_strategy=self._map_strategy)
+                                                                                current_mol_id=0, proposed_mol_id=1)
 
                 self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'solvent'
@@ -493,7 +502,7 @@ class RelativeFEPSetup(object):
                                                                                                          self._ligand_positions_old,phase='vacuum')
                 self._vacuum_topology_proposal = self._proposal_engine.propose(self._vacuum_system_old,
                                                                                self._vacuum_topology_old,
-                                          current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr)
+                                                                               current_mol_id=0, proposed_mol_id=1)
 
                 self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'vacuum'

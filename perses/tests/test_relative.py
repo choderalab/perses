@@ -447,8 +447,8 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene",atom_express
     system = system_generator.create_system(topology)
     positions = extractPositionsFromOEMol(refmol)
 
-    proposal_engine = SmallMoleculeSetProposalEngine([refmol, mol], system_generator)
-    proposal = proposal_engine.propose(system, topology, atom_expr = atom_expr, bond_expr = bond_expr)
+    proposal_engine = SmallMoleculeSetProposalEngine([refmol, mol], system_generator, atom_expr=atom_expr, bond_expr=bond_expr)
+    proposal = proposal_engine.propose(system, topology)
     geometry_engine = FFAllAngleGeometryEngine()
     new_positions, _ = geometry_engine.propose(proposal, positions, beta = beta, validate_energy_bookkeeping = False)
     _ = geometry_engine.logp_reverse(proposal, new_positions, positions, beta)
