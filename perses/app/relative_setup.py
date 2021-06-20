@@ -70,7 +70,8 @@ class RelativeFEPSetup(object):
                  solvent_box_dimensions=None,
                  map_strategy='geometry',
                  remove_constraints=False,
-                 use_given_geometries = False
+                 use_given_geometries = False,
+                 given_geometries_tolerance=0.2*unit.angstroms,
                  ):
         """
         Initialize a NonequilibriumFEPSetup object
@@ -140,6 +141,8 @@ class RelativeFEPSetup(object):
         use_given_geometries : bool, default False
             whether to extract the positions of ligand B and set the unique_new atom positions deterministically;
             if True, `complex` must be in `phases` and .sdf or .mol2 file of ligand must be provided
+        given_geometries_tolerance : simtk.unit.Quantity with units of length, default=0.2*angstrom
+            If use_given_geometries=True, use this tolerance for identifying mapped atoms
         """
         from openeye import oechem
 
@@ -165,6 +168,7 @@ class RelativeFEPSetup(object):
         self._solvent_box_dimensions = solvent_box_dimensions
         self._map_strategy = map_strategy
         self._use_given_geometries = use_given_geometries
+        self._given_geometries_tolerance = given_geometries_tolerance
         self._ligand_input = ligand_input
 
         if self._use_given_geometries:
@@ -370,6 +374,7 @@ class RelativeFEPSetup(object):
         proposal_engine.bond_expr = self._bond_expr
         proposal_engine.map_strategy = self._map_strategy
         proposal_engine.use_given_geometries = self._use_given_geometries
+        proposal_engine.given_geometries_tolerance = self._given_geometries_tolerance
         self._proposal_engine = proposal_engine
 
         _logger.info(f"instantiating FFAllAngleGeometryEngine...")

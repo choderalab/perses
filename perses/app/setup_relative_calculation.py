@@ -322,6 +322,11 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     for phase in phases:
         assert (phase in known_phases), f"Unknown phase, {phase} provided. run_setup() can be used with {known_phases}"
 
+    # TODO: This is an overly complex way to specify defaults.
+    #   We should replace this completely with a streamlined approach,
+    #   such as deferring to defaults for modules we call unless the user
+    #   chooses to override them.
+
     if not 'rmsd_restraint' in setup_options:
         setup_options['rmsd_restraint'] = False
 
@@ -330,6 +335,12 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     else:
         assert type(setup_options['use_given_geometries']) == type(True)
         use_given_geometries = setup_options['use_given_geometries']
+
+    if 'given_geometries_tolerance' not in list(setup_options.keys()):
+        given_geometries_tolerance = 0.2 * unit.angstroms
+    else:
+        # Assume user input is in Angstroms
+        given_geometries_tolerance = float(setup_options['given_geometries_tolerance']) * unit.angstroms
 
     if 'complex' in phases:
         _logger.info(f"\tPulling receptor (as pdb or mol2)...")
@@ -447,7 +458,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                           trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'],
 
                                           complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'], ionic_strength=ionic_strength, remove_constraints=setup_options['remove_constraints'],
-                                          use_given_geometries = use_given_geometries)
+                                          use_given_geometries=use_given_geometries, given_geometries_tolerance=given_geometries_tolerance)
 
 
         _logger.info(f"\twriting pickle output...")
