@@ -89,9 +89,10 @@ def test_mapping_strength_levels(pairs_of_smiles=[('Cc1ccccc1','c1ccc(cc1)N'),('
             system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
                                                  small_molecule_forcefield = 'gaff-1.81', molecules=molecules, cache=None)
             proposal_engine = SmallMoleculeSetProposalEngine([initial_molecule, proposed_molecule], system_generator)
+            proposal_engine.map_strength = example
             initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(initial_molecule, system_generator)
             print(f"running now with map strength {example}")
-            proposal = proposal_engine.propose(initial_system, initial_topology, map_strength = example)
+            proposal = proposal_engine.propose(initial_system, initial_topology)
             print(lig_a, lig_b,'length OLD and NEW atoms',len(proposal.unique_old_atoms), len(proposal.unique_new_atoms))
             if test:
                 render_atom_mapping(f'{index}-{example}.png', initial_molecule, proposed_molecule, proposal._new_to_old_atom_map)

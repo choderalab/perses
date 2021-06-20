@@ -3281,7 +3281,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         if atom_map is None:
             _logger.info(f"the atom map is not specified; proceeding to generate an atom map...")
             if self.use_given_geometries:
-                mol_atom_map = AtomMapper._get_mol_atom_map_by_positions(self.current_molecule, self.proposed_molecule, tolerance=self.given_geometries_tolerance)
+                mol_atom_map = AtomMapper._get_mol_atom_map_by_positions(self.current_molecule, self.proposed_molecule, coordinate_tolerance=self.given_geometries_tolerance)
             else:
                 mol_atom_map = AtomMapper._get_mol_atom_map(self.current_molecule, self.proposed_molecule, atom_expr=self.atom_expr, bond_expr=self.bond_expr, map_strength=self.map_strength, external_inttypes=self.external_inttypes, map_strategy=self.map_strategy)
         else:
