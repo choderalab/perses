@@ -8,6 +8,8 @@ DOCLINES = __doc__.split("\n")
 
 import os
 import sys
+import versioneer
+
 from os.path import join as pjoin
 from os.path import relpath
 from setuptools import setup
@@ -33,16 +35,10 @@ def find_package_data(data_root, package_root):
     return files
 
 
-# #########################
-VERSION = '0.8.2dev0'
-ISRELEASED = False
-__version__ = VERSION
-# #########################
-
 CLASSIFIERS = """\
 Intended Audience :: Science/Research
 Intended Audience :: Developers
-License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)
+License :: OSI Approved :: MIT License
 Programming Language :: C++
 Programming Language :: Python
 Development Status :: 4 - Beta
@@ -51,12 +47,9 @@ Topic :: Scientific/Engineering
 Operating System :: POSIX
 Operating System :: Unix
 Operating System :: MacOS
-Programming Language :: Python :: 2
-Programming Language :: Python :: 2.6
-Programming Language :: Python :: 2.7
 Programming Language :: Python :: 3
-Programming Language :: Python :: 3.3
-Programming Language :: Python :: 3.4
+Programming Language :: Python :: 3.7
+Programming Language :: Python :: 3.8
 """
 
 extensions = []
@@ -66,7 +59,8 @@ setup(name='perses',
       author_email='patrick.grinaway@choderalab.org',
       description=DOCLINES[0],
       long_description="\n".join(DOCLINES[2:]),
-      version=__version__,
+      version=versioneer.get_version(),
+      cmdclass=versioneer.get_cmdclass(),
       url='https://github.com/choderalab/perses',
       platforms=['Linux', 'Mac OS-X', 'Unix'],
       classifiers=CLASSIFIERS.splitlines(),
