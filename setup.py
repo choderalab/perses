@@ -58,8 +58,8 @@ extensions = []
 
 setup(
     name="perses",
-    author="Patrick Grinaway",
-    author_email="patrick.grinaway@choderalab.org",
+    author="John D. Chodera",
+    author_email="john.chodera@choderalab.org",
     description=DOCLINES[0],
     long_description="\n".join(DOCLINES[2:]),
     version=versioneer.get_version(),
