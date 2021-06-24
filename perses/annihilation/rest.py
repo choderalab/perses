@@ -365,23 +365,30 @@ class RESTTopologyFactoryV2(HybridTopologyFactory):
                 raise ValueError(f"Unknown forces {unknown_forces} encountered in {system_name} system")
         _logger.info("No unknown forces.")
 
+        _logger.info("Handling constraints")
         self._handle_constraints()
 
+        _logger.info("Handling bonds")
         self._add_bond_force_terms()
         self._add_bonds()
 
+        _logger.info("Handling angles")
         self._add_angle_force_terms()
         self._add_angles()
 
+        _logger.info("Handling torsions")
         self._add_torsion_force_terms()
         self._add_torsions()
 
+        _logger.info("Handling nonbondeds")
         self._add_nonbonded_force_terms()
         self._add_nonbondeds()
 
+        _logger.info("Handling nonbonded scaling (custom nb)")
         self._add_custom_nonbonded_force_terms()
         self._add_custom_nonbondeds()
 
+        _logger.info("Handling nonbonded exception scaling (custom bond)")
         self._add_custom_bond_force_terms()
         self._add_custom_bonds()
 
@@ -587,22 +594,15 @@ class RESTTopologyFactoryV2(HybridTopologyFactory):
         return out
 
     def _is_solvent(self, particle_index, positive_ion_name="NA", negative_ion_name="CL", water_name="HOH"):
-        if 'openmm' in self._topology.__module__:
-            atoms = self._topology.atoms()
-        elif 'mdtraj' in self._topology.__module__:
-            atoms = self._topology.atoms
+        atom = self._d_atoms[particle_index]
+        if atom.residue.name == positive_ion_name:
+            return True
+        elif atom.residue.name == negative_ion_name:
+            return True
+        elif atom.residue.name == water_name:
+            return True
         else:
-            raise Exception("Topology object must be simtk.openmm.app.topology or mdtraj.core.topology")
-        for atom in atoms:
-            if atom.index == particle_index:
-                if atom.residue.name == positive_ion_name:
-                    return True
-                elif atom.residue.name == negative_ion_name:
-                    return True
-                elif atom.residue.name == water_name:
-                    return True
-                else:
-                    return False
+            return False
 
     def _add_bonds(self):
         """
@@ -642,6 +642,15 @@ class RESTTopologyFactoryV2(HybridTopologyFactory):
             
     def _add_custom_nonbondeds(self):
         og_nb_force = self._og_system_forces['NonbondedForce']
+
+        # Prep look up dict for determining if atom is solvent
+        if 'openmm' in self._topology.__module__:
+            atoms = self._topology.atoms()
+        elif 'mdtraj' in self._topology.__module__:
+            atoms = self._topology.atoms
+        else:
+            raise Exception("Topology object must be simtk.openmm.app.topology or mdtraj.core.topology")
+        self._d_atoms = {atom.index : atom for atom in atoms}
 
         for particle_idx in range(self._num_particles):
             q, sigma, epsilon = og_nb_force.getParticleParameters(particle_idx)
