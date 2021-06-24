@@ -728,7 +728,7 @@ class PolymerProposalEngine(ProposalEngine):
         else:
             new_system = self._system_generator.build_system(new_topology)
 
-        #make constraint repairs
+        # Explicitly de-map any atoms involved in constraints that change length
         atom_map = SmallMoleculeSetProposalEngine._constraint_repairs(atom_map, old_system, new_system, old_topology, new_topology)
         _logger.debug(f"\tafter constraint repairs, the atom map is as such: {atom_map}")
 
@@ -2254,9 +2254,11 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         # Select the next molecule SMILES given proposal probabilities
         if self.proposed_mol_id is None:
+            # Select a molecule from the proposal matri
             _logger.info(f"the proposed oemol is not specified; proposing a new molecule from proposal matrix P(M_new | M_old)...")
             self.proposed_mol_id, self.proposed_molecule, logp_proposal = self._propose_molecule(current_system, current_topology, self.current_mol_id)
         else:
+            # The proposed molecule has been specified
             self.proposed_molecule = self.list_of_oemols[self.proposed_mol_id]
             proposed_mol_smiles = self._list_of_smiles[self.proposed_mol_id]
             _logger.info(f"proposed mol detected with smiles {proposed_mol_smiles} and logp_proposal of 0.0")
@@ -2283,6 +2285,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         # Determine atom mapping between old and new molecules
         _logger.info(f"determining atom map between old and new molecules...")
         if atom_map is None:
+            # Determine atom mapping using specified strategy
             _logger.info(f"the atom map is not specified; proceeding to generate an atom map...")
             from .atom_mapping import AtomMapper
             if self.use_given_geometries:
@@ -2290,6 +2293,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             else:
                 mol_atom_map = AtomMapper._get_mol_atom_map(self.current_molecule, self.proposed_molecule, atom_expr=self.atom_expr, bond_expr=self.bond_expr, map_strength=self.map_strength, external_inttypes=self.external_inttypes, map_strategy=self.map_strategy)
         else:
+            # Atom map was specified
             _logger.info(f"atom map is pre-determined as {atom_map}")
             mol_atom_map = atom_map
 
@@ -2307,7 +2311,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 old_idx = i
             adjusted_atom_map[i] = old_idx
 
-        # now to correct for possible constraint problems
+        # Explicitly de-map any atoms involved in constrained bonds that undergo length changes
         _logger.debug(f"mapped {len(adjusted_atom_map)} before constraint repairs")
         adjusted_atom_map = SmallMoleculeSetProposalEngine._constraint_repairs(adjusted_atom_map, current_system, new_system, current_topology, new_topology)
         _logger.debug(f"mapped {len(adjusted_atom_map)} after constraint repairs")
@@ -2316,10 +2320,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         min_keys, min_values = min(non_offset_new_to_old_atom_map.keys()), min(non_offset_new_to_old_atom_map.values())
         self.non_offset_new_to_old_atom_map = mol_atom_map
 
-        #create NetworkXMolecule for each molecule
+        # Create NetworkXMolecule for each molecule and add this to the OpenMM Topology object for later retrieval
         current_residue = [res for res in current_topology.residues() if res.name == self._residue_name][0]
         proposed_residue = [res for res in new_topology.residues() if res.name == self._residue_name][0]
-
         augment_openmm_topology(topology = current_topology, residue_oemol = self.current_molecule, residue_topology = current_residue, residue_to_oemol_map = {i: j for i, j in zip(range(old_mol_start_index, old_mol_start_index + len_old_mol), range(len_old_mol))})
         augment_openmm_topology(topology = new_topology, residue_oemol = self.proposed_molecule, residue_topology = proposed_residue, residue_to_oemol_map = {i: j for i, j in zip(range(new_mol_start_index, new_mol_start_index + len_new_mol), range(len_new_mol))})
 
@@ -2504,14 +2507,18 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             receptor_topology._periodicBoxVectors = copy.deepcopy(topology._periodicBoxVectors)
         return receptor_topology
 
+    # TODO: Move this method to AtomMapper?
     @staticmethod
     def _constraint_repairs(atom_map, old_system, new_system, old_topology, new_topology):
         """
         Given an adjusted atom map (corresponding to the true indices of the new: old atoms in their respective systems), iterate through all of the
         atoms in the map that are hydrogen and check if the constraint length changes; if so, we do not map.
         """
+        # TODO : Generalize this to handle any atoms involved in constraints that change
+
         old_hydrogens = list(atom.index for atom in old_topology.atoms() if atom.element == app.Element.getByAtomicNumber(1))
         new_hydrogens = list(atom.index for atom in new_topology.atoms() if atom.element == app.Element.getByAtomicNumber(1))
+
         #wrapping constraints
         old_constraints, new_constraints = {}, {}
         for idx in range(old_system.getNumConstraints()):

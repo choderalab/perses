@@ -154,6 +154,8 @@ class AtomMapper(object):
 
         .. TODO :: Use openff.toolkit.topology.Molecule instead of OEMol
 
+        .. TODO :: Do some cleanup and validation of the resulting atom map.
+
         """
         molA_positions = molA.GetCoords() # coordinates (Angstroms)
         molB_positions = molB.GetCoords() # coordinates (Angstroms)
