@@ -2572,12 +2572,9 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                              "chargeProd = charge1 * charge2;",
                              "charge1 = ((charge_old1 * {old_bool_string1}) + (charge_new1 * {new_bool_string1})) * {scale_bool_string1};", 
                              "charge2 = ((charge_old2 * {old_bool_string2}) + (charge_new2 * {new_bool_string2})) * {scale_bool_string2};",
-                             #"charge1 = select(1 - both_environment, charge_old1 * {old_bool_string1} + charge_new1 * {new_bool_string1}, charge_old1) * {scale_bool_string1};",
-                             #"charge2 = select(1 - both_environment, charge_old2 * {old_bool_string2} + charge_new2 * {new_bool_string2}, charge_old2) * {scale_bool_string2};",
-                             #"both_environment = environment_region1 * environment_region2;",
 
                              #define reaction field u_RF
-                             "u_RF = (1 / r_eff) + (((eps_RF - 1) * (r_eff^2)) / ((r_cutoff^3) * (1 + (2 * eps_RF)));",
+                             "u_RF = (1 / r_eff) + ((eps_RF - 1) * (r_eff^2)) / ((r_cutoff^3) * (1 + (2 * eps_RF)));",
 
                              #r_eff
                              "r_eff = sqrt(r^2 + w^2);",
@@ -2787,9 +2784,12 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         # Modify properties for testing:
         if generate_htf_for_testing:
+            self._w_RF_scale = 0
+            self._w_sterics_scale = 0
             self._default_RF_expr_list[2] = "switch = 1;"
             self._default_RF_expr_list[8] = "u_RF = 1 / r_eff;"
             self._default_RF_expression = ' '.join(self._default_RF_expr_list)
+            self._default_RF_exception_expr_list[2] = "switch = 1;"
             self._default_RF_exception_expr_list[8] = "u_RF = 1 / r_eff;"
             self._default_RF_exception_expression = ' '.join(self._default_RF_exception_expr_list)
 
