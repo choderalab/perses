@@ -442,7 +442,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                           temperature=temperature, solvent_padding=solvent_padding_angstroms, spectator_filenames=setup_options['spectators'],
                                           map_strength=setup_options['map_strength'],
                                           atom_expr=setup_options['atom_expr'], bond_expr=setup_options['bond_expr'],
-                                          atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
+                                          neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
                                           trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'],
 
