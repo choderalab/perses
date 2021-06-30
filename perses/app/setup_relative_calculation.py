@@ -562,6 +562,16 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                 factory = RxnHybridTopologyFactory
             else:
                 factory = HybridTopologyFactory
+            from simtk import openmm
+            top_prop[f"{phase}_topology_proposal"].old_system.getForce(3).setNonbondedMethod(openmm.NonbondedForce.NoCutoff)
+            top_prop[f"{phase}_topology_proposal"].old_system.getForce(3).setUseDispersionCorrection(False)
+            for i in range(top_prop[f"{phase}_topology_proposal"].old_system.getNumForces()):
+                if i == 3:
+                    top_prop[f"{phase}_topology_proposal"].old_system.getForce(i).setExceptionsUsePeriodicBoundaryConditions(False)
+                elif i < 3: # do not set PBCs for barostat
+                    top_prop[f"{phase}_topology_proposal"].old_system.getForce(i).setUsesPeriodicBoundaryConditions(False)
+            _logger.info(f"\t\t changed nonnbondedmethod to: {top_prop['solvent_topology_proposal'].old_system.getForce(3).getNonbondedMethod()}")
+            top_prop[f'{phase}_topology_proposal'].old_system.removeForce(4)
             htf[phase] = factory(top_prop['%s_topology_proposal' % phase],
                                                top_prop['%s_old_positions' % phase],
                                                top_prop['%s_new_positions' % phase],
@@ -569,7 +579,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                                neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
                                                softcore_LJ_v2 = setup_options['softcore_v2'],
                                                interpolate_old_and_new_14s = setup_options['anneal_1,4s'],
-                                               scale_regions=setup_options['scale_regions'])
+                                               scale_regions=setup_options['scale_regions'], generate_htf_for_testing=True)
 
         for phase in phases:
            # Define necessary vars to check energy bookkeeping
