@@ -434,7 +434,6 @@ class HybridTopologyFactory(object):
             A dictionary of the form {'core' :core_list} etc.
         """
         atom_classes = {'unique_old_atoms' : set(), 'unique_new_atoms' : set(), 'core_atoms' : set(), 'environment_atoms' : set()}
-        print("MAP: ", self._old_to_hybrid_map)
         # First, find the unique old atoms, as this is the most straightforward:
         for atom_idx in self._topology_proposal.unique_old_atoms:
             hybrid_idx = self._old_to_hybrid_map[atom_idx]
