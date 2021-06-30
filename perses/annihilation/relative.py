@@ -231,6 +231,29 @@ class HybridTopologyFactory(object):
         # Start by creating an empty system. This will become the hybrid system.
         self._hybrid_system = openmm.System()
 
+        # Begin by copying all particles in the old system to the hybrid system. Note that this does not copy the
+        # interactions. It does, however, copy the particle masses. In general, hybrid index and old index should be
+        # the same.
+        # TODO: Refactor this into self._add_particles()
+        _logger.info("Adding and mapping old atoms to hybrid system...")
+        for particle_idx in range(self._topology_proposal.n_atoms_old):
+            particle_mass = self._old_system.getParticleMass(particle_idx)
+            hybrid_idx = self._hybrid_system.addParticle(particle_mass)
+            self._old_to_hybrid_map[particle_idx] = hybrid_idx
+
+            # If the particle index in question is mapped, make sure to add it to the new to hybrid map as well.
+            if particle_idx in self._topology_proposal.old_to_new_atom_map.keys():
+                particle_index_in_new_system = self._topology_proposal.old_to_new_atom_map[particle_idx]
+                self._new_to_hybrid_map[particle_index_in_new_system] = hybrid_idx
+
+        # Next, add the remaining unique atoms from the new system to the hybrid system and map accordingly.
+        # As before, this does not copy interactions, only particle indices and masses.
+        _logger.info("Adding and mapping new atoms to hybrid system...")
+        for particle_idx in self._topology_proposal.unique_new_atoms:
+            particle_mass = self._new_system.getParticleMass(particle_idx)
+            hybrid_idx = self._hybrid_system.addParticle(particle_mass)
+            self._new_to_hybrid_map[particle_idx] = hybrid_idx
+
         # Check that if there is a barostat in the original system, it is added to the hybrid.
         # We copy the barostat from the old system.
         if "MonteCarloBarostat" in self._old_system_forces.keys():
@@ -411,7 +434,7 @@ class HybridTopologyFactory(object):
             A dictionary of the form {'core' :core_list} etc.
         """
         atom_classes = {'unique_old_atoms' : set(), 'unique_new_atoms' : set(), 'core_atoms' : set(), 'environment_atoms' : set()}
-
+        print("MAP: ", self._old_to_hybrid_map)
         # First, find the unique old atoms, as this is the most straightforward:
         for atom_idx in self._topology_proposal.unique_old_atoms:
             hybrid_idx = self._old_to_hybrid_map[atom_idx]
@@ -2324,7 +2347,12 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
 
         # Combine alchemical regions
         default_alchemical_region = set(chain(self._atom_classes['core_atoms'], self._atom_classes['unique_new_atoms'], self._atom_classes['unique_old_atoms']))
-        self._alchemical_region = default_alchemical_region
+        if alchemical_region is None:
+            self._alchemical_region = default_alchemical_region
+        else:
+            assert default_alchemical_region.issubset(set(alchemical_region)), f"the given alchemical region must include _all_ atoms in the default alchemical region"
+            self._alchemical_region = set(alchemical_region).union(default_alchemical_region)
+        #self._alchemical_region = default_alchemical_region
 
         # First thing to do is to copy over all of the standard valence force objects into the hybrid system
         self._handle_bonds()
