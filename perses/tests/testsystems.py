@@ -32,7 +32,6 @@ import os
 import os.path
 import numpy as np
 from functools import partial
-from openeye import oechem
 from openmmtools import states
 from openmmtools.mcmc import MCMCSampler, LangevinSplittingDynamicsMove
 from perses.utils.smallmolecules import sanitizeSMILES, canonicalize_SMILES
@@ -1231,6 +1230,8 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
     """
     def __init__(self, **kwargs):
         super(AblImatinibProtonationStateTestSystem, self).__init__(**kwargs)
+        from openeye import oechem
+
         solvents = ['vacuum', 'explicit'] # TODO: Add 'implicit' once GBSA parameterization for small molecules is working
         components = ['inhibitor', 'complex'] # TODO: Add 'ATP:kinase' complex to enable resistance design
         #solvents = ['vacuum'] # DEBUG: Just try vacuum for now
@@ -1454,6 +1455,8 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
     """
     def __init__(self, **kwargs):
         super(ImidazoleProtonationStateTestSystem, self).__init__(**kwargs)
+        from openeye import oechem
+
         solvents = ['vacuum', 'explicit'] # TODO: Add 'implicit' once GBSA parameterization for small molecules is working
         components = ['imidazole']
         padding = 9.0*unit.angstrom
@@ -1871,6 +1874,8 @@ class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
     def __init__(self, **kwargs):
         # Read SMILES from CSV file of clinical kinase inhibitors.
         from pkg_resources import resource_filename
+        from openeye import oechem
+
         molecules = list()
         molecules += self.read_smiles(resource_filename('perses', 'data/L99A-binders.txt'))
         molecules += self.read_smiles(resource_filename('perses', 'data/L99A-non-binders.txt'))
@@ -2051,6 +2056,8 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         list_of_canonicalized_smiles : list of str
             canonical isomeric smiles
         """
+        from openeye import oechem
+
         list_of_canonicalized_smiles = []
         ofs = oechem.oemolostream('current.mol2') # DEBUG
         for smiles in list_of_smiles:

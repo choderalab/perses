@@ -18,7 +18,6 @@ from perses.utils.smallmolecules import render_atom_mapping
 from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
 from perses.rjmc import topology_proposal
 from collections import defaultdict
-import openeye.oechem as oechem
 from openmmforcefields.generators import SystemGenerator
 from openff.toolkit.topology import Molecule
 from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
@@ -43,6 +42,8 @@ def test_small_molecule_proposals():
     """
     Make sure the small molecule proposal engine generates molecules
     """
+    import openeye.oechem as oechem
+
     list_of_smiles = ['CCCC','CCCCC','CCCCCC']
     list_of_mols = []
     for smi in list_of_smiles:
@@ -338,12 +339,12 @@ def generate_dipeptide_top_pos_sys(topology,
             else:
                 subtracted_valence_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
 
-            zero_state_error, one_state_error = validate_endstate_energies(forward_htf._topology_proposal, 
-                                                                           forward_htf, 
-                                                                           added_valence_energy, 
-                                                                           subtracted_valence_energy, 
-                                                                           beta = 1.0/(kB*temperature), 
-                                                                           ENERGY_THRESHOLD = ENERGY_THRESHOLD, 
+            zero_state_error, one_state_error = validate_endstate_energies(forward_htf._topology_proposal,
+                                                                           forward_htf,
+                                                                           added_valence_energy,
+                                                                           subtracted_valence_energy,
+                                                                           beta = 1.0/(kB*temperature),
+                                                                           ENERGY_THRESHOLD = ENERGY_THRESHOLD,
                                                                            platform = openmm.Platform.getPlatformByName('Reference'),
                                                                            repartitioned_endstate=endstate)
             print(f"zero state error : {zero_state_error}")
