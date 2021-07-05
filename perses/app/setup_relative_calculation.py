@@ -530,12 +530,9 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                                neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
                                                softcore_LJ_v2 = setup_options['softcore_v2'],
                                                interpolate_old_and_new_14s = setup_options['anneal_1,4s'],
-<<<<<<< HEAD
-                                               scale_regions=setup_options['scale_regions'])
-=======
+                                               scale_regions=setup_options['scale_regions'],
                                                rmsd_restraint=setup_options['rmsd_restraint'],
                                                )
->>>>>>> master
 
             if build_samplers:
                 ne_fep[phase] = SequentialMonteCarlo(factory = hybrid_factory,
