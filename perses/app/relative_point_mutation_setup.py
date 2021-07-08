@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 from perses.utils.openeye import createOEMolFromSDF, extractPositionsFromOEMol
-from perses.annihilation.relative import HybridTopologyFactory, RepartitionedHybridTopologyFactory
+from perses.annihilation.relative import HybridTopologyFactory, RepartitionedHybridTopologyFactory, RxnHybridTopologyFactory
 from perses.rjmc.topology_proposal import PointMutationEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 
@@ -106,6 +106,7 @@ class PointMutationExecutor(object):
                  flatten_exceptions=False,
                  generate_unmodified_hybrid_topology_factory=True,
                  generate_rest_capable_hybrid_topology_factory=False,
+                 generate_rxn_field_hybrid_topology_factory=False,
                  **kwargs):
         """
         arguments
@@ -160,6 +161,8 @@ class PointMutationExecutor(object):
                 whether to generate a vanilla HybridTopologyFactory
             generate_rest_capable_hybrid_topology_factory : bool, default False
                 whether to generate a RepartitionedHybridTopologyFactory
+            generate_rxn_field_hybrid_topology_factory : bool, default False
+                whether to generate a RxnHybridTopologyFactory
         TODO : allow argument for spectator ligands besides the 'ligand_file'
 
         """
@@ -277,7 +280,9 @@ class PointMutationExecutor(object):
             if generate_rest_capable_hybrid_topology_factory:
                  for repartitioned_endstate in [0, 1]:
                     self.generate_htf(RepartitionedHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
-
+            if generate_rxn_field_hybrid_topology_factory:
+               repartitioned_endstate = None
+               self.generate_htf(RxnHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
             if not topology_proposal.unique_new_atoms:
                 assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
                 assert geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
@@ -331,7 +336,7 @@ class PointMutationExecutor(object):
                 elif repartitioned_endstate == 1:
                     self.complex_rhtf_1 = htf
         else:
-            if factory == HybridTopologyFactory:
+            if factory == HybridTopologyFactory or factory == RxnHybridTopologyFactory:
                 self.apo_htf = htf
             elif factory == RepartitionedHybridTopologyFactory:
                 if repartitioned_endstate == 0:
