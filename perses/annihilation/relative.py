@@ -2695,7 +2695,10 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                              "r_eff = sqrt(r^2 + w^2);",
 
                              #4th dimension:
-                             "w = step(unique_new1 + unique_new2 + unique_old1 + unique_old2 - 0.1) * r_cutoff * (1. - {old_bool_string1} - {new_bool_string1}) * {w_scale};",
+                             #"w = step(unique_new1 + unique_new2 + unique_old1 + unique_old2 - 0.1) * r_cutoff * ({old_bool_string1} - {new_bool_string1}) * {w_scale};",
+                             "w = is_unique_old * r_cutoff * w_scale * (1 - lambda_0_electrostatics_old) + is_unique_new * w_scale * (1 - lambda_0_electrostatics_new);",
+                             "is_unique_old = step(unique_old1 + unique_old2 - 0.1);",
+                             "is_unique_new = step(unique_new1 + unique_new2 - 0.1);",
 
                              # switch parameter
                              "r_switch = r_cutoff * {switching_ratio};",
@@ -2714,8 +2717,9 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     _default_RF_exception_expr_list[5] = "chargeProd = select(1 - environment_region, chargeProd_old * {old_bool_string} + chargeProd_new * {new_bool_string}, chargeProd_old);"
     _default_RF_exception_expr_list[6] = ''
     _default_RF_exception_expr_list[7] = ''
-    _default_RF_exception_expr_list[10] = "w = step(unique_old + unique_new - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string}) * {w_scale};"
-
+    _default_RF_exception_expr_list[10] = "w = (is_unique_old * r_cutoff * w_scale * (1 - lambda_0_electrostatics_exceptions_old)) + (is_unique_new * w_scale * (1 - lambda_0_electrostatics_exceptions_new));"
+    _default_RF_exception_expr_list[11] = "is_unique_old = step(unique_old - 0.1);"
+    _default_RF_exception_expr_list[12] = "is_unique_new = step(unique_new - 0.1);"
 
     _default_RF_expression = ' '.join(_default_RF_expr_list)
     _default_RF_exception_expression = ' '.join(_default_RF_exception_expr_list)
@@ -2737,9 +2741,12 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
                                    #r_eff
                                    "r_eff = sqrt(r^2 + w^2);",
-
+                                   
                                    #4th dimension:
-                                   "w = step(unique_new1 + unique_new2 + unique_old1 + unique_old2 - 0.1) * r_cutoff * (1. - {old_bool_string1} - {new_bool_string1}) * {w_scale};",
+                                   #"w = step(unique_new1 + unique_new2 + unique_old1 + unique_old2 - 0.1) * r_cutoff * ({old_bool_string1} - {new_bool_string1}) * {w_scale};",
+                                   "w = is_unique_old * r_cutoff * w_scale * (1 - lambda_0_sterics_old) + is_unique_new * w_scale * (1 - lambda_0_sterics_new);",
+                                   "is_unique_old = step(unique_old1 + unique_old2 - 0.1);",
+                                   "is_unique_new = step(unique_new1 + unique_new2 - 0.1);",
 
                                    # parameters
                                    "r_cutoff = {r_cutoff};",
@@ -2757,8 +2764,9 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     _default_steric_exception_expr_list[6] = "epsilon = select(1 - environment_region, epsilon_old * {old_bool_string} + epsilon_new * {new_bool_string}, epsilon_old);"
     _default_steric_exception_expr_list[7] = ''
     _default_steric_exception_expr_list[8] = ''
-    _default_steric_exception_expr_list[10] = "w = step(unique_old + unique_new - 0.1) * r_cutoff * (1. - {old_bool_string} - {new_bool_string}) * {w_scale};"
-
+    _default_steric_exception_expr_list[10] = "w = (is_unique_old * r_cutoff * w_scale * (1 - lambda_0_sterics_exceptions_old)) + (is_unique_new * w_scale * (1 - lambda_0_sterics_exceptions_new));"
+    _default_steric_exception_expr_list[11] = "is_unique_old = step(unique_old - 0.1);"
+    _default_steric_exception_expr_list[12] = "is_unique_new = step(unique_new - 0.1);"
 
     _default_steric_expression = ' '.join(_default_steric_expr_list)
     _default_steric_exception_expression = ' '.join(_default_steric_exception_expr_list)
