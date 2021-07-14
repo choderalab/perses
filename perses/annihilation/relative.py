@@ -2631,31 +2631,30 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
 
 class RxnHybridTopologyFactory(HybridTopologyFactory):
     """
-    a subclass of `HybridTopologyFactory` that will treat nonbondeds with a `CustomNonbondedForce`,
+    A subclass of `HybridTopologyFactory` that will treat nonbondeds with a `CustomNonbondedForce`,
     support multiple alchemical regions as well as externally-scaleable lambda regions (e.g. REST).
 
-
     Here, I attempt to create a RF implementation of electrostatics using a polynomial switching function that turns on at some
-    r_switch = r_cutoff * switching_ratio. thr r_cutoff is a cutoff distance (in nm) beyond which electrostatics are not calculated and the switching ratio is a
-    scalar between 0 and 1 where the switching polynomial begins to decrease the effective electrostatic potential. both are free parameters.
+    r_switch = r_cutoff * switching_ratio. r_cutoff is a cutoff distance (in nm) beyond which electrostatics are not calculated and the switching_ratio is a
+    scalar between 0 and 1 where the switching polynomial begins to decrease the effective electrostatic potential. Both are free parameters.
 
-    in order to avoid singularities in the alchemical region (specifically in interactions of unique new/old atoms),
-    we introduce a decoupling in the 4th dimensional distance. decoupling does not affect core or env atoms.
+    In order to avoid singularities in the alchemical region (specifically in interactions of unique new/old atoms),
+    we introduce a decoupling in the 4th dimensional distance. Decoupling does not affect core or env atoms.
     However, the unique old/new atoms are 'lifted' into the 4th dimension 'w' upon 'alchemification' and the length of the 4th dimension is
     given by r_cutoff * w_scale. w_scale is, like 'switching_ratio', a user-defined scalar between 0 (non-inclusive) and 1. taking 'switching_ratio' to 1
     means that once the term is maximally 'lifted' into the 4th dimension, the 4th dimension is effectively of length 'r_cutoff'.
 
-    'scale_bool_string' is a scalar multiplier of the given `U_sterics` (`U_electrostatics`) that implementes REST2-like 'softening'.
+    'scale_scalar' is a scalar multiplier of the given `U_sterics` (`U_electrostatics`) that implementes REST2-like 'softening'.
     it is a boolean-type scaling factor that couples the per particle parameters which define which scaling region to which the given particle belongs
     to the global parameter that defines the scale factor.
 
-    Likewise, the `old/new_bool_string` is a scalar multiplier of the given per particle parameter that defines to which alchemical region (or environment_region)
+    Likewise, the `old/new_scalar` is a scalar multiplier of the given per particle parameter that defines to which alchemical region (or environment_region)
     a given (old/new) particle parameter (i.e. charge, sigma, epsilon) belongs. see `get_alch_identifier` for the per particle parameters returned for a given set of hybrid-indexed particles.
     Once the per particle parameters are defined, each term is (by index) multiplied by the following global parameter.
     In the case of electrostatics, the bool strings are given by :
-            old_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_electrostatics_old" for i in range(self._num_alchemical_regions)],
+            old_scalar = RxnHybridTopologyFactory.render_scalar_string(['1'] + [f"lambda_{i}_electrostatics_old" for i in range(self._num_alchemical_regions)],
                                                                         ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
-            new_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_electrostatics_new" for i in range(self._num_alchemical_regions)],
+            new_scalar = RxnHybridTopologyFactory.render_scalar_string(['1'] + [f"lambda_{i}_electrostatics_new" for i in range(self._num_alchemical_regions)],
                                                                         ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
     where 'lambda_{i}_electrostatics_{old/new}' is the global parameter that defines the old/new electrostatic scaling parameter.
     Sterics are treated in the same manner.
@@ -2663,118 +2662,150 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     Since we want to maximize the expressiveness of global parameters, we treat nonbonded exceptions identically to how standard nonbondeds are described above, except the global parameters
     are defined with `lambda_{i}_{electrostatics/sterics}_exceptions_{old/new}`.
 
-    NOTE : the `render_bool_string` yields lambda-independent environment region per particle parameters.
+    NOTE : the `render_scalar_string` yields lambda-independent environment region per particle parameters.
            environment region per particle parameters should be old/new system independent.
            Instead of interpolating between old and new parameters that are identical, we use a select statement that uses the following logic (with electrostatic charges as an example);
             if both regions are envronment, charge1 is given by charge_old1 (the old system charge of the first particle);
-            otherwise, charge1 is charge_old1 * {old_bool_string} + charge_new1 * {new_bool_string}.
-                notably, this introduces the necessity that the lambda protocol completely turns off (to 0) the charge_old1 (via {old_bool_string}) before charging charge_new1 (via {new_bool_string}).
+            otherwise, charge1 is charge_old1 * {old_scalar} + charge_new1 * {new_scalar}.
+                notably, this introduces the necessity that the lambda protocol completely turns off (to 0) the charge_old1 (via {old_scalar}) before charging charge_new1 (via {new_scalar}).
     The same strategy is also used for torsions. see `self._transcribe_torsions`
 
     NOTE : we need to add add rxn field electrostatic configuration-independent offsets (U^{off}, U^{slf}) given in eqs 5,6 in DOI: 10.1039/D0CP03835K
     """
     from openmmtools.constants import ONE_4PI_EPS0
-    _default_RF_expr_list = [
-                             "U_electrostatics;", # define scaled electrostatic term
-                             "U_electrostatics = switch * c_RF * u_RF;", # define product electrostatic term
+    _default_RF_expression_list = [
+    
+        "U_electrostatics;", # define scaled electrostatic term
+        "U_electrostatics = switch * c_RF * u_RF;", # define product electrostatic term
 
-                             #define switching function
-                             "switch = step(-t) + step(t) * step(1-t) * (1 + (t^3) * (-10 + t * (15 - (6 * t))));",
-                             "t = (r_eff - r_switch) / (r_cutoff - r_switch);",
+        # define switching function
+        "switch = step(-t) + step(t) * step(1-t) * (1 + (t^3) * (-10 + t * (15 - (6 * t))));",
+        "t = (r_eff - r_switch) / (r_cutoff - r_switch);",
 
-                             #define topological term
-                             f"c_RF = {ONE_4PI_EPS0} * chargeProd;",
-                             "chargeProd = charge1 * charge2;",
-                             "charge1 = ((charge_old1 * {old_bool_string1}) + (charge_new1 * {new_bool_string1})) * {scale_bool_string1};", 
-                             "charge2 = ((charge_old2 * {old_bool_string2}) + (charge_new2 * {new_bool_string2})) * {scale_bool_string2};",
+        # define topological term
+        f"c_RF = {ONE_4PI_EPS0} * chargeProd;",
+        "chargeProd = charge1 * charge2;",
+        "charge1 = ((charge_old1 * {old_scalar1}) + (charge_new1 * {new_scalar1})) * {scale_scalar1};",
+        "charge2 = ((charge_old2 * {old_scalar2}) + (charge_new2 * {new_scalar2})) * {scale_scalar2};",
 
-                             #define reaction field u_RF
-                             "u_RF = (1 / r_eff) + ((eps_RF - 1) * (r_eff^2)) / ((r_cutoff^3) * (1 + (2 * eps_RF)));",
+        # define reaction field u_RF
+        "u_RF = (1 / r_eff) + ((eps_RF - 1) * (r_eff^2)) / ((r_cutoff^3) * (1 + (2 * eps_RF)));",
 
-                             #r_eff
-                             "r_eff = sqrt(r^2 + w^2);",
+        # r_eff
+        "r_eff = sqrt(r^2 + w^2);",
 
-                             #4th dimension:
-                             #"w = step(unique_new1 + unique_new2 + unique_old1 + unique_old2 - 0.1) * r_cutoff * ({old_bool_string1} - {new_bool_string1}) * {w_scale};",
-                             "w = is_unique_old * r_cutoff * w_scale * (1 - lambda_0_electrostatics_old) + is_unique_new * w_scale * (1 - lambda_0_electrostatics_new);",
-                             "is_unique_old = step(unique_old1 + unique_old2 - 0.1);",
-                             "is_unique_new = step(unique_new1 + unique_new2 - 0.1);",
+        # 4th dimension:
+        "w = is_unique_old * r_cutoff * w_scale * (1 - lambda_0_electrostatics_old) + is_unique_new * r_cutoff * w_scale * (1 - lambda_0_electrostatics_new);",
+        "is_unique_old = step(unique_old1 + unique_old2 - 0.1);",
+        "is_unique_new = step(unique_new1 + unique_new2 - 0.1);",
 
-                             # switch parameter
-                             "r_switch = r_cutoff * {switching_ratio};",
+        # switch parameter
+        "r_switch = r_cutoff * {switching_ratio};",
 
-                             # reaction field parameters
-                             "eps_RF = {eps_RF};",
-                             "r_cutoff = {r_cutoff};",
-                             "w_scale = {w_scale};"
-                             ]
-    # predefined RF parameters (fed to the `expression` via `format`): [scale_bool_string, old_bool_string, new_bool_string, w_scale, switching_ratio, eps_RF, r_cutoff]
-    # RF per_particle_parameters: [scale_bools, old/new_bool_string, unique_old, unique_new, core]
+        # reaction field and 4th dimension parameters
+        "eps_RF = {eps_RF};",
+        "r_cutoff = {r_cutoff};",
+        "w_scale = {w_scale};"
+    
+    ]
 
     #electrostatic exception
-    _default_RF_exception_expr_list = copy.deepcopy(_default_RF_expr_list)
-    _default_RF_exception_expr_list[0] = "U_electrostatics * {scale_bool_string};"
-    _default_RF_exception_expr_list[5] = "chargeProd = select(1 - environment_region, chargeProd_old * {old_bool_string} + chargeProd_new * {new_bool_string}, chargeProd_old);"
-    _default_RF_exception_expr_list[6] = ''
-    _default_RF_exception_expr_list[7] = ''
-    _default_RF_exception_expr_list[10] = "w = (is_unique_old * r_cutoff * w_scale * (1 - lambda_0_electrostatics_exceptions_old)) + (is_unique_new * w_scale * (1 - lambda_0_electrostatics_exceptions_new));"
-    _default_RF_exception_expr_list[11] = "is_unique_old = step(unique_old - 0.1);"
-    _default_RF_exception_expr_list[12] = "is_unique_new = step(unique_new - 0.1);"
+    _default_RF_exception_expression_list = [
 
-    _default_RF_expression = ' '.join(_default_RF_expr_list)
-    _default_RF_exception_expression = ' '.join(_default_RF_exception_expr_list)
+            "U_electrostatics * {scale_scalar};",
+            "U_electrostatics = switch * c_RF * u_RF;", # define product electrostatic term
 
-    _default_steric_expr_list = ["U_sterics;",
+            # define switching function
+            "switch = step(-t) + step(t) * step(1-t) * (1 + (t^3) * (-10 + t * (15 - (6 * t))));",
+            "t = (r_eff - r_switch) / (r_cutoff - r_switch);",
 
-                                  "U_sterics = 4 * epsilon * x * (x - 1.0);",
-                                  "x = (sigma / r_eff)^6;",
+            # define topological term
+            "c_RF = {ONE_4PI_EPS0} * chargeProd;",
+            "chargeProd = select(1 - environment_region, chargeProd_old * {old_scalar} + chargeProd_new * {new_scalar}, chargeProd_old);",
 
-                                  # sigma
-                                  "sigma = (sigma1 + sigma2) / 2;",
-                                  "sigma1 = (sigma_old1 * {old_bool_string1}) + (sigma_new1 * {new_bool_string1});",
-                                  "sigma2 = (sigma_old2 * {old_bool_string2}) + (sigma_new2 * {new_bool_string2});",
+            # define reaction field u_RF
+            "u_RF = (1 / r_eff) + ((eps_RF - 1) * (r_eff^2)) / ((r_cutoff^3) * (1 + (2 * eps_RF)));",
 
-                                  # epsilon
-                                  "epsilon = sqrt(epsilon1 * epsilon2);",
-                                  "epsilon1 = ((epsilon_old1 * {old_bool_string1}) + (epsilon_new1 * {new_bool_string1})) * {scale_bool_string1};",
-                                  "epsilon2 = ((epsilon_old2 * {old_bool_string2}) + (epsilon_new2 * {new_bool_string2})) * {scale_bool_string2};",
+            # r_eff
+            "r_eff = sqrt(r^2 + w^2);",
 
-                                   #r_eff
-                                   "r_eff = sqrt(r^2 + w^2);",
-                                   
-                                   #4th dimension:
-                                   #"w = step(unique_new1 + unique_new2 + unique_old1 + unique_old2 - 0.1) * r_cutoff * ({old_bool_string1} - {new_bool_string1}) * {w_scale};",
-                                   "w = is_unique_old * r_cutoff * w_scale * (1 - lambda_0_sterics_old) + is_unique_new * w_scale * (1 - lambda_0_sterics_new);",
-                                   "is_unique_old = step(unique_old1 + unique_old2 - 0.1);",
-                                   "is_unique_new = step(unique_new1 + unique_new2 - 0.1);",
+            # 4th dimension:
+            "w = is_unique_old * r_cutoff * w_scale * (1 - lambda_0_electrostatics_old) + is_unique_new * r_cutoff * w_scale * (1 - lambda_0_electrostatics_new);",
+            "is_unique_old = step(unique_old - 0.1);",
+            "is_unique_new = step(unique_new - 0.1);",
 
-                                   # parameters
-                                   "r_cutoff = {r_cutoff};",
-                                   "w_scale = {w_scale};"
+            # switch parameter
+            "r_switch = r_cutoff * {switching_ratio};",
+
+            # reaction field and 4th dimension parameters
+            "eps_RF = {eps_RF};",
+            "r_cutoff = {r_cutoff};",
+            "w_scale = {w_scale};"
+
     ]
-    # per_particle_parameters : [scale_bools, old/new_bool_string, unique_old, unique_new, core]
-    # predefined steric parameters (fed to the `expression` via `format`): [scale_bool_string, old_bool_string, new_bool_string, w_scale, switching_ratio, r_cutoff]
 
-    #steric exception
-    _default_steric_exception_expr_list = copy.deepcopy(_default_steric_expr_list)
-    _default_steric_exception_expr_list[0] = "U_sterics * {scale_bool_string};"
-    _default_steric_exception_expr_list[3] = "sigma = select(1 - environment_region, sigma_old * {old_bool_string} + sigma_new * {new_bool_string}, sigma_old);"
-    _default_steric_exception_expr_list[4] = ''
-    _default_steric_exception_expr_list[5] = ''
-    _default_steric_exception_expr_list[6] = "epsilon = select(1 - environment_region, epsilon_old * {old_bool_string} + epsilon_new * {new_bool_string}, epsilon_old);"
-    _default_steric_exception_expr_list[7] = ''
-    _default_steric_exception_expr_list[8] = ''
-    _default_steric_exception_expr_list[10] = "w = (is_unique_old * r_cutoff * w_scale * (1 - lambda_0_sterics_exceptions_old)) + (is_unique_new * w_scale * (1 - lambda_0_sterics_exceptions_new));"
-    _default_steric_exception_expr_list[11] = "is_unique_old = step(unique_old - 0.1);"
-    _default_steric_exception_expr_list[12] = "is_unique_new = step(unique_new - 0.1);"
+    _default_steric_expression_list = [
 
-    _default_steric_expression = ' '.join(_default_steric_expr_list)
-    _default_steric_exception_expression = ' '.join(_default_steric_exception_expr_list)
+                "U_sterics;",
 
+                "U_sterics = 4 * epsilon * x * (x - 1.0);",
+                "x = (sigma / r_eff)^6;",
 
+                # sigma
+                "sigma = (sigma1 + sigma2) / 2;",
+                "sigma1 = (sigma_old1 * {old_scalar1}) + (sigma_new1 * {new_scalar1});",
+                "sigma2 = (sigma_old2 * {old_scalar2}) + (sigma_new2 * {new_scalar2});",
 
+                # epsilon
+                "epsilon = sqrt(epsilon1 * epsilon2);",
+                "epsilon1 = ((epsilon_old1 * {old_scalar1}) + (epsilon_new1 * {new_scalar1})) * {scale_scalar1};",
+                "epsilon2 = ((epsilon_old2 * {old_scalar2}) + (epsilon_new2 * {new_scalar2})) * {scale_scalar2};",
 
+                # r_eff
+                "r_eff = sqrt(r^2 + w^2);",
 
+                # 4th dimension:
+                "w = is_unique_old * r_cutoff * w_scale * (1 - lambda_0_sterics_old) + is_unique_new * r_cutoff * w_scale * (1 - lambda_0_sterics_new);",
+                "is_unique_old = step(unique_old1 + unique_old2 - 0.1);",
+                "is_unique_new = step(unique_new1 + unique_new2 - 0.1);",
+
+                # 4th dimension parameters
+                "r_cutoff = {r_cutoff};",
+                "w_scale = {w_scale};"
+
+    ]
+
+    _default_steric_exception_expression_list = [
+
+                "U_sterics * {scale_scalar};",
+
+                "U_sterics = 4 * epsilon * x * (x - 1.0);",
+                "x = (sigma / r_eff)^6;",
+
+                # sigma
+                "sigma = select(1 - environment_region, sigma_old * {old_scalar} + sigma_new * {new_scalar}, sigma_old);",
+
+                # epsilon
+                "epsilon = select(1 - environment_region, epsilon_old * {old_scalar} + epsilon_new * {new_scalar}, epsilon_old);",
+
+                # r_eff
+                "r_eff = sqrt(r^2 + w^2);",
+
+                # 4th dimension:
+                "w = is_unique_old * r_cutoff * w_scale * (1 - lambda_0_sterics_old) + is_unique_new * r_cutoff * w_scale * (1 - lambda_0_sterics_new);",
+                "is_unique_old = step(unique_old - 0.1);",
+                "is_unique_new = step(unique_new - 0.1);",
+
+                # 4th dimension parameters
+                "r_cutoff = {r_cutoff};",
+                "w_scale = {w_scale};"
+
+    ]
+
+    _default_RF_expression = ' '.join(_default_RF_expression_list)
+    _default_RF_exception_expression = ' '.join(_default_RF_exception_expression_list)
+    _default_steric_expression = ' '.join(_default_steric_expression_list)
+    _default_steric_exception_expression = ' '.join(_default_steric_exception_expression_list)
 
     def __init__(self,
                  topology_proposal,
@@ -2786,7 +2817,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
                  #electrostatics
                  RF_switching_ratio=0.25, # is this okay?
-                 epsilon_RF=78.8, #this is approximately correct for pure water,
+                 epsilon_RF=78.8, # this is approximately correct for pure water,
                  r_RF_cutoff=1.4 * unit.nanometers,  # default cutoff for reaction field electrostatics
                  w_RF_scale=1.,
 
@@ -2909,12 +2940,12 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         if generate_htf_for_testing:
             self._w_RF_scale = 0
             self._w_sterics_scale = 0
-            self._default_RF_expr_list[2] = "switch = 1;"
-            self._default_RF_expr_list[8] = "u_RF = 1 / r_eff;"
-            self._default_RF_expression = ' '.join(self._default_RF_expr_list)
-            self._default_RF_exception_expr_list[2] = "switch = 1;"
-            self._default_RF_exception_expr_list[8] = "u_RF = 1 / r_eff;"
-            self._default_RF_exception_expression = ' '.join(self._default_RF_exception_expr_list)
+            self._default_RF_expression_list[2] = "switch = 1;"
+            self._default_RF_expression_list[8] = "u_RF = 1 / r_eff;"
+            self._default_RF_expression = ' '.join(self._default_RF_expression_list)
+            self._default_RF_exception_expression_list[2] = "switch = 1;"
+            self._default_RF_exception_expression_list[6] = "u_RF = 1 / r_eff;"
+            self._default_RF_exception_expression = ' '.join(self._default_RF_exception_expression_list)
 
         # Prepare dicts of forces, which will be useful later
         # TODO: Store this as self._system_forces[name], name in ('old', 'new', 'hybrid') for compactness
@@ -2942,7 +2973,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         self._build_hybrid_particles()
 
         # Define scale regions
-        self._handle_scale_regions(scale_regions)
+        self._generate_scale_templates(scale_regions)
 
         # Check that if there is a barostat in the original system, it is added to the hybrid.
         # We copy the barostat from the old system.
@@ -3075,28 +3106,40 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     def num_scale_regions(self):
         return 0 if self._scale_regions is None else len(self._scale_regions)
 
-    def _handle_scale_regions(self, scale_regions):
+    def _generate_scale_templates(self, scale_regions):
+        """
+        After checking that scale_regions was defined correctly, generate lists that will be used as templates for
+        feeding into `render_scalar_string()`.
+
+        Parameters
+        ----------
+        scale_regions : list of lists (of ints)
+            each sublist contains the hybrid indices of atoms that should be scaled for scale region i
+
+        """
+
         import itertools
         if scale_regions is None:
             self._scale_regions = None
         else:
+            # Check that scale_regions is a list of lists
             assert type(scale_regions) == list
             for entry in scale_regions:
                 assert type(entry) == list
 
-            #the last bit is to ensure that the scale regions are disjoint
+            # Ensure that the scale regions are disjoint
             num_scaled_particles = sum([len(i) for i in scale_regions])
             num_combined_scaled_particles = len(list(itertools.chain.from_iterable(scale_regions)))
             assert num_scaled_particles == num_combined_scaled_particles, f"each scale region must be disjoint"
             self._scale_regions = [set(i) for i in scale_regions]
 
-        #get the scale template
+        # Get the scale template
         self._scale_templates = [
                                     list(itertools.chain.from_iterable([['nonscale_lambda']] + [[f"scale_lambda_{i}", f"interscale_lambda_{i}"] for i in range(self.num_scale_regions)])),
                                     list(itertools.chain.from_iterable([['nonscale_region']] + [[f"scale_region_{i}", f"interscale_region_{i}"] for i in range(self.num_scale_regions)]))
         ]
 
-        #we also have to define a particle scale template for the per_particle_parameters of the `NonbondedForce`
+        # We also have to define a particle scale template for the per_particle_parameters of the `NonbondedForce`
         params1 = ['nonscale_region1'] + [f"scale_region_{i}1" for i in range(self.num_scale_regions)]
         params2 = ['nonscale_region2'] + [f"scale_region_{i}2" for i in range(self.num_scale_regions)]
         self._particle_scale_templates = [
@@ -3184,7 +3227,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
         self._atom_classes = atom_classes
 
-        #generate a list of alchemical regions
+        # Generate a list of alchemical regions
         self._alchemical_regions = []
         self._alchemical_regions_by_type = {key: set(chain(*[val for val in atom_classes[key].values()])) for key in atom_classes.keys() if key != 'environment_atoms'}
         self._alchemical_regions_by_type['environment_atoms'] = self._atom_classes['environment_atoms']
@@ -3201,7 +3244,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         """
         for old_indices in self._old_system_exceptions.keys():
             hybrid_indices = (self._old_to_hybrid_map[old_indices[0]], self._old_to_hybrid_map[old_indices[1]])
-            if set(old_indices).intersection(self._atom_classes['environment_atoms']) != set():
+            if set(hybrid_indices).intersection(self._atom_classes['environment_atoms']) != set():
                 assert set(old_indices).intersection(self._alchemical_regions_by_type['unique_old_atoms']) == set(), f"old index exceptions {old_indices} include unique old and environment atoms, which is disallowed"
 
         for new_indices in self._new_system_exceptions.keys():
@@ -3240,51 +3283,61 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     def get_scale_identifier(self,
                              particles):
         """
-        return a list of binary ints that define which/whether the list of (hybrid-indexed) particles exists in scale_region_i;
+        For a given particle or set of particles, get the scale_id which is a list of binary ints that defines which/whether
+        the particle(s) exists in scale_region_i;
         if there is a single particle, there are no 'interscale_region' possibilities.
 
         Example: if there are 2 scale regions,
                 and all particles belong to the first region, return: [0, 1, 0, 0, 0] (nonscale_region, scale_region_0, interscale_region_0, scale_region_1, interscale_region_1)
 
+        Arguments
+        ---------
+        particles : set or int
+            a set of hybrid particle indices or single particle
+
+        Returns
+        -------
+        scale_id : list
+            list of binaries indicating whether/which scale region the particle(s) belong to
         """
         assert type(particles) in [type(set()), int], f"`particles` must be an integer or a set, got {type(particles)}."
         if isinstance(particles, int):
-            template = [0 for i in range(self.num_scale_regions + 1)]
-            template[0] = 1 # by default, the particle belongs to nonscale
+            scale_id = [0 for i in range(self.num_scale_regions + 1)]
+            scale_id[0] = 1 # By default, the particle belongs to nonscale
             if self.num_scale_regions == 0:
-                return template
+                return scale_id
             else:
                 for idx, _set in enumerate(self._scale_regions):
-                    if particles in _set: # here, particles is a single int
-                        template[idx+1] += 1 # update the template
-                        template[0] = 0 # remove nonscale default
-            return template
+                    if particles in _set: # Here, particles is a single int
+                        scale_id[idx+1] += 1 # Update the scale_id
+                        scale_id[0] = 0 # Remove nonscale default
+            return scale_id
 
         elif isinstance(particles, set):
-            template = [0 for i in range(2 * self.num_scale_regions + 1)]
-            template[0] = 1 # by default, the particles belong to nonscale
-            nonscale_counter = 0 # make an nonscale counter. add 1 to this every time the particles is not in the intersection with a scale region.
+            scale_id = [0 for i in range(2 * self.num_scale_regions + 1)]
+            scale_id[0] = 1 # By default, the particles belong to nonscale
+            nonscale_counter = 0 # Make a nonscale counter. Add 1 to this every time the particles is not in the intersection with a scale region.
             if self.num_scale_regions == 0:
-                return template
+                return scale_id
             else:
                 for idx, _set in enumerate(self._scale_regions):
-                    if particles.intersection(_set) != set(): # at least one of the particles is in the idx_th scale region
-                        # assert that it does not intersect with any other scale region...
+                    if particles.intersection(_set) != set(): # At least one of the particles is in the idx_th scale region
+                        # Assert that it does not intersect with any other scale region...
                         further_indices = range(idx+1, self.num_scale_regions)
                         intersections = [particles.intersection(self._scale_regions[q]) for q in further_indices]
                         for region_label, val in zip(further_indices, intersections):
                             assert val == set(), f"term containing particles {particles} intersects with scale regions {idx} and {region_label}"
-                        if particles.issubset(_set): # then this term is wholly in the scale region
-                            template[2*idx+1] = 1 # double the index (and add 1) so that we
-                        else: # it is interscale region
-                            template[2*idx+2] = 1
+                        if particles.issubset(_set): # Then this term is wholly in the scale region
+                            scale_id[2*idx+1] = 1 # Double the index (and add 1) so that we
+                        else: # It is interscale region
+                            scale_id[2*idx+2] = 1
                     else:
                         nonscale_counter += 1
 
-                if nonscale_counter != self.num_scale_regions: # if the particles matched one of the scale regions, set nonscale to 0
-                    template[0] = 0
+                if nonscale_counter != self.num_scale_regions: # If the particles matched one of the scale regions, set nonscale to 0
+                    scale_id[0] = 0
 
-                return template
+                return scale_id
 
         else:
             raise Exception(f"particles is of type {type(particles)}, but only `int` and `set` are allowable")
@@ -3292,27 +3345,31 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
     def get_alch_identifier(self,
                             particles):
         """
-        return a list of integers that specifies whether a term is environment or alchemical (if alchemical, specifies which region, too)
+        For a particle or set of particles, get the alch_id, which is a list of binary integers that specifies whether the particle(s)
+        is environment or alchemical (if alchemical, specifies which region, too)
 
-        arguments
-            particles : set
-                a set of hybrid particle indices
+        Example: if there are two alchemical regions, and I have a unique old bond, the alch_id would be [0, 1, 0]
 
-        returns
-            template : list
-                list of binaries;
-                template[0] defines whether a given particle belongs to the environment_region.
-                template[i + 1] defines whether a given particle belongs to alchemical_region i
-            str_identifier : str
-                string identifier;
-                one of {'environment_atoms', 'unique_old_atoms', 'unique_new_atoms', 'core_atoms'}
+        Arguments
+        ---------
+        particles : set or int
+            a set of hybrid particle indices or single particle
+
+        Returns
+        -------
+        alch_id : list
+            list of binaries;
+            alch_id[0] defines whether a given particle belongs to the environment_region.
+            alch_id[i + 1] defines whether a given particle belongs to alchemical_region i
+        atom_class : str
+            one of {'environment_atoms', 'unique_old_atoms', 'unique_new_atoms', 'core_atoms'}
         """
-        template = [0 for i in range(self._num_alchemical_regions + 1)]
-        template[0] = 1
-        str_identifier = 'environment_atoms'
+        alch_id = [0 for i in range(self._num_alchemical_regions + 1)]
+        alch_id[0] = 1
+        atom_class = 'environment_atoms'
         for idx, _set in enumerate(self._alchemical_regions):
 
-            # determine if the particles is in alchemical region idx
+            # Determine if the particles is in alchemical region idx
             if type(particles) == int:
                 in_alch = True if particles in _set else False
                 particles = set([particles])
@@ -3321,42 +3378,55 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             else:
                 raise Exception(f"we only support particles as int or set...")
 
-            if in_alch: #allow for particles that straddle alchemical regions
-                template[idx+1] += 1 #update the template
-                template[0] = 0 #remove env default
+            if in_alch: # Allow for particles that straddle alchemical regions
+                alch_id[idx+1] += 1 # Update the alch_id
+                alch_id[0] = 0 # Remove env default
 
-                #get whether it is core or unique_old/new
+                # Get whether it is core or unique_old/new
                 if particles.intersection(self._alchemical_regions_by_type['unique_old_atoms']):
                     assert not particles.intersection(self._alchemical_regions_by_type['unique_new_atoms'])
-                    str_identifier = 'unique_old_atoms'
+                    atom_class = 'unique_old_atoms'
                 elif particles.intersection(self._alchemical_regions_by_type['unique_new_atoms']):
                     assert not particles.intersection(self._alchemical_regions_by_type['unique_old_atoms'])
-                    str_identifier = 'unique_new_atoms'
+                    atom_class = 'unique_new_atoms'
                 elif particles.intersection(self._alchemical_regions_by_type['core_atoms']):
-                    str_identifier = 'core_atoms'
+                    atom_class = 'core_atoms'
                 else:
                     raise Exception(f"hybrid indices {particles} are identified as non-environment alchemical-region atoms but do not match unique_old/new/core ")
 
-        if template[0] == 1: #if this is in environemnt
-            assert particles.issubset(self._alchemical_regions_by_type['environment_atoms']), f"there is a discrepancy between template environment trigger and the environment atoms in `self._alchemical_regions_by_type`"
+        if alch_id[0] == 1: # If this is in environemnt
+            assert particles.issubset(self._alchemical_regions_by_type['environment_atoms']), f"there is a discrepancy between alch_id environment trigger and the environment atoms in `self._alchemical_regions_by_type`"
 
-        assert sum(template) == 1, f"the alchemical regions must be disjoint; got {template}"
-        return template, str_identifier
+        assert sum(alch_id) == 1, f"the alchemical regions must be disjoint; got {alch_id}"
+        return alch_id, atom_class
 
     @staticmethod
-    def render_bool_string(bool_variable_prefixes, bool_variable_names, auxiliary_names = None):
-        if auxiliary_names is not None:
-            # there is a distinct way these should be combined
-            selections = [f"{bool_variable_prefix} * ({bool_variable_name} + {auxiliary_name}) / 2" for bool_variable_prefix, bool_variable_name, auxiliary_name in enumerate(bool_variable_prefixes, bool_variable_names, auxiliary_names)]
-            return '( ' + '+'.join(selections) + ' )'
-        else:
-            selections = [f"{bool_variable_prefix} * {bool_variable_name}" for bool_variable_prefix, bool_variable_name in zip(bool_variable_prefixes, bool_variable_names)]
-            return '( ' + '+'.join(selections) + ' )'
+    def render_scalar_string(global_lambda_names, per_x_parameter_names):
+        """
+        Generates a string that evaluates to a scalar. This scalar is a multiplier that will control the value of a forcefield parameter (e.g. spring constant, bond length, angle, charge, etc)
+        The string will be used in the custom expression for each of the custom forces.
+
+        E.g. If we only define a single alchemical region, the string that will be used to multiply old bond parameters in the CustomBondForce is:
+        1 * environment_region + lambda_0_bonds_old * alchemical_region_0
+
+        Parameters
+        ----------
+        global_lambda_names : list of str
+            names of global lambdas that should be used in computing the scalar multiplier
+        per_x_parameter_names : list of str
+            names of per x (bond, angle, torsion, particle) parameter names that should be tethered to each of the global lambdas
+        Returns
+        -------
+        str
+
+        """
+        selections = [f"{global_lambda_name} * {per_x_parameter_name}" for global_lambda_name, per_x_parameter_name in zip(global_lambda_names, per_x_parameter_names)]
+        return '( ' + '+'.join(selections) + ' )'
 
 
     def _transcribe_bonds(self):
         """
-        handle the harmonic bonds...this serves as a template for how to transcribe the old/new system `HarmonicBondForce` to the
+        Handle the harmonic bonds...this serves as a template for how to transcribe the old/new system `HarmonicBondForce` to the
         hybrid system's `CustomBondForce`.
 
         Each bond term in the old system corresponds to a core, unique_old, or environment bond term.
@@ -3392,30 +3462,32 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
 
         """
-        scale_bool_string = RxnHybridTopologyFactory.render_bool_string([i + "_bonds" for i in self._scale_templates[0]],
+        # Generate scalar strings -- strings that evaluate to a scalar. We will want to multiply some terms in the custom expression by this scalar
+        scale_scalar = RxnHybridTopologyFactory.render_scalar_string([i + "_bonds" for i in self._scale_templates[0]],
                                                                         self._scale_templates[1]
                                                                         )
-        core_bond_expression = f"{scale_bool_string} * (K/2)*(r-length)^2;"
-        old_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_bonds_old" for i in range(self._num_alchemical_regions)],
+        old_scalar = RxnHybridTopologyFactory.render_scalar_string(['1'] + [f"lambda_{i}_bonds_old" for i in range(self._num_alchemical_regions)],
                                                                     ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
-        new_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_bonds_new" for i in range(self._num_alchemical_regions)],
+        new_scalar = RxnHybridTopologyFactory.render_scalar_string(['1'] + [f"lambda_{i}_bonds_new" for i in range(self._num_alchemical_regions)],
                                                                     ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
 
-        core_bond_expression += f"K = {old_bool_string} * K1 + {new_bool_string} * K2;"
-        core_bond_expression += f"length = {old_bool_string} * length1 + {new_bool_string} * length2;"
+        # Define the custom expression and create the custom force
+        core_bond_expression = f"{scale_scalar} * (K/2)*(r-length)^2;"
+        core_bond_expression += f"K = {old_scalar} * K1 + {new_scalar} * K2;"
+        core_bond_expression += f"length = {old_scalar} * length1 + {new_scalar} * length2;"
         custom_bond_force = openmm.CustomBondForce(core_bond_expression)
         self._hybrid_system.addForce(custom_bond_force)
 
-        #add global parameters
+        # Add global parameters
         for i in range(self._num_alchemical_regions):
             custom_bond_force.addGlobalParameter(f"lambda_{i}_bonds_old", 1.0)
             custom_bond_force.addGlobalParameter(f"lambda_{i}_bonds_new", 0.0)
 
-        for i in self._scale_templates[0]: #add the scaling global parameters
+        for i in self._scale_templates[0]: # Add the scaling global parameters
             custom_bond_force.addGlobalParameter(i + '_bonds', 1.0)
 
-        #add per-bond parameter
-        for i in self._scale_templates[1]: #add the scaling per bond parameters
+        # Add per-bond parameters
+        for i in self._scale_templates[1]: # Add the scaling per bond parameters
             custom_bond_force.addPerBondParameter(i)
 
         for i in ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)]:
@@ -3426,29 +3498,29 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         custom_bond_force.addPerBondParameter('length2') # new bond length
         custom_bond_force.addPerBondParameter('K2') # new spring constant
 
-        #now add the parameters
-        #there can only be a _single_ term for each atom pair, right?
+        # Now add the parameters
+        # there can only be a_single_term for each atom pair, right?
 
         old_system_bond_force = self._old_system_forces['HarmonicBondForce']
         new_system_bond_force = self._new_system_forces['HarmonicBondForce']
 
-        #set periodicity
+        # Set periodicity
         if old_system_bond_force.usesPeriodicBoundaryConditions():
             custom_bond_force.setUsesPeriodicBoundaryConditions(True)
 
-        #make a list of hybrid-indexed bond terms
+        # Make a dict of hybrid-indexed bond terms
         old_term_collector = {}
         new_term_collector = {}
 
-        #gather the old system bond force terms into a dict
+        # Gather the old system bond force terms into a dict
         for term_idx in range(old_system_bond_force.getNumBonds()):
-            p1, p2, r0, k = old_system_bond_force.getBondParameters(term_idx) #grab the parameters
-            hybrid_p1, hybrid_p2 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2] #make hybrid indices
-            sorted_list = tuple(sorted([hybrid_p1, hybrid_p2])) #sort the indices
+            p1, p2, r0, k = old_system_bond_force.getBondParameters(term_idx) # grab the parameters
+            hybrid_p1, hybrid_p2 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2] # make hybrid indices
+            sorted_list = tuple(sorted([hybrid_p1, hybrid_p2])) # sort the indices
             assert not sorted_list in old_term_collector.keys(), f"this bond already exists"
             old_term_collector[sorted_list] = [term_idx, r0, k]
 
-        # repeat for the new system bond force
+        # Repeat for the new system bond force
         for term_idx in range(new_system_bond_force.getNumBonds()):
             p1, p2, r0, k = new_system_bond_force.getBondParameters(term_idx)
             hybrid_p1, hybrid_p2 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2]
@@ -3456,23 +3528,23 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             assert not sorted_list in new_term_collector.keys(), f"this bond already exists"
             new_term_collector[sorted_list] = [term_idx, r0, k]
 
-        #build generator for debugging purposes
+        # Build generator for debugging purposes
         self._hybrid_to_old_bond_indices = {}
         self._hybrid_to_new_bond_indices = {}
         self._hybrid_to_core_bond_indices = {}
         self._hybrid_to_environment_bond_indices = {}
 
-        # iterate over the old_term_collector and add appropriate bonds
+        # Iterate over the old_term_collector and add appropriate bonds
         for hybrid_index_pair in old_term_collector.keys():
             idx_set = set(list(hybrid_index_pair))
             scale_id = self.get_scale_identifier(idx_set)
-            alch_id, string_identifier = self.get_alch_identifier(idx_set)
+            alch_id, atom_class = self.get_alch_identifier(idx_set)
             old_bond_idx, r0_old, k_old = old_term_collector[hybrid_index_pair]
             try:
                 new_bond_idx, r0_new, k_new = new_term_collector[hybrid_index_pair]
-            except Exception as e: #this might be a unique old term
+            except Exception as e: # this might be a unique old term
                 r0_new, k_new = r0_old, k_old
-            if alch_id[0] == 1: #if the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
+            if alch_id[0] == 1: # if the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
                 assert new_term_collector[hybrid_index_pair][1:] == old_term_collector[hybrid_index_pair][1:], f"hybrid_index_pair {hybrid_index_pair} bond term was identified in old term collector as {old_term_collector[hybrid_index_pair][1:]}, but in new term collector as {new_term_collector[hybrid_index_pair][1:]}"
                 r0_new = 0
                 k_new = 0
@@ -3480,26 +3552,26 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             bond_term = (hybrid_index_pair[0], hybrid_index_pair[1], scale_id + alch_id + [r0_old, k_old, r0_new, k_new])
             hybrid_bond_idx = custom_bond_force.addBond(*bond_term)
 
-            if string_identifier == 'unique_old_atoms':
+            if atom_class == 'unique_old_atoms':
                 self._hybrid_to_old_bond_indices[hybrid_bond_idx] = old_bond_idx
-            elif string_identifier == 'core_atoms':
+            elif atom_class == 'core_atoms':
                 self._hybrid_to_core_bond_indices[hybrid_bond_idx] = old_bond_idx
-            elif string_identifier == 'environment_atoms':
+            elif atom_class == 'environment_atoms':
                 self._hybrid_to_environment_bond_indices[hybrid_bond_idx] = old_bond_idx
             else:
                 raise Exception(f"old bond index {old_bond_idx} cannot be a unique new bond index")
 
-        #make a modified new_term_collector that omits the terms that are previously handled
+        # Make a modified new_term_collector that omits the terms that are previously handled
         mod_new_term_collector = {key: val for key, val in new_term_collector.items() if key not in list(old_term_collector.keys())}
 
-        #now iterate over the modified new term collector and add appropriate bonds. these should only be unique new, right?
+        # Now iterate over the modified new term collector and add appropriate bonds. These should only be unique new, right?
         for hybrid_index_pair in mod_new_term_collector.keys():
             idx_set = set(list(hybrid_index_pair))
             scale_id = self.get_scale_identifier(idx_set)
-            alch_id, string_identifier = self.get_alch_identifier(idx_set)
-            assert string_identifier == 'unique_new_atoms', f"we are iterating over modified new term collector, but the string identifier returned {string_identifier}"
+            alch_id, atom_class = self.get_alch_identifier(idx_set)
+            assert atom_class == 'unique_new_atoms', f"we are iterating over modified new term collector, but the string identifier returned {atom_class}"
 
-            #these terms are unchanged if they are unique new terms. preserve all valence terms
+            # These terms are unchanged if they are unique new terms. Preserve all valence terms
             new_bond_idx, r0_old, k_old = mod_new_term_collector[hybrid_index_pair]
             r0_new, k_new = r0_old, k_old
 
@@ -3509,33 +3581,35 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
     def _transcribe_angles(self):
         """
-        handle the harmonic angles...this serves as a template for how to transcribe the old/new system `HarmonicAngleForce` to the
-        hybrid system's `CustomAngleForce`.
+        Handle the harmonic angles -- transcribe the old/new system `HarmonicAngleForce` to the hybrid system's `CustomAngleForce`.
         """
-        scale_bool_string = RxnHybridTopologyFactory.render_bool_string([i + "_angles" for i in self._scale_templates[0]],
+
+        # Generate scalar strings -- strings that evaluate to a scalar. We will want to multiply some terms in the custom expression by this scalar
+        scale_scalar = RxnHybridTopologyFactory.render_scalar_string([i + "_angles" for i in self._scale_templates[0]],
                                                                         self._scale_templates[1]
                                                                         )
-        core_angle_expression = f"{scale_bool_string} * (K/2)*(theta-theta0)^2;"
-        old_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_angles_old" for i in range(self._num_alchemical_regions)],
+        old_scalar = RxnHybridTopologyFactory.render_scalar_string(['1'] + [f"lambda_{i}_angles_old" for i in range(self._num_alchemical_regions)],
                                                                     ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
-        new_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_angles_new" for i in range(self._num_alchemical_regions)],
+        new_scalar = RxnHybridTopologyFactory.render_scalar_string(['1'] + [f"lambda_{i}_angles_new" for i in range(self._num_alchemical_regions)],
                                                                     ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
 
-        core_angle_expression += f"K = {old_bool_string} * K1 + {new_bool_string} * K2;"
-        core_angle_expression += f"theta0 = {old_bool_string} * theta0_1 + {new_bool_string} * theta0_2;"
+        # Define the custom expression and create the custom force
+        core_angle_expression = f"{scale_scalar} * (K/2)*(theta-theta0)^2;"
+        core_angle_expression += f"K = {old_scalar} * K1 + {new_scalar} * K2;"
+        core_angle_expression += f"theta0 = {old_scalar} * theta0_1 + {new_scalar} * theta0_2;"
         custom_angle_force = openmm.CustomAngleForce(core_angle_expression)
         self._hybrid_system.addForce(custom_angle_force)
 
-        #add global parameters
+        # Add global parameters
         for i in range(self._num_alchemical_regions):
             custom_angle_force.addGlobalParameter(f"lambda_{i}_angles_old", 1.0)
             custom_angle_force.addGlobalParameter(f"lambda_{i}_angles_new", 0.0)
 
-        for i in self._scale_templates[0]: #add the scaling global parameters
+        for i in self._scale_templates[0]: # Add the scaling global parameters
             custom_angle_force.addGlobalParameter(i + '_angles', 1.0)
 
-        #add per-angle parameter
-        for i in self._scale_templates[1]: #add the scaling per angle parameters
+        # Add per-angle parameters
+        for i in self._scale_templates[1]: # Add the scaling per angle parameters
             custom_angle_force.addPerAngleParameter(i)
 
         for i in ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)]:
@@ -3546,53 +3620,53 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         custom_angle_force.addPerAngleParameter('theta0_2') # new angle length
         custom_angle_force.addPerAngleParameter('K2') # new spring constant
 
-        #now add the parameters
-        #there can only be a _single_ term for each atom triple, right?
+        # Now add the parameters
+        # there can only be a _single_ term for each atom triple, right?
 
         old_system_angle_force = self._old_system_forces['HarmonicAngleForce']
         new_system_angle_force = self._new_system_forces['HarmonicAngleForce']
 
-        #set periodicity
+        # Set periodicity
         if old_system_angle_force.usesPeriodicBoundaryConditions():
             custom_angle_force.setUsesPeriodicBoundaryConditions(True)
 
-        #make a list of hybrid-indexed angle terms
+        # Make a list of hybrid-indexed angle terms
         old_term_collector = {}
         new_term_collector = {}
 
-        #gather the old system angle force terms into a dict
+        # Gather the old system angle force terms into a dict
         for term_idx in range(old_system_angle_force.getNumAngles()):
-            p1, p2, p3, theta0, k = old_system_angle_force.getAngleParameters(term_idx) #grab the parameters
-            hybrid_p1, hybrid_p2, hybrid_p3 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2], self._old_to_hybrid_map[p3] #make hybrid indices
+            p1, p2, p3, theta0, k = old_system_angle_force.getAngleParameters(term_idx) # Grab the parameters
+            hybrid_p1, hybrid_p2, hybrid_p3 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2], self._old_to_hybrid_map[p3] # Make hybrid indices
             sorted_list = tuple([hybrid_p1, hybrid_p2, hybrid_p3]) if hybrid_p1 < hybrid_p3 else tuple([hybrid_p3, hybrid_p2, hybrid_p1])
             assert not sorted_list in old_term_collector.keys(), f"this angle already exists"
             old_term_collector[sorted_list] = [term_idx, theta0, k]
 
-        # repeat for the new system angle force
+        # Repeat for the new system angle force
         for term_idx in range(new_system_angle_force.getNumAngles()):
-            p1, p2, p3, theta0, k = new_system_angle_force.getAngleParameters(term_idx) #grab the parameters
-            hybrid_p1, hybrid_p2, hybrid_p3 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2], self._new_to_hybrid_map[p3] #make hybrid indices
+            p1, p2, p3, theta0, k = new_system_angle_force.getAngleParameters(term_idx) # Grab the parameters
+            hybrid_p1, hybrid_p2, hybrid_p3 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2], self._new_to_hybrid_map[p3] # Make hybrid indices
             sorted_list = tuple([hybrid_p1, hybrid_p2, hybrid_p3]) if hybrid_p1 < hybrid_p3 else tuple([hybrid_p3, hybrid_p2, hybrid_p1])
             assert not sorted_list in new_term_collector.keys(), f"this angle already exists"
             new_term_collector[sorted_list] = [term_idx, theta0, k]
 
-        #build generator for debugging purposes
+        # Build generator for debugging purposes
         self._hybrid_to_old_angle_indices = {}
         self._hybrid_to_new_angle_indices = {}
         self._hybrid_to_core_angle_indices = {}
         self._hybrid_to_environment_angle_indices = {}
 
-        # iterate over the old_term_collector and add appropriate angles
+        # Iterate over the old_term_collector and add appropriate angles
         for hybrid_index_pair in old_term_collector.keys():
             idx_set = set(list(hybrid_index_pair))
             scale_id = self.get_scale_identifier(idx_set)
-            alch_id, string_identifier = self.get_alch_identifier(idx_set)
+            alch_id, atom_class = self.get_alch_identifier(idx_set)
             old_angle_idx, theta0_old, k_old = old_term_collector[hybrid_index_pair]
             try:
                 new_angle_idx, theta0_new, k_new = new_term_collector[hybrid_index_pair]
-            except Exception as e: #this might be a unique old term
+            except Exception as e: # This might be a unique old term
                 theta0_new, k_new = theta0_old, k_old
-            if alch_id[0] == 1: #if the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
+            if alch_id[0] == 1: # If the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
                 assert new_term_collector[hybrid_index_pair][1:] == old_term_collector[hybrid_index_pair][1:], f"hybrid_index_pair {hybrid_index_pair} angle term was identified in old_term_collector as {old_term_collector[hybrid_index_pair]} but in the new_term_collector as {new_term_collector[hybrid_index_pair]}"
                 theta0_new = 0
                 k_new = 0
@@ -3603,26 +3677,26 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                           scale_id + alch_id + [theta0_old, k_old, theta0_new, k_new])
             hybrid_angle_idx = custom_angle_force.addAngle(*angle_term)
 
-            if string_identifier == 'unique_old_atoms':
+            if atom_class == 'unique_old_atoms':
                 self._hybrid_to_old_angle_indices[hybrid_angle_idx] = old_angle_idx
-            elif string_identifier == 'core_atoms':
+            elif atom_class == 'core_atoms':
                 self._hybrid_to_core_angle_indices[hybrid_angle_idx] = old_angle_idx
-            elif string_identifier == 'environment_atoms':
+            elif atom_class == 'environment_atoms':
                 self._hybrid_to_environment_angle_indices[hybrid_angle_idx] = old_angle_idx
             else:
                 raise Exception(f"old angle index {old_angle_idx} cannot be a unique new angle index")
 
-        #make a modified new_term_collector that omits the terms that are previously handled
+        # Make a modified new_term_collector that omits the terms that are previously handled
         mod_new_term_collector = {key: val for key, val in new_term_collector.items() if key not in list(old_term_collector.keys())}
 
-        #now iterate over the modified new term collector and add appropriate angles. these should only be unique new, right?
+        # Now iterate over the modified new term collector and add appropriate angles. These should only be unique new, right?
         for hybrid_index_pair in mod_new_term_collector.keys():
             idx_set = set(list(hybrid_index_pair))
             scale_id = self.get_scale_identifier(idx_set)
-            alch_id, string_identifier = self.get_alch_identifier(idx_set)
-            assert string_identifier == 'unique_new_atoms', f"we are iterating over modified new term collector, but the string identifier returned {string_identifier}"
+            alch_id, atom_class = self.get_alch_identifier(idx_set)
+            assert atom_class == 'unique_new_atoms', f"we are iterating over modified new term collector, but the string identifier returned {atom_class}"
 
-            #these terms are unchanged if they are unique new terms. preserve all valence terms
+            # These terms are unchanged if they are unique new terms. Preserve all valence terms
             new_angle_idx, theta0_old, k_old = mod_new_term_collector[hybrid_index_pair]
             theta0_new, k_new = theta0_old, k_old
 
@@ -3634,6 +3708,25 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             self._hybrid_to_new_angle_indices[hybrid_angle_idx] = new_angle_idx
 
     def _find_torsion_match(self, hybrid_index_pair_old, old_terms, new_term_collector):
+        """
+        For a given torsion (defined by hybrid indices) in the old force, return the hybrid indices for the matching
+        torsion (if it exists) in the new force.
+
+        Parameters
+        ----------
+        hybrid_index_pair_old : list of ints
+            hybrid atom indices defining a torsion from the old force
+        old_terms : list of lists
+            each sublist contains torsion parameters in the old force for the torsion specified by hybrid_index_pair_old
+        new_term_collector : dict
+            key : list of hybrid atom indices of a torsion in the new force
+            value : list of lists, where each sub list contains torsion parameters in the new force
+
+        Returns
+        -------
+        list of ints
+            hybrid atom indices for matching torsion in the new force (or None, if it doesn't exist)
+        """
         for hybrid_index_pair_new, new_terms in new_term_collector.items():
             if set(hybrid_index_pair_new) == set(hybrid_index_pair_old):
                 new_terms = np.array(new_terms)
@@ -3646,38 +3739,38 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
     def _transcribe_torsions(self):
         """
-        handle the periodic torsions...this serves as a template for how to transcribe the old/new system `PeriodicTorsionForce` to the
-        hybrid system's `PeriodicTorsionForce`.
+        Handle the periodic torsions -- transcribe the old/new system `PeriodicTorsionForce` to the hybrid system's `CustomTorsionForce`.
 
         TODO : add equivalent `environment` check for torsions...this is a bit tricky since a unique 4-tuple might have multiple torsions (or backward)
         """
-        scale_bool_string = RxnHybridTopologyFactory.render_bool_string([i + "_torsions" for i in self._scale_templates[0]],
+        # Generate scalar strings -- strings that evaluate to a scalar. We will want to multiply some terms in the custom expression by this scalar
+        scale_scalar = RxnHybridTopologyFactory.render_scalar_string([i + "_torsions" for i in self._scale_templates[0]],
                                                                         self._scale_templates[1]
                                                                         )
 
-        old_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_torsions_old" for i in range(self._num_alchemical_regions)],
+        old_scalar = RxnHybridTopologyFactory.render_scalar_string(['1'] + [f"lambda_{i}_torsions_old" for i in range(self._num_alchemical_regions)],
                                                                     ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
-        new_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_torsions_new" for i in range(self._num_alchemical_regions)],
+        new_scalar = RxnHybridTopologyFactory.render_scalar_string(['1'] + [f"lambda_{i}_torsions_new" for i in range(self._num_alchemical_regions)],
                                                                     ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
 
-        core_torsion_expression = f"{scale_bool_string} * ({old_bool_string} * U1 + {new_bool_string} * U2);"
-        #core_torsion_expression  = f"{old_bool_string}*U1 + {new_bool_string} * U2;"
+        # Define the custom expression and create the custom force
+        core_torsion_expression = f"{scale_scalar} * ({old_scalar} * U1 + {new_scalar} * U2);"
+        #core_torsion_expression  = f"{old_scalar}*U1 + {new_scalar} * U2;"
         core_torsion_expression += 'U1 = K1*(1+cos(periodicity1*theta-phase1));'
         core_torsion_expression += 'U2 = K2*(1+cos(periodicity2*theta-phase2));'
-
         custom_torsion_force = openmm.CustomTorsionForce(core_torsion_expression)
         self._hybrid_system.addForce(custom_torsion_force)
 
-        #add global parameters
+        # Add global parameters
         for i in range(self._num_alchemical_regions):
             custom_torsion_force.addGlobalParameter(f"lambda_{i}_torsions_old", 1.0)
             custom_torsion_force.addGlobalParameter(f"lambda_{i}_torsions_new", 0.0)
 
-        for i in self._scale_templates[0]: #add the scaling global parameters
+        for i in self._scale_templates[0]: # Add the scaling global parameters
             custom_torsion_force.addGlobalParameter(i + '_torsions', 1.0)
 
-        #add per-torsion parameter
-        for i in self._scale_templates[1]: #add the scaling per torsion parameters
+        # Add per-torsion parameters
+        for i in self._scale_templates[1]: # Add the scaling per torsion parameters
             custom_torsion_force.addPerTorsionParameter(i)
 
         for i in ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)]:
@@ -3693,34 +3786,34 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         custom_torsion_force.addPerTorsionParameter('phase2')
         custom_torsion_force.addPerTorsionParameter('K2')
 
-        #now add the parameters
+        # Now add the parameters
 
         old_system_torsion_force = self._old_system_forces['PeriodicTorsionForce']
         new_system_torsion_force = self._new_system_forces['PeriodicTorsionForce']
 
-        #set periodicity
+        # Set periodicity
         if old_system_torsion_force.usesPeriodicBoundaryConditions():
             custom_torsion_force.setUsesPeriodicBoundaryConditions(True)
 
-        #make a list of hybrid-indexed torsion terms
+        # Make a list of hybrid-indexed torsion terms
         old_term_collector = {}
         new_term_collector = {}
 
-        #gather the old system torsion force terms into a dict
+        # Gather the old system torsion force terms into a dict
         for term_idx in range(old_system_torsion_force.getNumTorsions()):
-            p1, p2, p3, p4, periodicity, phase, k = old_system_torsion_force.getTorsionParameters(term_idx) #grab the parameters
-            hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2], self._old_to_hybrid_map[p3], self._old_to_hybrid_map[p4] #make hybrid indices
+            p1, p2, p3, p4, periodicity, phase, k = old_system_torsion_force.getTorsionParameters(term_idx) # Grab the parameters
+            hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2], self._old_to_hybrid_map[p3], self._old_to_hybrid_map[p4] # Make hybrid indices
             sorted_list = tuple([hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]) if hybrid_p1 < hybrid_p4 else tuple([hybrid_p4, hybrid_p3, hybrid_p2, hybrid_p1])
             if sorted_list in old_term_collector.keys():
-                # it _is_ the case that some torsions have the same particle indices...
+                # It _is_ the case that some torsions have the same particle indices...
                 old_term_collector[sorted_list].append([term_idx, periodicity, phase, k])
             else:
-                #make this a nested list to hold multiple terms
+                # Make this a nested list to hold multiple terms
                 old_term_collector[sorted_list] = [[term_idx, periodicity, phase, k]]
 
-        # repeat for the new system torsion force
+        # Repeat for the new system torsion force
         for term_idx in range(new_system_torsion_force.getNumTorsions()):
-            p1, p2, p3, p4, periodicity, phase, k = new_system_torsion_force.getTorsionParameters(term_idx) #grab the parameters
+            p1, p2, p3, p4, periodicity, phase, k = new_system_torsion_force.getTorsionParameters(term_idx) # Grab the parameters
             hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2], self._new_to_hybrid_map[p3], self._new_to_hybrid_map[p4] #make hybrid indices
             sorted_list = tuple([hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]) if hybrid_p1 < hybrid_p4 else tuple([hybrid_p4, hybrid_p3, hybrid_p2, hybrid_p1])
             if sorted_list in new_term_collector.keys():
@@ -3728,21 +3821,21 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             else:
                 new_term_collector[sorted_list] = [[term_idx, periodicity, phase, k]]
 
-        #build generator for debugging purposes
+        # Build generator for debugging purposes
         self._hybrid_to_old_torsion_indices = {}
         self._hybrid_to_new_torsion_indices = {}
         self._hybrid_to_core_torsion_indices = {}
         self._hybrid_to_environment_torsion_indices = {}
 
-        # iterate over the old_term_collector and add appropriate torsions
+        # Iterate over the old_term_collector and add appropriate torsions
         mod_new_term_collector = {key: val for key, val in new_term_collector.items()}
         for hybrid_index_pair in old_term_collector.keys():
             idx_set = set(list(hybrid_index_pair))
             scale_id = self.get_scale_identifier(idx_set)
-            alch_id, string_identifier = self.get_alch_identifier(idx_set)
+            alch_id, atom_class = self.get_alch_identifier(idx_set)
             if alch_id[0] == 1: #if the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
                 # TODO : write a test for this...
-                # it must be the case that the list of old terms must be equal to the list of new terms
+                # It must be the case that the list of old terms must be equal to the list of new terms
                 is_env = True
             else:
                 is_env = False
@@ -3762,29 +3855,29 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
                 hybrid_torsion_idx = custom_torsion_force.addTorsion(*torsion_term)
 
-                if string_identifier == 'unique_old_atoms':
+                if atom_class == 'unique_old_atoms':
                     self._hybrid_to_old_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
-                elif string_identifier == 'core_atoms':
+                elif atom_class == 'core_atoms':
                     self._hybrid_to_core_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
-                elif string_identifier == 'environment_atoms':
+                elif atom_class == 'environment_atoms':
                     self._hybrid_to_environment_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
                 else:
                     raise Exception(f"old torsion index {old_torsion_idx} cannot be a unique new torsion index")
 
-            if is_env: #remove the entry in the new term
+            if is_env: # Remove the entry in the new term
                 if hybrid_index_pair not in mod_new_term_collector:
                     hybrid_index_pair = self._find_torsion_match(hybrid_index_pair, old_term_collector[hybrid_index_pair], new_term_collector)
                 mod_new_term_collector[hybrid_index_pair] = [] # Setting this to an empty list is sufficient (the key doesn't need to be popped) because the torsion terms are added by iterating over the list
 
-        #now iterate over the modified new term collector and add appropriate torsions. these should only be unique new or core, right?
+        # Now iterate over the modified new term collector and add appropriate torsions. These should only be unique new or core, right?
         for hybrid_index_pair in mod_new_term_collector.keys():
             idx_set = set(list(hybrid_index_pair))
             scale_id = self.get_scale_identifier(idx_set)
-            alch_id, string_identifier = self.get_alch_identifier(idx_set)
+            alch_id, atom_class = self.get_alch_identifier(idx_set)
 
-            #these terms are unchanged if they are unique new terms. preserve all valence terms
+            # These terms are unchanged if they are unique new terms. Preserve all valence terms
             for counter, torsion_term in enumerate(mod_new_term_collector[hybrid_index_pair]):
-                assert string_identifier in ['unique_new_atoms', 'core_atoms'], f"we are iterating over modified new term collector, but the string identifier returned {string_identifier}"
+                assert atom_class in ['unique_new_atoms', 'core_atoms'], f"we are iterating over modified new term collector, but the string identifier returned {atom_class}"
                 new_torsion_idx, periodicity_new, phase_new, k_new = torsion_term
 
                 #TODO : do these need to be unitless? check; also check if these terms are in the right order
@@ -3800,37 +3893,49 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                                                     k_new])
 
                 hybrid_torsion_idx = custom_torsion_force.addTorsion(*torsion_term)
-                if string_identifier == 'unique_new_atoms':
+                if atom_class == 'unique_new_atoms':
                     self._hybrid_to_new_torsion_indices[hybrid_torsion_idx] = new_torsion_idx
 
     def _transcribe_nonbondeds(self):
-        #assert type in ['electrostatics', 'sterics']
+        """
+        Add particles to each of the custom forces for electrostatics and sterics interactions and exceptions.
 
+        """
+
+        # Define mapping for alchemical_type_ids
+        # Each list contains boolean values for per particle parameters: [unique_old, unique_new, core]
+        d_alchemical_types = {"core_atoms" : [0,0,1],
+             "environment_atoms" : [0,0,0],
+             "unique_old_atoms": [1,0,0],
+             "unique_new_atoms": [0,1,0]
+        }
+
+        # Retrieve old and new nb forces
         old_system_nbf = self._old_system_forces['NonbondedForce']
         new_system_nbf = self._new_system_forces['NonbondedForce']
 
+        # Define custom nb forces for electrostatics and sterics
         electrostatics_force, sterics_force = self._get_nonbonded_force('electrostatics'), self._get_nonbonded_force('sterics')
 
-        #get old terms
+        # Iterate over particles in the old system and add them to the custom nonbonded forces
         done_indices = []
         for old_idx in range(old_system_nbf.getNumParticles()):
-            charge_old, sigma_old, epsilon_old = old_system_nbf.getParticleParameters(old_idx) #grab the parameters
+            charge_old, sigma_old, epsilon_old = old_system_nbf.getParticleParameters(old_idx) # Grab the old parameters
             hybrid_idx = self._old_to_hybrid_map[old_idx]
             scale_id = self.get_scale_identifier(hybrid_idx)
-            alch_id, string_identifier = self.get_alch_identifier(hybrid_idx)
-            if string_identifier in ['core_atoms', 'environment_atoms']: #then it has a 'new' counterpart
+            alch_id, atom_class = self.get_alch_identifier(hybrid_idx)
+            alchemical_type_id = d_alchemical_types[atom_class]
+
+            # Determine what the new parameters are
+            if atom_class in ['core_atoms', 'environment_atoms']: # Then it has a 'new' counterpart
                 new_idx = self._hybrid_to_new_map[hybrid_idx]
                 charge_new, sigma_new, epsilon_new = new_system_nbf.getParticleParameters(new_idx)
-                if string_identifier == 'core_atoms':
-                    alchemical_type_id = [0,0,1]
-                else:
-                    alchemical_type_id = [0,0,0]
+                if atom_class == 'environment_atoms':
                     assert charge_old == charge_new, f"charges do not match: {charge_old} (old) and {charge_new} (new)"
                     assert sigma_old == sigma_new, f"sigmas do not match: {sigma_old} (old) and {sigma_new} (new)"
                     assert epsilon_old == epsilon_new, f"epsilons do not match: {epsilon_old} (old) and {epsilon_new} (new)"
                     charge_new, sigma_new, epsilon_new = charge_old * 0., sigma_old*0., epsilon_old * 0.
-            elif string_identifier in ['unique_old_atoms']: # it does not and we just turn the term off
-                alchemical_type_id = [1,0,0]
+            elif atom_class in ['unique_old_atoms']: # it does not and we just turn the term off
                 charge_new, sigma_new, epsilon_new = charge_old * 0., sigma_old*0., epsilon_old * 0.
             else:
                 raise Exception(f"iterating over old terms yielded unique new atom.")
@@ -3839,42 +3944,42 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             sterics_force.addParticle(scale_id + alch_id + alchemical_type_id + [sigma_old, sigma_new, epsilon_old, epsilon_new])
             done_indices.append(hybrid_idx)
 
+        # Iterate over unique_new particles and add them to the custom nonbonded forces
         unique_new_hybrid_indices = set(range(self._hybrid_system.getNumParticles())).difference(set(done_indices))
-
         for hybrid_idx in list(unique_new_hybrid_indices):
             new_idx = self._hybrid_to_new_map[hybrid_idx]
             charge_new, sigma_new, epsilon_new = new_system_nbf.getParticleParameters(new_idx)
             scale_id = self.get_scale_identifier(hybrid_idx)
-            alch_id, string_identifier = self.get_alch_identifier(hybrid_idx)
-            assert string_identifier == 'unique_new_atoms', f"encountered a problem iterating over what should only be unique new atoms; got {string_identifier}"
-            alchemical_type_id = [0,1,0]
+            alch_id, atom_class = self.get_alch_identifier(hybrid_idx)
+            assert atom_class == 'unique_new_atoms', f"encountered a problem iterating over what should only be unique new atoms; got {atom_class}"
+            alchemical_type_id = d_alchemical_types[atom_class]
             electrostatics_force.addParticle(scale_id + alch_id + alchemical_type_id + [charge_new * 0., charge_new])
             sterics_force.addParticle(scale_id + alch_id + alchemical_type_id + [sigma_new, sigma_new, epsilon_new * 0., epsilon_new])
 
-        # now remove interactions between unique old/new
+        # Now remove interactions between unique old/new
         unique_news = self._alchemical_regions_by_type['unique_new_atoms']
         unique_olds = self._alchemical_regions_by_type['unique_old_atoms']
-
         for new in unique_news:
             for old in unique_olds:
                 electrostatics_force.addExclusion(new, old)
                 sterics_force.addExclusion(new, old)
 
+        # Define custom bond forces for electrostatic and steric exceptions
         electrostatics_exception_force, sterics_exception_force = self._get_nonbonded_force('electrostatics', True), self._get_nonbonded_force('sterics', True)
 
-        # now add add all nonzeroed exceptions to custom bond force
+        # Now add add all nonzeroed exceptions to custom bond force
         old_term_collector = {}
         new_term_collector = {}
 
-        #gather the old system bond force terms into a dict
+        # Gather the old system bond force terms into a dict
         for term_idx in range(old_system_nbf.getNumExceptions()):
-            p1, p2, chargeProd, sigma, epsilon = old_system_nbf.getExceptionParameters(term_idx) #grab the parameters
-            hybrid_p1, hybrid_p2 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2] #make hybrid indices
-            sorted_list = tuple(sorted([hybrid_p1, hybrid_p2])) #sort the indices
+            p1, p2, chargeProd, sigma, epsilon = old_system_nbf.getExceptionParameters(term_idx) # Grab the parameters
+            hybrid_p1, hybrid_p2 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2] # Make hybrid indices
+            sorted_list = tuple(sorted([hybrid_p1, hybrid_p2])) # Sort the indices
             assert not sorted_list in old_term_collector.keys(), f"this bond already exists"
             old_term_collector[sorted_list] = [term_idx, chargeProd, sigma, epsilon]
 
-        # repeat for the new system bond force
+        # Repeat for the new system bond force
         for term_idx in range(new_system_nbf.getNumExceptions()):
             p1, p2, chargeProd, sigma, epsilon = new_system_nbf.getExceptionParameters(term_idx)
             hybrid_p1, hybrid_p2 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2]
@@ -3883,24 +3988,19 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             new_term_collector[sorted_list] = [term_idx, chargeProd, sigma, epsilon]
 
 
-        # iterate over the old_term_collector and add appropriate bonds
+        # Iterate over the old_term_collector and add appropriate bonds
         for hybrid_index_pair in old_term_collector.keys():
             idx_set = set(list(hybrid_index_pair))
             scale_id = self.get_scale_identifier(idx_set)
-            alch_id, string_identifier = self.get_alch_identifier(idx_set)
-            if string_identifier == 'unique_old_atoms':
-                alchemical_type_id = [1,0,0]
-            elif string_identifier == 'core_atoms':
-                alchemical_type_id = [0,0,1]
-            else:
-                alchemical_type_id = [0,0,0]
+            alch_id, atom_class = self.get_alch_identifier(idx_set)
+            alchemical_type_id = d_alchemical_types[atom_class]
 
             old_idx, chargeProd_old, sigma_old, epsilon_old = old_term_collector[hybrid_index_pair]
             try:
                 new_bond_idx, chargeProd_new, sigma_new, epsilon_new = new_term_collector[hybrid_index_pair]
-            except Exception as e: #this might be a unique old term
+            except Exception as e: # This might be a unique old term
                 chargeProd_new, sigma_new, epsilon_new = chargeProd_old * 0., sigma_old, epsilon_old * 0.
-            if alch_id[0] == 1: #if the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
+            if alch_id[0] == 1: # Tf the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
                 assert new_term_collector[hybrid_index_pair][1:] == old_term_collector[hybrid_index_pair][1:], f"hybrid_index_pair {hybrid_index_pair} bond term was identified in old term collector as {old_term_collector[hybrid_index_pair][1:]}, but in new term collector as {new_term_collector[hybrid_index_pair][1:]}"
 
             #TODO : do these need to be unitless? check; also check if these terms are in the right order
@@ -3910,23 +4010,23 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             electrostatics_force.addExclusion(*hybrid_index_pair)
             sterics_force.addExclusion(*hybrid_index_pair)
 
-            if chargeProd_old.value_in_unit_system(unit.md_unit_system) + chargeProd_new.value_in_unit_system(unit.md_unit_system) + epsilon_old.value_in_unit_system(unit.md_unit_system) + epsilon_new.value_in_unit_system(unit.md_unit_system) == 0.0:
+            if all([v.value_in_unit_system(unit.md_unit_system) == 0.0 for v in (chargeProd_old, chargeProd_new, epsilon_old, epsilon_new)]):
                 pass
             else:
                 electrostatics_exception_force.addBond(*electrostatics_term)
                 sterics_exception_force.addBond(*sterics_term)
 
 
-        #make a modified new_term_collector that omits the terms that are previously handled
+        # Make a modified new_term_collector that omits the terms that are previously handled
         mod_new_term_collector = {key: val for key, val in new_term_collector.items() if key not in list(old_term_collector.keys())}
 
-        #now iterate over the modified new term collector and add appropriate bonds. these should only be unique new, right?
+        # Now iterate over the modified new term collector and add appropriate bonds. these should only be unique new, right?
         for hybrid_index_pair in mod_new_term_collector.keys():
             idx_set = set(list(hybrid_index_pair))
             scale_id = self.get_scale_identifier(idx_set)
-            alch_id, string_identifier = self.get_alch_identifier(idx_set)
-            assert string_identifier == 'unique_new_atoms', f"we are iterating over modified new term collector, but the string identifier returned {string_identifier}"
-            alchemical_type_id = [0,1,0] # can only be unique new
+            alch_id, atom_class = self.get_alch_identifier(idx_set)
+            assert atom_class == 'unique_new_atoms', f"we are iterating over modified new term collector, but the string identifier returned {atom_class}"
+            alchemical_type_id = d_alchemical_types[atom_class]
             new_bond_idx, chargeProd_new, sigma_new, epsilon_new = new_term_collector[hybrid_index_pair]
 
             electrostatics_term = (hybrid_index_pair[0], hybrid_index_pair[1], scale_id + alch_id + alchemical_type_id + [chargeProd_new * 0., chargeProd_new])
@@ -3934,7 +4034,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
 
             electrostatics_force.addExclusion(*hybrid_index_pair)
             sterics_force.addExclusion(*hybrid_index_pair)
-            if chargeProd_new.value_in_unit_system(unit.md_unit_system) + epsilon_new.value_in_unit_system(unit.md_unit_system) == 0.0:
+            if all([v.value_in_unit_system(unit.md_unit_system) == 0.0 for v in (chargeProd_new, epsilon_new)]):
                 pass
             else:
                 electrostatics_exception_force.addBond(*electrostatics_term)
@@ -3945,108 +4045,115 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
         self._hybrid_system.addForce(electrostatics_exception_force)
         self._hybrid_system.addForce(sterics_exception_force)
 
-    def _get_nonbonded_force(self, type, exception=False):
+    def _get_nonbonded_force(self, type, is_exception=False):
         """
-        write nonbonded terms (either electrostatics/sterics).
+        Write nonbonded terms (either electrostatics/sterics).
+
+        Parameters
+        ----------
+        type : str
+            indicates whether to write the force for electrostatics or sterics
+        is_exception : bool
+            indicates whether to write the force for nonbonded exceptions or interactions
+
         """
+
         import itertools
         assert type in ['electrostatics', 'sterics']
-        
-        str_type = type + '_exceptions' if exception else type
 
-        old_system_nbf = self._old_system_forces['NonbondedForce']
-        new_system_nbf = self._new_system_forces['NonbondedForce']
+        # Get the name of the force we are defining
+        force_name = type + '_exceptions' if is_exception else type
 
-        if not exception:
+        # Construct the custom expression
+        if not is_exception:
             scale_template = self._particle_scale_templates
-            scale_bool_string1 = RxnHybridTopologyFactory.render_bool_string([i + f"_{str_type}" for i in scale_template[0]],
+            scale_scalar1 = RxnHybridTopologyFactory.render_scalar_string([i + f"_{force_name}" for i in scale_template[0]],
                                                                         scale_template[1]
                                                                         )
-            scale_bool_string2 = RxnHybridTopologyFactory.render_bool_string([i + f"_{str_type}" for i in scale_template[0]],
+            scale_scalar2 = RxnHybridTopologyFactory.render_scalar_string([i + f"_{force_name}" for i in scale_template[0]],
                                                                             scale_template[2]
                                                                             )
-            old_bool_string1 = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_old" for i in range(self._num_alchemical_regions)],
+            old_scalar1 = RxnHybridTopologyFactory.render_scalar_string(['1'] + [f"lambda_{i}_{force_name}_old" for i in range(self._num_alchemical_regions)],
                                                             ['environment_region1'] + [f"alchemical_region_{i}1" for i in range(self._num_alchemical_regions)])
-            old_bool_string2 = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_old" for i in range(self._num_alchemical_regions)],
+            old_scalar2 = RxnHybridTopologyFactory.render_scalar_string(['1'] + [f"lambda_{i}_{force_name}_old" for i in range(self._num_alchemical_regions)],
                                                                         ['environment_region2'] + [f"alchemical_region_{i}2" for i in range(self._num_alchemical_regions)])
-            new_bool_string1 = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_new" for i in range(self._num_alchemical_regions)],
+            new_scalar1 = RxnHybridTopologyFactory.render_scalar_string(['1'] + [f"lambda_{i}_{force_name}_new" for i in range(self._num_alchemical_regions)],
                                                                     ['environment_region1'] + [f"alchemical_region_{i}1" for i in range(self._num_alchemical_regions)])
-            new_bool_string2 = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_new" for i in range(self._num_alchemical_regions)],
+            new_scalar2 = RxnHybridTopologyFactory.render_scalar_string(['1'] + [f"lambda_{i}_{force_name}_new" for i in range(self._num_alchemical_regions)],
                                                                         ['environment_region2'] + [f"alchemical_region_{i}2" for i in range(self._num_alchemical_regions)])
 
             if type == 'electrostatics':
                 expression = self._default_RF_expression
-                formatted_expression = expression.format(w_scale = self._w_RF_scale,
-                                                         switching_ratio = self._RF_switching_ratio,
-                                                         eps_RF = self._epsilon_RF,
-                                                         r_cutoff = self._r_RF_cutoff.value_in_unit_system(unit.md_unit_system),
-                                                         scale_bool_string1 = scale_bool_string1,
-                                                         scale_bool_string2 = scale_bool_string2,
-                                                         old_bool_string1 = old_bool_string1,
-                                                         new_bool_string1 = new_bool_string1,
-                                                         old_bool_string2 = old_bool_string2,
-                                                         new_bool_string2 = new_bool_string2
+                formatted_expression = expression.format(w_scale=self._w_RF_scale,
+                                                         switching_ratio=self._RF_switching_ratio,
+                                                         eps_RF=self._epsilon_RF,
+                                                         r_cutoff=self._r_RF_cutoff.value_in_unit_system(unit.md_unit_system),
+                                                         scale_scalar1=scale_scalar1,
+                                                         scale_scalar2=scale_scalar2,
+                                                         old_scalar1=old_scalar1,
+                                                         new_scalar1=new_scalar1,
+                                                         old_scalar2=old_scalar2,
+                                                         new_scalar2=new_scalar2
                                                         )
             else:
                 expression = self._default_steric_expression
-                formatted_expression = expression.format(w_scale = self._w_sterics_scale,
-                                                         switching_ratio = self._sterics_switching_ratio,
-                                                         r_cutoff = self._r_sterics_cutoff.value_in_unit_system(unit.md_unit_system),
-                                                         scale_bool_string1 = scale_bool_string1,
-                                                         scale_bool_string2 = scale_bool_string2,
-                                                         old_bool_string1 = old_bool_string1,
-                                                         new_bool_string1 = new_bool_string1,
-                                                         old_bool_string2 = old_bool_string2,
-                                                         new_bool_string2 = new_bool_string2,
+                formatted_expression = expression.format(w_scale=self._w_sterics_scale,
+                                                         switching_ratio=self._sterics_switching_ratio,
+                                                         r_cutoff=self._r_sterics_cutoff.value_in_unit_system(unit.md_unit_system),
+                                                         scale_scalar1=scale_scalar1,
+                                                         scale_scalar2=scale_scalar2,
+                                                         old_scalar1=old_scalar1,
+                                                         new_scalar1=new_scalar1,
+                                                         old_scalar2=old_scalar2,
+                                                         new_scalar2=new_scalar2,
                                                         )
 
             custom_nbf = openmm.CustomNonbondedForce(formatted_expression)
 
         else:
             scale_template = self._scale_templates
-            scale_bool_string = RxnHybridTopologyFactory.render_bool_string([i + f"_{str_type}" for i in scale_template[0]],
+            scale_scalar = RxnHybridTopologyFactory.render_scalar_string([i + f"_{force_name}" for i in scale_template[0]],
                                                                         scale_template[1]
                                                                         )
-            old_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_old" for i in range(self._num_alchemical_regions)],
+            old_scalar = RxnHybridTopologyFactory.render_scalar_string(['1'] + [f"lambda_{i}_{force_name}_old" for i in range(self._num_alchemical_regions)],
                                                             ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
-            new_bool_string = RxnHybridTopologyFactory.render_bool_string(['1'] + [f"lambda_{i}_{str_type}_new" for i in range(self._num_alchemical_regions)],
+            new_scalar = RxnHybridTopologyFactory.render_scalar_string(['1'] + [f"lambda_{i}_{force_name}_new" for i in range(self._num_alchemical_regions)],
                                                                     ['environment_region'] + [f"alchemical_region_{i}" for i in range(self._num_alchemical_regions)])
 
             if type == 'electrostatics':
                 expression = self._default_RF_exception_expression
-                formatted_expression = expression.format(w_scale = self._w_RF_scale,
-                                                         switching_ratio = self._RF_switching_ratio,
-                                                         eps_RF = self._epsilon_RF,
-                                                         r_cutoff = self._r_RF_cutoff.value_in_unit_system(unit.md_unit_system),
-                                                         scale_bool_string = scale_bool_string,
-                                                         old_bool_string = old_bool_string,
-                                                         new_bool_string = new_bool_string,
+                formatted_expression = expression.format(w_scale=self._w_RF_scale,
+                                                         switching_ratio=self._RF_switching_ratio,
+                                                         eps_RF=self._epsilon_RF,
+                                                         r_cutoff=self._r_RF_cutoff.value_in_unit_system(unit.md_unit_system),
+                                                         scale_scalar=scale_scalar,
+                                                         old_scalar=old_scalar,
+                                                         new_scalar=new_scalar,
                                                         )
             else:
                 expression = self._default_steric_exception_expression
-                formatted_expression = expression.format(w_scale = self._w_sterics_scale,
-                                                         switching_ratio = self._sterics_switching_ratio,
-                                                         r_cutoff = self._r_sterics_cutoff.value_in_unit_system(unit.md_unit_system),
-                                                         scale_bool_string = scale_bool_string,
-                                                         old_bool_string = old_bool_string,
-                                                         new_bool_string = new_bool_string,
+                formatted_expression = expression.format(w_scale=self._w_sterics_scale,
+                                                         switching_ratio=self._sterics_switching_ratio,
+                                                         r_cutoff=self._r_sterics_cutoff.value_in_unit_system(unit.md_unit_system),
+                                                         scale_scalar=scale_scalar,
+                                                         old_scalar=old_scalar,
+                                                         new_scalar=new_scalar,
                                                         )
 
             custom_nbf = openmm.CustomBondForce(formatted_expression)
 
 
-        for i in scale_template[0]: #add the scaling global parameters
-            custom_nbf.addGlobalParameter(i + f"_{str_type}", 1.0)
-
-        for i in [f"lambda_{i}_{str_type}_old" for i in range(self._num_alchemical_regions)]:
+        # Add global parameters
+        for i in scale_template[0]: # Add the scale lambda(s)
+            custom_nbf.addGlobalParameter(i + f"_{force_name}", 1.0)
+        for i in [f"lambda_{i}_{force_name}_old" for i in range(self._num_alchemical_regions)]: # Add the alchemical lambda(s) for old system
             custom_nbf.addGlobalParameter(i, 1.)
-        for i in [f"lambda_{i}_{str_type}_new" for i in range(self._num_alchemical_regions)]:
+        for i in [f"lambda_{i}_{force_name}_new" for i in range(self._num_alchemical_regions)]: # Add the alchemical lambda(s) for new system
             custom_nbf.addGlobalParameter(i, 0.)
 
 
-        if not exception:
-
-            #add per-particle parameters parameter
+        if not is_exception:
+            # Add per-particle parameters
             for i in ['nonscale_region'] + [f"scale_region_{i}" for i in range(self.num_scale_regions)]: #add the scaling per particle parameters
                 custom_nbf.addPerParticleParameter(i)
 
@@ -4067,7 +4174,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                 custom_nbf.addPerParticleParameter('epsilon_old')
                 custom_nbf.addPerParticleParameter('epsilon_new')
         else:
-             #add per-bond parameters parameter
+            # Add per-bond parameters
             for i in ['nonscale_region'] + list(itertools.chain.from_iterable([[f"scale_region_{i}", f"interscale_region_{i}"] for i in range(self.num_scale_regions)])): #add the scaling per bond parameters
                 custom_nbf.addPerBondParameter(i)
 
@@ -4089,10 +4196,11 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                 custom_nbf.addPerBondParameter('epsilon_new')
 
 
-        #handle some nonbonded attributes
+        # Handle some nonbonded attributes
+        old_system_nbf = self._old_system_forces['NonbondedForce']
         standard_nonbonded_method = old_system_nbf.getNonbondedMethod()
         if standard_nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
-            if exception:
+            if is_exception:
                 custom_nbf.setUsesPeriodicBoundaryConditions(True)
             else:
                 custom_nbf.setNonbondedMethod(self._translate_nonbonded_method_to_custom(standard_nonbonded_method))
@@ -4106,7 +4214,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
                     custom_nbf.setCutoffDistance(self._r_sterics_cutoff)
                     custom_nbf.setUseLongRangeCorrection(self._use_dispersion_correction)
         elif standard_nonbonded_method == openmm.NonbondedForce.NoCutoff:
-            if exception:
+            if is_exception:
                 custom_nbf.setUsesPeriodicBoundaryConditions(False)
             else:
                 custom_nbf.setNonbondedMethod(self._translate_nonbonded_method_to_custom(standard_nonbonded_method))
@@ -4114,19 +4222,3 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             raise Exception(f"nonbonded method is not recognized")
 
         return custom_nbf
-
-    def _transcribe_nonbonded_exceptions(self):
-        """
-        transcribe nonbonded exceptions as two separate CustomBondForces (one for electrostatics, one for sterics)
-
-        """
-
-    def _make_electrostatics_force(self):
-        """
-        make the electrostatic force
-        """
-
-    def _transcribe_nonbonded_terms(self):
-        """
-        transcribe nonbonded particles as two separate CustomBondForces (one for electrostatics, one for sterics)
-        """
