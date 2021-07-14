@@ -3954,7 +3954,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             assert atom_class == 'unique_new_atoms', f"encountered a problem iterating over what should only be unique new atoms; got {atom_class}"
             alchemical_type_id = d_alchemical_types[atom_class]
             electrostatics_force.addParticle(scale_id + alch_id + alchemical_type_id + [charge_new * 0., charge_new])
-            sterics_force.addParticle(scale_id + alch_id + alchemical_type_id + [sigma_new, sigma_new, epsilon_new * 0., epsilon_new])
+            sterics_force.addParticle(scale_id + alch_id + alchemical_type_id + [sigma_new * 0., sigma_new, epsilon_new * 0., epsilon_new])
 
         # Now remove interactions between unique old/new
         unique_news = self._alchemical_regions_by_type['unique_new_atoms']
@@ -3986,7 +3986,6 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             sorted_list = tuple(sorted([hybrid_p1, hybrid_p2]))
             assert not sorted_list in new_term_collector.keys(), f"this bond already exists"
             new_term_collector[sorted_list] = [term_idx, chargeProd, sigma, epsilon]
-
 
         # Iterate over the old_term_collector and add appropriate bonds
         for hybrid_index_pair in old_term_collector.keys():
