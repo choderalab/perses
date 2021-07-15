@@ -2720,7 +2720,7 @@ class RxnHybridTopologyFactory(HybridTopologyFactory):
             "t = (r_eff - r_switch) / (r_cutoff - r_switch);",
 
             # define topological term
-            "c_RF = {ONE_4PI_EPS0} * chargeProd;",
+            f"c_RF = {ONE_4PI_EPS0} * chargeProd;",
             "chargeProd = select(1 - environment_region, chargeProd_old * {old_scalar} + chargeProd_new * {new_scalar}, chargeProd_old);",
 
             # define reaction field u_RF
