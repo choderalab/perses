@@ -1,5 +1,7 @@
 """
-This file contains the base classes for topology proposals
+Tools for computing atom mappings for relative free energy transformations.
+These tools operate exclusively on OpenEye Toolkit openeye.oechem.OEMol objects.
+
 """
 
 from simtk import unit
@@ -14,13 +16,14 @@ import numpy as np
 
 import logging
 logging.basicConfig(level = logging.NOTSET)
-_logger = logging.getLogger("proposal_generator")
+_logger = logging.getLogger("atom_mapping")
 _logger.setLevel(logging.INFO)
 
 ################################################################################
 # FILE-LEVEL METHODS
 ################################################################################
 
+## TODO: Is this used anywhere?
 def has_h_mapped(atommap, mola, molb):
     """
     Parameters
@@ -40,53 +43,187 @@ def has_h_mapped(atommap, mola, molb):
 ################################################################################
 
 class InvalidMappingException(Exception):
-    def __init__(self, message, errors):
+    """
+    Invalid atom mapping for relative free energy transformation.
+
+    """
+    def __init__(self, message):
 
         # Call the base class constructor with the parameters it needs
         super().__init__(message)
 
-        # Now for your custom code...
-        self.errors = errors
+################################################################################
+# ATOM MAPPING
+################################################################################
+
+class AtomMapping(object):
+    """
+    An atom mapping between two small molecules.
+
+    Note that this atom mapping is mutable.
+
+    .. todo :: Figure out how this should work for biopolymers.
+
+    .. todo :: Migrate to openff.toolkit.topology.Molecule when able
+
+    Attributes
+    ----------
+    old_mol : openff.toolkit.topology.Molecule
+        Copy of the first molecule to be mapped
+    new_mol : openff.toolkit.topology.Molecule
+        Copy of the second molecule to be mapped
+    new_to_old_atom_map : dict of int : int
+        new_to_old_atom_map[new_atom_index] is the atom index in old_oemol corresponding to new_atom_index in new_oemol
+    old_to_new_atom_map : dict of int : int
+        old_to_new_atom_map[old_atom_index] is the atom index in new_oemol corresponding to old_atom_index in old_oemol
+
+    """
+    def __init__(self, old_mol, new_mol, new_to_old_atom_map=None, old_to_new_atom_map=None):
+        """
+        Construct an AtomMapping object.
+
+        Once constructed, either new_to_old_atom_map or old_to_new_atom_map can be accessed or set.
+
+        Parameters
+        ----------
+        old_mol : openff.toolkit.topology.Molecule or openeye.oechem.OEMol
+            First molecule to be mapped
+        new_mol : openff.toolkit.topology.Molecule or openeye.oechem.OEMol
+            Second molecule to be mapped
+        new_to_old_atom_map : dict of int : int
+            new_to_old_atom_map[new_atom_index] is the atom index in old_oemol corresponding to new_atom_index in new_oemol
+
+        """
+        # Store molecules
+        from openff.toolkit.topology import Molecule
+        self.old_mol = Molecule(old_mol)
+        self.new_mol = Molecule(new_mol)
+
+        # Store atom maps
+        if (old_to_new_atom_map is not None) and (new_to_old_atom_map is not None):
+            raise ValueError('Only one of old_to_new_atom_map or new_to_old_atom_map can be specified')
+        if (old_to_new_atom_map is None) and (new_to_old_atom_map is None):
+            raise ValueError('One of old_to_new_atom_map or new_to_old_atom_map must be specified')
+        if old_to_new_atom_map is not None:
+            self.old_to_new_atom_map = old_to_new_atom_map
+        if new_to_old_atom_map is not None:
+            self.new_to_old_atom_map = new_to_old_atom_map
+
+    def _validate(self):
+        """
+        Validate the atom mapping is consistent with stored moelcules.
+        """
+        # Ensure all keys and values are integers
+        if not (     all(isinstance(x, int) for x in self.new_to_old_atom_map.keys())
+                 and all(isinstance(x, int) for x in self.new_to_old_atom_map.values())
+               ):
+            raise InvalidMappingException(f'Atom mapping contains non-integers:\n{self.new_to_old_atom_map}')
+
+        # Check to make sure atom indices are within valid range
+        if (   not set(self.new_to_old_atom_map.keys()).issubset(range(self.new_mol.n_atoms))
+            or not set(self.new_to_old_atom_map.values()).issubset(range(self.old_mol.n_atoms))
+           ):
+            raise InvalidMappingException('Atom mapping contains invalid atom indices:\n{self.new_to_old_atom_map}\nold_mol: {self.old_mol}\nnew_mol: {self.new_mol}')
+
+        # Make sure mapping is one-to-one
+        if len(set(self.new_to_old_atom_map.keys())) != len(set(self.new_to_old_atom_map.values())):
+            raise InvalidMappingException('Atom mapping is not one-to-one:\n{self.new_to_old_atom_map}')
+
+    @property
+    def new_to_old_atom_map(self):
+        import copy
+        return copy.deepcopy(self._new_to_old_atom_map)
+
+    @new_to_old_atom_map.setter
+    def new_to_old_atom_map(self, value):
+        self._new_to_old_atom_map = dict(value)
+        self._validate()
+
+    @property
+    def old_to_new_atom_map(self):
+        # Construct reversed atom map on the fly
+        return dict(map(reversed, self._new_to_old_atom_map.items()))
+
+    @old_to_new_atom_map.setter
+    def old_to_new_atom_map(self, value):
+        self._new_to_old_atom_map = dict(map(reversed, value.items()))
+        self._validate()
+
+
+
 
 ################################################################################
 # ATOM MAPPERS
 ################################################################################
 
 class AtomMapper(object):
-    """ Generates map between two molecules.
-    As this doesn't generate a system, it will not be
-    accurate for whether hydrogens are mapped or not.
-    It also doesn't check that this is feasible to simulate,
-    but is just helpful for testing options.
+    """
+    Generate atom mappings between two molecules for relative free energy transformations.
 
-    Parameters
-    ----------
-    current_molecule : oechem.OEMol
-        starting molecule
-    proposed_molecule : oechem.OEMol
-        molecule to move to
-    atom_expr : oechem.OEExprOpts
-        atom requirement to consider two bonds as the same
-    bond_expr : oechem.OEExprOpts
-        bond requirement to consider two bonds as the same
-    allow_ring_breaking : bool, default=True
-        Wether or not to allow ring breaking in map
-    map_strategy : str, default = 'core'
+    .. note ::
+
+      As this doesn't generate a system, it will not be
+      accurate for whether hydrogens are mapped or not.
+      It also doesn't check that this is feasible to simulate,
+      but is just helpful for testing options.
+
+
+    .. todo ::
+
+       * Covert AtomMapper to use a factory design pattern:
+         - construct factory
+         - configure factory options
+         - create mappings through factory.create_mapping(mol1, mol2)
+
+       * Support both openeye.oechem.OEMol and openff.topology.Molecule
+
+       * Expose options for whether bonds to hydrogen are constrained or not (and hence should be mapped or not)
+
+       * Find a better way to express which mappings are valid for the hybrid topology factory
 
     Attributes
     ----------
-    map : type
-        Description of attribute `map`.
-    _get_mol_atom_map : type
-        Description of attribute `_get_mol_atom_map`.
-    current_molecule
-    proposed_molecule
-    atom_expr
-    bond_expr
-    allow_ring_breaking
-    map_strategy
+    atom_expr : openeye.oechem.OEExprOpts
+        Override for atom matching expression; None if default is to be used.
+    bond_expr : openeye.oechem.OEExprOpts
+        Override for bond matching expression; None if default is to be used.
+    allow_ring_breaking : bool
+        Wether or not to allow ring breaking in map
+    map_strategy : str
+        The strategy used to select atom mapping
 
     """
+
+    def __init__(self, atom_expr=None, bond_expr=None, allow_ring_breaking=False, map_strategy='core'):
+        """
+        Create an AtomMapper factory.
+
+        Parameters
+        ----------
+        atom_expr : openeye.oechem.OEExprOpts
+            Override for atom matching expression; None if default is to be used.
+        bond_expr : openeye.oechem.OEExprOpts
+            Override for bond matching expression; None if default is to be used.
+        allow_ring_breaking : bool, default=False
+            Wether or not to allow ring breaking in map
+        map_strategy : str, default='core'
+            The strategy used to select atom mapping.
+            Can be one of ['geometry', 'matching_criterion', 'random', 'weighted-random', 'return-all']
+            - `core` will return the map with the largest number of atoms in the core. If there are multiple maps with the same highest score, then `matching_criterion` is used to tie break
+            - `geometry` uses the coordinates of the molB oemol to calculate the heavy atom distance between the proposed map and the actual geometry
+            this can be vital for getting the orientation of ortho- and meta- substituents correct in constrained (i.e. protein-like) environments.
+            this is ONLY useful if the positions of ligand B are known and/or correctly aligned.
+            - `matching_criterion` uses the `matching_criterion` flag to pick which of the maps best satisfies a 2D requirement.
+            - `random` will use a random map of those that are possible
+            - `weighted-random` uses a map chosen at random, proportional to how close it is in geometry to ligand B. The same as for 'geometry', this requires the coordinates of ligand B to be meaninful
+            - `return-all` BREAKS THE API as it returns a list of dicts, rather than list. This is intended for development code, not main pipeline.
+
+        """
+        # Configure default object attributes
+        self.atom_expr = atom_expr
+        self.bond_expr = bond_expr
+        self.allow_ring_breaking = allow_ring_breaking
+        self.map_strategy = map_strategy
 
     def _score_maps(mol_A, mol_B, maps):
         """ Gives a score for how well each map in a list
@@ -186,7 +323,7 @@ class AtomMapper(object):
                           external_inttypes=False,
                           map_strategy='core'):
         """Find a suitable atom map between two molecules, according
-        to the atom_expr, bond_expr or map_strength
+        to the atom_expr, bond_expr, or map_strength
 
         Parameters
         ----------
@@ -461,7 +598,7 @@ class AtomMapper(object):
                       external_inttypes=False,
                       unique=True,
                       matching_criterion='index'):
-        """Generate all  possible maps between two oemols
+        """Generate all possible maps between two oemols
 
         Parameters
         ----------
@@ -600,7 +737,7 @@ class AtomMapper(object):
 
     @staticmethod
     def _find_closest_map(mol_A, mol_B, maps):
-        """ from a list of maps, finds the one that is geometrically the closest match for molecule B
+        """From a list of maps, finds the one that is geometrically the closest match for molecule B
 
         Parameters
         ----------
@@ -645,7 +782,7 @@ class AtomMapper(object):
         return maps[best_map_index]
 
     @staticmethod
-    def _create_pattern_to_target_map(current_mol, proposed_mol, match, matching_criterion = 'index'):
+    def _create_pattern_to_target_map(current_mol, proposed_mol, match, matching_criterion='index'):
         """
         Create a dict of {pattern_atom: target_atom}
 
@@ -653,9 +790,9 @@ class AtomMapper(object):
         ----------
         current_mol : openeye.oechem.oemol object
         proposed_mol : openeye.oechem.oemol object
-        match : oechem.OEMCSSearch.Match iter
+        match : oechem.OEMCSSearch.Match iterable
             entry in oechem.OEMCSSearch.Match object
-        matching_criterion : str, default 'index'
+        matching_criterion : str, optional, default='index'
             whether the pattern to target map is chosen based on atom indices or names (which should be uniquely defined)
             allowables: ['index', 'name']
         Returns
@@ -686,10 +823,15 @@ class AtomMapper(object):
         Parameters
         ----------
         old_mol : openeye.oechem.oemol object
+            The old molecules
         new_mol : openeye.oechem.oemol object
-        match : openeye.oechem.OEMatchBase
-        matching_criterion : str, default
-
+            The new molecule
+        match : openeye.oechem.OEMatchBase iterable
+            entry in oechem.OEMCSSearch.Match object
+        matching_criterion : str
+            Matching criterion for _create_pattern_to_target_map.
+            whether the pattern to target map is chosen based on atom indices or names (which should be uniquely defined)
+            allowables: ['index', 'name']
         Returns
         -------
         new_to_old_atom_map : dict
@@ -712,14 +854,14 @@ class AtomMapper(object):
 
     @staticmethod
     def _assign_atom_ring_id(atom, max_ring_size=10):
-        """ Returns the int type based on the ring occupancy
+        """Returns the int type based on the ring occupancy
         of the atom
 
         Parameters
         ----------
         atom : oechem.OEAtomBase
             atom to compute integer of
-        max_ring_size : int, default = 10
+        max_ring_size : int, optional, default=10
             Largest ring size that will be checked for
 
         Returns
@@ -744,7 +886,7 @@ class AtomMapper(object):
         ----------
         bond : oechem.OEBondBase
             atom to compute integer of
-        max_ring_size : int, default = 10
+        max_ring_size : int, optional, default=10
             Largest ring size that will be checked for
 
         Returns
@@ -768,7 +910,7 @@ class AtomMapper(object):
         ----------
         molecule : oechem.OEMol
             oemol to assign ring ID to
-        max_ring_size : int, default = 10
+        max_ring_size : int, optional, default=10
             Largest ring size that will be checked for
 
         Returns
@@ -793,13 +935,14 @@ class AtomMapper(object):
             first molecule to compare
         new_mol : oechem.OEMol
             second molecule to compare
-        distance : float, default = 0.3
+        distance : float, optional, default=0.3
             Distance (in angstrom) that two atoms need to be closer than to be
             labelled as the same.
 
         Returns
         -------
-        copies of old_mol and new_mol, with IntType set according to inter-molecular distances
+        old_mol, new_mol : openeye.oechem.OEMol
+            copies of old_mol and new_mol, with IntType set according to inter-molecular distances
         """
         _logger.info(f'Using a distance of {distance} to force the mapping of close atoms')
         from scipy.spatial.distance import cdist
@@ -815,8 +958,25 @@ class AtomMapper(object):
 
     @staticmethod
     def preserves_rings(new_to_old_map, current, proposed):
-        """Returns True if the transformation allows ring
-        systems to be broken or created."""
+        """Determine whether the proposed atom map preserves whole rings.
+
+        Parameters
+        ----------
+        new_to_old_map : dict of OEAtom : OEAtom
+            new_to_old_map[current_atom] is the corresponding proposed_atom
+        current : openeye.oechem.OEMol
+            Initial molecule whose rings are to be checked for not being broken
+        proposed : openeye.oechem.OEMol
+            Final molecule
+
+        Returns
+        -------
+        rings_are_preserved : bool
+            True if atom mapping preserves complete rings;
+            False if atom mapping includes only partial rings,
+            which would allow rings to be broken or created
+
+        """
         if AtomMapper.breaks_rings_in_transformation(new_to_old_map,
                                                      proposed):
             return False
@@ -829,7 +989,8 @@ class AtomMapper(object):
     @staticmethod
     def preserve_chirality(current_mol, proposed_mol, new_to_old_atom_map):
         """
-        filters the new_to_old_atom_map for chirality preservation
+        Alter the new_to_old_atom_map for to preserve chirality
+
         The current scheme is implemented as follows:
         for atom_new, atom_old in new_to_old.items():
             if atom_new is R/S and atom_old is undefined:
@@ -843,6 +1004,23 @@ class AtomMapper(object):
                 # check if all of the neighbors are being mapped:
                     if True, flip two
                     else: do nothing
+
+        .. todo :: Check that chirality is correctly handled.
+
+        Parameters
+        ----------
+        current_mol : openeye.oechem.OEMol
+            Initial molecule whose rings are to be checked for not being broken
+        proposed_mol : openeye.oechem.OEMol
+            Final molecule
+        new_to_old_atom_map : dict of OEAtom : OEAtom
+            new_to_old_atom_map[current_atom] is the corresponding proposed_atom
+
+        Returns
+        -------
+        filtered_new_to_old_atom_map : dict of OEAtom : OEAtom
+            The filtered atom map that ensures that chirality is preserved
+
         """
         import openeye.oechem as oechem
         pattern_atoms = { atom.GetIdx() : atom for atom in current_mol.GetAtoms() }
@@ -903,7 +1081,13 @@ class AtomMapper(object):
 
     @staticmethod
     def breaks_rings_in_transformation(atom_map, current):
-            """Return True if the transformation from molecule1 to molecule2 breaks rings.
+            """Determine whether the mapping causes rings to be broken in transformation from molecule1 to molecule2.
+
+            .. note ::
+
+                Calling this method on its own is not sufficient to determine whether
+                atom_map might cause rings to be broken in either direction. This
+                method must be called in both directions in order to determine this.
 
             Parameters
             ----------
@@ -914,7 +1098,9 @@ class AtomMapper(object):
 
             Returns
             -------
-            bool
+            breaks_rings : bool
+                Returns True if the atom mapping would cause rings to be broken in transformation from
+                molecule1 to molecule2
             """
             for cycle in AtomMapper.enumerate_cycle_basis(current):
                 cycle_size = len(cycle)
@@ -1024,6 +1210,17 @@ class AtomMapper(object):
 
         return top_aliph_matches
 
-    def save_atom_mapping(self,filename='atom_map.png'):
+    def save_atom_mapping(self, filename='atom_map.png'):
+        """
+        Render the atom mapping to an image.
+
+        .. todo :: Rename this method, since the atom mapping isn't saved in a computer-readable form.
+
+        Parameters
+        ----------
+        filename : str, optional, default='atom_map.png'
+            The filename for the atom mapping image to be written to.
+
+        """
         from perses.utils.smallmolecules import render_atom_mapping
         render_atom_mapping(filename, self.current_mol, self.proposed_mol, self.atom_map)

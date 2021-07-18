@@ -1,9 +1,51 @@
 from pkg_resources import resource_filename
 import os
+import pytest
+import unittest
 
 from perses.utils.smallmolecules import render_atom_mapping
 from openff.toolkit.topology import Molecule
-from perses.rjmc.atom_mapping import AtomMapper
+from perses.rjmc.atom_mapping import AtomMapper, AtomMapping, InvalidMappingException
+
+class AtomMappingTest(unittest.TestCase):
+    """Test AtomMapping object."""
+    def setUp(self):
+        """Create useful common objects for testing."""
+        from openff.toolkit.topology import Molecule
+        self.old_mol = Molecule.from_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])([H:8])') # ethane
+        self.new_mol = Molecule.from_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])[O:8][H:9]') # ethanol
+        self.old_to_new_atom_map = { 1:1, 5:5 }
+        self.new_to_old_atom_map = dict(map(reversed, self.old_to_new_atom_map.items()))
+
+    def test_create(self):
+        atom_mapping = AtomMapping(self.old_mol, self.old_mol, old_to_new_atom_map=self.old_to_new_atom_map)
+        assert atom_mapping.old_to_new_atom_map == self.old_to_new_atom_map
+        assert atom_mapping.new_to_old_atom_map == self.new_to_old_atom_map
+        atom_mapping = AtomMapping(self.old_mol, self.old_mol, new_to_old_atom_map=self.new_to_old_atom_map)
+        assert atom_mapping.old_to_new_atom_map == self.old_to_new_atom_map
+        assert atom_mapping.new_to_old_atom_map == self.new_to_old_atom_map
+
+    def test_validation_fail(self):
+        # Non-integers
+        with pytest.raises(InvalidMappingException) as excinfo:
+            atom_mapping = AtomMapping(self.old_mol, self.new_mol, { 1:1, 5:5, 6:'a' })
+        # Invalid atom indices
+        with pytest.raises(InvalidMappingException) as excinfo:
+            atom_mapping = AtomMapping(self.old_mol, self.new_mol, { 1:1, 5:5, 10:10 })
+        # Duplicated atom indices
+        with pytest.raises(InvalidMappingException) as excinfo:
+            atom_mapping = AtomMapping(self.old_mol, self.new_mol, { 1:1, 5:5, 4:5 })
+
+    def test_set_and_get_mapping(self):
+        atom_mapping = AtomMapping(self.old_mol, self.old_mol, old_to_new_atom_map=self.old_to_new_atom_map)
+        # Set old-to-new map
+        atom_mapping.old_to_new_atom_map = self.old_to_new_atom_map
+        assert atom_mapping.old_to_new_atom_map == self.old_to_new_atom_map
+        assert atom_mapping.new_to_old_atom_map == self.new_to_old_atom_map
+        # Set new-to-old map
+        atom_mapping.new_to_old_atom_map = self.new_to_old_atom_map
+        assert atom_mapping.old_to_new_atom_map == self.old_to_new_atom_map
+        assert atom_mapping.new_to_old_atom_map == self.new_to_old_atom_map
 
 def test_ring_breaking_detection():
     """
