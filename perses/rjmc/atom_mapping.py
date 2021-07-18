@@ -72,10 +72,17 @@ class AtomMapping(object):
         Copy of the first molecule to be mapped
     new_mol : openff.toolkit.topology.Molecule
         Copy of the second molecule to be mapped
+    n_mapped_atoms : int
+        The number of mapped atoms.
+        Read-only property.
     new_to_old_atom_map : dict of int : int
         new_to_old_atom_map[new_atom_index] is the atom index in old_oemol corresponding to new_atom_index in new_oemol
+        A copy is returned, but this attribute can be set.
+        Zero-based indexing within the atoms in old_mol and new_mol is used.
     old_to_new_atom_map : dict of int : int
         old_to_new_atom_map[old_atom_index] is the atom index in new_oemol corresponding to old_atom_index in old_oemol
+        A copy is returned, but this attribute can be set.
+        Zero-based indexing within the atoms in old_mol and new_mol is used.
 
     """
     def __init__(self, old_mol, new_mol, new_to_old_atom_map=None, old_to_new_atom_map=None):
@@ -109,10 +116,19 @@ class AtomMapping(object):
         if new_to_old_atom_map is not None:
             self.new_to_old_atom_map = new_to_old_atom_map
 
+    def __repr__(self):
+        return f"AtomMapping(Molecule.from_smiles('{self.old_mol.to_smiles(mapped=True)}'), Molecule.from_smiles('{self.new_mol.to_smiles(mapped=True)}'), old_to_new_atom_map={self.old_to_new_atom_map})"
+
+    def __str__(self):
+        return f'{self.old_mol.to_smiles(mapped=True)} -> {self.new_mol.to_smiles(mapped=True)} : {self.old_to_new_atom_map}'
+
     def _validate(self):
         """
         Validate the atom mapping is consistent with stored moelcules.
         """
+        # Ensure mapping is not empty
+        if len(self.new_to_old_atom_map) == 0:
+            raise InvalidMappingException(f'Atom mapping contains no mappped atoms')
         # Ensure all keys and values are integers
         if not (     all(isinstance(x, int) for x in self.new_to_old_atom_map.keys())
                  and all(isinstance(x, int) for x in self.new_to_old_atom_map.values())
@@ -149,8 +165,167 @@ class AtomMapping(object):
         self._new_to_old_atom_map = dict(map(reversed, value.items()))
         self._validate()
 
+    @property
+    def n_mapped_atoms(self):
+        """The number of mapped atoms"""
+        return len(self._new_to_old_atom_map)
 
+    def render_image(self, filename, width=1200, height=600):
+        """
+        Render the atom mapping to an image or PDF.
 
+        .. note :: This currently requires the OpenEye toolkit.
+
+        .. todo ::
+
+           * Add support for biopolymer mapping rendering
+           * Add support for non-OpenEye rendering?
+
+        Parameters
+        ----------
+        filename : str
+            The image filename to write to.
+            Format automatically detected from file suffix.
+        width : int, optional, default=1200
+            Width in pixels
+        height : int, optional, default=600
+            Height in pixels
+
+        """
+        from openeye import oechem, oedepict
+
+        molecule1 = self.old_mol.to_openeye()
+        molecule2 = self.new_mol.to_openeye()
+        new_to_old_atom_map = self.new_to_old_atom_map
+
+        oechem.OEGenerate2DCoordinates(molecule1)
+        oechem.OEGenerate2DCoordinates(molecule2)
+
+        # Add both to an OEGraphMol reaction
+        rmol = oechem.OEGraphMol()
+        rmol.SetRxn(True)
+        def add_molecule(mol):
+            # Add atoms
+            new_atoms = list()
+            old_to_new_atoms = dict()
+            for old_atom in mol.GetAtoms():
+                new_atom = rmol.NewAtom(old_atom.GetAtomicNum())
+                new_atom.SetFormalCharge(old_atom.GetFormalCharge())
+                new_atoms.append(new_atom)
+                old_to_new_atoms[old_atom] = new_atom
+            # Add bonds
+            for old_bond in mol.GetBonds():
+                rmol.NewBond(old_to_new_atoms[old_bond.GetBgn()], old_to_new_atoms[old_bond.GetEnd()], old_bond.GetOrder())
+            return new_atoms, old_to_new_atoms
+
+        [new_atoms_1, old_to_new_atoms_1] = add_molecule(molecule1)
+        [new_atoms_2, old_to_new_atoms_2] = add_molecule(molecule2)
+
+        # Label reactant and product
+        for atom in new_atoms_1:
+            atom.SetRxnRole(oechem.OERxnRole_Reactant)
+        for atom in new_atoms_2:
+            atom.SetRxnRole(oechem.OERxnRole_Product)
+
+        core1 = oechem.OEAtomBondSet()
+        core2 = oechem.OEAtomBondSet()
+        # add all atoms to the set
+        core1.AddAtoms(new_atoms_1)
+        core2.AddAtoms(new_atoms_2)
+        # Label mapped atoms
+        core_change = oechem.OEAtomBondSet()
+        index =1
+        for (index2, index1) in new_to_old_atom_map.items():
+            new_atoms_1[index1].SetMapIdx(index)
+            new_atoms_2[index2].SetMapIdx(index)
+            # now remove the atoms that are core, so only uniques are highlighted
+            core1.RemoveAtom(new_atoms_1[index1])
+            core2.RemoveAtom(new_atoms_2[index2])
+            if new_atoms_1[index1].GetAtomicNum() != new_atoms_2[index2].GetAtomicNum():
+                # this means the element type is changing
+                core_change.AddAtom(new_atoms_1[index1])
+                core_change.AddAtom(new_atoms_2[index2])
+            index += 1
+        # Set up image options
+        itf = oechem.OEInterface()
+        oedepict.OEConfigureImageOptions(itf)
+        ext = oechem.OEGetFileExtension(filename)
+        if not oedepict.OEIsRegisteredImageFile(ext):
+            raise ValueError(f'Unknown image type for filename {filename}')
+        ofs = oechem.oeofstream()
+        if not ofs.open(filename):
+            raise IOError(f'Cannot open output file {filename}')
+
+        # Setup depiction options
+        oedepict.OEConfigure2DMolDisplayOptions(itf, oedepict.OE2DMolDisplaySetup_AromaticStyle)
+        opts = oedepict.OE2DMolDisplayOptions(width, height, oedepict.OEScale_AutoScale)
+        oedepict.OESetup2DMolDisplayOptions(opts, itf)
+        opts.SetBondWidthScaling(True)
+        opts.SetAtomPropertyFunctor(oedepict.OEDisplayAtomMapIdx())
+        opts.SetAtomColorStyle(oedepict.OEAtomColorStyle_WhiteMonochrome)
+
+        # Depict reaction with component highlights
+        oechem.OEGenerate2DCoordinates(rmol)
+        rdisp = oedepict.OE2DMolDisplay(rmol, opts)
+
+        if core1.NumAtoms() != 0:
+            oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEPink),oedepict.OEHighlightStyle_Stick, core1)
+        if core2.NumAtoms() != 0:
+            oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEPurple),oedepict.OEHighlightStyle_Stick, core2)
+        if core_change.NumAtoms() != 0:
+            oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEGreen),oedepict.OEHighlightStyle_Stick, core_change)
+        oedepict.OERenderMolecule(ofs, ext, rdisp)
+        ofs.close()
+
+    def creates_or_breaks_rings(self):
+        """Determine whether the mapping causes rings to be created or broken in transformation.
+
+        Returns
+        -------
+        breaks_rings : bool
+            Returns True if the atom mapping would cause rings to be created or broken
+        """
+        # For every cycle in the molecule, check that ALL atoms in the cycle are mapped or not mapped
+        import networkx
+        for molecule, mapped_atoms in [
+            (self.old_mol, self.old_to_new_atom_map.keys()),
+            (self.new_mol, self.old_to_new_atom_map.values())
+           ]:
+            graph = molecule.to_networkx()
+            for cycle in networkx.cycle_basis(graph):
+                n_atoms_in_cycle = len(cycle)
+                n_atoms_mapped = len( set(cycle).intersection(mapped_atoms) )
+                if not ((n_atoms_mapped==0) or (n_atoms_in_cycle==n_atoms_mapped)):
+                    return True
+
+        return False
+
+    def unmap_partially_mapped_cycles(self):
+        """De-map any atoms involved in partially-mapped cycles that would otherwise cause rings to be created or broken.
+
+        .. todo :: Check to make sure that we don't end up with problematic mappings.
+
+        """
+        # For every cycle in the molecule, check that ALL atoms in the cycle are mapped or not mapped
+        import networkx
+        atoms_to_demap = dict()
+        for molecule, mapped_atoms, selection in [
+            (self.old_mol, self.old_to_new_atom_map.keys(), 'old'),
+            (self.new_mol, self.old_to_new_atom_map.values(), 'new')
+           ]:
+            atoms_to_demap[selection] = set()
+            graph = molecule.to_networkx()
+            for cycle in networkx.cycle_basis(graph):
+                n_atoms_in_cycle = len(cycle)
+                n_atoms_mapped = len( set(cycle).intersection(mapped_atoms) )
+                if not ((n_atoms_mapped==0) or (n_atoms_in_cycle==n_atoms_mapped)):
+                    # De-map any atoms in this map
+                    for atom_index in cycle:
+                        atoms_to_demap[selection].add(atom_index)
+
+        # Update mapping
+        print(self.old_to_new_atom_map)
+        self.old_to_new_atom_map = { old_atom : new_atom for old_atom, new_atom in self.old_to_new_atom_map.items() if (old_atom not in atoms_to_demap['old']) and (new_atom not in atoms_to_demap['new']) }
 
 ################################################################################
 # ATOM MAPPERS

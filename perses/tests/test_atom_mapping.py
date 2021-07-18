@@ -12,29 +12,34 @@ class AtomMappingTest(unittest.TestCase):
     def setUp(self):
         """Create useful common objects for testing."""
         from openff.toolkit.topology import Molecule
-        self.old_mol = Molecule.from_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])([H:8])') # ethane
-        self.new_mol = Molecule.from_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])[O:8][H:9]') # ethanol
-        self.old_to_new_atom_map = { 1:1, 5:5 }
+        self.old_mol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])([H:7])') # ethane
+        self.new_mol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])[O:7][H:8]') # ethanol
+        self.old_to_new_atom_map = { 0:0, 4:4 }
         self.new_to_old_atom_map = dict(map(reversed, self.old_to_new_atom_map.items()))
 
     def test_create(self):
         atom_mapping = AtomMapping(self.old_mol, self.old_mol, old_to_new_atom_map=self.old_to_new_atom_map)
         assert atom_mapping.old_to_new_atom_map == self.old_to_new_atom_map
         assert atom_mapping.new_to_old_atom_map == self.new_to_old_atom_map
+        assert atom_mapping.n_mapped_atoms == 2
         atom_mapping = AtomMapping(self.old_mol, self.old_mol, new_to_old_atom_map=self.new_to_old_atom_map)
         assert atom_mapping.old_to_new_atom_map == self.old_to_new_atom_map
         assert atom_mapping.new_to_old_atom_map == self.new_to_old_atom_map
+        assert atom_mapping.n_mapped_atoms == 2
 
     def test_validation_fail(self):
+        # Empty mapping
+        with pytest.raises(InvalidMappingException) as excinfo:
+            atom_mapping = AtomMapping(self.old_mol, self.new_mol, { })
         # Non-integers
         with pytest.raises(InvalidMappingException) as excinfo:
-            atom_mapping = AtomMapping(self.old_mol, self.new_mol, { 1:1, 5:5, 6:'a' })
+            atom_mapping = AtomMapping(self.old_mol, self.new_mol, { 0:0, 4:4, 5:'a' })
         # Invalid atom indices
         with pytest.raises(InvalidMappingException) as excinfo:
-            atom_mapping = AtomMapping(self.old_mol, self.new_mol, { 1:1, 5:5, 10:10 })
+            atom_mapping = AtomMapping(self.old_mol, self.new_mol, { 0:0, 4:4, 9:9 })
         # Duplicated atom indices
         with pytest.raises(InvalidMappingException) as excinfo:
-            atom_mapping = AtomMapping(self.old_mol, self.new_mol, { 1:1, 5:5, 4:5 })
+            atom_mapping = AtomMapping(self.old_mol, self.new_mol, { 0:0, 4:4, 3:4 })
 
     def test_set_and_get_mapping(self):
         atom_mapping = AtomMapping(self.old_mol, self.old_mol, old_to_new_atom_map=self.old_to_new_atom_map)
@@ -46,6 +51,54 @@ class AtomMappingTest(unittest.TestCase):
         atom_mapping.new_to_old_atom_map = self.new_to_old_atom_map
         assert atom_mapping.old_to_new_atom_map == self.old_to_new_atom_map
         assert atom_mapping.new_to_old_atom_map == self.new_to_old_atom_map
+
+    def test_repr(self):
+        atom_mapping = AtomMapping(self.old_mol, self.old_mol, old_to_new_atom_map=self.old_to_new_atom_map)
+        repr(atom_mapping)
+
+    def test_str(self):
+        atom_mapping = AtomMapping(self.old_mol, self.old_mol, old_to_new_atom_map=self.old_to_new_atom_map)
+        str(atom_mapping)
+
+    def test_render_image(self):
+        import tempfile
+        atom_mapping = AtomMapping(self.old_mol, self.old_mol, old_to_new_atom_map=self.old_to_new_atom_map)
+        for suffix in ['.pdf', '.png', '.svg']:
+            with tempfile.NamedTemporaryFile(suffix=suffix) as tmpfile:
+                atom_mapping.render_image(tmpfile.name)
+
+    def test_ring_breaking_detection(self):
+        # Test simple ethane -> ethanol transformation
+        atom_mapping = AtomMapping(self.old_mol, self.old_mol, old_to_new_atom_map=self.old_to_new_atom_map)
+        assert atom_mapping.creates_or_breaks_rings() == False
+
+        # Define benzene -> napthalene transformation
+        from openff.toolkit.topology import Molecule
+        old_mol = Molecule.from_smiles('[c:0]1[c:1][c:2][c:3][c:4][c:5]1') # benzene
+        new_mol = Molecule.from_smiles('[c:0]12[c:1][c:2][c:3][c:4][c:5]2[c:6][c:7][c:8][c:9]1') # napthalene
+        old_to_new_atom_map = { 0:0, 1:1, 2:2, 3:3, 4:4, 5:5 }
+        new_to_old_atom_map = dict(map(reversed, self.old_to_new_atom_map.items()))
+        atom_mapping = AtomMapping(old_mol, new_mol, old_to_new_atom_map=old_to_new_atom_map)
+        print(atom_mapping)
+        assert atom_mapping.creates_or_breaks_rings() == True
+
+    def test_unmap_partially_mapped_cycles(self):
+        # Test simple ethane -> ethanol transformation
+        atom_mapping = AtomMapping(self.old_mol, self.old_mol, old_to_new_atom_map=self.old_to_new_atom_map)
+        n_mapped_atoms_old = atom_mapping.n_mapped_atoms
+        atom_mapping.unmap_partially_mapped_cycles()
+        assert atom_mapping.n_mapped_atoms == n_mapped_atoms_old
+
+        # Test methyl-cyclohexane -> methyl-cyclopentane, demapping the ring transformation
+        from openff.toolkit.topology import Molecule
+        old_mol = Molecule.from_smiles('[C:0][C:1]1[C:2][C:3][C:4][C:5][C:6]1') # methyl-cyclohexane
+        new_mol = Molecule.from_smiles('[C:0][C:1]1[C:2][C:3][C:4][C:5]1') # methyl-cyclopentane
+        old_to_new_atom_map = { 0:0, 1:1, 2:2, 3:3, 5:4, 6:5 }
+        new_to_old_atom_map = dict(map(reversed, self.old_to_new_atom_map.items()))
+        atom_mapping = AtomMapping(old_mol, new_mol, old_to_new_atom_map=old_to_new_atom_map)
+        assert atom_mapping.creates_or_breaks_rings() == True
+        atom_mapping.unmap_partially_mapped_cycles()
+        assert atom_mapping.old_to_new_atom_map == {0:0} # only methyl group should remain mapped
 
 def test_ring_breaking_detection():
     """
