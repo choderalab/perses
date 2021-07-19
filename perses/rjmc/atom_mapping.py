@@ -759,6 +759,8 @@ class AtomMapper(object):
             for atom_mapping in atom_mappings:
                 atom_mapping.unmap_partially_mapped_cycles()
 
+        # TODO: Should we attempt to preserve chirality here?
+
         if len(all_molecule_mappings) == 0:
             _logger.warning('No maps found. Try relaxing match criteria or setting allow_ring_breaking to True')
             return None

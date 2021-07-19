@@ -1289,27 +1289,31 @@ class PolymerProposalEngine(ProposalEngine):
         #NOTE: since the sidechain oemols are NOT zero-indexed anymore, we need to match by name (since they are unique identifiers)
         break_bool = False if old_res_name == 'TRP' or new_res_name == 'TRP' else True # Set allow_ring_breaking to be False if the transformation involves TRP
         _logger.debug(f"\t\t\t allow ring breaking: {break_bool}")
+        # TODO: Refactor to re-use atom_mapper for all ligands?
+        # TODO: Generate atom mapping using only geometries if requested
         from .atom_mapping import AtomMapper
-        local_atom_map_nonstereo_sidechain = AtomMapper._get_mol_atom_map(current_oemol, proposed_oemol, map_strength='strong', matching_criterion='name', map_strategy='matching_criterion', allow_ring_breaking=break_bool)
+        atom_mapper = AtomMapper(map_strength='strong', matching_criterion='name', map_strategy='matching_criterion', allow_ring_breaking=break_bool)
+        atom_mapping = atom_mapper.get_best_atom_mapping(current_oemol, proposed_oemol)
 
         #check the atom map thus far:
-        _logger.debug(f"\t\t\tlocal atom map nonstereo sidechain: {local_atom_map_nonstereo_sidechain}")
+        _logger.debug(f"\t\t\tlocal atom map nonstereo sidechain: {atom_mapping}")
 
         #preserve chirality of the sidechain
         # _logger.warning(f"\t\t\told oemols: {[atom.GetIdx() for atom in self.current_molecule.GetAtoms()]}")
         # _logger.warning(f"\t\t\tnew oemols: {[atom.GetIdx() for atom in new_oemol_res.GetAtoms()]}")
-        if local_atom_map_nonstereo_sidechain is not None:
-            from .atom_mapping import AtomMapper
-            local_atom_map_stereo_sidechain = AtomMapper.preserve_chirality(current_oemol, proposed_oemol, local_atom_map_nonstereo_sidechain)
+        # TODO: Should this be done here, or automatically in the mapping generation?
+        if atom_mapping is not None:
+            atom_mapping.preserve_chirality()
         else:
-            local_atom_map_stereo_sidechain = {}
+            atom_mapping = dict()
 
-        _logger.debug(f"\t\t\tlocal atom map stereo sidechain: {local_atom_map_stereo_sidechain}")
+        _logger.debug(f"\t\t\tlocal atom map stereo sidechain: {atom_mapping}")
 
         #fix the sidechain indices w.r.t. full oemol
+        # TODO: Glue AtomMapping in more broadly
         sidechain_fixed_map = {}
         mapped_names = []
-        for new_sidechain_idx, old_sidechain_idx in local_atom_map_stereo_sidechain.items():
+        for new_sidechain_idx, old_sidechain_idx in atom_mapping.new_to_old_atom_map.items():
             new_name, old_name = new_sidechain_oemol_indices_to_name[new_sidechain_idx], old_sidechain_oemol_indices_to_name[old_sidechain_idx]
             mapped_names.append((new_name, old_name))
             new_full_oemol_idx, old_full_oemol_idx = new_oemol_name_idx[new_name], old_oemol_name_idx[old_name]
@@ -2283,15 +2287,23 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             new_system = self._system_generator.build_system(new_topology)
 
         # Determine atom mapping between old and new molecules
+        # TODO: Refine this
         _logger.info(f"determining atom map between old and new molecules...")
         if atom_map is None:
             # Determine atom mapping using specified strategy
             _logger.info(f"the atom map is not specified; proceeding to generate an atom map...")
             from .atom_mapping import AtomMapper
             if self.use_given_geometries:
-                mol_atom_map = AtomMapper._get_mol_atom_map_by_positions(self.current_molecule, self.proposed_molecule, coordinate_tolerance=self.given_geometries_tolerance)
+                # Use MCSS to derive mapping
+                atom_mapper = AtomMapper(coordinate_tolerance=self.given_geometries_tolerance)
+                atom_mapping = atom_mapper.get_best_mapping(self.current_molecule, self.proposed_molecule)
             else:
-                mol_atom_map = AtomMapper._get_mol_atom_map(self.current_molecule, self.proposed_molecule, atom_expr=self.atom_expr, bond_expr=self.bond_expr, map_strength=self.map_strength, external_inttypes=self.external_inttypes, map_strategy=self.map_strategy)
+                # Explicitly generate atom mapping from only the positions
+                atom_mapper = AtomMapper(atom_expr=self.atom_expr, bond_expr=self.bond_expr, map_strength=self.map_strength, external_inttypes=self.external_inttypes)
+                atom_mapping = atom_mapper.generate_atom_mapping_from_positions(self.current_molecule, self.proposed_molecule)
+
+            # TODO: Glue in AtomMapping object more broadly
+            atom_map = atom_mapping.new_to_old_atom_map
         else:
             # Atom map was specified
             _logger.info(f"atom map is pre-determined as {atom_map}")
@@ -2611,20 +2623,25 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             probability_matrix[Mold, Mnew] is the probability of choosing molecule Mnew given the current molecule is Mold
 
         """
+        # TODO: Configure AtomMapper appropriately
         from .atom_mapping import AtomMapper
+        atom_mapper = AtomMapper()
+
         n_mols = len(self.list_of_oemols)
         probability_matrix = np.zeros([n_mols, n_mols])
         for i in range(n_mols):
             for j in range(i):
                 oemol_i = self.list_of_oemols[i]
                 oemol_j = self.list_of_oemols[j]
-                atom_map = AtomMapper._get_mol_atom_map(oemol_i, oemol_j)
-                if not atom_map:
-                    n_atoms_matching = 0
-                    continue
-                n_atoms_matching = len(atom_map.keys())
-                probability_matrix[i, j] = n_atoms_matching
-                probability_matrix[j, i] = n_atoms_matching
+                # TODO: Change this to take into account all possible mappings
+                # NOTE: We presume best mapping is symmetric
+                atom_mapping = atom_mapper.get_best_mapping(oemol_i, oemol_j)
+                if atom_mapping is None:
+                    score = 0.0
+                else:
+                    score = atom_mapper.score_mapping(atom_mapping)
+                probability_matrix[i, j] = score
+                probability_matrix[j, i] = score
         #normalize the rows:
         for i in range(n_mols):
             row_sum = np.sum(probability_matrix[i, :])
@@ -2664,7 +2681,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """
         from perses.tests.utils import createSystemFromSMILES
         from perses.rjmc.geometry import ProposalOrderTools
+
+        # TODO: Configure AtomMapper appropriately
         from .atom_mapping import AtomMapper
+        atom_mapper = AtomMapper()
 
         safe_smiles = set()
         smiles_pairs = set()
@@ -2677,10 +2697,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             mol1, sys1, pos1, top1 = createSystemFromSMILES(smiles_pair[0])
             mol2, sys2, pos2, top2 = createSystemFromSMILES(smiles_pair[1])
 
-            new_to_old_atom_map = AtomMapper._get_mol_atom_map()
-            if not new_to_old_atom_map:
+            atom_mapping = atom_mapper.get_best_mapping(mol1, mol2)
+            if atom_mapping is None:
                 continue
-            top_proposal = TopologyProposal(new_topology=top2, old_topology=top1, new_system=sys2, old_system=sys1, new_to_old_atom_map=new_to_old_atom_map, new_chemical_state_key='e', old_chemical_state_key='w')
+            top_proposal = TopologyProposal(new_topology=top2, old_topology=top1, new_system=sys2, old_system=sys1, new_to_old_atom_map=atom_mapping.new_to_old_atom_map, new_chemical_state_key='e', old_chemical_state_key='w')
             proposal_order = ProposalOrderTools(top_proposal)
             try:
                 forward_order = proposal_order.determine_proposal_order(direction='forward')
