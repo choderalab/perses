@@ -1017,7 +1017,7 @@ class AtomMapper(object):
 
         return map_score
 
-    def generate_atom_mapping_from_positions(old_mol, new_mol):
+    def generate_atom_mapping_from_positions(self, old_mol, new_mol):
         """Generate an atom mapping derived entirely from atom position proximity.
 
         The resulting map will be cleaned up by de-mapping hydrogens and rings as needed.
@@ -1057,8 +1057,8 @@ class AtomMapper(object):
             raise InvalidMappingException(f'Both old and new molecules must have at least one conformer defined.')
 
         # Get conformers in common distance unit as numpy arrays
-        old_mol_positions = old_mol.conformers[0].coordinates / distance_unit
-        new_mol_positions = new_mol.conformers[0].coordinates / distance_unit
+        old_mol_positions = old_mol.conformers[0] / distance_unit
+        new_mol_positions = new_mol.conformers[0] / distance_unit
 
         # TODO: Refactor
         molA_positions = old_mol.to_openeye().GetCoords() # coordinates (Angstroms)
@@ -1067,7 +1067,7 @@ class AtomMapper(object):
 
         # Define closeness criteria for np.allclose
         rtol = 0.0 # relative tolerane
-        atol = coordinate_tolerance / distance_unit # absolute tolerance (Angstroms)
+        atol = self.coordinate_tolerance / distance_unit # absolute tolerance (Angstroms)
 
         old_to_new_atom_map = dict()
         for old_atom_index in range(old_mol.n_atoms):
@@ -1075,11 +1075,12 @@ class AtomMapper(object):
             new_atom_matches = [
                 new_atom_index
                 for new_atom_index in range(new_mol.n_atoms)
-                if np.allclose(old_mol_positions[old_atom_index,:], new_mol_positions[new_mol_index,:], rtol=rtol, atol=atol)
+                if np.allclose(old_mol_positions[old_atom_index,:], new_mol_positions[new_atom_index,:], rtol=rtol, atol=atol)
                 ]
             if not len(new_atom_matches) in [0,1]:
                 raise InvalidMappingException(f"there are multiple new positions with the same coordinates as old atom {old_atom_index} for coordinate tolerance {self.coordinate_tolerance}")
             if len(new_atom_matches) == 1:
+                new_atom_index = new_atom_matches[0]
                 old_to_new_atom_map[old_atom_index] = new_atom_index
 
         atom_mapping = AtomMapping(old_mol, new_mol, old_to_new_atom_map=old_to_new_atom_map)
