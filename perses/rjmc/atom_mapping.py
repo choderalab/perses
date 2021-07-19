@@ -20,25 +20,6 @@ _logger = logging.getLogger("atom_mapping")
 _logger.setLevel(logging.INFO)
 
 ################################################################################
-# FILE-LEVEL METHODS
-################################################################################
-
-## TODO: Is this used anywhere?
-def has_h_mapped(atommap, mola, molb):
-    """
-    Parameters
-    mola : oechem.OEMol
-    molb : oechem.OEMol
-    """
-
-    import openeye.oechem as oechem
-    for a_atom, b_atom in atommap.items():
-        if mola.GetAtom(oechem.OEHasAtomIdx(a_atom)).GetAtomicNum() == 1 or molb.GetAtom(oechem.OEHasAtomIdx(b_atom)).GetAtomicNum() == 1:
-            return True
-
-    return False
-
-################################################################################
 # EXCEPTIONS
 ################################################################################
 
