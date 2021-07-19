@@ -79,7 +79,6 @@ class AtomMappingTest(unittest.TestCase):
         old_to_new_atom_map = { 0:0, 1:1, 2:2, 3:3, 4:4, 5:5 }
         new_to_old_atom_map = dict(map(reversed, self.old_to_new_atom_map.items()))
         atom_mapping = AtomMapping(old_mol, new_mol, old_to_new_atom_map=old_to_new_atom_map)
-        print(atom_mapping)
         assert atom_mapping.creates_or_breaks_rings() == True
 
     def test_unmap_partially_mapped_cycles(self):
@@ -122,7 +121,7 @@ class TestAtomMapper(unittest.TestCase):
             # Read molecules
             dataset_path = 'data/schrodinger-jacs-datasets/%s_ligands.sdf' % dataset_name
             sdf_filename = resource_filename('perses', dataset_path)
-            self.molecules[dataset_name] = Molecule.from_file(sdf_filename, allow_undefined_stereochemistry=True)
+            self.molecules[dataset_name] = Molecule.from_file(sdf_filename, allow_undefined_stereo=True)
 
     def test_molecular_atom_mapping(self):
         """Test the creation of atom maps between pairs of molecules from the JACS benchmark set.
@@ -139,11 +138,11 @@ class TestAtomMapper(unittest.TestCase):
             #for (molecule1, molecule2) in combinations(molecules, 2): # too slow
             from itertools import combinations
             for old_index, new_index in combinations(range(len(molecules)), 2):
-                atom_mapping = AtomMapper.get_best_mapping(molecules[old_index], molecules[new_index])
+                atom_mapping = atom_mapper.get_best_mapping(molecules[old_index], molecules[new_index])
                 # TODO: Perform quality checks
                 # Render mapping for visual inspection
-                filename = 'mapping-{dataset_name}-{old_index}-to-{new_index}.png'
-                atom_mapping.render_atom_mapping(filename)
+                filename = f'mapping-{dataset_name}-{old_index}-to-{new_index}.png'
+                atom_mapping.render_image(filename)
 
     def test_map_strategy(self):
         """
@@ -159,7 +158,7 @@ class TestAtomMapper(unittest.TestCase):
         for dataset_name in ['Jnk1']:
             molecules = self.molecules[dataset_name]
 
-            # Jnk1 ligands 0 and 1 have meta substituents that face opposite each other in the active site.
+            # Jnk1 ligands 0 and 2 have meta substituents that face opposite each other in the active site.
             # When ignoring position information, the mapper should align these groups, and put them both in the core.
             # When using position information, the mapper should see that the orientations differ and chose
             # to unmap (i.e. put both these groups in core) such as to get the geometry right at the expense of
@@ -167,17 +166,17 @@ class TestAtomMapper(unittest.TestCase):
 
             # Ignore positional information when scoring mappings
             atom_mapper.use_positions = False
-            atom_mapping = atom_mapper.get_best_atom_mapping(molecules[0], molecules[1])
-            assert len(atom_mapping.new_to_old_atom_map) == 37, 'Expected meta groups methyl C to map onto ethyl O'
+            atom_mapping = atom_mapper.get_best_mapping(molecules[0], molecules[2])
+            assert len(atom_mapping.new_to_old_atom_map) == 36, f'Expected meta groups methyl C to map onto ethyl O\n{atom_mapping}'
 
             # Use positional information to score mappings
             atom_mapper.use_positions = True
-            atom_mapping = atom_mapper.get_best_atom_mapping(molecules[0], molecules[1])
-            assert len(atom_mapping.new_to_old_atom_map) == 35,  'Expected meta groups methyl C to NOT map onto ethyl O as they are distal in cartesian space'
+            atom_mapping = atom_mapper.get_best_mapping(molecules[0], molecules[2])
+            assert len(atom_mapping.new_to_old_atom_map) == 35,  f'Expected meta groups methyl C to NOT map onto ethyl O as they are distal in cartesian space\n{atom_mapping}'
 
             # Explicitly construct mapping from positional information alone
-            atom_mapping = atom_mapper.generate_atom_mapping_from_positions(molecules[0], molecules[1])
-            assert len(atom_mapping.new_to_old_atom_map) == 35,  'Expected meta groups methyl C to NOT map onto ethyl O as they are distal in cartesian space'
+            atom_mapping = atom_mapper.generate_atom_mapping_from_positions(molecules[0], molecules[2])
+            assert len(atom_mapping.new_to_old_atom_map) == 35,  f'Expected meta groups methyl C to NOT map onto ethyl O as they are distal in cartesian space\n{atom_mapping}'
 
     def test_simple_heterocycle_mapping(self):
         """
@@ -197,6 +196,6 @@ class TestAtomMapper(unittest.TestCase):
             from openff.toolkit.topology import Molecule
             old_mol = Molecule.from_iupac(old_iupac)
             new_mol = Molecule.from_iupac(new_iupac)
-            atom_mapping = atom_mapper.get_best_atom_mapping(old_mol, new_mol)
+            atom_mapping = atom_mapper.get_best_mapping(old_mol, new_mol)
 
             assert len(atom_mapping.old_to_new_atom_map) > 0
