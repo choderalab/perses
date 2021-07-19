@@ -68,7 +68,6 @@ class RelativeFEPSetup(object):
                  nonbonded_method = 'PME',
                  complex_box_dimensions=None,
                  solvent_box_dimensions=None,
-                 map_strategy='geometry',
                  remove_constraints=False,
                  use_given_geometries = False,
                  given_geometries_tolerance=0.2*unit.angstroms,
@@ -123,18 +122,6 @@ class RelativeFEPSetup(object):
             box dimensions for the complex phase
         solvent_box_dimensions: Vec(3), optional, default=None
             box dimensions for the solvent phase
-        map_strategy : 'str' default='geometry'
-            determines which map is considered the best and returned
-            options are 'geometry', 'random', 'weighted-random', 'return-all'
-            can be one of ['geometry', 'matching_criterion', 'random', 'weighted-random', 'return-all']
-            - core will return the map with the largest number of atoms in the core. If there are multiple maps with the same highest score, then `matching_criterion` is used to tie break
-            - geometry uses the coordinates of the molB oemol to calculate the heavy atom distance between the proposed map and the actual geometry
-            this can be vital for getting the orientation of ortho- and meta- substituents correct in constrained (i.e. protein-like) environments.
-            this is ONLY useful if the positions of ligand B are known and/or correctly aligned.
-            - matching_criterion uses the `matching_criterion` flag to pick which of the maps best satisfies a 2D requirement.
-            - random will use a random map of those that are possible
-            - weighted-random uses a map chosen at random, proportional to how close it is in geometry to ligand B. The same as for 'geometry', this requires the coordinates of ligand B to be meaninful
-            - return-all BREAKS THE API as it returns a list of dicts, rather than list. This is intended for development code, not main pipeline.
         remove_constraints : bool, default=False
             if hydrogen constraints should be constrained in the simulation
             default is False, so no constraints removed, but 'all' or 'not water' can be used to remove constraints.
@@ -166,7 +153,6 @@ class RelativeFEPSetup(object):
         self._spectator_filenames = spectator_filenames
         self._complex_box_dimensions = complex_box_dimensions
         self._solvent_box_dimensions = solvent_box_dimensions
-        self._map_strategy = map_strategy
         self._use_given_geometries = use_given_geometries
         self._given_geometries_tolerance = given_geometries_tolerance
         self._ligand_input = ligand_input
@@ -217,13 +203,8 @@ class RelativeFEPSetup(object):
         _logger.info(f"Handling files for ligands and indices...")
         if type(self._ligand_input) is not list: # the ligand has been provided as a single file
             if self._ligand_input[-3:] == 'smi': #
-                if self._map_strategy == 'geometry':
-                    _logger.warning('Geometry mapping strategy is not recommended with smiles input as the coordinates are meaningless')
-                    _logger.warning('setting map_strategy to core instead')
-                    self._map_strategy = 'core'
                 _logger.info(f"Detected .smi format.  Proceeding...")
-                _logger.info('No geometry information for smiles, so ensuring mapping does not try use it')
-                self._map_strategy = 'core'
+                _logger.info('  Note that SMILES does not contain geometry information for use in mapping')
                 self._ligand_smiles_old = load_smi(self._ligand_input,self._old_ligand_index)
                 self._ligand_smiles_new = load_smi(self._ligand_input,self._new_ligand_index)
                 _logger.info(f"\told smiles: {self._ligand_smiles_old}")
@@ -372,7 +353,6 @@ class RelativeFEPSetup(object):
         proposal_engine.map_strength = self._map_strength
         proposal_engine.atom_expr = self._atom_expr
         proposal_engine.bond_expr = self._bond_expr
-        proposal_engine.map_strategy = self._map_strategy
         proposal_engine.use_given_geometries = self._use_given_geometries
         proposal_engine.given_geometries_tolerance = self._given_geometries_tolerance
         self._proposal_engine = proposal_engine

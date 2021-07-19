@@ -1292,7 +1292,7 @@ class PolymerProposalEngine(ProposalEngine):
         # TODO: Refactor to re-use atom_mapper for all ligands?
         # TODO: Generate atom mapping using only geometries if requested
         from .atom_mapping import AtomMapper
-        atom_mapper = AtomMapper(map_strength='strong', matching_criterion='name', map_strategy='matching_criterion', allow_ring_breaking=break_bool)
+        atom_mapper = AtomMapper(map_strength='strong', matching_criterion='name', allow_ring_breaking=break_bool)
         atom_mapping = atom_mapper.get_best_atom_mapping(current_oemol, proposed_oemol)
 
         #check the atom map thus far:
@@ -2127,8 +2127,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         TODO: What does this do?
     preserve_chirality : bool, default=True
         whether to preserve the chirality of the small molecule
-    map_strategy : str. default='matching_criterion'
-        TODO: What does this do?
     external_inttypes : bool, default=False
         TODO: What is this?
     use_given_geometries : bool, default=False
@@ -2144,7 +2142,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     map_strength = 'default'
     preserve_chirality = True,
     external_inttypes = False,
-    map_strategy = 'matching_criterion'
     use_given_geometries = False
     given_geometries_tolerance = 0.2 * unit.angstroms
 
