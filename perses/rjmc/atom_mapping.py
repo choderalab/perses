@@ -441,7 +441,6 @@ class AtomMapper(object):
       It also doesn't check that this is feasible to simulate,
       but is just helpful for testing options.
 
-
     .. todo ::
 
        * Expose options for whether bonds to hydrogen are constrained or not (and hence should be mapped or not)
@@ -465,9 +464,16 @@ class AtomMapper(object):
     Examples
     --------
 
-    Create an AtomMapper
+    Create an AtomMapper factory:
 
     >>> atom_mapper = AtomMapper()
+
+    You can also configure it after it has been created:
+
+    >>> atom_mapper.use_positions = True # use positions in scoring mappings if available
+    >>> atom_mapper.allow_ring_breaking = False # don't allow rings to be broken
+    >>> from openeye import oechem
+    >>> atom_mapper.atom_expr = oechem.OEExprOpts_Hybridization # override default atom_expr
 
     Specify two molecules without positions
 
@@ -477,7 +483,7 @@ class AtomMapper(object):
 
     Retrieve all mappings between two molecules
 
-    >>> atom_mapping = atom_mapper.get_all_mappings(ethane, ethanol)
+    >>> atom_mappings = atom_mapper.get_all_mappings(ethane, ethanol)
 
     Retrieve optimal mapping between molecules
 
@@ -487,14 +493,31 @@ class AtomMapper(object):
 
     >>> atom_mapping = atom_mapper.get_sampled_mapping(ethane, ethanol)
 
+    We can access (or modify) either the old-to-new atom mapping or new-to-old atom mapping,
+    and both will be kept in a self-consistent state:
+
+    >>> atom_mapping.old_to_new_atom_map
+    >>> atom_mapping.new_to_old_atom_map
+
+    Copies of the initial and final molecules are also available as OpenFF Molecule objects:
+
+    >>> atom_mapping.old_mol
+    >>> atom_mapping.new_mol
+
     The AtomMapper can also utilize positions in generating atom mappings.
     If positions are available, they will be used to derive mappings by default.
 
+    >>> atom_mapper.use_positions = True # use positions in scoring mappings if available
     >>> old_mol = Molecule.from_file('old_mol.sdf')
     >>> new_mol = Molecule.from_file('new_mol.sdf')
     >>> atom_mapping = atom_mapper.get_best_mapping(old_mol, new_mol)
 
-    The tolerance can be adjusted in the AtomMapper factory:
+    The mapping can also be generated only from positions,
+    rather than scoring mappings from MCSS:
+
+    >>> atom_mapping = atom_mapper.generate_atom_mapping_from_positions(old_mol, new_mol)
+
+    The tolerance for position scoring or position-derived mappings can be adjusted in the AtomMapper factory:
 
     >>> from simtk import unit
     >>> atom_mapper.coordinate_tolerance = 0.3*unit.angstroms
@@ -598,6 +621,23 @@ class AtomMapper(object):
         -------
         atom_mappings : list of AtomMapping
             All valid atom mappings
+
+        Examples:
+        ---------
+        Specify two molecules without positions
+
+        >>> from openff.toolkit.topology import Molecule
+        >>> ethane = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])([H:7])')
+        >>> ethanol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])[O:7][H:8]')
+
+        Retrieve all mappings between two molecules
+
+        >>> atom_mappings = atom_mapper.get_all_mappings(ethane, ethanol)
+
+        You can also specify OEMols for one or more of the molecules:
+
+        >>> atom_mappings = atom_mapper.get_all_mappings(ethane.to_openeye(), ethanol.to_openeye())
+        >>> atom_mappings = atom_mapper.get_all_mappings(ethane.to_openeye(), ethanol)
 
         """
         atom_mappings = set() # all unique atom mappings found
@@ -787,6 +827,15 @@ class AtomMapper(object):
         atom_mapping : AtomMapping
             Atom mapping with the best score
 
+        Examples
+        --------
+        Retrieve best-scoring mapping between ethane and ethanol
+
+        >>> from openff.toolkit.topology import Molecule
+        >>> ethane = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])([H:7])')
+        >>> ethanol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])[O:7][H:8]')
+        >>> atom_mapping = atom_mapper.get_best_mapping(ethane, ethanol)
+
         """
         import numpy as np
         atom_mappings = self.get_all_mappings(old_mol, new_mol)
@@ -808,6 +857,15 @@ class AtomMapper(object):
         -------
         atom_mapping : AtomMapping
             Atom mapping with the best score
+
+        Examples
+        --------
+        Sample a mapping stochasticaly between ethane and ethanol
+
+        >>> from openff.toolkit.topology import Molecule
+        >>> ethane = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])([H:7])')
+        >>> ethanol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])[O:7][H:8]')
+        >>> atom_mapping = atom_mapper.get_sampled_mapping(ethane, ethanol)
 
         """
         import numpy as np
@@ -839,6 +897,17 @@ class AtomMapper(object):
         logP_reverse : float
             log probability of selecting atom_mapping in reverse direction
 
+        Examples
+        --------
+        Propose a stochastic mapping between ethane and ethanol, computing the probability
+        of both the forward mapping and reverse mapping choices:
+
+        >>> from openff.toolkit.topology import Molecule
+        >>> ethane = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])([H:7])')
+        >>> ethanol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])[O:7][H:8]')
+        >>> atom_mapping, logP_forward, logP_reverse = atom_mapper.propose_mapping(ethane, ethanol)
+
+
         """
         # TODO: Stochastically select mapping, then compute forward and reverse log probabilities that same mapping
         #       would be used in forward and reverse directions (for new_mol -> old_mol)
@@ -862,6 +931,16 @@ class AtomMapper(object):
         -------
         score : float
             A score for the atom mapping, where larger scores indicate better maps.
+
+        Examples
+        --------
+        Compute scores for all mappings between ethane and ethanol:
+
+        >>> from openff.toolkit.topology import Molecule
+        >>> ethane = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])([H:7])')
+        >>> ethanol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])[O:7][H:8]')
+        >>> atom_mappings = atom_mapper.propose_mapping(ethane, ethanol)
+        >>> scores = [ atom_mapper.score_mapping(atom_mapping) for atom_mapping in atom_mappings ]
 
         """
 
@@ -955,6 +1034,15 @@ class AtomMapper(object):
         atom_mapping : AtomMapping
             The atom mapping determined from positions.
             mapping[molB_index] = molA_index is the mapping of atoms from molA to molB that are geometrically close
+
+        Examples
+        --------
+        Derive atom mapping from positions:
+
+        >>> atom_mapper = AtomMapper()
+        >>> old_mol = Molecule.from_file('old_mol.sdf')
+        >>> new_mol = Molecule.from_file('new_mol.sdf')
+        >>> atom_mapping = atom_mapper.generate_atom_mapping_from_positions(old_mol, new_mol)
 
         """
         from openff.toolkit.topology import Molecule
