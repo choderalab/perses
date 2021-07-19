@@ -1293,7 +1293,7 @@ class PolymerProposalEngine(ProposalEngine):
         # TODO: Generate atom mapping using only geometries if requested
         from .atom_mapping import AtomMapper
         atom_mapper = AtomMapper(map_strength='strong', matching_criterion='name', allow_ring_breaking=break_bool)
-        atom_mapping = atom_mapper.get_best_atom_mapping(current_oemol, proposed_oemol)
+        atom_mapping = atom_mapper.get_best_mapping(current_oemol, proposed_oemol)
 
         #check the atom map thus far:
         _logger.debug(f"\t\t\tlocal atom map nonstereo sidechain: {atom_mapping}")
