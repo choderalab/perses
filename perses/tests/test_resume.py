@@ -1,6 +1,7 @@
 def test_resume_small_molecule():
     pass
 
+
 def test_resume_protein_mutation_no_checkpoint():
     import logging
     import pickle
@@ -9,12 +10,14 @@ def test_resume_protein_mutation_no_checkpoint():
     import simtk.unit as unit
     from openmmtools import mcmc
     from openmmtools.multistate import MultiStateReporter
+    from pkg_resources import resource_filename
+    from simtk import unit
+
     from perses.annihilation.lambda_protocol import LambdaProtocol
     from perses.app.relative_point_mutation_setup import PointMutationExecutor
     from perses.samplers.multistate import HybridRepexSampler
-    from simtk import unit
 
-    pdb_filename = resource_filename('perses', 'data/ala_vacuum.pdb')
+    pdb_filename = resource_filename("perses", "data/ala_vacuum.pdb")
 
     solvent_delivery = PointMutationExecutor(
         pdb_filename,
@@ -30,7 +33,6 @@ def test_resume_protein_mutation_no_checkpoint():
         nonperiodic_forcefield_kwargs={"nonbondedMethod": app.NoCutoff},
     )
     htf = solvent_delivery.get_apo_htf()
-
 
     # Build the hybrid repex samplers
     _logger = logging.getLogger()
