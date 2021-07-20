@@ -581,7 +581,8 @@ class AtomMapper(object):
             # bonds need to match in bond order
             # ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
             'default' : {
-                'atom' : oechem.OEExprOpts_Hybridization, #| oechem.OEExprOpts_IntType
+                'atom' : oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember,
+                #'atom' : oechem.OEExprOpts_Hybridization, #| oechem.OEExprOpts_IntType
                 'bond' : oechem.OEExprOpts_DefaultBonds
             },
             # strong requires same hybridization AND the same atom type
