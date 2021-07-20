@@ -319,12 +319,22 @@ class AtomMapping(object):
                     for atom_index in cycle:
                         atoms_to_demap[selection].add(atom_index)
 
+        # Save initial mapping
+        import copy
+        initial_mapping = copy.deepcopy(self)
+
         # Update mapping
         self.old_to_new_atom_map = { old_atom : new_atom for old_atom, new_atom in self.old_to_new_atom_map.items() if (old_atom not in atoms_to_demap['old']) and (new_atom not in atoms_to_demap['new']) }
 
         # Check to make sure we haven't screwed something up
         if self.creates_or_breaks_rings() == True:
-            raise AssertionError('AtomMapping.unmap_partially_mapped_cycles() failed to eliminate all ring creation/breaking. This indicates a programming logic error.')
+            msg = f'AtomMapping.unmap_partially_mapped_cycles() failed to eliminate all ring creation/breaking. This indicates a programming logic error.\n'
+            msg += f'  Initial mapping (initial-mapping.png): {initial_mapping}\n'
+            msg += f'  After demapping (final-mapping.png)  : {self}\n'
+            msg += f'  Atoms to demap: {atoms_to_demap}\n'
+            initial_mapping.render_image('initial-mapping.png')
+            self.render_image('final-mapping.png')
+            raise AssertionError(msg)
 
     def preserve_chirality(self):
         """
@@ -648,7 +658,7 @@ class AtomMapper(object):
                 # TODO: Revisit whether we actually need this
                 from openeye import oechem
                 oemol = oechem.OEMol(mol)
-            except NotImplementedError as e:
+            except (TypeError, NotImplementedError) as e:
                 oemol = offmol.to_openeye()
 
             return offmol, oemol
@@ -736,7 +746,7 @@ class AtomMapper(object):
                                                 bond_expr=0,
                                                 matching_criterion=self.matching_criterion)
                 _logger.info(f'{len(scaffold_to_molecule_maps)} scaffold maps found')
-                scaffold_to_molecule_map = scaffold_maps[0]
+                scaffold_to_molecule_map = scaffold_to_molecule_maps[0]
                 _logger.info(f'Scaffold to molecule map: {scaffold_to_molecule_map}')
                 assert len(scaffold_to_molecule_map.old_to_new_atom_map) == oescaffold.NumAtoms(), f'Scaffold should be fully contained within the molecule it came from: map: {scaffold_to_molecule_map}\n{oescaffold.NumAtoms()} atoms in scaffold'
                 return scaffold_to_molecule_map
@@ -818,10 +828,17 @@ class AtomMapper(object):
         >>> atom_mapping = atom_mapper.get_best_mapping(ethane, ethanol)
 
         """
+        import time
+        initial_time = time.time()
+
         import numpy as np
         atom_mappings = self.get_all_mappings(old_mol, new_mol)
         scores = np.array([ self.score_mapping(atom_mapping) for atom_mapping in atom_mappings ])
         best_map_index = np.argmax(scores)
+
+        elapsed_time = time.time() - initial_time
+        _logger.info(f'get_best_mapping took {elapsed_time:.3f} s')
+
         return atom_mappings[best_map_index]
 
     def get_sampled_mapping(self, old_mol, new_mol):
@@ -1077,6 +1094,8 @@ class AtomMapper(object):
         external_inttypes=False,
         atom_expr=None,
         bond_expr=None,
+        # TODO: Should 'unique' be False by default?
+        # See https://docs.eyesopen.com/toolkits/python/oechemtk/patternmatch.html#section-patternmatch-mcss
         unique=True,
         matching_criterion='index',
         ):

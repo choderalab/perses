@@ -131,18 +131,24 @@ class TestAtomMapper(unittest.TestCase):
 
         # Test mappings for JACS dataset ligands
         # TODO: Uncomment other test datasets
-        for dataset_name in ['CDK2']: #, 'p38', 'Tyk2', 'Thrombin', 'PTP1B', 'MCL1', 'Jnk1', 'Bace']:
+        #for dataset_name in ['CDK2', 'p38', 'Tyk2', 'Thrombin', 'PTP1B', 'MCL1', 'Jnk1', 'Bace']:
+        for dataset_name in ['MCL1']:
             molecules = self.molecules[dataset_name]
 
             # Build atom map for some transformations.
-            #for (molecule1, molecule2) in combinations(molecules, 2): # too slow
-            from itertools import combinations
-            for old_index, new_index in combinations(range(len(molecules)), 2):
-                atom_mapping = atom_mapper.get_best_mapping(molecules[old_index], molecules[new_index])
-                # TODO: Perform quality checks
-                # Render mapping for visual inspection
-                filename = f'mapping-{dataset_name}-{old_index}-to-{new_index}.png'
-                atom_mapping.render_image(filename)
+            #from itertools import combinations
+            #for old_index, new_index in combinations(range(len(molecules)), 2): # too slow
+            old_index = 0
+            for new_index in range(1, len(molecules)):
+                try:
+                    atom_mapping = atom_mapper.get_best_mapping(molecules[old_index], molecules[new_index])
+                    # TODO: Perform quality checks
+                    # Render mapping for visual inspection
+                    filename = f'mapping-{dataset_name}-{old_index}-to-{new_index}.png'
+                    atom_mapping.render_image(filename)
+                except Exception as e:
+                    e.args += (f'Exception encountered for {dataset_name} : {old_index} {molecules[old_index]}-> {new_index} {molecules[new_index]}', )
+                    raise e
 
     def test_map_strategy(self):
         """
