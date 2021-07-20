@@ -288,10 +288,13 @@ class AtomMapping(object):
             (self.new_mol, self.old_to_new_atom_map.values())
            ]:
             graph = molecule.to_networkx()
-            for cycle in networkx.cycle_basis(graph):
+            #for cycle in networkx.cycle_basis(graph):
+            for cycle in networkx.algorithms.cycles.simple_cycles(graph.to_directed()):
                 n_atoms_in_cycle = len(cycle)
+                if n_atoms_in_cycle < 3:
+                    continue
                 n_atoms_mapped = len( set(cycle).intersection(mapped_atoms) )
-                if not ((n_atoms_mapped==0) or (n_atoms_in_cycle==n_atoms_mapped)):
+                if not ((n_atoms_mapped==0) or (n_atoms_mapped==n_atoms_in_cycle)):
                     return True
 
         return False
@@ -311,10 +314,13 @@ class AtomMapping(object):
            ]:
             atoms_to_demap[selection] = set()
             graph = molecule.to_networkx()
-            for cycle in networkx.cycle_basis(graph):
+            #for cycle in networkx.cycle_basis(graph):
+            for cycle in networkx.algorithms.cycles.simple_cycles(graph.to_directed()):
                 n_atoms_in_cycle = len(cycle)
+                if n_atoms_in_cycle < 3:
+                    continue
                 n_atoms_mapped = len( set(cycle).intersection(mapped_atoms) )
-                if not ((n_atoms_mapped==0) or (n_atoms_in_cycle==n_atoms_mapped)):
+                if not ((n_atoms_mapped==0) or (n_atoms_mapped==n_atoms_in_cycle)):
                     # De-map any atoms in this map
                     for atom_index in cycle:
                         atoms_to_demap[selection].add(atom_index)
@@ -669,8 +675,8 @@ class AtomMapper(object):
         # Annotate OEMol representations with ring IDs
         # TODO: What is all this doing
         if not self.external_inttypes or self.allow_ring_breaking:
-            AtomMapper._assign_ring_ids(old_oemol)
-            AtomMapper._assign_ring_ids(new_oemol)
+            self._assign_ring_ids(old_oemol)
+            self._assign_ring_ids(new_oemol)
 
         from perses.utils.openeye import get_scaffold
         old_oescaffold = get_scaffold(old_oemol)
@@ -726,20 +732,21 @@ class AtomMapper(object):
 
             # Determine mappings from scaffold to original molecule
             # TODO: Rework this logic to use openff Molecule
-            def determine_molecule_to_scaffold_mapping(oemol, oescaffold):
+            def determine_scaffold_to_molecule_mapping(oescaffold, oemol):
                 """Determine mapping of scaffold to full molecule.
 
                 Parameters
                 ----------
-                oemol : openeye.oechem.OEMol
-                    The complete molecule
                 oescaffold : openeye.oechem.OEMol
                     The scaffold within the complete molecule
+                oemol : openeye.oechem.OEMol
+                    The complete molecule
 
                 Returns
                 -------
                 scaffold_to_molecule_map : dict of int : int
                     scaffold_to_molecule_map[scaffold_atom_index] is the atom index in oemol corresponding to scaffold_atom_index in oescaffold
+
                 """
                 scaffold_to_molecule_maps = AtomMapper._get_all_maps(oescaffold, oemol,
                                                 atom_expr=oechem.OEExprOpts_AtomicNumber,
@@ -751,15 +758,13 @@ class AtomMapper(object):
                 assert len(scaffold_to_molecule_map.old_to_new_atom_map) == oescaffold.NumAtoms(), f'Scaffold should be fully contained within the molecule it came from: map: {scaffold_to_molecule_map}\n{oescaffold.NumAtoms()} atoms in scaffold'
                 return scaffold_to_molecule_map
 
-            old_scaffold_to_molecule_map = determine_molecule_to_scaffold_mapping(old_oemol, old_oescaffold)
-            new_scaffold_to_molecule_map = determine_molecule_to_scaffold_mapping(new_oemol, new_oescaffold)
+            old_scaffold_to_molecule_map = determine_scaffold_to_molecule_mapping(old_oescaffold, old_oemol)
+            new_scaffold_to_molecule_map = determine_scaffold_to_molecule_mapping(new_oescaffold, new_oemol)
 
             # now want to find all of the maps
             # for all of the possible scaffold symmetries
             # TODO: Re-work this algorithm
             for scaffold_map in scaffold_maps:
-                new_to_old_scaffold_map = scaffold_map.new_to_old_atom_map
-
                 if (self.external_inttypes is False) and (self.allow_ring_breaking is True):
                     # reset the IntTypes
                     for oeatom in old_oemol.GetAtoms():
@@ -768,18 +773,16 @@ class AtomMapper(object):
                         oeatom.SetIntType(0)
 
                     # Assign scaffold-mapped atoms in the real molecule an IntType equal to their mapping index
+                    old_oeatoms = [ atom for atom in old_oemol.GetAtoms() ]
+                    new_oeatoms = [ atom for atom in new_oemol.GetAtoms() ]
                     index = 1
-                    for new_scaffold_atom_index, old_scaffold_atom_index in new_to_old_scaffold_map.items():
-                        for oeatom in old_oemol.GetAtoms():
-                            if oeatom.GetIdx() == old_scaffold_to_molecule_map.old_to_new_atom_map[old_scaffold_atom_index]:
-                                oeatom.SetIntType(index)
-                        for oeatom in new_oemol.GetAtoms():
-                            if oeatom.GetIdx() == new_scaffold_to_molecule_map.new_to_old_atom_map[new_scaffold_atom_index]:
-                                oeatom.SetIntType(index)
+                    for old_scaffold_atom_index, new_scaffold_atom_index in scaffold_map.old_to_new_atom_map.items():
+                        old_oeatoms[old_scaffold_to_molecule_map.old_to_new_atom_map[old_scaffold_atom_index]].SetIntType(index)
+                        new_oeatoms[new_scaffold_to_molecule_map.old_to_new_atom_map[new_scaffold_atom_index]].SetIntType(index)
                         index += 1
                     # Assign remaining unmapped atoms in the real molecules an IntType determined by their ring classes
-                    set._assign_ring_ids(old_oemol, only_assign_if_zero=True)
-                    set._assign_ring_ids(new_oemol, only_assign_if_zero=True)
+                    self._assign_ring_ids(old_oemol, only_assign_if_zero=True)
+                    self._assign_ring_ids(new_oemol, only_assign_if_zero=True)
 
                 atom_mappings_for_this_scaffold_map = AtomMapper._get_all_maps(old_oemol, new_oemol,
                                                         external_inttypes=True,
