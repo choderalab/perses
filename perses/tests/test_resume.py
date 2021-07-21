@@ -14,8 +14,6 @@ def test_resume_protien_mutation_with_checkpoint(tmp_path):
     from pkg_resources import resource_filename
     from simtk import unit
 
-    dummy_cache = cache.DummyContextCache()
-
     pdb_filename = resource_filename("perses", "data/ala_vacuum.pdb")
     solvent_delivery = PointMutationExecutor(
         pdb_filename,
@@ -55,7 +53,6 @@ def test_resume_protien_mutation_with_checkpoint(tmp_path):
             n_restart_attempts=20,
             splitting="V R R R O R R R V",
             constraint_tolerance=1e-06,
-            context_cache=dummy_cache,
         ),
         hybrid_factory=htf,
         online_analysis_interval=10,
