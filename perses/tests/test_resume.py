@@ -148,4 +148,4 @@ def test_resume_protein_mutation_no_checkpoint(tmp_path):
     hss.extend(n_cycles)
     hss.extend(5)
 
-    assert simulation.iteration == 15
+    assert hss.iteration == 15
