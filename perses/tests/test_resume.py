@@ -1,7 +1,7 @@
 def test_resume_small_molecule():
     pass
 
-def test_resume_protien_mutation_with_checkpoint():
+def test_resume_protien_mutation_with_checkpoint(tmp_path):
     import logging
 
     import simtk.openmm.app as app
@@ -36,11 +36,11 @@ def test_resume_protien_mutation_with_checkpoint():
     _logger = logging.getLogger()
     _logger.setLevel(logging.DEBUG)
     selection = "not water"
-    checkpoint_interval = 10
-    n_states = 5
-    n_cycles = 50
+    checkpoint_interval = 5
+    n_states = 3
+    n_cycles = 10
     lambda_protocol = LambdaProtocol(functions="default")
-    reporter_file = "cdk2_solvent.nc"
+    reporter_file = tmp_path / "cdk2_solvent.nc"
     reporter = MultiStateReporter(
         reporter_file,
         analysis_particle_indices=htf.hybrid_topology.select(selection),
@@ -74,12 +74,12 @@ def test_resume_protien_mutation_with_checkpoint():
     simulation = HybridRepexSampler.from_storage(reporter)
 
     # Resume simulation
-    simulation.extend(10)
+    simulation.extend(5)
 
-    assert simulation.iteration == 60
+    assert simulation.iteration == 10
 
 
-def test_resume_protein_mutation_no_checkpoint():
+def test_resume_protein_mutation_no_checkpoint(tmp_path):
     import logging
     import pickle
 
@@ -115,11 +115,11 @@ def test_resume_protein_mutation_no_checkpoint():
     _logger = logging.getLogger()
     _logger.setLevel(logging.DEBUG)
     selection = "not water"
-    checkpoint_interval = 10
-    n_states = 5
-    n_cycles = 50
+    checkpoint_interval = 5
+    n_states = 3
+    n_cycles = 10
     lambda_protocol = LambdaProtocol(functions="default")
-    reporter_file = "cdk2_solvent.nc"
+    reporter_file = tmp_path / "cdk2_solvent.nc"
     reporter = MultiStateReporter(
         reporter_file,
         analysis_particle_indices=htf.hybrid_topology.select(selection),
@@ -144,5 +144,4 @@ def test_resume_protein_mutation_no_checkpoint():
         storage_file=reporter,
         lambda_protocol=lambda_protocol,
     )
-    hss.extend(n_cycles)
-    hss.extend(10)
+    hss.extend(5)
