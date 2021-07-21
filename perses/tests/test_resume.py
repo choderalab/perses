@@ -67,7 +67,7 @@ def test_resume_protien_mutation_with_checkpoint(tmp_path):
         lambda_protocol=lambda_protocol,
     )
     hss.extend(n_cycles)
-    #del hss
+    del hss
 
     # Load repex simulation
     reporter = MultiStateReporter(reporter_file, checkpoint_interval=10)
