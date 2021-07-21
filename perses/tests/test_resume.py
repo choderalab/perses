@@ -76,7 +76,7 @@ def test_resume_protien_mutation_with_checkpoint(tmp_path):
     # Resume simulation
     simulation.extend(5)
 
-    assert simulation.iteration == 10
+    assert simulation.iteration == 15
 
 
 def test_resume_protein_mutation_no_checkpoint(tmp_path):
@@ -144,4 +144,8 @@ def test_resume_protein_mutation_no_checkpoint(tmp_path):
         storage_file=reporter,
         lambda_protocol=lambda_protocol,
     )
+
+    hss.extend(n_cycles)
     hss.extend(5)
+
+    assert simulation.iteration == 15
