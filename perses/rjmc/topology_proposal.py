@@ -2291,16 +2291,20 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             _logger.info(f"the atom map is not specified; proceeding to generate an atom map...")
             from .atom_mapping import AtomMapper
             if self.use_given_geometries:
-                # Use MCSS to derive mapping
-                atom_mapper = AtomMapper(coordinate_tolerance=self.given_geometries_tolerance)
-                atom_mapping = atom_mapper.get_best_mapping(self.current_molecule, self.proposed_molecule)
-            else:
                 # Explicitly generate atom mapping from only the positions
-                atom_mapper = AtomMapper(atom_expr=self.atom_expr, bond_expr=self.bond_expr, map_strength=self.map_strength, external_inttypes=self.external_inttypes)
+                atom_mapper = AtomMapper(coordinate_tolerance=self.given_geometries_tolerance)
                 atom_mapping = atom_mapper.generate_atom_mapping_from_positions(self.current_molecule, self.proposed_molecule)
+            else:
+                # Use MCSS to derive mapping
+                atom_mapper = AtomMapper(
+                    atom_expr=self.atom_expr, bond_expr=self.bond_expr, map_strength=self.map_strength,
+                    external_inttypes=self.external_inttypes,
+                    use_positions=True, coordinate_tolerance=self.given_geometries_tolerance, # use positions if available
+                    )
+                atom_mapping = atom_mapper.get_best_mapping(self.current_molecule, self.proposed_molecule)
 
             # TODO: Glue in AtomMapping object more broadly
-            atom_map = atom_mapping.new_to_old_atom_map
+            mol_atom_map = atom_mapping.new_to_old_atom_map
         else:
             # Atom map was specified
             _logger.info(f"atom map is pre-determined as {atom_map}")
