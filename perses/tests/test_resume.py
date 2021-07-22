@@ -1,3 +1,57 @@
+def test_cli_resume():
+    import os
+    import subprocess
+    import tempfile
+
+    import yaml
+    from pkg_resources import resource_filename
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        os.chdir(temp_dir)
+        # Need to get path to examples dir
+        protein_pdb = resource_filename(
+            "perses", os.path.join("examples", "cdk2-example", "CDK2_protein.pdb")
+        ).replace("/perses", "", 1)
+        ligand_file = resource_filename(
+            "perses",
+            os.path.join("examples", "cdk2-example", "CDK2_ligands_shifted.sdf"),
+        ).replace("/perses", "", 1)
+
+        document = """
+        atom_selection: not water
+        checkpoint_interval: 5
+        fe_type: repex
+        forcefield_files:
+        - amber/ff14SB.xml
+        - amber/tip3p_standard.xml
+        - amber/tip3p_HFE_multivalent.xml
+        - amber/phosaa10.xml
+        n_cycles: 10
+        n_equilibration_iterations: 10
+        n_states: 3
+        n_steps_per_move_application: 50
+        new_ligand_index: 15
+        old_ligand_index: 14
+        phases:
+        - vacuum
+        pressure: 1.0
+        save_setup_pickle_as: fesetup_hbonds.pkl
+        small_molecule_forcefield: openff-1.0.0
+        solvent_padding: 9.0
+        temperature: 300.0
+        timestep: 4.0
+        trajectory_directory: cdk2_repex_hbonds
+        trajectory_prefix: cdk2
+        """
+
+        y_doc = yaml.load(document, Loader=yaml.UnsafeLoader)
+        y_doc["protein_pdb"] = protein_pdb
+        y_doc["ligand_file"] = ligand_file
+        with open("test.yml", "w") as outfile:
+            yaml.dump(y_doc, outfile)
+        subprocess.run(["perses-relative", "test.yml"])
+
+
 def test_resume_small_molecule(tmp_path):
     import logging
     import os
@@ -5,11 +59,12 @@ def test_resume_small_molecule(tmp_path):
     import simtk.unit as unit
     from openmmtools import mcmc
     from openmmtools.multistate import MultiStateReporter
+    from pkg_resources import resource_filename
+
     from perses.annihilation.lambda_protocol import LambdaProtocol
     from perses.annihilation.relative import HybridTopologyFactory
     from perses.app.relative_setup import RelativeFEPSetup
     from perses.samplers.multistate import HybridRepexSampler
-    from pkg_resources import resource_filename
 
     smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
     fe_setup = RelativeFEPSetup(
@@ -82,13 +137,14 @@ def test_resume_protien_mutation_with_checkpoint(tmp_path):
 
     import simtk.openmm.app as app
     from openeye import oechem
-    from openmmtools import mcmc, cache
+    from openmmtools import cache, mcmc
     from openmmtools.multistate import MultiStateReporter
+    from pkg_resources import resource_filename
+    from simtk import unit
+
     from perses.annihilation.lambda_protocol import LambdaProtocol
     from perses.app.relative_point_mutation_setup import PointMutationExecutor
     from perses.samplers.multistate import HybridRepexSampler
-    from pkg_resources import resource_filename
-    from simtk import unit
 
     pdb_filename = resource_filename("perses", "data/ala_vacuum.pdb")
     solvent_delivery = PointMutationExecutor(
