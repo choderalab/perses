@@ -150,7 +150,7 @@ class TestAtomMapper(unittest.TestCase):
                             filename = f'mapping-{dataset_name}-use_positions={use_positions}-allow_ring_breaking={allow_ring_breaking}-{old_index}-to-{new_index}.png'
                             atom_mapping.render_image(filename)
                         except Exception as e:
-                            e.args += (f'Exception encountered for {dataset_name} : {old_index} {molecules[old_index]}-> {new_index} {molecules[new_index]}', )
+                            e.args += (f'Exception encountered for {dataset_name} use_positions={use_positions} allow_ring_breaking={allow_ring_breaking}: {old_index} {molecules[old_index]}-> {new_index} {molecules[new_index]}', )
                             raise e
 
     def test_map_strategy(self):

@@ -281,27 +281,36 @@ class AtomMapping(object):
         breaks_rings : bool
             Returns True if the atom mapping would cause rings to be created or broken
         """
-        # Check that any bond between mapped atoms in one molecule is also bonded in the other molecule
         import networkx as nx
-        old_mol_graph = self.old_mol.to_networkx()
-        new_mol_graph = self.new_mol.to_networkx()
-        # Check that all bonds between mapped atoms in old_mol are mapped in new_mol
-        for old_edge in old_mol_graph.edges:
-            if set(old_edge).issubset(self.old_to_new_atom_map.keys()):
-                new_edge = (self.old_to_new_atom_map[old_edge[0]], self.old_to_new_atom_map[old_edge[1]])
-                if not new_mol_graph.has_edge(*new_edge):
-                    _logger.info(f"old_mol bond {old_edge} is mapped to new_mol {new_edge}, which breaks this bond")
+        # Check that any bond between mapped atoms in one molecule is also bonded in the other molecule
+        for mol1, mol2, atom_mapping in [
+            (self.old_mol, self.new_mol, self.old_to_new_atom_map),
+            (self.new_mol, self.old_mol, self.new_to_old_atom_map),
+            ]:
+            mol1_graph = mol1.to_networkx()
+            mol2_graph = mol2.to_networkx()
+            # Check that all bonds between mapped atoms in mol1 are mapped in mol2
+            for mol1_edge in mol1_graph.edges:
+                if set(mol1_edge).issubset(atom_mapping.keys()):
+                    mol2_edge = (atom_mapping[mol1_edge[0]], atom_mapping[mol1_edge[1]])
+                    if not mol2_graph.has_edge(*mol2_edge):
+                        self.render_image('debug.png') # DEBUG
+                        return True
+        # For every cycle in the molecule, check that ALL atoms in the cycle are mapped or not mapped
+        for molecule, mapped_atoms in [
+            (self.old_mol, self.old_to_new_atom_map.keys()),
+            (self.new_mol, self.old_to_new_atom_map.values())
+           ]:
+            graph = molecule.to_networkx()
+            for cycle in nx.simple_cycles(graph.to_directed()):
+                n_atoms_in_cycle = len(cycle)
+                if n_atoms_in_cycle < 3:
+                    # Cycle must contain at least three atoms to be useful
+                    continue
+                n_atoms_mapped = len( set(cycle).intersection(mapped_atoms) )
+                if not ((n_atoms_mapped==0) or (n_atoms_in_cycle==n_atoms_mapped)):
                     self.render_image('debug.png') # DEBUG
                     return True
-        # Check that all bonds between mapped atoms in new_mol are mapped in old_mol
-        for new_edge in new_mol_graph.edges:
-            if set(new_edge).issubset(self.new_to_old_atom_map.keys()):
-                old_edge = (self.new_to_old_atom_map[new_edge[0]], self.new_to_old_atom_map[new_edge[1]])
-                if not old_mol_graph.has_edge(*old_edge):
-                    _logger.info(f"new_mol bond {new_edge} is mapped to old_mol {new_edge}, which breaks this bond")
-                    self.render_image('debug.png') # DEBUG
-                    return True
-
         return False
 
     def unmap_partially_mapped_cycles(self):
@@ -315,21 +324,67 @@ class AtomMapping(object):
         .. todo :: Check to make sure that we don't end up with problematic mappings.
 
         """
-
-        # Construct old_mol graph pruning any edges that are not bonded mapped atoms
-        # in both old and new mols
         import networkx as nx
+
+        # Save initial mapping
+        import copy
+        initial_mapping = copy.deepcopy(self)
+
+        # Traverse all cycles and de-map any atoms that are in partially mapped cycles
+        # making sure to check that bonds in mapped atoms are concordant.
+        atoms_to_demap = dict()
+        for mol1, mol2, atom_mapping, selection in [
+            (self.old_mol, self.new_mol, self.old_to_new_atom_map, 'old'),
+            (self.new_mol, self.old_mol, self.new_to_old_atom_map, 'new')
+           ]:
+            atoms_to_demap[selection] = set()
+            mol1_graph = mol1.to_networkx()
+            mol2_graph = mol2.to_networkx()
+            for cycle in nx.simple_cycles(mol1_graph.to_directed()):
+                n_atoms_in_cycle = len(cycle)
+                if n_atoms_in_cycle < 3:
+                    # Need at least three atoms in a cycle
+                    continue
+
+                # Check that all atoms and bonds are mapped
+                def is_cycle_mapped(mol1_graph, mol2_graph, cycle, atom_mapping):
+                    n_atoms_in_cycle = len(cycle)
+                    for index in range(n_atoms_in_cycle):
+                        mol1_atom1, mol1_atom2 = cycle[index], cycle[(index+1)%n_atoms_in_cycle]
+                        if not ((mol1_atom1 in atom_mapping) and (mol1_atom2 in atom_mapping)):
+                            return False
+                        mol2_atom1, mol2_atom2 = atom_mapping[mol1_atom1], atom_mapping[mol1_atom2]
+                        if not mol2_graph.has_edge(mol2_atom1, mol2_atom2):
+                            return False
+
+                    # All atoms and bonds in cycle are mapped correctly
+                    return True
+
+                if not is_cycle_mapped(mol1_graph, mol2_graph, cycle, atom_mapping):
+                    # De-map any atoms in this map
+                    for atom_index in cycle:
+                        atoms_to_demap[selection].add(atom_index)
+
+        # Update mapping to eliminate any atoms in partially mapped cycles
+        if len(atoms_to_demap['old'])>0 or len(atoms_to_demap['new'])>0:
+            _logger.info(f"AtomMapping.unmap_partially_mapped_cycles(): Demapping atoms that were in partially mapped cycles: {atoms_to_demap}")
+        self.old_to_new_atom_map = { old_atom : new_atom for old_atom, new_atom in self.old_to_new_atom_map.items() if (old_atom not in atoms_to_demap['old']) and (new_atom not in atoms_to_demap['new']) }
+
+        # Construct old_mol graph pruning any edges that do not share bonds
+        # correctly mapped in both molecules
         old_mol_graph = self.old_mol.to_networkx()
         new_mol_graph = self.new_mol.to_networkx()
         for edge in old_mol_graph.edges:
             if not set(edge).issubset(self.old_to_new_atom_map.keys()):
                 # Remove the edge because bond is not between mapped atoms
                 old_mol_graph.remove_edge(*edge)
+                _logger.info(f'Demapping old_mol edge {edge} because atoms are not mapped')
             else:
                 # Both atoms are mapped
                 # Ensure atoms are also bonded in new_mol
                 if not new_mol_graph.has_edge(self.old_to_new_atom_map[edge[0]], self.old_to_new_atom_map[edge[1]]):
                     old_mol_graph.remove_edge(*edge)
+                    _logger.info(f'Demapping old_mol edge {edge} because atoms are not bonded in new_mol')
 
         # Find the largest connected component of the graph
         connected_components = [component for component in nx.connected_components(old_mol_graph)]
@@ -342,17 +397,14 @@ class AtomMapping(object):
             msg = f'AtomMapping.unmap_partially_mapped_cycles(): Largest connected component has too few atoms ({len(largest_connected_component)} atoms)\n'
             msg += f'  Initial mapping (initial-mapping.png): {self}\n'
             msg += f'  largest_connected_component: {largest_connected_component}\n'
-            self.render_image('initial-mapping.png')
+            initial_mapping.render_image('initial-mapping.png')
             raise AssertionError(msg)
-
-        # Save initial mapping
-        import copy
-        initial_mapping = copy.deepcopy(self)
 
         # Update mapping to include only largest connected component atoms
         self.old_to_new_atom_map = { old_atom : new_atom for old_atom, new_atom in self.old_to_new_atom_map.items() if (old_atom in largest_connected_component) }
 
-        _logger.info(f"AtomMapping.make_factorizible(): Number of mapped atoms changed from {len(initial_mapping.old_to_new_atom_map)} -> {self.old_to_new_atom_map}")
+
+        _logger.info(f"AtomMapping.unmap_partially_mapped_cycles(): Number of mapped atoms changed from {len(initial_mapping.old_to_new_atom_map)} -> {len(self.old_to_new_atom_map)}")
 
         # Check to make sure we haven't screwed something up
         if self.creates_or_breaks_rings() == True:
@@ -362,7 +414,7 @@ class AtomMapping(object):
             msg += f'  largest_connected_component: {largest_connected_component}\n'
             initial_mapping.render_image('initial-mapping.png')
             self.render_image('final-mapping.png')
-            raise AssertionError(msg)
+            raise InvalidMappingException(msg)
 
     def preserve_chirality(self):
         """
@@ -697,7 +749,7 @@ class AtomMapper(object):
 
         # Annotate OEMol representations with ring IDs
         # TODO: What is all this doing
-        if not self.external_inttypes or self.allow_ring_breaking:
+        if (not self.external_inttypes) or self.allow_ring_breaking:
             self._assign_ring_ids(old_oemol)
             self._assign_ring_ids(new_oemol)
 
@@ -820,7 +872,8 @@ class AtomMapper(object):
             for atom_mapping in atom_mappings:
                 atom_mapping.unmap_partially_mapped_cycles()
 
-        # TODO: Should we attempt to preserve chirality here?
+        # TODO: Should we attempt to preserve chirality here for all atom mappings?
+        # Or is this just for biopolymer residues?
 
         if len(atom_mappings) == 0:
             _logger.warning('No maps found. Try relaxing match criteria or setting allow_ring_breaking to True')
@@ -859,6 +912,9 @@ class AtomMapper(object):
 
         import numpy as np
         atom_mappings = self.get_all_mappings(old_mol, new_mol)
+        if (atom_mappings is None) or len(atom_mappings)==0:
+            return None
+
         scores = np.array([ self.score_mapping(atom_mapping) for atom_mapping in atom_mappings ])
         best_map_index = np.argmax(scores)
 
