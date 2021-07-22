@@ -134,8 +134,7 @@ class TestAtomMapper(unittest.TestCase):
 
                 # Test mappings for JACS dataset ligands
                 # TODO: Uncomment other test datasets
-                #for dataset_name in ['CDK2', 'p38', 'Tyk2', 'Thrombin', 'PTP1B', 'MCL1', 'Jnk1', 'Bace']:
-                for dataset_name in ['MCL1']:
+                for dataset_name in ['CDK2', 'p38', 'Tyk2', 'Thrombin', 'PTP1B', 'MCL1', 'Jnk1', 'Bace']:
                     molecules = self.molecules[dataset_name]
 
                     # Build atom map for some transformations.
@@ -147,8 +146,8 @@ class TestAtomMapper(unittest.TestCase):
                             atom_mapping = atom_mapper.get_best_mapping(molecules[old_index], molecules[new_index])
                             # TODO: Perform quality checks
                             # Render mapping for visual inspection
-                            filename = f'mapping-{dataset_name}-use_positions={use_positions}-allow_ring_breaking={allow_ring_breaking}-{old_index}-to-{new_index}.png'
-                            atom_mapping.render_image(filename)
+                            #filename = f'mapping-{dataset_name}-use_positions={use_positions}-allow_ring_breaking={allow_ring_breaking}-{old_index}-to-{new_index}.png'
+                            #atom_mapping.render_image(filename)
                         except Exception as e:
                             e.args += (f'Exception encountered for {dataset_name} use_positions={use_positions} allow_ring_breaking={allow_ring_breaking}: {old_index} {molecules[old_index]}-> {new_index} {molecules[new_index]}', )
                             raise e

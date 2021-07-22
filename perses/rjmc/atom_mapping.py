@@ -294,7 +294,6 @@ class AtomMapping(object):
                 if set(mol1_edge).issubset(atom_mapping.keys()):
                     mol2_edge = (atom_mapping[mol1_edge[0]], atom_mapping[mol1_edge[1]])
                     if not mol2_graph.has_edge(*mol2_edge):
-                        self.render_image('debug.png') # DEBUG
                         return True
         # For every cycle in the molecule, check that ALL atoms in the cycle are mapped or not mapped
         for molecule, mapped_atoms in [
@@ -309,7 +308,6 @@ class AtomMapping(object):
                     continue
                 n_atoms_mapped = len( set(cycle).intersection(mapped_atoms) )
                 if not ((n_atoms_mapped==0) or (n_atoms_in_cycle==n_atoms_mapped)):
-                    self.render_image('debug.png') # DEBUG
                     return True
         return False
 
