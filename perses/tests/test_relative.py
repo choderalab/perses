@@ -447,7 +447,7 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene",atom_express
     system = system_generator.create_system(topology)
     positions = extractPositionsFromOEMol(refmol)
 
-    proposal_engine = SmallMoleculeSetProposalEngine([refmol, mol], system_generator, atom_expr=atom_expr, bond_expr=bond_expr)
+    proposal_engine = SmallMoleculeSetProposalEngine([refmol, mol], system_generator, atom_expr=atom_expr, bond_expr=bond_expr, allow_ring_breaking=True)
     proposal = proposal_engine.propose(system, topology)
     geometry_engine = FFAllAngleGeometryEngine()
     new_positions, _ = geometry_engine.propose(proposal, positions, beta = beta, validate_energy_bookkeeping = False)
@@ -616,7 +616,6 @@ def test_RMSD_restraint():
              nonbonded_method = 'PME',
              complex_box_dimensions=None,
              solvent_box_dimensions=None,
-             map_strategy='matching_criterion',
              remove_constraints=False,
              use_given_geometries = False
              )

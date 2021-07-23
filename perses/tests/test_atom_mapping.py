@@ -139,9 +139,9 @@ class TestAtomMapper(unittest.TestCase):
 
                     # Build atom map for some transformations.
                     #from itertools import combinations
-                    #for old_index, new_index in combinations(range(len(molecules)), 2): # too slow
+                    #for old_index, new_index in combinations(range(len(molecules)), 2): # exhaustive test is too slow
                     old_index = 0
-                    for new_index in range(1, len(molecules)):
+                    for new_index in range(1, len(molecules), 2): # skip every few molecules to keep test times down
                         try:
                             atom_mapping = atom_mapper.get_best_mapping(molecules[old_index], molecules[new_index])
                             # TODO: Perform quality checks
