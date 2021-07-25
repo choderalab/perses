@@ -1,6 +1,10 @@
 """
 Tools for computing atom mappings for relative free energy transformations.
-These tools operate exclusively on OpenEye Toolkit openeye.oechem.OEMol objects.
+
+These tools currently require the OpenEye Toolkit, but will eventually be fully migrated
+to the OpenFF toolkit.
+
+.. todo :: This module should be migrated to openmmtools.
 
 """
 

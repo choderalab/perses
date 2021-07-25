@@ -72,35 +72,6 @@ def test_small_molecule_proposals():
         assert smiles == proposal.new_chemical_state_key
         proposal = new_proposal
 
-def test_mapping_strength_levels(pairs_of_smiles=[('Cc1ccccc1','c1ccc(cc1)N'),('CC(c1ccccc1)','O=C(c1ccccc1)'),('Oc1ccccc1','Sc1ccccc1')],test=True):
-
-    correct_results = {0:{'default': (3,2), 'weak':(3,2), 'strong':(4,3)},
-                       1:{'default': (7,3), 'weak':(6,2), 'strong':(7,3)},
-                       2:{'default': (1,1), 'weak':(1,1), 'strong':(2,2)}}
-
-    mapping = ['weak','default','strong']
-
-    for example in mapping:
-        for index, (lig_a, lig_b) in enumerate(pairs_of_smiles):
-            print(f"conducting {example} mapping with ligands {lig_a}, {lig_b}")
-            initial_molecule = smiles_to_oemol(lig_a)
-            proposed_molecule = smiles_to_oemol(lig_b)
-            molecules = [Molecule.from_openeye(mol) for mol in [initial_molecule, proposed_molecule]]
-            system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
-                                                 small_molecule_forcefield = 'gaff-1.81', molecules=molecules, cache=None)
-            proposal_engine = SmallMoleculeSetProposalEngine([initial_molecule, proposed_molecule], system_generator)
-            proposal_engine.map_strength = example
-            initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(initial_molecule, system_generator)
-            print(f"running now with map strength {example}")
-            proposal = proposal_engine.propose(initial_system, initial_topology)
-            print(lig_a, lig_b,'length OLD and NEW atoms',len(proposal.unique_old_atoms), len(proposal.unique_new_atoms))
-            if test:
-                render_atom_mapping(f'{index}-{example}.png', initial_molecule, proposed_molecule, proposal._new_to_old_atom_map)
-                assert ( (len(proposal.unique_old_atoms), len(proposal.unique_new_atoms)) == correct_results[index][example]), f"the mapping failed, correct results are {correct_results[index][example]}"
-                print(f"the mapping worked!!!")
-            print()
-
-
 def load_pdbid_to_openmm(pdbid):
     """
     create openmm topology without pdb file

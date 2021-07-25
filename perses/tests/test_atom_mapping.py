@@ -7,6 +7,19 @@ from perses.utils.smallmolecules import render_atom_mapping
 from openff.toolkit.topology import Molecule
 from perses.rjmc.atom_mapping import AtomMapper, AtomMapping, InvalidMappingException
 
+################################################################################
+# LOGGER
+################################################################################
+
+import logging
+logging.basicConfig(level = logging.NOTSET)
+_logger = logging.getLogger("atom_mapping")
+_logger.setLevel(logging.INFO)
+
+################################################################################
+# AtomMapping
+################################################################################
+
 class AtomMappingTest(unittest.TestCase):
     """Test AtomMapping object."""
     def setUp(self):
@@ -114,6 +127,10 @@ class AtomMappingTest(unittest.TestCase):
         atom_mapping.preserve_chirality()
         assert atom_mapping.old_to_new_atom_map == {0:0, 1:1, 2:2, 3:3} # TODO: Check this
 
+################################################################################
+# AtomMapper
+################################################################################
+
 class TestAtomMapper(unittest.TestCase):
     def setUp(self):
         self.molecules = dict()
@@ -141,7 +158,7 @@ class TestAtomMapper(unittest.TestCase):
                     #from itertools import combinations
                     #for old_index, new_index in combinations(range(len(molecules)), 2): # exhaustive test is too slow
                     old_index = 0
-                    for new_index in range(1, len(molecules), 2): # skip every few molecules to keep test times down
+                    for new_index in range(1, len(molecules), 3): # skip every few molecules to keep test times down
                         try:
                             atom_mapping = atom_mapper.get_best_mapping(molecules[old_index], molecules[new_index])
                             # TODO: Perform quality checks
@@ -207,3 +224,35 @@ class TestAtomMapper(unittest.TestCase):
             atom_mapping = atom_mapper.get_best_mapping(old_mol, new_mol)
 
             assert len(atom_mapping.old_to_new_atom_map) > 0
+
+    def test_mapping_strength_levels(self):
+        """Test the mapping strength defaults work as expected"""
+        # SMILES pairs to test mappings
+        tests = [
+            ('Cc1ccccc1','c1ccc(cc1)N', {'default': 12, 'weak' : 12, 'strong' : 11}),
+            ('CC(c1ccccc1)','O=C(c1ccccc1)', {'default': 13, 'weak' : 13, 'strong' : 11}),
+            ('Oc1ccccc1','Sc1ccccc1', {'default': 12, 'weak' : 12, 'strong' : 11}),
+            ]
+
+        DEBUG_MODE = False # If True, don't fail, but print results of tests for calibration
+
+        mapping = ['weak','default','strong']
+
+        for mol1_smiles, mol2_smiles, expected_results in tests:
+            for map_strength, expected_n_mapped_atoms in expected_results.items():
+                # Create OpenFF Molecule objects
+                from openff.toolkit.topology import Molecule
+                mol1 = Molecule.from_smiles(mol1_smiles)
+                mol2 = Molecule.from_smiles(mol2_smiles)
+
+                # Initialize the atom mapper with the requested mapping strength
+                atom_mapper = AtomMapper(map_strength=map_strength, allow_ring_breaking=False)
+
+                # Create the atom mapping
+                atom_mapping = atom_mapper.get_best_mapping(mol1, mol2)
+
+                if DEBUG_MODE:
+                    _logger.info(f'*** {mol1_smiles} -> {mol2_smiles} using map strength {map_strength} : {atom_mapping.n_mapped_atoms} atoms mapped : {atom_mapping.old_to_new_atom_map}')
+                    atom_mapping.render_image(f'test_mapping_strength_levels:{mol1_smiles}:{mol2_smiles}:{map_strength}.png')
+                else:
+                    assert atom_mapping.n_mapped_atoms==expected_n_mapped_atoms, "Number of mapped atoms does not match hand-calibrated expectation"
