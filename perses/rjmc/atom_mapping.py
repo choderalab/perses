@@ -98,6 +98,15 @@ class AtomMapping(object):
         self.old_mol = Molecule(old_mol, allow_undefined_stereo=True)
         self.new_mol = Molecule(new_mol, allow_undefined_stereo=True)
 
+        # Fix atom name retrieval from OEMol objects
+        # TODO: When https://github.com/openforcefield/openff-toolkit/issues/1026 is fixed, remove this
+        if hasattr(old_mol, 'GetAtoms'):
+            for index, atom in enumerate(old_mol.GetAtoms()):
+                self.old_mol.atoms[index].name = atom.GetName()
+        if hasattr(new_mol, 'GetAtoms'):
+            for index, atom in enumerate(new_mol.GetAtoms()):
+                self.new_mol.atoms[index].name = atom.GetName()
+
         # Store atom maps
         if (old_to_new_atom_map is not None) and (new_to_old_atom_map is not None):
             raise ValueError('Only one of old_to_new_atom_map or new_to_old_atom_map can be specified')
@@ -124,7 +133,7 @@ class AtomMapping(object):
         """
         # Ensure mapping is not empty
         if len(self.new_to_old_atom_map) == 0:
-            raise InvalidMappingException(f'Atom mapping contains no mappped atoms')
+            raise InvalidMappingException(f'Atom mapping contains no mapped atoms')
 
         # Ensure all keys and values are integers
         if not (     all(isinstance(x, int) for x in self.new_to_old_atom_map.keys())
@@ -661,7 +670,8 @@ class AtomMapper(object):
             # strong requires same hybridization AND the same atom type
             # bonds are same as default, require them to match in bond order
             'strong' : {
-                'atom' : oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms,
+                'atom' : oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_AtomicNumber | oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember,
+                #'atom' : oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms, # This seems broken for biopolymers due to OEExprOpts_HvyDegree, which does not seem to be working properly
                 'bond' : oechem.OEExprOpts_DefaultBonds
             }
         }
@@ -732,19 +742,29 @@ class AtomMapper(object):
                 A copy of the OEMol, preserving data if provided
             """
             from openff.toolkit.topology import Molecule
-            offmol = Molecule(mol)
-            try:
-                # Retain OEMol if provided, since it may have int atom and bond types
-                # TODO: Revisit whether we actually need this
-                from openeye import oechem
-                oemol = oechem.OEMol(mol)
-            except (TypeError, NotImplementedError) as e:
+            from openeye import oechem
+            if isinstance(mol, Molecule):
+                # OpenFF Molecule
+                offmol = Molecule(mol)
                 oemol = offmol.to_openeye()
+                # Fix atom name retrieval from OEMol objects
+                # TODO: When https://github.com/openforcefield/openff-toolkit/issues/1026 is fixed, remove this
+                for atom, oeatom in zip(offmol.atoms, oemol.GetAtoms()):
+                    atom.name = oeatom.GetName()
+            elif hasattr(mol, 'GetAtoms'):
+                # OpenEye OEMol
+                offmol = Molecule(mol)
+                oemol = oechem.OEMol(mol)
+            else:
+                raise ValueError(f'Not sure how to copy {mol}; should be openff.toolkit.topology.Molecule or openeye.oechem.OEMol')
 
             return offmol, oemol
 
         old_offmol, old_oemol = copy_molecule(old_mol)
         new_offmol, new_oemol = copy_molecule(new_mol)
+
+        if (old_offmol.n_atoms==0) or (new_offmol.n_atoms==0):
+            raise ValueError(f'old_mol ({old_offmol.n_atoms} atoms) and new_mol ({new_offmol.n_atoms} atoms) must both have more than zero atoms')
 
         # Annotate OEMol representations with ring IDs
         # TODO: What is all this doing
@@ -759,21 +779,27 @@ class AtomMapper(object):
         self._assign_ring_ids(old_oescaffold, assign_atoms=True, assign_bonds=False)
         self._assign_ring_ids(new_oescaffold, assign_atoms=True, assign_bonds=False)
 
-        # Generate scaffold maps
-        # TODO: Why are these hard-coded?
-        from openeye import oechem
-        scaffold_maps = AtomMapper._get_all_maps(old_oescaffold, new_oescaffold,
-                                                 atom_expr=oechem.OEExprOpts_RingMember | oechem.OEExprOpts_IntType,
-                                                 bond_expr=oechem.OEExprOpts_RingMember,
-                                                 external_inttypes=True,
-                                                 unique=False,
-                                                 matching_criterion=self.matching_criterion)
+        # Check arguments
+        if (old_oescaffold.NumAtoms()==0) or (new_oescaffold.NumAtoms()==0):
+            # We can't do anything with empty scaffolds
+            _logger.info(f'One or more scaffolds had no atoms')
+            scaffold_maps = list()
+        else:
+            # Generate scaffold maps
+            # TODO: Why are these hard-coded?
+            from openeye import oechem
+            scaffold_maps = AtomMapper._get_all_maps(old_oescaffold, new_oescaffold,
+                                                     atom_expr=oechem.OEExprOpts_RingMember | oechem.OEExprOpts_IntType,
+                                                     bond_expr=oechem.OEExprOpts_RingMember,
+                                                     external_inttypes=True,
+                                                     unique=False,
+                                                     matching_criterion=self.matching_criterion)
 
-        _logger.info(f'Scaffold has symmetry of {len(scaffold_maps)}')
+            _logger.info(f'Scaffold mapping generated {len(scaffold_maps)} maps')
 
         if len(scaffold_maps) == 0:
             # There are no scaffold maps, so attempt to generate maps between molecules using the factory parameters
-            _logger.warning('Two molecules are not similar to have a common scaffold')
+            _logger.warning('Molecules do not appear to share a common scaffold.')
             _logger.warning('Proceeding with direct mapping of molecules, but please check atom mapping and the geometry of the ligands.')
 
             # if no commonality with the scaffold, don't use it.
@@ -1022,10 +1048,9 @@ class AtomMapper(object):
         >>> scores = [ atom_mapper.score_mapping(atom_mapping) for atom_mapping in atom_mappings ]
 
         """
-        # Handle the special cas of scoring by name
+        # Handle the special case of scoring matches by atom name concordance
         if self.matching_criterion == 'name':
             score = sum([atom_mapping.old_mol.atoms[old_atom].name == atom_mapping.new_mol.atoms[new_atom].name for old_atom, new_atom in atom_mapping.old_to_new_atom_map.items() ])
-
             return score
 
         # Score by positions
@@ -1220,6 +1245,10 @@ class AtomMapper(object):
         .. todo :: Can we refactor to get rid of this function?
 
         """
+        # Check arguments
+        if (old_oemol.NumAtoms()==0) or (new_oemol.NumAtoms()==0):
+            raise ValueError(f'old_oemol ({old_oemol.NumAtoms()} atoms) and new_oemol ({new_oemol.NumAtoms()} atoms) must both have a nonzero number of atoms')
+
         import openeye.oechem as oechem
 
         if atom_expr is None:
@@ -1241,7 +1270,12 @@ class AtomMapper(object):
 
         atom_mappings = set()
         for match in matches:
-            atom_mapping = AtomMapper._create_atom_mapping(old_oemol, new_oemol, match, matching_criterion)
+            try:
+                atom_mapping = AtomMapper._create_atom_mapping(old_oemol, new_oemol, match, matching_criterion)
+            except InvalidMappingException as e:
+                # Mapping is not valid; skip it
+                pass
+
             atom_mappings.add(atom_mapping)
 
         # Render to a list to return mappings
@@ -1315,12 +1349,19 @@ class AtomMapper(object):
             old_index, new_index = pattern_oeatom.GetIdx(), target_oeatom.GetIdx()
             old_oeatom, new_oeatom = pattern_oeatom, target_oeatom
 
-            # Check if a hydrogen was mapped to a non-hydroden (basically the xor of is_h_a and is_h_b)
+            # Check if a hydrogen was mapped to a non-hydrogen (basically the xor of is_h_a and is_h_b)
             if (old_oeatom.GetAtomicNum() == 1) != (new_oeatom.GetAtomicNum() == 1):
                 continue
 
             # Check if X-H to Y-H changes where element(X) != element(Y) or aromatic(X) != aromatic(Y)
-            if (old_oeatom.GetAtomicNum() == 1) and (new_oeatom.GetAtomicNum() == 1):
+            if (
+                (old_oeatom.GetAtomicNum() == 1) and (new_oeatom.GetAtomicNum() == 1)
+                # Handle the weird special case where the molecule is just one hydrogen atom
+                # (which is an abuse that occurs in the current biopolymer logic)
+                # TODO: Fix this when we overhaul biopolymer logic
+                and (old_oeatom.GetDegree() > 0) and (new_oeatom.GetDegree() == 1)
+               ):
+
                 X = [ bond.GetNbr(old_oeatom) for bond in old_oeatom.GetBonds() ][0]
                 Y = [ bond.GetNbr(new_oeatom) for bond in new_oeatom.GetBonds() ][0]
                 if ( X.GetAtomicNum() != Y.GetAtomicNum() ) or ( X.IsAromatic() != Y.IsAromatic() ):

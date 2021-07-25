@@ -655,19 +655,33 @@ def RepartitionedHybridTopologyFactory_energies(topology, chain, system, positio
     """
     Test whether the difference in the nonalchemical zero and alchemical zero states is the forward valence energy.  Also test for the one states.
     Note that two RepartitionedHybridTopologyFactorys need to be generated (one for each endstate) because the energies need to be validated separately for each endstate.
+    Tests all mutants.
+    """
+    for res in topology.residues():
+        if res.id == '2':
+            wt_res = res.name
+    aminos_updated = [amino for amino in aminos if amino not in [wt_res, 'PRO', 'HIS', 'TRP', 'PHE', 'TYR']]
+    for mutant in aminos_updated:
+        RepartitionedHybridTopologyFactory_energy_mutant(topology, chain, system, positions, system_generator, mutant)
+
+
+def RepartitionedHybridTopologyFactory_energy_mutant(topology, chain, system, positions, system_generator, mutant):
+    """
+    Test whether the difference in the nonalchemical zero and alchemical zero states is the forward valence energy.  Also test for the one states.
+    Note that two RepartitionedHybridTopologyFactorys need to be generated (one for each endstate) because the energies need to be validated separately for each endstate.
+    Tests a single mutant.
     """
 
     from perses.rjmc.topology_proposal import PointMutationEngine
     from perses.annihilation.relative import RepartitionedHybridTopologyFactory
     from perses.tests.utils import validate_endstate_energies
 
-    ENERGY_THRESHOLD = 1e-6
+    ENERGY_THRESHOLD = 1e-4
 
     for res in topology.residues():
         if res.id == '2':
             wt_res = res.name
-    aminos_updated = [amino for amino in aminos if amino not in [wt_res, 'PRO', 'HIS', 'TRP', 'PHE', 'TYR']]
-    mutant = random.choice(aminos_updated)
+
     print(f'Making mutation {wt_res}->{mutant}')
 
     # Create point mutation engine to mutate residue at id 2 to random amino acid
@@ -801,7 +815,7 @@ def flattenedHybridTopologyFactory_energies(topology, chain, system, positions, 
     from perses.annihilation.relative import RepartitionedHybridTopologyFactory
     from perses.tests.utils import validate_endstate_energies
 
-    ENERGY_THRESHOLD = 1e-6
+    ENERGY_THRESHOLD = 1e-6 #kJ/mol
 
     # Create point mutation engine to mutate residue at id 2 to a random amino acid
     aminos_updated = [amino for amino in aminos if amino not in ['ALA', 'PRO', 'HIS', 'TRP', 'PHE', 'TYR']]

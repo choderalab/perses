@@ -1157,7 +1157,11 @@ class PolymerProposalEngine(ProposalEngine):
         new_oemol_res_copy : openeye.oechem.oemol object
             copy of modified new oemol
 
-        .. todo :: Move this into atom_mapping.py
+        .. todo ::
+
+            * Move this into atom_mapping.py
+            * Overhaul biopolymer mapping to use openff.topology.Topology features
+            * Generalize to support arbitrary biopolymer residues and protonation/tautomeric states
 
         """
         from pkg_resources import resource_filename
@@ -1255,6 +1259,7 @@ class PolymerProposalEngine(ProposalEngine):
         local_atom_map = {}
 
         #now remove backbones in both molecules and map them separately
+        # TODO: Why don't we just include backbone atoms and just enforce their mapping via external indices?
         backbone_atoms = ['C', 'CA', 'N', 'O', 'H', 'HA', "H'"]
         # TODO dom make this a seperate function
         old_atoms_to_delete, new_atoms_to_delete = [], []
@@ -1278,13 +1283,11 @@ class PolymerProposalEngine(ProposalEngine):
                 except Exception as e:
                     raise Exception(f"failed to map the backbone separately: {e}")
 
-
         _logger.debug(f"\t\t\told_oemol_res names: {[(atom.GetIdx(), atom.GetName()) for atom in current_oemol.GetAtoms()]}")
         _logger.debug(f"\t\t\tnew_oemol_res names: {[(atom.GetIdx(), atom.GetName()) for atom in proposed_oemol.GetAtoms()]}")
 
         old_sidechain_oemol_indices_to_name = {atom.GetIdx(): atom.GetName() for atom in current_oemol.GetAtoms()}
         new_sidechain_oemol_indices_to_name = {atom.GetIdx(): atom.GetName() for atom in proposed_oemol.GetAtoms()}
-
 
         #now we can get the mol atom map of the sidechain
         #NOTE: since the sidechain oemols are NOT zero-indexed anymore, we need to match by name (since they are unique identifiers)
@@ -1294,12 +1297,7 @@ class PolymerProposalEngine(ProposalEngine):
         # TODO: Generate atom mapping using only geometries if requested
         from .atom_mapping import AtomMapper, InvalidMappingException
         atom_mapper = AtomMapper(map_strength='strong', matching_criterion='name', allow_ring_breaking=break_bool)
-        try:
-            atom_mapping = atom_mapper.get_best_mapping(current_oemol, proposed_oemol)
-        except InvalidMappingException as e:
-            # DEBUG
-            atom_mapping.render_image('debug.png')
-            raise e
+        atom_mapping = atom_mapper.get_best_mapping(current_oemol, proposed_oemol)
 
         #check the atom map thus far:
         _logger.debug(f"\t\t\tlocal atom map nonstereo sidechain: {atom_mapping}")
@@ -1315,13 +1313,17 @@ class PolymerProposalEngine(ProposalEngine):
 
         _logger.debug(f"\t\t\tlocal atom map stereo sidechain: {atom_mapping}")
 
+        # DEBUG
+        _logger.info(atom_mapping.old_mol.atoms)
+        _logger.info(atom_mapping.new_mol.atoms)
+
         #fix the sidechain indices w.r.t. full oemol
         # TODO: Glue AtomMapping in more broadly
         sidechain_fixed_map = {}
         mapped_names = []
         for new_sidechain_idx, old_sidechain_idx in atom_mapping.new_to_old_atom_map.items():
             try:
-                new_name, old_name = new_sidechain_oemol_indices_to_name[new_sidechain_idx], old_sidechain_oemol_indices_to_name[old_sidechain_idx]
+                new_name, old_name = atom_mapping.new_mol.atoms[new_sidechain_idx].name, atom_mapping.old_mol.atoms[old_sidechain_idx].name
                 mapped_names.append((new_name, old_name))
                 new_full_oemol_idx, old_full_oemol_idx = new_oemol_name_idx[new_name], old_oemol_name_idx[old_name]
                 sidechain_fixed_map[new_full_oemol_idx] = old_full_oemol_idx
@@ -1352,7 +1354,6 @@ class PolymerProposalEngine(ProposalEngine):
         topology_index_map = {}
         for new_oemol_idx, old_oemol_idx in local_atom_map.items():
             topology_index_map[new_oemol_to_res_map[new_oemol_idx]] = old_oemol_to_res_map[old_oemol_idx]
-
 
         _logger.debug(f"\t\t\ttopology_atom_map: {topology_index_map}")
 
