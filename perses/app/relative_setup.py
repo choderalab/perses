@@ -1011,7 +1011,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
                  eq_splitting_string="V R O R V",
                  neq_splitting_string = "V R O R V",
                  measure_shadow_work=False,
-                 timestep=1.0*unit.femtoseconds,
+                 timestep=4.0*unit.femtoseconds,
                  ncmc_save_interval = None,
                  write_ncmc_configuration = False,
                  relative_transform = True):
