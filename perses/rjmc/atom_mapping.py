@@ -180,9 +180,9 @@ class AtomMapping(object):
         """The number of mapped atoms"""
         return len(self._new_to_old_atom_map)
 
-    def render_image(self, filename, width=1200, height=600):
+    def render_image(self, filename, format=None, width=1200, height=600):
         """
-        Render the atom mapping to an image or PDF.
+        Render the atom mapping image.
 
         .. note :: This currently requires the OpenEye toolkit.
 
@@ -195,14 +195,31 @@ class AtomMapping(object):
         ----------
         filename : str
             The image filename to write to.
-            Format automatically detected from file suffix.
+            Format automatically detected from file suffix if 'format' is not specified.
+            If None, will return IPython.disply.Image
+        format : str, optional, default=None
+            If specified, format to render in (e.g. 'png', 'pdf')
         width : int, optional, default=1200
             Width in pixels
         height : int, optional, default=600
             Height in pixels
 
+        Returns
+        -------
+        image : IPython.display.Image
+            If filename is None, the image will be returned.
+
         """
         from openeye import oechem, oedepict
+
+        # Handle format
+        if format is None:
+            if filename is not None:
+                format = oechem.OEGetFileExtension(filename)
+            else:
+                format = 'png'
+        if not oedepict.OEIsRegisteredImageFile(format):
+            raise ValueError(f'Unknown image type {format}')
 
         molecule1 = self.old_mol.to_openeye()
         molecule2 = self.new_mol.to_openeye()
@@ -259,12 +276,6 @@ class AtomMapping(object):
         # Set up image options
         itf = oechem.OEInterface()
         oedepict.OEConfigureImageOptions(itf)
-        ext = oechem.OEGetFileExtension(filename)
-        if not oedepict.OEIsRegisteredImageFile(ext):
-            raise ValueError(f'Unknown image type for filename {filename}')
-        ofs = oechem.oeofstream()
-        if not ofs.open(filename):
-            raise IOError(f'Cannot open output file {filename}')
 
         # Setup depiction options
         oedepict.OEConfigure2DMolDisplayOptions(itf, oedepict.OE2DMolDisplaySetup_AromaticStyle)
@@ -276,16 +287,32 @@ class AtomMapping(object):
 
         # Depict reaction with component highlights
         oechem.OEGenerate2DCoordinates(rmol)
-        rdisp = oedepict.OE2DMolDisplay(rmol, opts)
+        display = oedepict.OE2DMolDisplay(rmol, opts)
 
         if core1.NumAtoms() != 0:
-            oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEPink),oedepict.OEHighlightStyle_Stick, core1)
+            oedepict.OEAddHighlighting(display, oechem.OEColor(oechem.OEPink),oedepict.OEHighlightStyle_Stick, core1)
         if core2.NumAtoms() != 0:
-            oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEPurple),oedepict.OEHighlightStyle_Stick, core2)
+            oedepict.OEAddHighlighting(display, oechem.OEColor(oechem.OEPurple),oedepict.OEHighlightStyle_Stick, core2)
         if core_change.NumAtoms() != 0:
-            oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEGreen),oedepict.OEHighlightStyle_Stick, core_change)
-        oedepict.OERenderMolecule(ofs, ext, rdisp)
-        ofs.close()
+            oedepict.OEAddHighlighting(display, oechem.OEColor(oechem.OEGreen),oedepict.OEHighlightStyle_Stick, core_change)
+
+        if filename is not None:
+            ofs = oechem.oeofstream()
+            if not ofs.open(filename):
+                raise Exception('Cannot open output file %s' % filename)
+            oedepict.OERenderMolecule(ofs, format, display)
+            ofs.close()
+        else:
+            from IPython.display import Image
+            oeimage = oedepict.OEImage(width, height)
+            oedepict.OERenderMolecule(oeimage, display)
+            string = oedepict.OEWriteImageToString(format, oeimage)
+            return Image(string)
+
+    def _ipython_display_(self):
+        from IPython.display import display
+        print(str(self))
+        display(self.render_image(None, format='png'))
 
     def creates_or_breaks_rings(self):
         """Determine whether the mapping causes rings to be created or broken in transformation.
@@ -379,7 +406,7 @@ class AtomMapping(object):
 
         # Update mapping to eliminate any atoms in partially mapped cycles
         if len(atoms_to_demap['old'])>0 or len(atoms_to_demap['new'])>0:
-            _logger.info(f"AtomMapping.unmap_partially_mapped_cycles(): Demapping atoms that were in partially mapped cycles: {atoms_to_demap}")
+            _logger.debug(f"AtomMapping.unmap_partially_mapped_cycles(): Demapping atoms that were in partially mapped cycles: {atoms_to_demap}")
         self.old_to_new_atom_map = { old_atom : new_atom for old_atom, new_atom in self.old_to_new_atom_map.items() if (old_atom not in atoms_to_demap['old']) and (new_atom not in atoms_to_demap['new']) }
 
         # Construct old_mol graph pruning any edges that do not share bonds
@@ -390,19 +417,19 @@ class AtomMapping(object):
             if not set(edge).issubset(self.old_to_new_atom_map.keys()):
                 # Remove the edge because bond is not between mapped atoms
                 old_mol_graph.remove_edge(*edge)
-                _logger.info(f'Demapping old_mol edge {edge} because atoms are not mapped')
+                _logger.debug(f'Demapping old_mol edge {edge} because atoms are not mapped')
             else:
                 # Both atoms are mapped
                 # Ensure atoms are also bonded in new_mol
                 if not new_mol_graph.has_edge(self.old_to_new_atom_map[edge[0]], self.old_to_new_atom_map[edge[1]]):
                     old_mol_graph.remove_edge(*edge)
-                    _logger.info(f'Demapping old_mol edge {edge} because atoms are not bonded in new_mol')
+                    _logger.debug(f'Demapping old_mol edge {edge} because atoms are not bonded in new_mol')
 
         # Find the largest connected component of the graph
         connected_components = [component for component in nx.connected_components(old_mol_graph)]
         connected_components.sort(reverse=True, key=lambda subgraph : len(subgraph))
         largest_connected_component = connected_components[0]
-        _logger.info(f"AtomMapping.unmap_partially_mapped_cycles(): Connected component sizes: {[len(component) for component in connected_components]}")
+        _logger.debug(f"AtomMapping.unmap_partially_mapped_cycles(): Connected component sizes: {[len(component) for component in connected_components]}")
 
         # Check to make sure we haven't screwed something up
         if len(largest_connected_component) == 0:
@@ -416,7 +443,7 @@ class AtomMapping(object):
         self.old_to_new_atom_map = { old_atom : new_atom for old_atom, new_atom in self.old_to_new_atom_map.items() if (old_atom in largest_connected_component) }
 
 
-        _logger.info(f"AtomMapping.unmap_partially_mapped_cycles(): Number of mapped atoms changed from {len(initial_mapping.old_to_new_atom_map)} -> {len(self.old_to_new_atom_map)}")
+        _logger.debug(f"AtomMapping.unmap_partially_mapped_cycles(): Number of mapped atoms changed from {len(initial_mapping.old_to_new_atom_map)} -> {len(self.old_to_new_atom_map)}")
 
         # Check to make sure we haven't screwed something up
         if self.creates_or_breaks_rings() == True:
@@ -457,7 +484,7 @@ class AtomMapping(object):
         # _logger.warning(f"\t\t\told oemols: {pattern_atoms}")
         # _logger.warning(f"\t\t\tnew oemols: {target_atoms}")
         copied_new_to_old_atom_map = copy.deepcopy(self.new_to_old_atom_map)
-        _logger.info(self.new_to_old_atom_map)
+        _logger.debug(self.new_to_old_atom_map)
 
         for new_index, old_index in self.new_to_old_atom_map.items():
 
@@ -660,8 +687,10 @@ class AtomMapper(object):
             # atoms need to match in aromaticity. Same with bonds.
             # maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
             'weak' : {
-                'atom' : oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic, #| oechem.OEExprOpts_IntType
-                'bond' : oechem.OEExprOpts_DefaultBonds
+                #'atom' : oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic, #| oechem.OEExprOpts_IntType
+                #'bond' : oechem.OEExprOpts_DefaultBonds
+                'atom' : oechem.OEExprOpts_RingMember,
+                'bond' : oechem.OEExprOpts_RingMember
             },
             # default atom expression, requires same aromaticitiy and hybridization
             # bonds need to match in bond order
@@ -786,7 +815,7 @@ class AtomMapper(object):
         # Check arguments
         if (old_oescaffold.NumAtoms()==0) or (new_oescaffold.NumAtoms()==0):
             # We can't do anything with empty scaffolds
-            _logger.info(f'One or more scaffolds had no atoms')
+            _logger.debug(f'One or more scaffolds had no atoms')
             scaffold_maps = list()
         else:
             # Generate scaffold maps
@@ -799,7 +828,7 @@ class AtomMapper(object):
                                                      unique=False,
                                                      matching_criterion=self.matching_criterion)
 
-            _logger.info(f'Scaffold mapping generated {len(scaffold_maps)} maps')
+            _logger.debug(f'Scaffold mapping generated {len(scaffold_maps)} maps')
 
         if len(scaffold_maps) == 0:
             # There are no scaffold maps, so attempt to generate maps between molecules using the factory parameters
@@ -814,9 +843,9 @@ class AtomMapper(object):
                                                         atom_expr=self.atom_expr,
                                                         bond_expr=self.bond_expr,
                                                         matching_criterion=self.matching_criterion)
-            _logger.info(f'{len(generated_atom_mappings)} mappings were generated by AtomMapper._get_all_maps()')
+            _logger.debug(f'{len(generated_atom_mappings)} mappings were generated by AtomMapper._get_all_maps()')
             for x in generated_atom_mappings:
-                _logger.info(x)
+                _logger.debug(x)
 
             atom_mappings.update(generated_atom_mappings)
 
@@ -829,10 +858,10 @@ class AtomMapper(object):
             # Keep only those scaffold match(es) with maximum score
             # TODO: Will this cause difficulties when trying to stochastically propose maps in both directions,
             # or when we want to retain all maps?
-            _logger.info(f'There are {len(scaffold_maps)} scaffold mappings before filtering by score')
+            _logger.debug(f'There are {len(scaffold_maps)} scaffold mappings before filtering by score')
             scores = [ self.score_mapping(atom_mapping) for atom_mapping in scaffold_maps ]
             scaffold_maps = [ atom_mapping for index, atom_mapping in enumerate(scaffold_maps) if scores[index]==max(scores) ]
-            _logger.info(f'There are {len(scaffold_maps)} after filtering to remove lower-scoring scaffold maps')
+            _logger.debug(f'There are {len(scaffold_maps)} after filtering to remove lower-scoring scaffold maps')
 
             # Determine mappings from scaffold to original molecule
             # TODO: Rework this logic to use openff Molecule
@@ -856,9 +885,9 @@ class AtomMapper(object):
                                                 atom_expr=oechem.OEExprOpts_AtomicNumber,
                                                 bond_expr=0,
                                                 matching_criterion=self.matching_criterion)
-                _logger.info(f'{len(scaffold_to_molecule_maps)} scaffold maps found')
+                _logger.debug(f'{len(scaffold_to_molecule_maps)} scaffold maps found')
                 scaffold_to_molecule_map = scaffold_to_molecule_maps[0]
-                _logger.info(f'Scaffold to molecule map: {scaffold_to_molecule_map}')
+                _logger.debug(f'Scaffold to molecule map: {scaffold_to_molecule_map}')
                 assert len(scaffold_to_molecule_map.old_to_new_atom_map) == oescaffold.NumAtoms(), f'Scaffold should be fully contained within the molecule it came from: map: {scaffold_to_molecule_map}\n{oescaffold.NumAtoms()} atoms in scaffold'
                 return scaffold_to_molecule_map
 
@@ -897,9 +926,19 @@ class AtomMapper(object):
 
         if not self.allow_ring_breaking:
             # Filter the matches to remove any that allow ring breaking
-            _logger.info(f'Fixing mappings to not create or break rings')
+            _logger.debug(f'Fixing mappings to not create or break rings')
+            valid_atom_mappings = set()
             for atom_mapping in atom_mappings:
-                atom_mapping.unmap_partially_mapped_cycles()
+                try:
+                    atom_mapping.render_image('debug.png')
+                    atom_mapping.unmap_partially_mapped_cycles()
+                    valid_atom_mappings.add(atom_mapping)
+                except InvalidMappingException as e:
+                    # Atom mapping is no longer valid
+                    stop
+                    pass
+
+            atom_mappings = valid_atom_mappings
 
         # TODO: Should we attempt to preserve chirality here for all atom mappings?
         # Or is this just for biopolymer residues?
@@ -948,7 +987,7 @@ class AtomMapper(object):
         best_map_index = np.argmax(scores)
 
         elapsed_time = time.time() - initial_time
-        _logger.info(f'get_best_mapping took {elapsed_time:.3f} s')
+        _logger.debug(f'get_best_mapping took {elapsed_time:.3f} s')
 
         return atom_mappings[best_map_index]
 
@@ -1276,11 +1315,10 @@ class AtomMapper(object):
         for match in matches:
             try:
                 atom_mapping = AtomMapper._create_atom_mapping(old_oemol, new_oemol, match, matching_criterion)
+                atom_mappings.add(atom_mapping)
             except InvalidMappingException as e:
                 # Mapping is not valid; skip it
                 pass
-
-            atom_mappings.add(atom_mapping)
 
         # Render to a list to return mappings
         return list(atom_mappings)
