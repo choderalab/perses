@@ -134,7 +134,7 @@ def relax_structure(temperature,
                     nequil=1000,
                     n_steps_per_iteration=250,
                     platform_name='OpenCL',
-                    timestep=2.*unit.femtosecond,
+                    timestep=4.*unit.femtosecond,
                     collision_rate=90./unit.picosecond,
                     **kwargs):
     """
@@ -151,7 +151,7 @@ def relax_structure(temperature,
             numper of steps per nequil
         platform name : str default='OpenCL'
             platform to run openmm on. OpenCL is best as this is what is used on FAH
-        timestep : simtk.unit.Quantity, default = 2*unit.femtosecond
+        timestep : simtk.unit.Quantity, default = 4*unit.femtosecond
             timestep for equilibration NOT for production
         collision_rate : simtk.unit.Quantity, default=90./unit.picosecond
 
@@ -197,7 +197,7 @@ def run_neq_fah_setup(ligand_file,
                       trajectory_directory,
                       complex_box_dimensions=(9.8, 9.8, 9.8),
                       solvent_box_dimensions=(3.5, 3.5, 3.5),
-                      timestep=4.0,
+                      timestep=4.0, # femtoseconds (implicit)
                       eq_splitting='V R O R V',
                       neq_splitting='V R H O R V',
                       measure_shadow_work=False,
@@ -234,7 +234,7 @@ def run_neq_fah_setup(ligand_file,
                       setup='small_molecule',
                       protein_kwargs=None,
                       ionic_strength=0.15*unit.molar,
-                      remove_constraints='not water',
+                      remove_constraints=False,
                       rmsd_restraint=True,
                       **kwargs):
     """
@@ -486,7 +486,7 @@ def run(yaml_filename=None):
         if not os.path.exists(f"{setup_options['apo_projid']}"):
             #os.makedirs(f"{setup_options['apo_projid']}/RUNS/")
             dst = f"{setup_options['apo_projid']}/RUNS/{setup_options['trajectory_directory']}"
-            os.makedirs(dst)        
+            os.makedirs(dst)
             copyfile(yaml_filename, dst)
     if 'vacuum_projid' in setup_options:
         if not os.path.exists(f"{setup_options['vacuum_projid']}"):
