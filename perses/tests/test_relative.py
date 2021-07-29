@@ -16,6 +16,7 @@ from perses.tests import utils
 from openmmtools.states import SamplerState
 import openmmtools.mcmc as mcmc
 import openmmtools.cache as cache
+from openmmtools.integrators import LangevinIntegrator
 from unittest import skipIf
 
 import pymbar.timeseries as timeseries
