@@ -66,6 +66,8 @@ def test_resume_small_molecule(tmp_path):
     from perses.app.relative_setup import RelativeFEPSetup
     from perses.samplers.multistate import HybridRepexSampler
 
+    os.chdir(tmp_path)
+
     smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
     fe_setup = RelativeFEPSetup(
         ligand_input=smiles_filename,
@@ -210,14 +212,12 @@ def test_resume_protien_mutation_with_checkpoint(tmp_path):
 
 def test_resume_protein_mutation_no_checkpoint(tmp_path):
     import logging
-    import pickle
 
     import simtk.openmm.app as app
     import simtk.unit as unit
     from openmmtools import mcmc
     from openmmtools.multistate import MultiStateReporter
     from pkg_resources import resource_filename
-    from simtk import unit
 
     from perses.annihilation.lambda_protocol import LambdaProtocol
     from perses.app.relative_point_mutation_setup import PointMutationExecutor
