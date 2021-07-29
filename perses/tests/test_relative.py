@@ -698,10 +698,25 @@ def RepartitionedHybridTopologyFactory_energies(topology, chain, system, positio
                                                use_14_nonbondeds=True)
 
     # Create geometry proposal
-    new_positions, logp_proposal = geometry_engine.propose(topology_proposal, positions, beta,
+    for i in range(5):
+        new_positions, logp_proposal = geometry_engine.propose(topology_proposal, positions, beta,
                                                                    validate_energy_bookkeeping=True)
-    logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, positions, beta,
+        logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, positions, beta,
                                                 validate_energy_bookkeeping=True)
+        # Check potential energy
+        platform = openmm.Platform.getPlatformByName('Reference')
+        integrator = LangevinIntegrator(temperature=temperature)
+        context = openmm.Context(topology_proposal.new_system, integrator, platform)
+        context.setPeriodicBoxVectors(*topology_proposal.new_system.getDefaultPeriodicBoxVectors())
+        context.setPositions(new_positions)
+        context.setVelocitiesToTemperature(temperature)
+        potential_energy = context.getState(getEnergy=True).getPotentialEnergy()
+
+        if potential_energy < 1e8 * unit.kilojoule_per_mole:
+            break
+        else:
+            if i == 4:
+                raise Exception("Was not able to generate a decent proposal after 5 iterations")
 
     if not topology_proposal.unique_new_atoms:
         assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
