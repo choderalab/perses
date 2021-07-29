@@ -199,9 +199,49 @@ class TestAtomMapper(unittest.TestCase):
             atom_mapping = atom_mapper.get_best_mapping(molecules[0], molecules[2])
             #assert len(atom_mapping.new_to_old_atom_map) == 35,  f'Expected meta groups methyl C to NOT map onto ethyl O as they are distal in cartesian space\n{atom_mapping}' # TODO
 
-            # Explicitly construct mapping from positional information alone
-            atom_mapping = atom_mapper.generate_atom_mapping_from_positions(molecules[0], molecules[2])
+    def test_generate_atom_mapping_from_positions(self):
+        """
+        Test the generation of atom mappings from positions on JACS set compounds
+        """
+        # Create and configure an AtomMapper
+        atom_mapper = AtomMapper()
+
+        for dataset_name in ['CDK2', 'p38', 'Tyk2', 'Thrombin', 'PTP1B', 'MCL1', 'Jnk1', 'Bace']:
+            molecules = self.molecules[dataset_name]
+            reference_molecule = molecules[0]
+            for index, target_molecule in enumerate(molecules):
+                # Explicitly construct mapping from positional information alone
+                atom_mapping = atom_mapper.generate_atom_mapping_from_positions(reference_molecule, target_molecule)
+
+    def test_atom_mappings_moonshot(self):
+        """
+        Test the generation of atom mappings on COVID Moonshot compounds
+        """
+        # Create and configure an AtomMapper
+        atom_mapper = AtomMapper()
+
+        # Load molecules with positions
+        dataset_path = 'data/covid-moonshot/sprint-10-2021-07-26-x10959-dimer-neutral.sdf.gz'
+        sdf_filename = resource_filename('perses', dataset_path)
+        molecules = Molecule.from_file(sdf_filename)
+
+        # Test geometry-derived mappings
+        nskip = 10 # skip interval
+        reference_molecule = molecules[0]
+        for index, molecule in enumerate(1, molecules, nskip):
+            # Ignore positional information when scoring mappings
+            atom_mapper.use_positions = False
+            atom_mapping = atom_mapper.get_best_mapping(molecules[0], molecules[2])
+            #assert len(atom_mapping.new_to_old_atom_map) == 36, f'Expected meta groups methyl C to map onto ethyl O\n{atom_mapping}' # TODO
+
+            # Use positional information to score mappings
+            atom_mapper.use_positions = True
+            atom_mapping = atom_mapper.get_best_mapping(molecules[0], molecules[2])
             #assert len(atom_mapping.new_to_old_atom_map) == 35,  f'Expected meta groups methyl C to NOT map onto ethyl O as they are distal in cartesian space\n{atom_mapping}' # TODO
+
+            # Explicitly construct mapping from positional information alone
+            atom_mapping = atom_mapper.generate_atom_mapping_from_positions(reference_molecule, molecule)
+
 
     def test_simple_heterocycle_mapping(self):
         """
@@ -215,7 +255,6 @@ class TestAtomMapper(unittest.TestCase):
 
         # Create and configure an AtomMapper
         atom_mapper = AtomMapper(allow_ring_breaking=False)
-
 
         for old_iupac, new_iupac in iupac_pairs:
             from openff.toolkit.topology import Molecule
