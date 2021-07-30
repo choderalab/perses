@@ -914,25 +914,20 @@ def _resume_run(setup_options):
             print(f"{phase} phase has a free energy of {free_energies[phase]}")
 
     elif setup_options['fe_type'] == 'repex':
-        _logger.info(f"Detecting repex as fe_type...")
-        _logger.info(f"Writing hybrid factory {trajectory_prefix}hybrid_factory.npy to {trajectory_directory}...")
-        np.savez(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
-                setup_dict['hybrid_topology_factories'])
-
-        hss = setup_dict['hybrid_samplers']
-        _logger.info(f"Iterating through phases for repex...")
         for phase in setup_options['phases']:
             print(f'Running {phase} phase')
-            hss_run = hss[phase]
+            trajectory_directory = setup_options['trajectory_directory']
+            trajectory_prefix = setup_options['trajectory_prefix']
 
-            _logger.info(f"\t\tequilibrating...\n\n")
-            hss_run.equilibrate(n_equilibration_iterations)
-            _logger.info(f"\n\n")
-
+            reporter_file = str(trajectory_directory)+'/'+str(trajectory_prefix)+'-'+str(phase)+'.nc'
+            reporter = MultiStateReporter(reporter_file)
+            simulation = HybridRepexSampler.from_storage(reporter)
+            total_steps = setup_options['n_cycles']
+            run_so_far = simulation.iteration
+            left_to_do = total_steps - run_so_far
             _logger.info(f"\t\textending simulation...\n\n")
-            hss_run.extend(setup_options['n_cycles'])
+            simulation.extend(n_iterations=left_to_do)
             _logger.info(f"\n\n")
-
             _logger.info(f"\t\tFinished phase {phase}")
     else:
         raise("Can't resume")
