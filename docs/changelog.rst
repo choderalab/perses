@@ -19,3 +19,5 @@ Bugfixes
   Atom mapping is now handled via an ``AtomMapper`` factory that generates an ``AtomMapping`` class that localizes all relevant functionality.
 - (PR `#824 <https://github.com/choderalab/perses/pull/824>`_)
   The default timestep is now 4 fs (was 1 fs) and the minimum openMM version is now 7.5.0
+- (PR `#812 <https://github.com/choderalab/perses/pull/812>`_)
+  Automatically set package version by ``git tag`` using versioneer
