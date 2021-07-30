@@ -68,9 +68,9 @@ class RelativeFEPSetup(object):
                  nonbonded_method = 'PME',
                  complex_box_dimensions=None,
                  solvent_box_dimensions=None,
-                 map_strategy='geometry',
                  remove_constraints=False,
-                 use_given_geometries = False
+                 use_given_geometries = False,
+                 given_geometries_tolerance=0.2*unit.angstroms,
                  ):
         """
         Initialize a NonequilibriumFEPSetup object
@@ -122,27 +122,21 @@ class RelativeFEPSetup(object):
             box dimensions for the complex phase
         solvent_box_dimensions: Vec(3), optional, default=None
             box dimensions for the solvent phase
-        map_strategy : 'str' default='geometry'
-            determines which map is considered the best and returned
-            options are 'geometry', 'random', 'weighted-random', 'return-all'
-            can be one of ['geometry', 'matching_criterion', 'random', 'weighted-random', 'return-all']
-            - core will return the map with the largest number of atoms in the core. If there are multiple maps with the same highest score, then `matching_criterion` is used to tie break
-            - geometry uses the coordinates of the molB oemol to calculate the heavy atom distance between the proposed map and the actual geometry
-            this can be vital for getting the orientation of ortho- and meta- substituents correct in constrained (i.e. protein-like) environments.
-            this is ONLY useful if the positions of ligand B are known and/or correctly aligned.
-            - matching_criterion uses the `matching_criterion` flag to pick which of the maps best satisfies a 2D requirement.
-            - random will use a random map of those that are possible
-            - weighted-random uses a map chosen at random, proportional to how close it is in geometry to ligand B. The same as for 'geometry', this requires the coordinates of ligand B to be meaninful
-            - return-all BREAKS THE API as it returns a list of dicts, rather than list. This is intended for development code, not main pipeline.
         remove_constraints : bool, default=False
             if hydrogen constraints should be constrained in the simulation
             default is False, so no constraints removed, but 'all' or 'not water' can be used to remove constraints.
         use_given_geometries : bool, default False
             whether to extract the positions of ligand B and set the unique_new atom positions deterministically;
             if True, `complex` must be in `phases` and .sdf or .mol2 file of ligand must be provided
+        given_geometries_tolerance : simtk.unit.Quantity with units of length, default=0.2*angstrom
+            If use_given_geometries=True, use this tolerance for identifying mapped atoms
         """
         from openeye import oechem
 
+        # TODO: Refactor this class into initializer that configures options and factory methods that use them.
+        # QUESTION: Why do we add these as private object attributes?
+        #   If we want users to be able to modify them, they should not be private.
+        #   Also, these are all used immediately within __init__, so it doesn't make sense to store them this way.
         self._pressure = pressure
         self._temperature = temperature
         self._barostat_period = 50
@@ -159,8 +153,8 @@ class RelativeFEPSetup(object):
         self._spectator_filenames = spectator_filenames
         self._complex_box_dimensions = complex_box_dimensions
         self._solvent_box_dimensions = solvent_box_dimensions
-        self._map_strategy = map_strategy
         self._use_given_geometries = use_given_geometries
+        self._given_geometries_tolerance = given_geometries_tolerance
         self._ligand_input = ligand_input
 
         if self._use_given_geometries:
@@ -209,13 +203,8 @@ class RelativeFEPSetup(object):
         _logger.info(f"Handling files for ligands and indices...")
         if type(self._ligand_input) is not list: # the ligand has been provided as a single file
             if self._ligand_input[-3:] == 'smi': #
-                if self._map_strategy == 'geometry':
-                    _logger.warning('Geometry mapping strategy is not recommended with smiles input as the coordinates are meaningless')
-                    _logger.warning('setting map_strategy to core instead')
-                    self._map_strategy = 'core'
                 _logger.info(f"Detected .smi format.  Proceeding...")
-                _logger.info('No geometry information for smiles, so ensuring mapping does not try use it')
-                self._map_strategy = 'core'
+                _logger.info('  Note that SMILES does not contain geometry information for use in mapping')
                 self._ligand_smiles_old = load_smi(self._ligand_input,self._old_ligand_index)
                 self._ligand_smiles_new = load_smi(self._ligand_input,self._new_ligand_index)
                 _logger.info(f"\told smiles: {self._ligand_smiles_old}")
@@ -359,7 +348,14 @@ class RelativeFEPSetup(object):
         _logger.info("successfully created SystemGenerator to create ligand systems")
 
         _logger.info(f"executing SmallMoleculeSetProposalEngine...")
-        self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_oemol_old, self._ligand_oemol_new], self._system_generator, residue_name='MOL')
+        # Create proposal engine
+        proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_oemol_old, self._ligand_oemol_new], self._system_generator, residue_name='MOL')
+        proposal_engine.map_strength = self._map_strength
+        proposal_engine.atom_expr = self._atom_expr
+        proposal_engine.bond_expr = self._bond_expr
+        proposal_engine.use_given_geometries = self._use_given_geometries
+        proposal_engine.given_geometries_tolerance = self._given_geometries_tolerance
+        self._proposal_engine = proposal_engine
 
         _logger.info(f"instantiating FFAllAngleGeometryEngine...")
         if self._use_given_geometries:
@@ -383,9 +379,7 @@ class RelativeFEPSetup(object):
             _logger.info(f"creating TopologyProposal...")
             self._complex_topology_proposal = self._proposal_engine.propose(self._complex_system_old_solvated,
                                           self._complex_topology_old_solvated,
-                                          current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr,
-                                          map_strategy=self._map_strategy,
-                                          use_given_geometries=self._use_given_geometries)
+                                          current_mol_id=0, proposed_mol_id=1)
 
             self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
 
@@ -435,7 +429,7 @@ class RelativeFEPSetup(object):
                 _logger.info(f"creating TopologyProposal")
                 self._solvent_topology_proposal = self._proposal_engine.propose(self._ligand_system_old_solvated,
                                                                                 self._ligand_topology_old_solvated,
-                                          current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr,map_strategy=self._map_strategy)
+                                                                                current_mol_id=0, proposed_mol_id=1)
 
                 self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'solvent'
@@ -493,7 +487,7 @@ class RelativeFEPSetup(object):
                                                                                                          self._ligand_positions_old,phase='vacuum')
                 self._vacuum_topology_proposal = self._proposal_engine.propose(self._vacuum_system_old,
                                                                                self._vacuum_topology_old,
-                                          current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr)
+                                                                               current_mol_id=0, proposed_mol_id=1)
 
                 self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'vacuum'

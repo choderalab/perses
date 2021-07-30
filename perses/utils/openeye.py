@@ -537,6 +537,9 @@ def get_scaffold(molecule, adjustHcount=False):
     """
     from openeye import oechem
 
+    # Make a copy so as not to modify original molecule
+    molecule = oechem.OEMol(molecule)
+
     def TraverseForRing(visited, atom):
         visited.add(atom.GetIdx())
 
