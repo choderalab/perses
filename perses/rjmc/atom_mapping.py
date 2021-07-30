@@ -953,6 +953,16 @@ class AtomMapper(object):
     def get_best_mapping(self, old_mol, new_mol):
         """Retrieve the best mapping between old and new molecules.
 
+        .. note ::
+
+           This method may generate multiple distinct mappings with the same best score;
+           the choice of mapping is returned is ambiguous.
+
+         .. todo ::
+
+           We should figure out how to make the choice deterministic in the case
+           multiple mappings have the same score.
+
         Parameters
         ----------
         old_mol : openff.toolkit.topology.Molecule or openeye.oechem.OEMol

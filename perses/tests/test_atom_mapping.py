@@ -1,10 +1,7 @@
-from pkg_resources import resource_filename
 import os
 import pytest
 import unittest
 
-from perses.utils.smallmolecules import render_atom_mapping
-from openff.toolkit.topology import Molecule
 from perses.rjmc.atom_mapping import AtomMapper, AtomMapping, InvalidMappingException
 
 ################################################################################
@@ -136,6 +133,7 @@ class TestAtomMapper(unittest.TestCase):
         self.molecules = dict()
         for dataset_name in ['CDK2', 'p38', 'Tyk2', 'Thrombin', 'PTP1B', 'MCL1', 'Jnk1', 'Bace']:
             # Read molecules
+            from pkg_resources import resource_filename
             dataset_path = 'data/schrodinger-jacs-datasets/%s_ligands.sdf' % dataset_name
             sdf_filename = resource_filename('perses', dataset_path)
             self.molecules[dataset_name] = Molecule.from_file(sdf_filename, allow_undefined_stereo=True)
@@ -207,7 +205,7 @@ class TestAtomMapper(unittest.TestCase):
         atom_mapper = AtomMapper()
 
         # Exclude datasets that contain displaced ligands:
-        # 'p38', 'PTP1B', 'MCL1', 
+        # 'p38', 'PTP1B', 'MCL1',
         for dataset_name in ['CDK2', 'Tyk2', 'Thrombin', 'Jnk1', 'Bace']:
             molecules = self.molecules[dataset_name]
             reference_molecule = molecules[0]
@@ -227,6 +225,7 @@ class TestAtomMapper(unittest.TestCase):
         atom_mapper = AtomMapper()
 
         # Load molecules with positions
+        from pkg_resources import resource_filename
         dataset_path = 'data/covid-moonshot/sprint-10-2021-07-26-x10959-dimer-neutral.sdf.gz'
         sdf_filename = resource_filename('perses', dataset_path)
         molecules = Molecule.from_file(sdf_filename)
