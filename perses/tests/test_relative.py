@@ -712,7 +712,7 @@ def RepartitionedHybridTopologyFactory_energy_mutant(topology, chain, system, po
                                                use_14_nonbondeds=True)
 
     # Create geometry proposal
-    for i in range(5):
+    for _ in range(5):
         new_positions, logp_proposal = geometry_engine.propose(topology_proposal, positions, beta,
                                                                    validate_energy_bookkeeping=True)
         logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, positions, beta,
@@ -728,9 +728,8 @@ def RepartitionedHybridTopologyFactory_energy_mutant(topology, chain, system, po
 
         if potential_energy < 1e8 * unit.kilojoule_per_mole:
             break
-        else:
-            if i == 4:
-                raise Exception("Was not able to generate a decent proposal after 5 iterations")
+    else:  # Max number of tries reached
+        raise Exception("Was not able to generate a decent proposal after 5 iterations")
 
     if not topology_proposal.unique_new_atoms:
         assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
