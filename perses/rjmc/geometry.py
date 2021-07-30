@@ -2229,18 +2229,18 @@ class GeometrySystemGenerator(object):
             #If this is a CustomTorsionForce, we need to pass the parameters as a list, and it will have the growth_idx parameter.
             #If it's a regular PeriodicTorsionForce, there is no growth_index and the parameters are passed separately.
 
-            p1, p2, p3, p4 = topology_index_map
-            possible_omissions = [(p1,p2), (p2,p3), (p3,p4), (p2,p1), (p3,p2), (p4,p3)]
-            if growth_idx > 0:
-                if any(torsion_pair in self.omitted_bonds for torsion_pair in possible_omissions):
-                    pass
+                p1, p2, p3, p4 = topology_index_map
+                possible_omissions = [(p1,p2), (p2,p3), (p3,p4), (p2,p1), (p3,p2), (p4,p3)]
+                if growth_idx > 0:
+                    if any(torsion_pair in self.omitted_bonds for torsion_pair in possible_omissions):
+                        pass
+                    else:
+                        _torsion_index = torsion_force.addTorsion(topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, adjusted_phase, k, growth_idx])
+                        self.extra_torsion_terms[_torsion_index] = (topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, adjusted_phase, k, growth_idx])
+                        _logger.debug(f"\t\t\t\t{(topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3])}")
                 else:
-                    _torsion_index = torsion_force.addTorsion(topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, adjusted_phase, k, growth_idx])
-                    self.extra_torsion_terms[_torsion_index] = (topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, adjusted_phase, k, growth_idx])
-                    _logger.debug(f"\t\t\t\t{(topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3])}")
-            else:
-                pass
-                #we omit terms wherein the growth index only pertains to the
+                    pass
+                    #we omit terms wherein the growth index only pertains to the
 
         _logger.debug(f"\t\t\trelevant torsions for chirality restraints being added...")
         #set chirality restraints (adapted from https://github.com/choderalab/perses/blob/protein_mutations_ivy/perses/rjmc/geometry.py)
