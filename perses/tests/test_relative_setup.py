@@ -251,7 +251,6 @@ def test_host_guest_deterministic_geometries():
                  nonbonded_method = 'PME',
                  complex_box_dimensions=None,
                  solvent_box_dimensions=None,
-                 map_strategy='geometry',
                  remove_constraints=False,
                  use_given_geometries = True
                  )
