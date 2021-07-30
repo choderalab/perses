@@ -21,3 +21,7 @@ Bugfixes
   The default timestep is now 4 fs (was 1 fs) and the minimum openMM version is now 7.5.0
 - (PR `#812 <https://github.com/choderalab/perses/pull/812>`_)
   Automatically set package version by ``git tag`` using versioneer
+- (PR `#804 <https://github.com/choderalab/perses/pull/804>`_)
+  Set the default temperature back to 300 K for ``relative_point_mutation_setup.py``.
+- (PR `#796 <https://github.com/choderalab/perses/pull/796>`_)
+  Removed defunct ``atom_map`` argument from FEP constructor.
