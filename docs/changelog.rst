@@ -14,6 +14,8 @@ The full release history can be viewed `at the GitHub yank releases page <https:
 
 Bugfixes
 ^^^^^^^^
+- (PR `#821 <https://github.com/choderalab/perses/pull/821>`_)
+  Added tests for the resume simulation functionality.
 - (PR `#809 <https://github.com/choderalab/perses/pull/809>`_) 
   The atom mapping facility was overhauled to address a bug in mapping rings (`#805 <https://github.com/choderalab/perses/issues/805>`_).
   Atom mapping is now handled via an ``AtomMapper`` factory that generates an ``AtomMapping`` class that localizes all relevant functionality.
