@@ -1201,8 +1201,8 @@ class AtomMapper(object):
         distance_unit = unit.angstroms # distance unit for comparisons
 
         # Coerce to openff Molecule
-        old_mol = Molecule(old_mol)
-        new_mol = Molecule(new_mol)
+        old_mol = Molecule(old_mol, allow_undefined_stereo=True)
+        new_mol = Molecule(new_mol, allow_undefined_stereo=True)
 
         # Check to ensure conformers are defined
         if (old_mol.conformers is None) or (new_mol.conformers is None):
@@ -1221,6 +1221,7 @@ class AtomMapper(object):
         rtol = 0.0 # relative tolerane
         atol = self.coordinate_tolerance / distance_unit # absolute tolerance (Angstroms)
 
+        # TODO: Can we instead anneal mappings based on closeness in case there is ambiguity?
         old_to_new_atom_map = dict()
         for old_atom_index in range(old_mol.n_atoms):
             # Determine which new atom indices match the old atom

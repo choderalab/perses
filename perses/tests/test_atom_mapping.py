@@ -206,12 +206,18 @@ class TestAtomMapper(unittest.TestCase):
         # Create and configure an AtomMapper
         atom_mapper = AtomMapper()
 
-        for dataset_name in ['CDK2', 'p38', 'Tyk2', 'Thrombin', 'PTP1B', 'MCL1', 'Jnk1', 'Bace']:
+        # Exclude datasets that contain displaced ligands:
+        # 'p38', 'PTP1B', 'MCL1', 
+        for dataset_name in ['CDK2', 'Tyk2', 'Thrombin', 'Jnk1', 'Bace']:
             molecules = self.molecules[dataset_name]
             reference_molecule = molecules[0]
             for index, target_molecule in enumerate(molecules):
                 # Explicitly construct mapping from positional information alone
-                atom_mapping = atom_mapper.generate_atom_mapping_from_positions(reference_molecule, target_molecule)
+                try:
+                    atom_mapping = atom_mapper.generate_atom_mapping_from_positions(reference_molecule, target_molecule)
+                except InvalidMappingException as e:
+                    e.args = e.args + (f'dataset: {dataset_name}: molecule 0 -> {index}',)
+                    raise e
 
     def test_atom_mappings_moonshot(self):
         """
@@ -225,10 +231,13 @@ class TestAtomMapper(unittest.TestCase):
         sdf_filename = resource_filename('perses', dataset_path)
         molecules = Molecule.from_file(sdf_filename)
 
+        # Take a subset
+        nskip = 20
+        molecules = molecules[::nskip]
+
         # Test geometry-derived mappings
-        nskip = 10 # skip interval
         reference_molecule = molecules[0]
-        for index, molecule in enumerate(1, molecules, nskip):
+        for index, molecule in enumerate(molecules):
             # Ignore positional information when scoring mappings
             atom_mapper.use_positions = False
             atom_mapping = atom_mapper.get_best_mapping(molecules[0], molecules[2])
