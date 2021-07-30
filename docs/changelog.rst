@@ -14,6 +14,8 @@ The full release history can be viewed `at the GitHub yank releases page <https:
 
 Bugfixes
 ^^^^^^^^
+- (PR `#830 <https://github.com/choderalab/perses/pull/830>`_)
+  Added support for resuming simulations from the CLI
 - (PR `#821 <https://github.com/choderalab/perses/pull/821>`_)
   Added tests for the resume simulation functionality.
 - (PR `#828 <https://github.com/choderalab/perses/pull/828>`_)
