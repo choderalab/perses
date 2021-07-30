@@ -1,10 +1,23 @@
-def test_cli_resume():
-    import os
-    import subprocess
-    import tempfile
+import logging
+import os
+import subprocess
+import tempfile
 
-    import yaml
-    from pkg_resources import resource_filename
+import simtk.openmm.app as app
+import yaml
+from openmmtools import mcmc
+from openmmtools.multistate import MultiStateReporter
+from pkg_resources import resource_filename
+from simtk import unit
+
+from perses.annihilation.lambda_protocol import LambdaProtocol
+from perses.annihilation.relative import HybridTopologyFactory
+from perses.app.relative_point_mutation_setup import PointMutationExecutor
+from perses.app.relative_setup import RelativeFEPSetup
+from perses.samplers.multistate import HybridRepexSampler
+
+
+def test_cli_resume():
 
     with tempfile.TemporaryDirectory() as temp_dir:
         os.chdir(temp_dir)
@@ -53,18 +66,6 @@ def test_cli_resume():
 
 
 def test_resume_small_molecule(tmp_path):
-    import logging
-    import os
-
-    import simtk.unit as unit
-    from openmmtools import mcmc
-    from openmmtools.multistate import MultiStateReporter
-    from pkg_resources import resource_filename
-
-    from perses.annihilation.lambda_protocol import LambdaProtocol
-    from perses.annihilation.relative import HybridTopologyFactory
-    from perses.app.relative_setup import RelativeFEPSetup
-    from perses.samplers.multistate import HybridRepexSampler
 
     os.chdir(tmp_path)
 
@@ -135,18 +136,6 @@ def test_resume_small_molecule(tmp_path):
 
 
 def test_resume_protien_mutation_with_checkpoint(tmp_path):
-    import logging
-
-    import simtk.openmm.app as app
-    from openeye import oechem
-    from openmmtools import cache, mcmc
-    from openmmtools.multistate import MultiStateReporter
-    from pkg_resources import resource_filename
-    from simtk import unit
-
-    from perses.annihilation.lambda_protocol import LambdaProtocol
-    from perses.app.relative_point_mutation_setup import PointMutationExecutor
-    from perses.samplers.multistate import HybridRepexSampler
 
     pdb_filename = resource_filename("perses", "data/ala_vacuum.pdb")
     solvent_delivery = PointMutationExecutor(
@@ -211,17 +200,6 @@ def test_resume_protien_mutation_with_checkpoint(tmp_path):
 
 
 def test_resume_protein_mutation_no_checkpoint(tmp_path):
-    import logging
-
-    import simtk.openmm.app as app
-    import simtk.unit as unit
-    from openmmtools import mcmc
-    from openmmtools.multistate import MultiStateReporter
-    from pkg_resources import resource_filename
-
-    from perses.annihilation.lambda_protocol import LambdaProtocol
-    from perses.app.relative_point_mutation_setup import PointMutationExecutor
-    from perses.samplers.multistate import HybridRepexSampler
 
     pdb_filename = resource_filename("perses", "data/ala_vacuum.pdb")
 
