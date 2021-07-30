@@ -14,6 +14,8 @@ The full release history can be viewed `at the GitHub yank releases page <https:
 
 Bugfixes
 ^^^^^^^^
+- (PR `#821 <https://github.com/choderalab/perses/pull/821>`_)
+  Added tests for the resume simulation functionality.
 - (PR `#828 <https://github.com/choderalab/perses/pull/828>`_)
   Addresses (`issue #815 <https://github.com/choderalab/perses/issues/815>`_) by checking the potential energy of the proposed positions before generating the ``RepartitonedHybridTopologyFactory``.
 - (PR `#809 <https://github.com/choderalab/perses/pull/809>`_) 
