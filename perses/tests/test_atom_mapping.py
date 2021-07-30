@@ -3,6 +3,7 @@ import pytest
 import unittest
 
 from perses.rjmc.atom_mapping import AtomMapper, AtomMapping, InvalidMappingException
+from openff.toolkit.topology import Molecule
 
 ################################################################################
 # LOGGER
@@ -21,7 +22,6 @@ class TestAtomMapping(unittest.TestCase):
     """Test AtomMapping object."""
     def setUp(self):
         """Create useful common objects for testing."""
-        from openff.toolkit.topology import Molecule
         self.old_mol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])([H:7])') # ethane
         self.new_mol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])[O:7][H:8]') # ethanol
         self.old_to_new_atom_map = { 0:0, 4:4 }
@@ -83,7 +83,6 @@ class TestAtomMapping(unittest.TestCase):
         assert atom_mapping.creates_or_breaks_rings() == False
 
         # Define benzene -> napthalene transformation
-        from openff.toolkit.topology import Molecule
         old_mol = Molecule.from_smiles('[c:0]1[c:1][c:2][c:3][c:4][c:5]1') # benzene
         new_mol = Molecule.from_smiles('[c:0]12[c:1][c:2][c:3][c:4][c:5]2[c:6][c:7][c:8][c:9]1') # napthalene
         old_to_new_atom_map = { 0:0, 1:1, 2:2, 3:3, 4:4, 5:5 }
@@ -99,7 +98,6 @@ class TestAtomMapping(unittest.TestCase):
         assert atom_mapping.n_mapped_atoms == n_mapped_atoms_old
 
         # Test methyl-cyclohexane -> methyl-cyclopentane, demapping the ring transformation
-        from openff.toolkit.topology import Molecule
         old_mol = Molecule.from_smiles('[C:0][C:1]1[C:2][C:3][C:4][C:5][C:6]1') # methyl-cyclohexane
         new_mol = Molecule.from_smiles('[C:0][C:1]1[C:2][C:3][C:4][C:5]1') # methyl-cyclopentane
         old_to_new_atom_map = { 0:0, 1:1, 2:2, 3:3, 5:4, 6:5 }
@@ -117,7 +115,6 @@ class TestAtomMapping(unittest.TestCase):
         assert atom_mapping.n_mapped_atoms == n_mapped_atoms_old
 
         # Test resolution of incorrect stereochemistry
-        from openff.toolkit.topology import Molecule
         old_mol = Molecule.from_smiles('[C@H:0]([Cl:1])([Br:2])([F:3])')
         new_mol = Molecule.from_smiles('[C@@H:0]([Cl:1])([Br:2])([F:3])')
         atom_mapping = AtomMapping(old_mol, new_mol, old_to_new_atom_map={0:0, 1:1, 2:2, 3:3})
@@ -265,7 +262,7 @@ class TestAtomMapper(unittest.TestCase):
         atom_mapper = AtomMapper(allow_ring_breaking=False)
 
         for old_iupac, new_iupac in iupac_pairs:
-            from openff.toolkit.topology import Molecule
+
             old_mol = Molecule.from_iupac(old_iupac)
             new_mol = Molecule.from_iupac(new_iupac)
             atom_mapping = atom_mapper.get_best_mapping(old_mol, new_mol)
@@ -289,7 +286,6 @@ class TestAtomMapper(unittest.TestCase):
         for mol1_smiles, mol2_smiles, expected_results in tests:
             for map_strength, expected_n_mapped_atoms in expected_results.items():
                 # Create OpenFF Molecule objects
-                from openff.toolkit.topology import Molecule
                 mol1 = Molecule.from_smiles(mol1_smiles)
                 mol2 = Molecule.from_smiles(mol2_smiles)
 
