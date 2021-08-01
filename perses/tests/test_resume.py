@@ -64,8 +64,10 @@ def test_cli_resume_repex():
             yaml.dump(y_doc, outfile)
         subprocess.run(["perses-relative", "test.yml"])
         import glob
+        import subprocess
         print(os.getcwd())
         print(glob.glob("**",recursive=True))
+        print(subprocess.run("find / -name cdk2-vacuum.nc 2>/dev/null", shell=True))
 
         # Now we change the yaml to run longer
         y_doc["n_cycles"] = 20
