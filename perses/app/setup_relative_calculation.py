@@ -612,7 +612,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                 else:
                     selection_indices = None
 
-                storage_name = str(trajectory_directory)+'/'+str(trajectory_prefix)+'-'+str(phase)+'.nc'
+                storage_name = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
                 _logger.info(f'\tstorage_name: {storage_name}')
                 _logger.info(f'\tselection_indices {selection_indices}')
                 _logger.info(f'\tcheckpoint interval {checkpoint_interval}')
@@ -897,7 +897,7 @@ def _resume_run(setup_options):
             trajectory_directory = setup_options['trajectory_directory']
             trajectory_prefix = setup_options['trajectory_prefix']
 
-            reporter_file = str(trajectory_directory)+'/'+str(trajectory_prefix)+'-'+str(phase)+'.nc'
+            reporter_file = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
             reporter = MultiStateReporter(reporter_file)
             simulation = HybridSAMSSampler.from_storage(reporter)
             total_steps = setup_options['n_cycles']
@@ -918,7 +918,7 @@ def _resume_run(setup_options):
             trajectory_directory = setup_options['trajectory_directory']
             trajectory_prefix = setup_options['trajectory_prefix']
 
-            reporter_file = str(trajectory_directory)+'/'+str(trajectory_prefix)+'-'+str(phase)+'.nc'
+            reporter_file = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
             reporter = MultiStateReporter(reporter_file)
             simulation = HybridRepexSampler.from_storage(reporter)
             total_steps = setup_options['n_cycles']
