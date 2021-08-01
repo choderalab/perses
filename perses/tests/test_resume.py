@@ -62,9 +62,9 @@ def test_cli_resume_repex():
         y_doc["ligand_file"] = ligand_file
         with open("test.yml", "w") as outfile:
             yaml.dump(y_doc, outfile)
+        import subprocess
         subprocess.run(["perses-relative", "test.yml"])
         import glob
-        import subprocess
         print(os.getcwd())
         print(glob.glob("**",recursive=True))
         print(subprocess.run("find / -name cdk2-vacuum.nc 2>/dev/null", shell=True))
