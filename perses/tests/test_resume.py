@@ -62,7 +62,6 @@ def test_cli_resume_repex():
         y_doc["ligand_file"] = ligand_file
         with open("test.yml", "w") as outfile:
             yaml.dump(y_doc, outfile)
-        import subprocess
         subprocess.run(["perses-relative", "test.yml"])
         import glob
         print(os.getcwd())
