@@ -687,7 +687,7 @@ def run(yaml_filename=None):
     for phase in setup_options['phases']:
         trajectory_directory = setup_options['trajectory_directory']
         trajectory_prefix = setup_options['trajectory_prefix']
-        reporter_file = str(trajectory_directory)+'/'+str(trajectory_prefix)+'-'+str(phase)+'.nc'
+        reporter_file = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
         # Once we find one, we are good to resume the simulation
         if os.path.isfile(reporter_file):
             _resume_run(setup_options)
