@@ -31,12 +31,13 @@ class TimeFilter(logging.Filter):
 
 fmt = logging.Formatter(fmt="%(asctime)s:(%(relative)ss):%(name)s:%(message)s")
 #logging.basicConfig(level = logging.NOTSET)
+LOGLEVEL = os.environ.get("LOGLEVEL", "INFO").upper()
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.INFO,
+    level=LOGLEVEL,
     datefmt='%Y-%m-%d %H:%M:%S')
 _logger = logging.getLogger()
-_logger.setLevel(logging.INFO)
+_logger.setLevel(LOGLEVEL)
 [hndl.addFilter(TimeFilter()) for hndl in _logger.handlers]
 [hndl.setFormatter(fmt) for hndl in _logger.handlers]
 
@@ -298,8 +299,7 @@ def getSetupOptions(filename):
         _logger.info(f"\t'softcore_v2' not specified: default to 'False'")
 
     _logger.info(f"\tCreating '{trajectory_directory}'...")
-    assert (not os.path.exists(trajectory_directory)), f'Output trajectory directory "{trajectory_directory}" already exists. Refusing to overwrite'
-    os.makedirs(trajectory_directory)
+    os.makedirs(trajectory_directory, exist_ok=True)
 
 
     return setup_options
@@ -613,7 +613,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                 else:
                     selection_indices = None
 
-                storage_name = str(trajectory_directory)+'/'+str(trajectory_prefix)+'-'+str(phase)+'.nc'
+                storage_name = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
                 _logger.info(f'\tstorage_name: {storage_name}')
                 _logger.info(f'\tselection_indices {selection_indices}')
                 _logger.info(f'\tcheckpoint interval {checkpoint_interval}')
@@ -681,6 +681,20 @@ def run(yaml_filename=None):
 
     _logger.info(f"Getting setup options from {yaml_filename}")
     setup_options = getSetupOptions(yaml_filename)
+
+    # The name of the reporter file includes the phase name, so we need to check each
+    # one
+    for phase in setup_options['phases']:
+        trajectory_directory = setup_options['trajectory_directory']
+        trajectory_prefix = setup_options['trajectory_prefix']
+        reporter_file = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
+        # Once we find one, we are good to resume the simulation
+        if os.path.isfile(reporter_file):
+            _resume_run(setup_options)
+            # There is a loop in _resume_run for each phase so once we extend each phase
+            # we are done
+            exit()
+
     if 'lambdas' in setup_options:
         if type(setup_options['lambdas']) == int:
             lambdas = {}
@@ -873,6 +887,50 @@ def run(yaml_filename=None):
                 _logger.info(f"\n\n")
 
                 _logger.info(f"\t\tFinished phase {phase}")
+
+def _resume_run(setup_options):
+    if setup_options['fe_type'] == 'sams':
+        logZ = dict()
+        free_energies = dict()
+
+        _logger.info(f"Iterating through phases for sams...")
+        for phase in setup_options['phases']:
+            trajectory_directory = setup_options['trajectory_directory']
+            trajectory_prefix = setup_options['trajectory_prefix']
+
+            reporter_file = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
+            reporter = MultiStateReporter(reporter_file)
+            simulation = HybridSAMSSampler.from_storage(reporter)
+            total_steps = setup_options['n_cycles']
+            run_so_far = simulation.iteration
+            left_to_do = total_steps - run_so_far
+            _logger.info(f"\t\textending simulation...\n\n")
+            simulation.extend(n_iterations=left_to_do)
+            logZ[phase] = simulation._logZ[-1] - simulation._logZ[0]
+            free_energies[phase] = simulation._last_mbar_f_k[-1] - simulation._last_mbar_f_k[0]
+            _logger.info(f"\t\tFinished phase {phase}")
+        for phase in free_energies:
+            print(f"Comparing ligand {setup_options['old_ligand_index']} to {setup_options['new_ligand_index']}")
+            print(f"{phase} phase has a free energy of {free_energies[phase]}")
+
+    elif setup_options['fe_type'] == 'repex':
+        for phase in setup_options['phases']:
+            print(f'Running {phase} phase')
+            trajectory_directory = setup_options['trajectory_directory']
+            trajectory_prefix = setup_options['trajectory_prefix']
+
+            reporter_file = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
+            reporter = MultiStateReporter(reporter_file)
+            simulation = HybridRepexSampler.from_storage(reporter)
+            total_steps = setup_options['n_cycles']
+            run_so_far = simulation.iteration
+            left_to_do = total_steps - run_so_far
+            _logger.info(f"\t\textending simulation...\n\n")
+            simulation.extend(n_iterations=left_to_do)
+            _logger.info(f"\n\n")
+            _logger.info(f"\t\tFinished phase {phase}")
+    else:
+        raise("Can't resume")
 
 if __name__ == "__main__":
     run()
