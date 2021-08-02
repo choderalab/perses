@@ -63,13 +63,15 @@ def test_cli_resume_repex():
 
         with open("test.yml", "w") as outfile:
             yaml.dump(y_doc, outfile)
-        subprocess.run("perses-relative test.yml", shell=True, check=True)
+
+        env = os.environ.copy()
+        subprocess.run("perses-relative test.yml", shell=True, check=True, env=env)
 
         # Now we change the yaml to run longer
         y_doc["n_cycles"] = 20
         with open("test.yml", "w") as outfile:
             yaml.dump(y_doc, outfile)
-        subprocess.run("perses-relative test.yml", shell=True, check=True)
+        subprocess.run("perses-relative test.yml", shell=True, check=True, env=env)
 
         # Check to see if we have a total of 20
         reporter = MultiStateReporter(
