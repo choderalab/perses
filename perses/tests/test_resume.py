@@ -72,10 +72,13 @@ def test_cli_resume_repex():
         subprocess.run("perses-relative test.yml", shell=True, check=True)
 
         # Check to see if we have a total of 20
-        reporter = MultiStateReporter("cdk2_repex_hbonds/cdk2-vacuum.nc", checkpoint_interval=10)
+        reporter = MultiStateReporter(
+            "cdk2_repex_hbonds/cdk2-vacuum.nc", checkpoint_interval=10
+        )
         simulation = HybridRepexSampler.from_storage(reporter)
 
         assert simulation.iteration == 20
+
 
 def test_resume_small_molecule(tmp_path):
 
