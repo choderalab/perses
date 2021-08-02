@@ -31,12 +31,13 @@ class TimeFilter(logging.Filter):
 
 fmt = logging.Formatter(fmt="%(asctime)s:(%(relative)ss):%(name)s:%(message)s")
 #logging.basicConfig(level = logging.NOTSET)
+LOGLEVEL = os.environ.get("LOGLEVEL", "INFO").upper()
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.INFO,
+    level=LOGLEVEL,
     datefmt='%Y-%m-%d %H:%M:%S')
 _logger = logging.getLogger()
-_logger.setLevel(logging.INFO)
+_logger.setLevel(LOGLEVEL)
 [hndl.addFilter(TimeFilter()) for hndl in _logger.handlers]
 [hndl.setFormatter(fmt) for hndl in _logger.handlers]
 
