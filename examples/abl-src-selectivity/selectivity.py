@@ -92,15 +92,29 @@ class Selectivity(PersesTestSystem):
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
-            forcefield_kwargs={'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },periodic_forcefield_kwargs = {'nonbondedMethod': app.CutoffPeriodic})
-            use_antechamber=True)
+                                                        forcefield_kwargs={
+                                                            'nonbondedCutoff' : 9.0 * unit.angstrom,
+                                                            'implicitSolvent' : None, 'constraints' : None
+                                                        },
+                                                        periodic_forcefield_kwargs={
+                                                            'nonbondedMethod': app.CutoffPeriodic
+                                                        },
+                                                        use_antechamber=True
+                                                        )
 # NOTE implicit solvent not supported by this SystemGenerator
 #        system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
 #            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
 #            use_antechamber=True)
         system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml'],
-            forcefield_kwargs={ 'implicitSolvent' : None, 'constraints' : None }, nonperiodic_forcefield_kwargs = {'nonbondedMethod' : app.NoCutoff}
-            use_antechamber=True)
+                                                      forcefield_kwargs={
+                                                          'implicitSolvent' : None,
+                                                          'constraints' : None
+                                                      },
+                                                      nonperiodic_forcefield_kwargs={
+                                                          'nonbondedMethod' : app.NoCutoff
+                                                      },
+                                                      use_antechamber=True
+                                                      )
         # Copy system generators for all environments
         for solvent in solvents:
             for component in components:
@@ -221,7 +235,7 @@ def run_selectivity():
     system = Selectivity(storage_filename=storage_filename)
     system.designer.run(niterations=10)
 
-    from perses.analysis import Analysis
+    from perses.analysis.analysis import Analysis
     analysis = Analysis(storage_filename=storage_filename)
     analysis.plot_ncmc_work('ncmc-work.pdf')
 
