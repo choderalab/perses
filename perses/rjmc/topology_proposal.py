@@ -479,26 +479,6 @@ class PolymerProposalEngine(ProposalEngine):
         _logger.debug(f"Instantiating PolymerProposalEngine")
         super(PolymerProposalEngine,self).__init__(system_generator=system_generator, proposal_metadata=proposal_metadata, always_change=always_change)
         self._chain_id = chain_id # chain identifier defining polymer to be modified
-        self._aminos_3letter_to_1letter_map = {'ALA' : 'A' ,
-                                                'ARG' : 'R' ,
-                                                'ASN' : 'N' ,
-                                                'ASP' : 'D' ,
-                                                'CYS' : 'C' ,
-                                                'GLN' : 'Q' ,
-                                                'GLU' : 'E' ,
-                                                'GLY' : 'G' ,
-                                                'HIS' : 'H' ,
-                                                'ILE' : 'I' ,
-                                                'LEU' : 'L' ,
-                                                'LYS' : 'K' ,
-                                                'MET' : 'M' ,
-                                                'PHE' : 'F' ,
-                                                'PRO' : 'P' ,
-                                                'SER' : 'S' ,
-                                                'THR' : 'T' ,
-                                                'TRP' : 'W' ,
-                                                'TYR' : 'Y' ,
-                                                'VAL' : 'V' }
         self._aggregate = aggregate # ?????????
 
     @staticmethod
