@@ -56,7 +56,7 @@ def convert_mdtraj_to_oemol(traj: md.Trajectory) -> oechem.OEMol:
 
     Parameters
     ----------
-    mdtraj: md.Trajectory
+    traj: md.Trajectory
         The trajectory to turn into an OEMol
 
     Returns
