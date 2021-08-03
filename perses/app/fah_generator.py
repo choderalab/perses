@@ -409,6 +409,7 @@ def run_neq_fah_setup(ligand_file,
         else:
             passed = True
 
+        # TODO: state variable can indeed be undefined
         pos = state.getPositions(asNumpy=True)
         pos = np.asarray(pos)
 
