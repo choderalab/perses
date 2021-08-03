@@ -169,10 +169,6 @@ class PointMutationExecutor(object):
         """
         from openeye import oechem
 
-        # Load nonstandard amino acid bond definitions
-        residues_nonstandard_xml = resource_filename("perses", os.path.join("data", "residues_nonstandard.xml"))
-        app.Topology.loadBondDefinitions(residues_nonstandard_xml)
-
         # First thing to do is load the apo protein to mutate...
         protein_pdbfile = open(protein_filename, 'r')
         protein_pdb = app.PDBFile(protein_pdbfile)
