@@ -20,7 +20,7 @@ ENERGY_THRESHOLD = 1e-2
 temperature = 300 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
-ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS']
+ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS', 'HID', 'HIE', 'HIP']
 
 # Set up logger
 import logging
