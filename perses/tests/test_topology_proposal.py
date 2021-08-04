@@ -325,7 +325,7 @@ def test_mutate_from_alanine():
     #      generating VERY large nonbonded energies, to which numerical precision cannot achieve a proper threshold of 1e-6.
     #      in the future, we can look to use sterics or something fancy.  At the moment, we recommend conservative transforms
     #      or transforms that have more unique _old_ atoms than new
-    aminos = ['ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','SER','THR','TRP','TYR','VAL']
+    aminos = ['ARG', 'ASH', 'ASN', 'ASP', 'CYS', 'GLH', 'GLN', 'GLU', 'GLY', 'HID', 'HIE', 'HIS', 'HIP', 'ILE', 'LEU', 'LYN', 'LYS', 'MET', 'PHE', 'SER', 'THR', 'TRP', 'TYR', 'VAL']
     attempt_full_pipeline_aminos = ['CYS', 'ILE', 'SER', 'THR', 'VAL'] #let's omit rings and large perturbations for now
 
     ala, system_generator = generate_atp()
@@ -543,8 +543,6 @@ def test_mutate_from_every_amino_to_every_other():
             continue
         if residue.index == (num_residues -1):
             continue
-        if residue.name in ['HID','HIE']:
-            residue.name = 'HIS'
         new_sequence.append(residue.name)
     for i in range(len(aminos)):
         assert new_sequence[i] == aminos[i]
