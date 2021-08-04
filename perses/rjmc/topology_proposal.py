@@ -1198,7 +1198,8 @@ class PolymerProposalEngine(ProposalEngine):
 
         current_residue_pdb_filename = resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{old_res_name}.pdb"))
         proposed_residue_pdb_filename = resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{new_res_name}.pdb"))
-        
+        print(f"is the old res {old_res_name} pdb present? ", os.path.isfile(current_residue_pdb_filename))        
+        print(f"is the new res {new_res_name} pdb present? ", os.path.isfile(current_residue_pdb_filename))
         current_oemol = PolymerProposalEngine.generate_oemol_from_pdb_template(current_residue_pdb_filename)
         proposed_oemol = PolymerProposalEngine.generate_oemol_from_pdb_template(proposed_residue_pdb_filename)
 
