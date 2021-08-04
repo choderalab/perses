@@ -445,7 +445,7 @@ class PolymerProposalEngine(ProposalEngine):
     _aminos = ['ALA', 'ARG', 'ASH', 'ASN', 'ASP', 'CYS', 'GLN', 'GLH', 'GLU', 'GLY', 'HID', 'HIE', 'HIP', 'HIS', 'ILE', 'LEU', 'LYN',  'LYS',  'MET', 'PHE',
                     'SER', 'THR', 'TRP', 'TYR', 'VAL'] # common naturally-occurring amino acid names
                     # Note this does not include PRO since there's a problem with OpenMM's template DEBUG
-    _positive_aminos = ['ARG', 'HIS', 'LYS', 'HID', 'HIE', 'HIP']
+    _positive_aminos = ['ARG', 'LYS', 'HIP']
     _negative_aminos = ['ASP', 'GLU']
 
     def _get_neutrals(aminos, positive, negative):
@@ -1198,7 +1198,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         current_residue_pdb_filename = resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{old_res_name}.pdb"))
         proposed_residue_pdb_filename = resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{new_res_name}.pdb"))
-
+        
         current_oemol = PolymerProposalEngine.generate_oemol_from_pdb_template(current_residue_pdb_filename)
         proposed_oemol = PolymerProposalEngine.generate_oemol_from_pdb_template(proposed_residue_pdb_filename)
 
