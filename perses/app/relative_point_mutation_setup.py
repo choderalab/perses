@@ -112,6 +112,7 @@ class PointMutationExecutor(object):
         arguments
             protein_filename : str
                 path to protein (to mutate); .pdb
+                Note: if there are nonstandard residues, the PDB should contain the standard residue name but the atoms/positions should correspond to the nonstandard residue. E.g. if I want to include HID, the PDB should contain HIS for the residue name, but the atoms should correspond to the atoms present in HID. You can use openmm.app.Modeller.addHydrogens() to generate a PDB like this. The same is true for the ligand_input, if its a PDB. 
             mutation_chain_id : str
                 name of the chain to be mutated
             mutation_residue_id : str
