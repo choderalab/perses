@@ -1867,6 +1867,7 @@ class PointMutationEngine(PolymerProposalEngine):
         # Propose a location at which to mutate the residue
         # proposed_location : int, index of chosen entry in location_prob
         proposed_location = np.random.choice(range(num_residues), p=location_prob)
+        original_residue = chain_residues[proposed_location]
 
         if self._residues_allowed_to_mutate is None:
             proposed_location = original_residue.index
