@@ -299,6 +299,10 @@ def getSetupOptions(filename):
         _logger.info(f"\t'softcore_v2' not specified: default to 'False'")
 
     _logger.info(f"\tCreating '{trajectory_directory}'...")
+
+    if not 'rmsd_restraint' in setup_options:
+        setup_options['rmsd_restraint'] = False
+
     os.makedirs(trajectory_directory, exist_ok=True)
 
 
@@ -327,8 +331,6 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     #   such as deferring to defaults for modules we call unless the user
     #   chooses to override them.
 
-    if not 'rmsd_restraint' in setup_options:
-        setup_options['rmsd_restraint'] = False
 
     if 'use_given_geometries' not in list(setup_options.keys()):
         use_given_geometries = False
@@ -680,7 +682,10 @@ def run(yaml_filename=None):
            _logger.critical(f"You must specify the setup yaml file as an argument to the script.")
 
     _logger.info(f"Getting setup options from {yaml_filename}")
-    setup_options = getSetupOptions(yaml_filename)
+    from types import MappingProxyType
+
+    setup_options_temp = getSetupOptions(yaml_filename)
+    setup_options = MappingProxyType(setup_options_temp)
 
     # The name of the reporter file includes the phase name, so we need to check each
     # one
