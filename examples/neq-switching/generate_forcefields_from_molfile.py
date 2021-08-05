@@ -1,6 +1,7 @@
 from openmoltools import forcefield_generators
 from openeye import oechem
 
+
 def normalize_molecule(mol):
     # Assign aromaticity.
     oechem.OEAssignAromaticFlags(mol, oechem.OEAroModelOpenEye)
@@ -19,6 +20,7 @@ def normalize_molecule(mol):
 
     return mol
 
+
 def generate_forcefield(molecule_file, outfile):
 
     ifs = oechem.oemolistream()
@@ -35,6 +37,7 @@ def generate_forcefield(molecule_file, outfile):
 
     with open(outfile, 'w') as output_file:
         output_file.write(ffxml)
+
 
 if __name__=="__main__":
     import sys

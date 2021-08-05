@@ -4,6 +4,7 @@ from openmmtools import integrators
 from simtk import openmm
 from simtk.openmm import app
 
+
 def run_equilibrium(system, topology, configuration, n_steps, report_interval, equilibration_steps, filename):
     from mdtraj.reporters import HDF5Reporter
     integrator = integrators.LangevinIntegrator()
@@ -20,7 +21,8 @@ def run_equilibrium(system, topology, configuration, n_steps, report_interval, e
     simulation.reporters.append(reporter)
     simulation.step(n_steps)
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     import yaml
     import sys
     import os
