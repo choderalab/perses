@@ -1291,7 +1291,8 @@ class PolymerProposalEngine(ProposalEngine):
 
         #now we can get the mol atom map of the sidechain
         #NOTE: since the sidechain oemols are NOT zero-indexed anymore, we need to match by name (since they are unique identifiers)
-        break_bool = False if old_res_name == 'TRP' or new_res_name == 'TRP' else True # Set allow_ring_breaking to be False if the transformation involves TRP
+        ring_aas = ['TRP', 'TYR', 'PHE', 'HIS', 'HID', 'HIE', 'HIP']
+        break_bool = False if old_res_name in ring_aas or new_res_name in ring_aas else True
         _logger.debug(f"\t\t\t allow ring breaking: {break_bool}")
         # TODO: Refactor to re-use atom_mapper for all ligands?
         # TODO: Generate atom mapping using only geometries if requested
