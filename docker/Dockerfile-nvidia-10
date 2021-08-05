@@ -1,0 +1,32 @@
+FROM nvidia/cuda:10.1-runtime-ubuntu18.04
+SHELL ["/bin/bash", "-c"]
+
+RUN apt update && \
+    apt upgrade -y && \
+    apt install -y wget && \ 
+    apt autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
+ENV ENV_NAME="base"
+ENV MAMBA_ROOT_PREFIX="/opt/conda"
+ENV HOME="/home/micromamba"
+ENV BASH_ENV="$HOME/.bashrc"
+ENV PATH "$MAMBA_ROOT_PREFIX/bin:$PATH"
+
+
+RUN wget -qO- https://micromamba.snakepit.net/api/micromamba/linux-64/latest | tar -xvj bin/micromamba && \
+    mkdir -p "$HOME" && \
+    ./bin/micromamba shell init -s bash -p "$MAMBA_ROOT_PREFIX" && \
+    echo "micromamba activate $ENV_NAME" >> "$BASH_ENV" && \
+    chmod -R a+rwx "$HOME" "$BASH_ENV" "$MAMBA_ROOT_PREFIX" && \
+    micromamba install -n "$ENV_NAME" -c conda-forge -c openeye --yes perses==0.9.1 openeye-toolkits google-cloud-storage && \
+    micromamba clean -a
+
+
+RUN mkdir /perses
+RUN mkdir /data
+ENV OE_LICENSE=/perses/oe_license.txt
+
+ENV PATH $PATH:/perses
+ENV OPENMM_CPU_THREADS="2"
