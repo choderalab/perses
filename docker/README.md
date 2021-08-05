@@ -4,5 +4,5 @@ I have an `oe_license.txt` file in `/home/mmh/.openeye/`.
 The container expects `oe_license.txt` in `/perses/` because we set `ENV OE_LICENSE=/perses/oe_license.txt` in the Dockerfile.
 
 To do that use the `--mount` option.
-
-docker run --mount type=bind,source=/home/mmh/.openeye/,target=/perses/,readonly oe-license-test:0.1  python -c "import openeye; assert openeye.oechem.OEChemIsLicensed(), 'OpenEye license checks failed!'"
+For example and to to test:
+docker run --rm --mount type=bind,source=/home/mmh/.openeye/,target=/perses/,readonly mmh42/perses:0.9.1  python -c "import openeye; assert openeye.oechem.OEChemIsLicensed(), 'OpenEye license checks failed!'"
