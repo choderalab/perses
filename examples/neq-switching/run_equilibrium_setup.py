@@ -6,6 +6,7 @@ from openmmtools import constants
 from openmoltools import forcefield_generators
 from openmmforcefields.generators import SystemGenerator
 from perses.utils.openeye import extractPositionsFromOEMol
+from perses.rjmc.atom_mapping import AtomMapper
 from simtk import openmm, unit
 from simtk.openmm import app
 import copy
@@ -14,6 +15,7 @@ import mdtraj as md
 temperature = 300.0*unit.kelvin
 beta = 1.0 / (temperature*constants.kB)
 OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
+
 
 def generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filename):
     """
@@ -49,7 +51,6 @@ def generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filen
 
     ligand_topology_dict = {smiles : forcefield_generators.generateTopologyFromOEMol(mol) for smiles, mol in mol_dict.items()}
 
-
     protein_pdbfile = open(protein_pdb_filename, 'r')
     pdb_file = app.PDBFile(protein_pdbfile)
     protein_pdbfile.close()
@@ -82,6 +83,7 @@ def generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filen
         complex_positions_dict[smiles] = complex_positions
 
     return complex_topologies, complex_positions_dict
+
 
 def generate_ligand_topologies_and_positions(ligand_filename):
     """
@@ -278,6 +280,7 @@ if __name__=="__main__":
 
     #smiles_list = [oechem.OECreateSmiString(mol, OESMILES_OPTIONS)]
 
+    # TODO: This wasn't using the perses AtomMapper, what is this expecting?
     atom_mapper = AtomMapper(mol_list)
     atom_mapper.map_all_molecules()
     atom_mapper.generate_and_check_proposal_matrix()
