@@ -2091,7 +2091,7 @@ class HybridTopologyFactory(object):
 
         Parameters
         ----------
-        hybrid_positions : [n, 3] np.ndarray with unit
+        hybrid_positions : [n, 3] np.ndarray or simtk.unit.Quantity
             The positions of the hybrid system
 
         Returns
@@ -2114,7 +2114,7 @@ class HybridTopologyFactory(object):
 
         Parameters
         ----------
-        hybrid_positions : [n, 3] np.ndarray with unit
+        hybrid_positions : [n, 3] np.ndarray or simtk.unit.Quantity
             The positions of the hybrid system
 
         Returns
