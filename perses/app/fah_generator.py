@@ -18,6 +18,8 @@ from simtk import openmm
 import logging
 
 import datetime
+
+
 class TimeFilter(logging.Filter):
     def filter(self, record):
         try:
@@ -133,7 +135,7 @@ def relax_structure(temperature,
                     positions,
                     nequil=1000,
                     n_steps_per_iteration=250,
-                    platform_name='OpenCL',
+                    platform_name='CPU',
                     timestep=4.*unit.femtosecond,
                     collision_rate=90./unit.picosecond,
                     **kwargs):
@@ -414,13 +416,28 @@ def run_neq_fah_setup(ligand_file,
         pos = np.asarray(pos)
 
         import mdtraj as md
-        top = htfs[phase].hybrid_topology
-        np.save(f'{dir}/hybrid_topology', top)
-        traj = md.Trajectory(pos, top)
-        traj.remove_solvent(exclude=['CL', 'NA'], inplace=True)
-        traj.save(f'{dir}/hybrid_{phase}.pdb')
+        # Save old trajectory
+        old_traj = md.Trajectory(htfs[phase].old_positions(pos),
+                                 md.Topology.from_openmm(htfs[phase]._topology_proposal.old_topology))
+        old_traj.remove_solvent(exclude=['CL', 'NA'], inplace=True)
+        old_traj.save(f'{dir}/old_{phase}.pdb')
+        # Save new trajectory
+        new_traj = md.Trajectory(htfs[phase].new_positions(pos),
+                                 md.Topology.from_openmm(htfs[phase]._topology_proposal.new_topology))
+        new_traj.remove_solvent(exclude=['CL', 'NA'], inplace=True)
+        new_traj.save(f'{dir}/new_{phase}.pdb')
 
-        #lastly, make a core.xml
+        # Save atom mappings in single file
+        # to be accessed using
+        # np.load('/path/to/file.npz', allow_pickle=True)['hybrid_to_old_map'].flat[0]
+        # TODO: Better way to serialize this information?
+        hybrid_to_old_map = htfs[phase]._hybrid_to_old_map
+        hybrid_to_new_map = htfs[phase]._hybrid_to_new_map
+        np.savez(f'{dir}/hybrid_atom_mappings.npz',
+                 hybrid_to_old_map=hybrid_to_old_map,
+                 hybrid_to_new_map=hybrid_to_new_map)
+
+        # lastly, make a core.xml
 ###
         nsteps_per_cycle = 2*nsteps_eq + 2*nsteps_neq
         ncycles = 1
