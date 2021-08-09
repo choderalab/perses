@@ -135,7 +135,7 @@ def relax_structure(temperature,
                     positions,
                     nequil=1000,
                     n_steps_per_iteration=250,
-                    platform_name='CPU',
+                    platform_name='OpenCL',
                     timestep=4.*unit.femtosecond,
                     collision_rate=90./unit.picosecond,
                     **kwargs):
@@ -416,12 +416,12 @@ def run_neq_fah_setup(ligand_file,
         pos = np.asarray(pos)
 
         import mdtraj as md
-        # Save old trajectory
+        # Store initial configuration/topology for old system sliced form hybrid system as PDB file
         old_traj = md.Trajectory(htfs[phase].old_positions(pos),
                                  md.Topology.from_openmm(htfs[phase]._topology_proposal.old_topology))
         old_traj.remove_solvent(exclude=['CL', 'NA'], inplace=True)
         old_traj.save(f'{dir}/old_{phase}.pdb')
-        # Save new trajectory
+        # Store initial configuration/topology for new system sliced form hybrid system as PDB file
         new_traj = md.Trajectory(htfs[phase].new_positions(pos),
                                  md.Topology.from_openmm(htfs[phase]._topology_proposal.new_topology))
         new_traj.remove_solvent(exclude=['CL', 'NA'], inplace=True)
