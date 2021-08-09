@@ -910,6 +910,10 @@ class PolymerProposalEngine(ProposalEngine):
             # template_atom_names : dict, key : template atom index, value : template atom name
             template_atom_names = {}
             for atom in template.atoms:
+                if replace_with == 'LYN' and atom.name == 'HZ3': # Rename HZ3 to HZ1 s.t. the topology matches the naming in amino_acid_templates/LYN.pdb
+                    atom.name = 'HZ1'
+                    template.atomIndices['HZ1'] = template.atomIndices['HZ3']
+                    del template.atomIndices['HZ3']
                 template_atom_names[template.getAtomIndexByName(atom.name)] = atom.name
 
             # template_atoms : list(simtk.openmm.app.topology._TemplateAtomData) atoms in new residue
