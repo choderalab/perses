@@ -256,8 +256,10 @@ class PointMutationExecutor(object):
             validate_bool = False if old_res.name in ring_amino_acids or proposed_residue in ring_amino_acids else True
             new_positions, logp_proposal = geometry_engine.propose(topology_proposal, pos, beta,
                                                                    validate_energy_bookkeeping=validate_bool)
+            logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta,
+                                                        validate_energy_bookkeeping=validate_bool)
 
-            #check for charge change...
+            # Check for charge change...
             charge_diff = point_mutation_engine._get_charge_difference(current_resname=topology_proposal.old_topology.residue_topology.name,
                                                                        new_resname=topology_proposal.new_topology.residue_topology.name)
             _logger.info(f"charge diff: {charge_diff}")
@@ -268,9 +270,6 @@ class PointMutationExecutor(object):
                 self._transform_waters_into_ions(new_water_indices_to_ionize, topology_proposal.new_system, charge_diff)
                 PointMutationExecutor._modify_atom_classes(new_water_indices_to_ionize, topology_proposal)
 
-
-            logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta,
-                                                        validate_energy_bookkeeping=validate_bool)
             if generate_unmodified_hybrid_topology_factory:
                 repartitioned_endstate = None
                 self.generate_htf(HybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
