@@ -209,6 +209,12 @@ class PointMutationExecutor(object):
             complex_positions[:protein_n_atoms, :] = protein_positions
             complex_positions[protein_n_atoms:, :] = ligand_positions
 
+            # Convert positions back to openmm vec3 objects
+            complex_positions_vec3 = []
+            for position in complex_positions:
+                complex_positions_vec3.append(openmm.Vec3(*position.value_in_unit_system(unit.md_unit_system)))
+            complex_positions = unit.Quantity(value=complex_positions_vec3, unit=unit.nanometer)
+
         # Now for a system_generator
         self.system_generator = SystemGenerator(forcefields=forcefield_files,
                                                 barostat=barostat,
