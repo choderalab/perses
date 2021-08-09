@@ -251,6 +251,20 @@ class PointMutationExecutor(object):
 
             topology_proposal = point_mutation_engine.propose(sys, top)
 
+            # Fix naked charges in old and new systems
+            for system in [topology_proposal.old_system, topology_proposal.new_system]:
+                force_dict = {i.__class__.__name__: i for i in system.getForces()}
+                if 'NonbondedForce' in [i for i in force_dict.keys()]:
+                    nb_force = force_dict['NonbondedForce']
+                    for i in range(nb_force.getNumParticles()):
+                        charge, sigma, epsilon = nb_force.getParticleParameters(i)
+                        if sigma == 0*unit.nanometer:
+                            sigma = 0.06*unit.nanometer
+                            nb_force.setParticleParameters(i, charge, sigma, epsilon)
+                        if epsilon == 0*unit.kilojoule_per_mole:
+                            epsilon = 0.0001*unit.kilojoule_per_mole
+                            nb_force.setParticleParameters(i, charge, sigma, epsilon)
+
             # Only validate energy bookkeeping if the WT and proposed residues do not involve rings
             old_res = [res for res in top.residues() if res.id == mutation_residue_id][0]
             validate_bool = False if old_res.name in ring_amino_acids or proposed_residue in ring_amino_acids else True
