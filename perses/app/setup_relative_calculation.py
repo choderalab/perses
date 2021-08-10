@@ -5,6 +5,7 @@ import os
 import sys
 import simtk.unit as unit
 import logging
+from pathlib import Path
 
 from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
 from perses.annihilation.relative import HybridTopologyFactory
@@ -105,6 +106,9 @@ def getSetupOptions(filename):
 
     if 'complex_box_dimensions' not in setup_options:
         setup_options['complex_box_dimensions'] = None
+    # If complex_box_dimensions is None, nothing to do
+    elif setup_options['complex_box_dimensions'] is None:
+        pass
     else:
         setup_options['complex_box_dimensions'] = tuple([float(x) for x in setup_options['complex_box_dimensions']])
 
@@ -299,6 +303,10 @@ def getSetupOptions(filename):
         _logger.info(f"\t'softcore_v2' not specified: default to 'False'")
 
     _logger.info(f"\tCreating '{trajectory_directory}'...")
+
+    if not 'rmsd_restraint' in setup_options:
+        setup_options['rmsd_restraint'] = False
+
     os.makedirs(trajectory_directory, exist_ok=True)
 
 
@@ -327,8 +335,6 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     #   such as deferring to defaults for modules we call unless the user
     #   chooses to override them.
 
-    if not 'rmsd_restraint' in setup_options:
-        setup_options['rmsd_restraint'] = False
 
     if 'use_given_geometries' not in list(setup_options.keys()):
         use_given_geometries = False
@@ -680,7 +686,17 @@ def run(yaml_filename=None):
            _logger.critical(f"You must specify the setup yaml file as an argument to the script.")
 
     _logger.info(f"Getting setup options from {yaml_filename}")
+
     setup_options = getSetupOptions(yaml_filename)
+
+    # We want to make sure that if the file is in a directory, we put the parsed file in
+    # the same directory
+    yaml_path = Path(yaml_filename)
+    yaml_name = yaml_path.name
+    time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    yaml_parse_name = f"parsed-{time}-{yaml_name}"
+    with open(Path.joinpath(yaml_path.parents[0], yaml_parse_name), "w") as outfile:
+            yaml.dump(setup_options, outfile)
 
     # The name of the reporter file includes the phase name, so we need to check each
     # one
