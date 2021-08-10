@@ -4261,6 +4261,54 @@ class RestCapablePMEHybridTopologyFactory(RxnHybridTopologyFactory):
 
     from openmmtools.constants import ONE_4PI_EPS0
 
+    # global parameters:
+    #
+    # - lambda_rest_scale - this is sqrt(beta/beta0)
+    # - lambda_electrostatics_old - this goes from 1 to 0 (on to off) and is split from lambda_electrostatics_new to enable additional control of the unique old vs. new atoms
+    # - lambda_electrostatics_new - this goes from 0 to 1 (off to on)
+    # - lambda_sterics_old - this goes from 1 to 0 (on to off)
+    # - lambda_sterics_new - this goes from 0 to 1 (off to on)
+
+    # per particle parameters:
+    #
+    # for rest scaling (these three sets are disjoint):
+    #     is_rest - indicates whether the atom is in the rest region (1), otherwise 0
+    #     is_nonrest_solute - indicates whether the atom is outside the rest region and is solute (1), otherwise 0
+    #     is_nonrest_solvent - indicates whether the atom is outside the rest region and is solvent (1), otherwise 0
+    # for alchemical scaling (these sets are disjoint):
+    #     is_environment - indicates whether the atom is considered environment (1), otherwise 0
+    #     is_core - indicates whether the atom is considered core (1), otherwise 0
+    #     is_unique_old - indicates whether the atom is considered unique old (1), otherwise 0
+    #     is_unique_new - indicates whether the atom is considered unique new(1), otherwise 0
+    # for defining energy:
+    #     charge_old - charge of the atom in the old system
+    #     charge_new - charge of the atom in the new system
+    #     sigma_old - sigma of the atom in the old system
+    #     sigma_new - sigma of the atom in the new system
+    #     epsilon_old - epsilon of the atom in the old system
+    #     epsilon_new - epsilon of the atom in the new system
+
+    # per bond parameters:
+    #
+    # for rest scaling (these three sets are disjoint):
+    #     is_rest - indicates whether the exception is in the rest region (1), otherwise 0
+    #     is_inter - indicates whether the exception straddles the rest region (1), otherwise 0
+    #     is_nonrest - indicates whether the exception is outside the rest region (1), otherwise 0
+    # for alchemical scaling (these sets are disjoint):
+    #     is_environment - indicates whether the exception is considered environment (1), otherwise 0
+    #     is_core - indicates whether the exception is considered core (1), otherwise 0
+    #     is_unique_old - indicates whether the exception is considered unique old (1), otherwise 0
+    #     is_unique_new - indicates whether the exception is considered unique new(1), otherwise 0
+    # for defining energy:
+    #     chargeProd_old - charge product of the atoms forming the exception in the old system
+    #     chargeProd_new - charge product of the atoms forming the exception in the new system
+    #     sigma_old - sigma of the atoms forming the exception in the old system
+    #     sigma_new - sigma of the atoms forming the exception in the new system
+    #     epsilon_old - epsilon of the atoms forming the exception in the old system
+    #     epsilon_new - epsilon of the atoms forming the exception in the new system
+
+
+
     _default_nonbonded_expression_list = [
 
         "U_electrostatics + U_sterics;",
@@ -4274,9 +4322,6 @@ class RestCapablePMEHybridTopologyFactory(RxnHybridTopologyFactory):
 
         # Define chargeProd (with REST scaling)
         "chargeProd = (charge1 * p1_rest_scale) * (charge2 * p2_rest_scale);",
-        "p1_rest_scale = select(1 - is_both_solvent, is_rest1 * lambda_rest_scale + is_nonrest_solute1 + is_nonrest_solvent1 * lambda_rest_scale, 1);",
-        "p2_rest_scale = select(1 - is_both_solvent, is_rest2 * lambda_rest_scale + is_nonrest_solute2 + is_nonrest_solvent2 * lambda_rest_scale, 1);",
-        "is_both_solvent = is_nonrest_solvent1 * is_nonrest_solvent2;",
 
         # Define charge1 and charge2 (with alchemical scaling)
         "charge1 = (is_unique_old1 * old_charge_scalar1) + (is_unique_new1 * new_charge_scalar1) + is_core1 * (old_charge_scalar1 + new_charge_scalar1) + is_environment1 * (old_charge_scalar1 + new_charge_scalar1);",
@@ -4300,8 +4345,7 @@ class RestCapablePMEHybridTopologyFactory(RxnHybridTopologyFactory):
         "new_sigma_scalar2 = lambda_sterics_new * sigma_new2;",
 
         # Define epsilon (with rest scaling)
-        "epsilon = sqrt((epsilon1 * p1_rest_scale) * (epsilon2 * p2_rest_scale));",
-        # Q for DAR: Are we sure we want to apply the rest scaling before combining epsilons?
+        "epsilon = p1_rest_scale * p2_rest_scale * sqrt(epsilon1 * epsilon2);",
 
         # Define epsilon1 and epsilon2 (with alchemical scaling)
         "epsilon1 = (is_unique_old1 * old_epsilon_scalar1) + (is_unique_new1 * new_epsilon_scalar1) + is_core1 * (old_epsilon_scalar1 + new_epsilon_scalar1) + is_environment1 * (old_epsilon_scalar1 + new_epsilon_scalar1);",
@@ -4311,6 +4355,11 @@ class RestCapablePMEHybridTopologyFactory(RxnHybridTopologyFactory):
         "epsilon2 = (is_unique_old2 * old_epsilon_scalar2) + (is_unique_new2 * new_epsilon_scalar2) + is_core2 * (old_epsilon_scalar2 + new_epsilon_scalar2) + is_environment2 * (old_epsilon_scalar2 + new_epsilon_scalar2);",
         "old_epsilon_scalar2 = lambda_sterics_old * epsilon_old2;",
         "new_epsilon_scalar2 = lambda_seterics_new * epsilon_new2;",
+
+        # Define rest scale factors
+        "p1_rest_scale = select(1 - is_both_solvent, is_rest1 * lambda_rest_scale + is_nonrest_solute1 + is_nonrest_solvent1 * lambda_rest_scale, 1);",
+        "p2_rest_scale = select(1 - is_both_solvent, is_rest2 * lambda_rest_scale + is_nonrest_solute2 + is_nonrest_solvent2 * lambda_rest_scale, 1);",
+        "is_both_solvent = is_nonrest_solvent1 * is_nonrest_solvent2;",
 
         # Define alpha
         "alpha = sqrt(-log(2 * delta) / r_cutoff);",
@@ -4322,9 +4371,8 @@ class RestCapablePMEHybridTopologyFactory(RxnHybridTopologyFactory):
         "r_eff_sterics = sqrt(r^2 + w_sterics^2);",
 
         # Define 4th dimension terms:
-        "w_electrostatics = is_unique_old * lambda_electrostatics_new * w_scale + is_unique_new * lambda_electrostatics_new * w_scale;", # Q for DAR: do we also want to multiply by r_cutoff (as we do in RxnHybridTopologyFactory)?
-        # we want w for unique old atoms to go from 0 to 1
-        "w_sterics = is_unique_old * lambda_sterics_new * w_scale + is_unique_new * lambda_sterics_old * w_scale;",
+        "w_electrostatics = is_unique_old * lambda_electrostatics_new * w_scale * r_cutoff + is_unique_new * lambda_electrostatics_old * w_scale * r_cutoff;", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
+        "w_sterics = is_unique_old * lambda_sterics_new * w_scale * r_cutoff + is_unique_new * lambda_sterics_old * w_scale * r_cutoff;",
         "is_unique_old = step(is_unique_old1 + is_unique_old2 - 0.1);",
         "is_unique_new = step(is_unique_new1 + is_unique_new2 - 0.1);",
         "w_scale = {w_scale};"
@@ -4370,12 +4418,12 @@ class RestCapablePMEHybridTopologyFactory(RxnHybridTopologyFactory):
         "r_eff_sterics = sqrt(r^2 + w_sterics^2);",
 
         # Define 4th dimension terms:
-        "w_electrostatics = is_unique_old * lambda_electrostatics_new * w_scale + is_unique_new * lambda_electrostatics_new * w_scale;",
-        # we want w for unique old atoms to go from 0 to 1
-        "w_sterics = is_unique_old * lambda_sterics_new * w_scale + is_unique_new * lambda_sterics_old * w_scale;",
+        "w_electrostatics = is_unique_old * lambda_electrostatics_new * w_scale * r_cutoff + is_unique_new * lambda_electrostatics_old * w_scale * r_cutoff;",
+        "w_sterics = is_unique_old * lambda_sterics_new * w_scale * r_cutoff + is_unique_new * lambda_sterics_old * w_scale * r_cutoff;",
         "w_scale = {w_scale};"
 
     ]
+
 
     _default_nonbonded_expression = ' '.join(_default_nonbonded_expression_list)
     _default_exception_expression = ' '.join(_default_exception_expression_list)
@@ -4388,8 +4436,8 @@ class RestCapablePMEHybridTopologyFactory(RxnHybridTopologyFactory):
                  # scaling arguments
                  scale_regions=None,
 
-                 r_cutoff=1.4 * unit.nanometers,  # default cutoff for reaction field electrostatics
-                 w_scale=1.,
+                 r_cutoff=None,
+                 w_scale=0.1,
                  delta=1e-4, # ewaldErrorTolerance
 
                  use_dispersion_correction=False,
@@ -4398,7 +4446,7 @@ class RestCapablePMEHybridTopologyFactory(RxnHybridTopologyFactory):
                  generate_htf_for_testing=False,
                  **kwargs):
 
-        _logger.info("*** Generating RxnHybridTopologyFactory ***")
+        _logger.info("*** Generating RestCapablePMEHybridTopologyFactory ***")
         _logger.info("Beginning nonbonded method, total particle, barostat, and exceptions retrieval...")
         self._topology_proposal = topology_proposal
         self._num_alchemical_regions = 1
@@ -4410,12 +4458,6 @@ class RestCapablePMEHybridTopologyFactory(RxnHybridTopologyFactory):
         self._old_positions = current_positions
         self._new_positions = new_positions
 
-        # nonbonded parameters
-        self._r_cutoff = r_cutoff
-        self._w_scale = w_scale
-        self._delta = delta
-        self._use_dispersion_correction = use_dispersion_correction
-
         # Modify properties for testing:
         if generate_htf_for_testing:
             self._w_scale = 0
@@ -4426,6 +4468,18 @@ class RestCapablePMEHybridTopologyFactory(RxnHybridTopologyFactory):
         self._new_system_forces = {type(force).__name__ : force for force in self._new_system.getForces()}
         _logger.info(f"Old system forces: {self._old_system_forces.keys()}")
         _logger.info(f"New system forces: {self._new_system_forces.keys()}")
+
+        # Nonbonded parameters
+        if not r_cutoff: # Set the cutoff based on the old system's cutoff
+            if self._old_system_forces['NonbondedForce'].getNonbondedMethod() != openmm.NonbondedForce.NoCutoff:
+                self._r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
+            else:
+                self._r_cutoff = 100 * unit.nanometers
+        else:
+            self._r_cutoff = r_cutoff
+        self._w_scale = w_scale
+        self._delta = delta
+        self._use_dispersion_correction = use_dispersion_correction
 
         # Check that there are no unknown forces in the new and old systems:
         for system_name in ('old', 'new'):
@@ -4793,10 +4847,10 @@ class RestCapablePMEHybridTopologyFactory(RxnHybridTopologyFactory):
             # Add per-bond parameters for rest scaling -- these sets are disjoint
             custom_force.addPerParticleParameter("is_rest")
             custom_force.addPerParticleParameter("is_inter")
-            custom_force.addPerParticleParameter("is_nonrest") # This probably isn't necessary, but should we keep it for completeness?
+            custom_force.addPerParticleParameter("is_nonrest")
 
             # Add per-bond parameters for alchemical scaling -- these sets are also disjoint
-            custom_force.addPerParticleParameter('is_environment') # This probably isn't necessary, but should we keep it for consistency?
+            custom_force.addPerParticleParameter('is_environment')
             custom_force.addPerParticleParameter('is_core')
             custom_force.addPerParticleParameter('is_unique_old')
             custom_force.addPerParticleParameter('is_unique_new')
@@ -4810,7 +4864,6 @@ class RestCapablePMEHybridTopologyFactory(RxnHybridTopologyFactory):
             custom_force.addPerBondParameter('epsilon_new')
 
         # Handle some nonbonded attributes
-        # Note for DAR: can you double check that these attributes are set appropriately?
         old_system_nbf = self._old_system_forces['NonbondedForce']
         standard_nonbonded_method = old_system_nbf.getNonbondedMethod()
         if standard_nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME,
@@ -4821,7 +4874,7 @@ class RestCapablePMEHybridTopologyFactory(RxnHybridTopologyFactory):
                 custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(standard_nonbonded_method))
                 custom_force.setUseSwitchingFunction(False)
                 custom_force.setCutoffDistance(self._r_cutoff)
-                # Should we also explictly set the long range correction to be False?
+                custom_force.setUseLongRangeCorrection(False)
 
         elif standard_nonbonded_method == openmm.NonbondedForce.NoCutoff:
             if is_exception:
