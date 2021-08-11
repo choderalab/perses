@@ -18,6 +18,8 @@ from simtk import openmm
 import logging
 
 import datetime
+
+
 class TimeFilter(logging.Filter):
     def filter(self, record):
         try:
@@ -134,7 +136,7 @@ def relax_structure(temperature,
                     nequil=1000,
                     n_steps_per_iteration=250,
                     platform_name='OpenCL',
-                    timestep=2.*unit.femtosecond,
+                    timestep=4.*unit.femtosecond,
                     collision_rate=90./unit.picosecond,
                     **kwargs):
     """
@@ -151,7 +153,7 @@ def relax_structure(temperature,
             numper of steps per nequil
         platform name : str default='OpenCL'
             platform to run openmm on. OpenCL is best as this is what is used on FAH
-        timestep : simtk.unit.Quantity, default = 2*unit.femtosecond
+        timestep : simtk.unit.Quantity, default = 4*unit.femtosecond
             timestep for equilibration NOT for production
         collision_rate : simtk.unit.Quantity, default=90./unit.picosecond
 
@@ -197,7 +199,7 @@ def run_neq_fah_setup(ligand_file,
                       trajectory_directory,
                       complex_box_dimensions=(9.8, 9.8, 9.8),
                       solvent_box_dimensions=(3.5, 3.5, 3.5),
-                      timestep=4.0,
+                      timestep=4.0, # femtoseconds (implicit)
                       eq_splitting='V R O R V',
                       neq_splitting='V R H O R V',
                       measure_shadow_work=False,
@@ -234,7 +236,7 @@ def run_neq_fah_setup(ligand_file,
                       setup='small_molecule',
                       protein_kwargs=None,
                       ionic_strength=0.15*unit.molar,
-                      remove_constraints='not water',
+                      remove_constraints=False,
                       rmsd_restraint=True,
                       **kwargs):
     """
@@ -409,17 +411,33 @@ def run_neq_fah_setup(ligand_file,
         else:
             passed = True
 
+        # TODO: state variable can indeed be undefined
         pos = state.getPositions(asNumpy=True)
         pos = np.asarray(pos)
 
         import mdtraj as md
-        top = htfs[phase].hybrid_topology
-        np.save(f'{dir}/hybrid_topology', top)
-        traj = md.Trajectory(pos, top)
-        traj.remove_solvent(exclude=['CL', 'NA'], inplace=True)
-        traj.save(f'{dir}/hybrid_{phase}.pdb')
+        # Store initial configuration/topology for old system sliced form hybrid system as PDB file
+        old_traj = md.Trajectory(htfs[phase].old_positions(pos),
+                                 md.Topology.from_openmm(htfs[phase]._topology_proposal.old_topology))
+        old_traj.remove_solvent(exclude=['CL', 'NA'], inplace=True)
+        old_traj.save(f'{dir}/old_{phase}.pdb')
+        # Store initial configuration/topology for new system sliced form hybrid system as PDB file
+        new_traj = md.Trajectory(htfs[phase].new_positions(pos),
+                                 md.Topology.from_openmm(htfs[phase]._topology_proposal.new_topology))
+        new_traj.remove_solvent(exclude=['CL', 'NA'], inplace=True)
+        new_traj.save(f'{dir}/new_{phase}.pdb')
 
-        #lastly, make a core.xml
+        # Save atom mappings in single file
+        # to be accessed using
+        # np.load('/path/to/file.npz', allow_pickle=True)['hybrid_to_old_map'].flat[0]
+        # TODO: Better way to serialize this information?
+        hybrid_to_old_map = htfs[phase]._hybrid_to_old_map
+        hybrid_to_new_map = htfs[phase]._hybrid_to_new_map
+        np.savez(f'{dir}/hybrid_atom_mappings.npz',
+                 hybrid_to_old_map=hybrid_to_old_map,
+                 hybrid_to_new_map=hybrid_to_new_map)
+
+        # lastly, make a core.xml
 ###
         nsteps_per_cycle = 2*nsteps_eq + 2*nsteps_neq
         ncycles = 1
@@ -486,7 +504,7 @@ def run(yaml_filename=None):
         if not os.path.exists(f"{setup_options['apo_projid']}"):
             #os.makedirs(f"{setup_options['apo_projid']}/RUNS/")
             dst = f"{setup_options['apo_projid']}/RUNS/{setup_options['trajectory_directory']}"
-            os.makedirs(dst)        
+            os.makedirs(dst)
             copyfile(yaml_filename, dst)
     if 'vacuum_projid' in setup_options:
         if not os.path.exists(f"{setup_options['vacuum_projid']}"):

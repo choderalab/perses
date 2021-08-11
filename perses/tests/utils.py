@@ -565,6 +565,8 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     new_positions : np.array, unit-bearing
         The positions of the new system
     """
+    # TODO: Modify this to use openff.toolkit.topology.Molecule instead of openeye
+
     from openmoltools import forcefield_generators
     from openmmtools import testsystems
     from openmmforcefields.generators import SystemGenerator
@@ -579,6 +581,7 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     current_mol = forcefield_generators.generateOEMolFromTopologyResidue(ligand_topology[1]) # guest is second residue in topology
     proposed_mol = smiles_to_oemol('C1CC2(CCC1(CC2)C)C')
 
+    from openeye import oechem
     initial_smiles = oechem.OEMolToSmiles(current_mol)
     final_smiles = oechem.OEMolToSmiles(proposed_mol)
 
@@ -591,8 +594,7 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     gaff_filename = get_data_filename('data/gaff.xml')
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False},nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff})
     geometry_engine = geometry.FFAllAngleGeometryEngine()
-    proposal_engine = SmallMoleculeSetProposalEngine(
-        [current_mol, proposed_mol], system_generator, residue_name=current_mol_name,atom_expr=atom_expr,bond_expr=bond_expr)
+    proposal_engine = SmallMoleculeSetProposalEngine([current_mol, proposed_mol], system_generator, residue_name=current_mol_name)
 
     # Generate topology proposal
     topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol_id=0, proposed_mol_id=1)

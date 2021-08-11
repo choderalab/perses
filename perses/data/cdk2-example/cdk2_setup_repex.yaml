@@ -9,6 +9,10 @@ ligand_file: CDK2_ligands.sdf
 old_ligand_index: 14
 new_ligand_index: 15
 
+# Use geometry-derived mapping
+use_given_geometries: true
+given_geometries_tolerance: 0.2 # angstroms
+
 # OpenMM ffxml force field files installed via the openmm-forcefields package
 # for biopolymers and solvents.
 # Note that small molecule force field files should NOT be included here.
