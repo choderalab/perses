@@ -543,6 +543,8 @@ class RelativeFEPSetup(object):
         receptor_mol2_filename : str, default None
             Receptor mol2 filename. If none, protein_pdb_filename must be provided
         """
+        # TODO: What if you get both protein pdb and receptor mol2?
+        # It might be a better idea to have something to auto-detect the format or a kwarg to specify it.
         if protein_pdb_filename:
             self._protein_pdb_filename = protein_pdb_filename
             protein_pdbfile = open(self._protein_pdb_filename, 'r')
