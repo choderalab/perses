@@ -2091,7 +2091,7 @@ class HybridTopologyFactory(object):
 
         Parameters
         ----------
-        hybrid_positions : [n, 3] np.ndarray with unit
+        hybrid_positions : [n, 3] np.ndarray or simtk.unit.Quantity
             The positions of the hybrid system
 
         Returns
@@ -2100,6 +2100,9 @@ class HybridTopologyFactory(object):
             The positions of the old system
         """
         n_atoms_old = self._topology_proposal.n_atoms_old
+        # making sure hybrid positions are simtk.unit.Quantity objects
+        if not isinstance(hybrid_positions, unit.Quantity):
+            hybrid_positions = unit.Quantity(hybrid_positions, unit=unit.nanometer)
         old_positions = unit.Quantity(np.zeros([n_atoms_old, 3]), unit=unit.nanometer)
         for idx in range(n_atoms_old):
             old_positions[idx, :] = hybrid_positions[idx, :]
@@ -2111,7 +2114,7 @@ class HybridTopologyFactory(object):
 
         Parameters
         ----------
-        hybrid_positions : [n, 3] np.ndarray with unit
+        hybrid_positions : [n, 3] np.ndarray or simtk.unit.Quantity
             The positions of the hybrid system
 
         Returns
@@ -2120,6 +2123,9 @@ class HybridTopologyFactory(object):
             The positions of the new system
         """
         n_atoms_new = self._topology_proposal.n_atoms_new
+        # making sure hybrid positions are simtk.unit.Quantity objects
+        if not isinstance(hybrid_positions, unit.Quantity):
+            hybrid_positions = unit.Quantity(hybrid_positions, unit=unit.nanometer)
         new_positions = unit.Quantity(np.zeros([n_atoms_new, 3]), unit=unit.nanometer)
         for idx in range(n_atoms_new):
             new_positions[idx, :] = hybrid_positions[self._new_to_hybrid_map[idx], :]
