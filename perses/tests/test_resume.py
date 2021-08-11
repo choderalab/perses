@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 import subprocess
 import tempfile
 
@@ -17,7 +18,7 @@ from perses.app.relative_setup import RelativeFEPSetup
 from perses.samplers.multistate import HybridRepexSampler
 
 
-def test_cli_resume():
+def test_cli_resume_repex():
 
     with tempfile.TemporaryDirectory() as temp_dir:
         os.chdir(temp_dir)
@@ -60,9 +61,28 @@ def test_cli_resume():
         y_doc = yaml.load(document, Loader=yaml.UnsafeLoader)
         y_doc["protein_pdb"] = protein_pdb
         y_doc["ligand_file"] = ligand_file
+
         with open("test.yml", "w") as outfile:
             yaml.dump(y_doc, outfile)
-        subprocess.run(["perses-relative", "test.yml"])
+
+        env = os.environ.copy()
+        if os.environ.get('GITHUB_ACTIONS', False):
+            shutil.copy("/home/runner/work/perses/perses/oe_license.txt", ".")
+        subprocess.run("perses-relative test.yml", shell=True, check=True, env=env)
+
+        # Now we change the yaml to run longer
+        y_doc["n_cycles"] = 20
+        with open("test.yml", "w") as outfile:
+            yaml.dump(y_doc, outfile)
+        subprocess.run("perses-relative test.yml", shell=True, check=True, env=env)
+
+        # Check to see if we have a total of 20
+        reporter = MultiStateReporter(
+            "cdk2_repex_hbonds/cdk2-vacuum.nc", checkpoint_interval=10
+        )
+        simulation = HybridRepexSampler.from_storage(reporter)
+
+        assert simulation.iteration == 20
 
 
 def test_resume_small_molecule(tmp_path):
