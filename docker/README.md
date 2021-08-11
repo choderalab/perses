@@ -16,10 +16,10 @@ $ docker run --rm --mount type=bind,source=$HOME/.openeye/,target=/perses/,reado
 
 ## GPU Support
 
-Pass the option `--gpus all` to use the host's GPU:
+Pass the option `--gpus device=0` to use the host's GPU:
 
 ```
-$ docker run -it --rm --gpus all --mount type=bind,source=$HOME/.openeye/,target=/openeye/,readonly choderalab/perses:0.9.1 python -m simtk.testInstallation
+$ docker run -it --rm --gpus device=0 --mount type=bind,source=$HOME/.openeye/,target=/openeye/,readonly choderalab/perses:0.9.1 python -m simtk.testInstallation
 OpenMM Version: 7.5.1
 Git Revision: a9cfd7fb9343e21c3dbb76e377c721328830a3ee
 
@@ -37,3 +37,5 @@ CPU vs. CUDA: 7.32829e-07
 
 All differences are within tolerance.
 ```
+Note: `perses` currently works best on a single GPU. 
+See the documentation [here](https://docs.docker.com/config/containers/resource_constraints/#access-an-nvidia-gpu) for how to specify a single GPU on a multi-GPU system.
