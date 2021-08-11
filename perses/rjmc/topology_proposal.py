@@ -1139,7 +1139,7 @@ class PolymerProposalEngine(ProposalEngine):
         new_topology : simtk.openmm.app.Topology
             topology of new system
         ignore_sidechain_atoms : bool, default False
-            whether to ignore sidechain atoms in the atom map
+            whether to ignore sidechain atoms (CB atoms and beyond) in the atom map
 
         Returns
         -------
@@ -1342,15 +1342,6 @@ class PolymerProposalEngine(ProposalEngine):
         if ignore_sidechain_atoms:
             for index in sidechain_atom_indices:
                 del[sidechain_fixed_map[index]]
-
-        #make sure that CB is mapped; otherwise the residue will not be contiguous
-        #found_CB = False
-        #if any(item[0] == 'CB' and item[1] == 'CB' for item in mapped_names):
-        #    found_CB = True
-	#
-        #if not found_CB:
-        #    _logger.debug(f"\t\t\tno 'CB' found!!!.  removing local atom map stereo sidechain...")
-        #    sidechain_fixed_map = {}
 
         _logger.debug(f"\t\t\tthe local atom map (backbone) is {local_atom_map}")
         #update the local map
