@@ -1,6 +1,7 @@
 import logging
 import numpy as np
 from openmmtools.integrators import PeriodicNonequilibriumIntegrator
+from pkg_resources import resource_filename
 from simtk import unit
 from simtk import openmm
 import argparse
@@ -35,7 +36,7 @@ parser.add_argument('--neq_save_period',
 args = parser.parse_args()
 
 # Build HybridTopologyFactory
-solvent_delivery = PointMutationExecutor("ala_vacuum.pdb",
+solvent_delivery = PointMutationExecutor(resource_filename('perses', os.path.join('data', 'ala_vacuum.pdb')),
                                          '1',
                                          '2',
                                          'ASP',
