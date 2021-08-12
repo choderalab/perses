@@ -15,22 +15,22 @@ _logger.setLevel(logging.INFO)
 
 # Read args
 parser = argparse.ArgumentParser(description='run perses protein mutation on capped amino acid')
-parser.add_argument('dir', type=str, help='path to input/output dir')
 parser.add_argument('time_step', type=float, help='time step in femtoseconds')
 parser.add_argument('eq_steps', type=int, help='Number of steps for equilibrium simulation')
 parser.add_argument('neq_steps', type=int, help='Number of steps for non-equilibrium simulation')
+parser.add_argument('--outdir', type=str, help='path to output directory. Defaults to output/', default='output/')
 parser.add_argument('--platform',
                     type=str,
-                    help='compute platform: Reference, CPU, CUDA or OpenCL.',
+                    help='compute platform: Reference, CPU, CUDA or OpenCL. Defaults to OpenCL.',
                     default='OpenCL',
                     required=False)
 parser.add_argument('--eq_save_period',
                     type=int,
-                    help='Save period for equlibrium simulation, in steps.',
+                    help='Save period for equlibrium simulation, in steps. Defaults to 1000.',
                     default=1000)
 parser.add_argument('--neq_save_period',
                     type=int,
-                    help='Save period for non-equlibrium simulation, in steps.',
+                    help='Save period for non-equlibrium simulation, in steps. Defaults to 1000.',
                     default=1000)
 args = parser.parse_args()
 
@@ -160,7 +160,7 @@ reverse_works_master.append(reverse_works)
 
 # Save output
 # create output directory if it does not exist
-out_path = pathlib.Path(args.dir)
+out_path = pathlib.Path(args.outdir)
 out_path.mkdir(parents=True, exist_ok=True)
 # Save works
 with open(os.path.join(out_path, f"forward.npy"), 'wb') as out_file:
