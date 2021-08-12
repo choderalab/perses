@@ -4,7 +4,6 @@ from openmmtools.integrators import PeriodicNonequilibriumIntegrator
 from pkg_resources import resource_filename
 from simtk import unit
 from simtk import openmm
-import argparse
 import os
 import pathlib
 import time
@@ -14,26 +13,16 @@ from perses.app.relative_point_mutation_setup import PointMutationExecutor
 _logger = logging.getLogger()
 _logger.setLevel(logging.INFO)
 
-# Read args
-parser = argparse.ArgumentParser(description='run perses protein mutation on capped amino acid')
-parser.add_argument('time_step', type=float, help='time step in femtoseconds')
-parser.add_argument('eq_steps', type=int, help='Number of steps for equilibrium simulation')
-parser.add_argument('neq_steps', type=int, help='Number of steps for non-equilibrium simulation')
-parser.add_argument('--outdir', type=str, help='path to output directory. Defaults to output/', default='output/')
-parser.add_argument('--platform',
-                    type=str,
-                    help='compute platform: Reference, CPU, CUDA or OpenCL. Defaults to OpenCL.',
-                    default='OpenCL',
-                    required=False)
-parser.add_argument('--eq_save_period',
-                    type=int,
-                    help='Save period for equlibrium simulation, in steps. Defaults to 1000.',
-                    default=1000)
-parser.add_argument('--neq_save_period',
-                    type=int,
-                    help='Save period for non-equlibrium simulation, in steps. Defaults to 1000.',
-                    default=1000)
-args = parser.parse_args()
+# Simulation parameters -- modify as needed
+nsteps_eq = 2
+nsteps_neq = 4
+neq_splitting = 'V R H O R V'
+timestep = 4.0 * unit.femtosecond
+platform_name = 'CPU'  # Change to 'CUDA' or 'OpenCL' in production
+temperature = 300 * unit.kelvin
+save_freq_eq = 1
+save_freq_neq = 2
+outdir_path = 'output/'
 
 # Build HybridTopologyFactory
 solvent_delivery = PointMutationExecutor(resource_filename('perses', os.path.join('data', 'ala_vacuum.pdb')),
@@ -60,16 +49,6 @@ DEFAULT_ALCHEMICAL_FUNCTIONS = {
     'lambda_angles': x,
     'lambda_torsions': x
 }
-
-# Define simulation parameters
-nsteps_eq = args.eq_steps
-nsteps_neq = args.neq_steps
-neq_splitting = 'V R H O R V'
-timestep = args.time_step * unit.femtosecond
-platform_name = args.platform
-temperature = 300 * unit.kelvin
-save_freq_eq = args.eq_save_period
-save_freq_neq = args.neq_save_period
 
 system = htf.hybrid_system
 positions = htf.hybrid_positions
@@ -161,7 +140,7 @@ reverse_works_master.append(reverse_works)
 
 # Save output
 # create output directory if it does not exist
-out_path = pathlib.Path(args.outdir)
+out_path = pathlib.Path(outdir_path)
 out_path.mkdir(parents=True, exist_ok=True)
 # Save works
 with open(os.path.join(out_path, f"forward.npy"), 'wb') as out_file:
