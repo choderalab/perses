@@ -24,12 +24,12 @@ def test_cli_resume_repex():
         os.chdir(temp_dir)
         # Need to get path to examples dir
         protein_pdb = resource_filename(
-            "perses", os.path.join("examples", "cdk2-example", "CDK2_protein.pdb")
-        ).replace("/perses", "", 1)
+            "perses", os.path.join("data", "cdk2-example", "CDK2_protein.pdb")
+        )
         ligand_file = resource_filename(
             "perses",
-            os.path.join("examples", "cdk2-example", "CDK2_ligands_shifted.sdf"),
-        ).replace("/perses", "", 1)
+            os.path.join("data", "cdk2-example", "CDK2_ligands_shifted.sdf"),
+        )
 
         document = """
         atom_selection: not water
@@ -155,7 +155,7 @@ def test_resume_small_molecule(tmp_path):
     assert simulation.iteration == 15
 
 
-def test_resume_protien_mutation_with_checkpoint(tmp_path):
+def test_resume_protein_mutation_with_checkpoint(tmp_path):
 
     pdb_filename = resource_filename("perses", "data/ala_vacuum.pdb")
     solvent_delivery = PointMutationExecutor(
@@ -167,7 +167,7 @@ def test_resume_protien_mutation_with_checkpoint(tmp_path):
         flatten_exceptions=True,
         conduct_endstate_validation=False,
         barostat=None,
-        phase="vaccum",
+        phase="vacuum",
         periodic_forcefield_kwargs=None,
         nonperiodic_forcefield_kwargs={"nonbondedMethod": app.NoCutoff},
     )
