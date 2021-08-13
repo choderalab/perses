@@ -4356,10 +4356,14 @@ class RestCapablePMEHybridTopologyFactory(RxnHybridTopologyFactory):
         "old_epsilon_scalar2 = lambda_sterics_old * epsilon_old2;",
         "new_epsilon_scalar2 = lambda_seterics_new * epsilon_new2;",
 
-        # Define rest scale factors
-        "p1_rest_scale = select(1 - is_both_solvent, is_rest1 * lambda_rest_scale + is_nonrest_solute1 + is_nonrest_solvent1 * lambda_rest_scale, 1);",
-        "p2_rest_scale = select(1 - is_both_solvent, is_rest2 * lambda_rest_scale + is_nonrest_solute2 + is_nonrest_solvent2 * lambda_rest_scale, 1);",
-        "is_both_solvent = is_nonrest_solvent1 * is_nonrest_solvent2;",
+        # Define rest scale factors (normal rest)
+        "p1_rest_scale = is_rest1 * lambda_rest_scale;",
+        "p2_rest_scale = is_rest2 * lambda_rest_scale;",
+
+        # Define rest scale factors (scaled water rest)
+        # "p1_rest_scale = select(1 - is_both_solvent, is_rest1 * lambda_rest_scale + is_nonrest_solute1 + is_nonrest_solvent1 * lambda_rest_scale, 1);",
+        # "p2_rest_scale = select(1 - is_both_solvent, is_rest2 * lambda_rest_scale + is_nonrest_solute2 + is_nonrest_solvent2 * lambda_rest_scale, 1);",
+        # "is_both_solvent = is_nonrest_solvent1 * is_nonrest_solvent2;",
 
         # Define alpha
         "alpha = sqrt(-log(2 * delta) / r_cutoff);",
