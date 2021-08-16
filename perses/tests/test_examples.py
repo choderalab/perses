@@ -27,13 +27,14 @@ def run_script_file(file_path, cmd_args=None):
     with tempfile.TemporaryDirectory() as tmp_dir:
         os.chdir(tmp_dir)
         cmd = ["python", file_path]
+        print(cmd)
         # Extend cmd list with given cmd_args
         if cmd_args:
             cmd.extend(cmd_args)
         try:
-            subprocess.check_call(cmd)
-        except subprocess.CalledProcessError:
-            raise Exception(f"Example {file_path} failed")
+            subprocess.run(cmd, capture_output=True, check=True)
+        except subprocess.CalledProcessError as error:
+            raise Exception(f"Example {file_path} failed. STDERR: {error.stderr}")
 
 
 def find_example_scripts():
