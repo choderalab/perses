@@ -66,8 +66,6 @@ def test_cli_resume_repex():
             yaml.dump(y_doc, outfile)
 
         env = os.environ.copy()
-        if os.environ.get('GITHUB_ACTIONS', False):
-            shutil.copy("/home/runner/work/perses/perses/oe_license.txt", ".")
         subprocess.run("perses-relative test.yml", shell=True, check=True, env=env)
 
         # Now we change the yaml to run longer
