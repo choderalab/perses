@@ -15,7 +15,7 @@ _logger.setLevel(logging.INFO)
 
 # Simulation parameters -- modify as needed
 nsteps_eq = 2
-nsteps_neq = 4
+nsteps_neq = 32
 neq_splitting = 'V R H O R V'
 timestep = 4.0 * unit.femtosecond
 platform_name = 'CPU'  # Change to 'CUDA' or 'OpenCL' in production
