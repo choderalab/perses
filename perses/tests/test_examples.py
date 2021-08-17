@@ -34,7 +34,7 @@ def run_script_file(file_path, cmd_args=None):
         try:
             subprocess.run(cmd, capture_output=True, check=True)
         except subprocess.CalledProcessError as error:
-            raise Exception(f"Example {file_path} failed. STDERR: {error.stderr}")
+            raise Exception(f"Example {file_path} failed. STDERR: {error.stderr.decode()}")
 
 
 def find_example_scripts():
