@@ -25,13 +25,13 @@ save_freq_neq = 2
 outdir_path = 'output/'
 
 # Build HybridTopologyFactory
-solvent_delivery = PointMutationExecutor(resource_filename('perses', os.path.join('data/barstar-mutation',
+solvent_delivery = PointMutationExecutor(resource_filename('perses', os.path.join('data', 'barstar-mutation',
                                                                                   '1brs_barstar_renumbered.pdb')),
                                          '1',
                                          '2',
                                          'ALA',
                                          ligand_input=resource_filename('perses',
-                                                                        os.path.join('data/barstar-mutation',
+                                                                        os.path.join('data', 'barstar-mutation',
                                                                                      '1brs_barnase_renumbered.pdb')),
                                          ionic_strength=0.05*unit.molar,
                                          flatten_torsions=True,
