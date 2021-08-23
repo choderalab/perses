@@ -1,15 +1,10 @@
 """
 Visualization tools for perses (protein mutations or small molecule transformations).
 Requires PDB and trajectory (.dcd or .xtc) files for old and new atoms.
-Note: Not tested on small molecules yet
 
 Pre-requisites:
 conda install -c schrodinger pymol (+ PyMOL license)
 conda install -c conda-forge moviepy
-
-TODO
-----
-* Test small molecule transformation
 
 """
 
@@ -79,7 +74,7 @@ class Visualization(object):
     v.save_mp4(frames)
 
     # Small molecule transformation example:
-    v = Visualization("old.pdb", "new.pdb", "dcd", "C")
+    v = Visualization("old.pdb", "new.pdb", "dcd", "C", is_protein=False, unique_old_selection="old and name C1", unique_new_selection="new and name H1")
     v.load()
     v.format(zoom_distance=3, rotate_x_angle=90)
     v.save_frames(outfile_prefix="output/frame")
@@ -94,6 +89,8 @@ class Visualization(object):
                         mutated_chain,
                         is_protein=True,
                         mutated_residue=None,
+                        unique_old_selection=None,
+                        unique_new_selection=None,
                         as_spheres=True,
                         ligand_chain=None):
         """
@@ -116,6 +113,14 @@ class Visualization(object):
         mutated_residue : str, default None
             Residue id of the protein mutation
             Leave as None if the trajectory involves a small molecule transformation.
+        unique_old_selection : str, default None
+            PyMOL selection string for unique old atoms. If not specified and the transformation is a protein mutation,
+            the unique old atoms will automatically be perceived as all sidechain atoms in the old residue. 
+            If not specified and the transformation is small molecule, this will throw an error.
+        unique_new_selection : str, default None
+            PyMOL selection string for unique new atoms. If not specified and the transformation is a protein mutation,
+            the unique new atoms will automatically be perceived as all sidechain atoms in the new residue. 
+            If not specified and the transformation is small molecule, this will throw an error.
         as_spheres : boolean, default True
             Indicates whether to represent the mutated residue/ligand as spheres or sticks.
             If True, will be spheres. Otherwise, will be sticks.
@@ -135,6 +140,8 @@ class Visualization(object):
         self._is_protein = is_protein
         self._mutated_chain = mutated_chain
         self._mutated_residue = mutated_residue
+        self._unique_old_selection = unique_old_selection
+        self._unique_new_selection = unique_new_selection  
         self._as_spheres = as_spheres
         self._ligand_chain = ligand_chain
 
@@ -145,15 +152,18 @@ class Visualization(object):
             self._old_selection = f"(old and chain {self._mutated_chain} and resi {self._mutated_residue})"
             self._new_selection = f"(new and chain {self._mutated_chain} and resi {self._mutated_residue})"
             self._both_selection = f"(chain {self._mutated_chain} and resi {self._mutated_residue})"
+            if not self._unique_old_selection:
+                self._unique_old = f"(old and chain {self._mutated_chain} and resi {self._mutated_residue} and not backbone)"
+            if not self._unique_new_selection: 
+                self._unique_new = f"(new and chain {self._mutated_chain} and resi {self._mutated_residue} and not backbone)"
         else:
             self._old_selection = f"(old and chain {self._mutated_chain})"
             self._new_selection = f"(new and chain {self._mutated_chain})"
             self._both_selection = f"chain {self._mutated_chain}"
-
-        # Get PyMOL indices of unique old and new atoms as strings
-        _logger.info("Getting unique old and new atom indices...")
-        self._unique_old = f"(old and chain {self._mutated_chain} and resi {self._mutated_residue} and not backbone)"
-        self._unique_new = f"(new and chain {self._mutated_chain} and resi {self._mutated_residue} and not backbone)"
+            if not self._unique_old_selection:
+                raise Exception("unique_old_selection must be defined for small molecule transformations")
+            if not self._unique_new_selection:
+                raise Exception("unique_new_selection must be defined for small molecule transformations")
 
     def load(self):
         """
@@ -282,12 +292,14 @@ class Visualization(object):
         # Format spheres or sticks of mutated residue
         if self._as_spheres:
             _logger.info("Showing spheres...")
-            cmd.show("spheres", self._old_selection)
+            cmd.show("spheres", self._both_selection)
+            cmd.hide("sticks", self._both_selection)
             cmd.set("sphere_scale", sphere_radius)
             cmd.set("sphere_transparency", 1, self._new_selection)
         else:
             _logger.info("Showing sticks...")
-            cmd.show("sticks", self._old_selection)
+            cmd.show("sticks", self._both_selection)
+            cmd.hide("spheres", self._both_selection)
             cmd.set("stick_transparency", 1, self._new_selection)
 
         # Fade out the protein
@@ -378,7 +390,7 @@ class Visualization(object):
                 self._set_transparency(1, 0, self._old_selection, self._new_selection)
             else:
                 lam = (step - equilibration_frames) / (states - 2*(equilibration_frames))
-                self._set_transparency(lam, 1-lam, self._unique_old, self._unique_new)
+                self._set_transparency(lam, 1-lam, self._unique_old_selection, self._unique_new_selection)
 
             cmd.set("ray_opaque_background", 1)
             cmd.refresh()
