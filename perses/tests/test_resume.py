@@ -155,7 +155,7 @@ def test_resume_small_molecule(tmp_path):
     assert simulation.iteration == 15
 
 
-def test_resume_protien_mutation_with_checkpoint(tmp_path):
+def test_resume_protein_mutation_with_checkpoint(tmp_path):
 
     pdb_filename = resource_filename("perses", "data/ala_vacuum.pdb")
     solvent_delivery = PointMutationExecutor(
