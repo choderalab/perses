@@ -16,16 +16,15 @@ import os
 import pathlib
 import pytest
 import subprocess
-import tempfile
-
+from perses.tests.utils import enter_temp_directory
 
 ROOT_DIR_PATH = pathlib.Path(__file__).joinpath("../../../").resolve()
 
 
 def run_script_file(file_path, cmd_args=None):
     """Run through the shell a python script."""
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        os.chdir(tmp_dir)
+    with enter_temp_directory() as tmp_dir:
+        # print(tmp_dir)
         cmd = ["python", file_path]
         print(cmd)
         # Extend cmd list with given cmd_args
