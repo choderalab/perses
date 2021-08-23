@@ -258,18 +258,23 @@ class PointMutationExecutor(object):
             topology_proposal = point_mutation_engine.propose(sys, top)
 
             # Fix naked charges in old and new systems
-            for system in [topology_proposal.old_system, topology_proposal.new_system]:
+            old_topology_atom_map = {atom.index: atom.residue.name for atom in topology_proposal.old_topology.atoms()}
+            new_topology_atom_map = {atom.index: atom.residue.name for atom in topology_proposal.new_topology.atoms()}
+            for i, system in enumerate([topology_proposal.old_system, topology_proposal.new_system]):
                 force_dict = {i.__class__.__name__: i for i in system.getForces()}
-                if 'NonbondedForce' in [i for i in force_dict.keys()]:
+                atom_map = old_topology_atom_map if i == 0 else new_topology_atom_map
+                if 'NonbondedForce' in [k for k in force_dict.keys()]:
                     nb_force = force_dict['NonbondedForce']
-                    for i in range(nb_force.getNumParticles()):
-                        charge, sigma, epsilon = nb_force.getParticleParameters(i)
+                    for idx in range(nb_force.getNumParticles()):
+                        if atom_map[idx] in ['HOH', 'WAT']: # Do not add naked charge fix to water hydrogens
+                            continue
+                        charge, sigma, epsilon = nb_force.getParticleParameters(idx)
                         if sigma == 0*unit.nanometer:
                             sigma = 0.06*unit.nanometer
-                            nb_force.setParticleParameters(i, charge, sigma, epsilon)
+                            nb_force.setParticleParameters(idx, charge, sigma, epsilon)
                         if epsilon == 0*unit.kilojoule_per_mole:
                             epsilon = 0.0001*unit.kilojoule_per_mole
-                            nb_force.setParticleParameters(i, charge, sigma, epsilon)
+                            nb_force.setParticleParameters(idx, charge, sigma, epsilon)
 
             # Only validate energy bookkeeping if the WT and proposed residues do not involve rings
             old_res = [res for res in top.residues() if res.id == mutation_residue_id][0]
