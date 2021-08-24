@@ -47,7 +47,11 @@ def find_example_scripts():
 
     example_file_paths = []
     for example_file_path in examples_dir_path.glob("*/*.py"):
-        example_file_paths.append(example_file_path.as_posix())
+        # TODO: find a better way to mark slow examples
+        example_posix_path = example_file_path.as_posix()
+        if "kinase-neq-switching" in example_posix_path:
+            example_posix_path = pytest.param(example_posix_path, marks=pytest.mark.slow)
+        example_file_paths.append(example_posix_path)
 
     return example_file_paths
 
