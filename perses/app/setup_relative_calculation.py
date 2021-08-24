@@ -640,7 +640,8 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                                                                         collision_rate=1.0 / unit.picosecond,
                                                                                         n_steps=n_steps_per_move_application,
                                                                                         reassign_velocities=False,
-                                                                                        n_restart_attempts=20,constraint_tolerance=1e-06),
+                                                                                        n_restart_attempts=20,constraint_tolerance=1e-06,
+                                                                                        context_cache=cache.ContextCache(capacity=None, time_to_live=None)),
                                                    hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                    online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
                                                    gamma0=setup_options['gamma0'])
@@ -651,7 +652,8 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                                                                          n_steps=n_steps_per_move_application,
                                                                                          reassign_velocities=False,
                                                                                          n_restart_attempts=20,constraint_tolerance=1e-06),
-                                                                                         hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
+                                                                                         hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'],
+                                                                                         context_cache = cache.ContextCache(capacity=None, time_to_live=None))
                     hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
             else:
                 _logger.info(f"omitting sampler construction")
