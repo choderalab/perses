@@ -160,7 +160,7 @@ def test_resume_protein_mutation_with_checkpoint(tmp_path):
         pdb_filename,
         "1",
         "2",
-        "ASP",
+        "THR",
         flatten_torsions=True,
         flatten_exceptions=True,
         conduct_endstate_validation=False,
