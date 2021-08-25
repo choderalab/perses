@@ -935,8 +935,9 @@ class AtomMapper(object):
                     valid_atom_mappings.add(atom_mapping)
                 except InvalidMappingException as e:
                     # Atom mapping is no longer valid
-                    stop
-                    pass
+                    # pass
+                    # TODO: Raising the actual error, do we want to pass it as previously stated?
+                    raise e
 
             atom_mappings = valid_atom_mappings
 
