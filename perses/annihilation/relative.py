@@ -2925,7 +2925,12 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             if self._old_system_forces['NonbondedForce'].getNonbondedMethod() != openmm.NonbondedForce.NoCutoff:
                 self._r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
             else:
-                self._r_cutoff = 100 * unit.nanometers
+                self._r_cutoff = 100 * unit.nanometer
+                # If the nonbonded method is NoCutoff, set alpha to 0
+                self._default_nonbonded_expression_list[27] = "alpha = 0;"
+                self._default_exception_expression_list[13] = "alpha = 0;"
+                self._default_nonbonded_expression = ' '.join(self._default_nonbonded_expression_list)
+                self._default_exception_expression = ' '.join(self._default_exception_expression_list)
         else:
             self._r_cutoff = r_cutoff
         self._w_scale = w_scale
