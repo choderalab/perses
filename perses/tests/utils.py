@@ -11,8 +11,10 @@ __author__ = 'John D. Chodera'
 import copy
 from simtk import openmm, unit
 from simtk.openmm import app
-import sys
 import numpy as np
+import os
+import shutil
+import tempfile
 from perses.rjmc import geometry
 from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
 from openmmtools.constants import kB
@@ -37,23 +39,25 @@ import logging
 _logger = logging.getLogger("tests-utils")
 _logger.setLevel(logging.INFO)
 
+
 @contextlib.contextmanager
 def enter_temp_directory():
     """Create and enter a temporary directory; used as context manager."""
-    import tempfile
     temp_dir = tempfile.mkdtemp()
-    import os
     cwd = os.getcwd()
-    os.chdir(temp_dir)
-    yield temp_dir
-    os.chdir(cwd)
-    import shutil
-    shutil.rmtree(temp_dir)
+    try:
+        os.chdir(temp_dir)
+        yield temp_dir
+    finally:
+        os.chdir(cwd)
+        shutil.rmtree(temp_dir)
 
 # TODO: Move some of these utility routines to openmoltools.
 
+
 class NaNException(Exception):
     pass
+
 
 def quantity_is_finite(quantity):
     """
@@ -73,6 +77,7 @@ def quantity_is_finite(quantity):
     if np.any( np.isnan( np.array(quantity / quantity.unit) ) ):
         return False
     return True
+
 
 def compare_at_lambdas(context, functions):
     """
