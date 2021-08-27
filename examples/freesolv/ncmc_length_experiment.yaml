@@ -1,9 +1,0 @@
-#try different switching lengths for NCMC
-molecules: ['benzene', 'naphthalene']
-lengths: [1000, 2000, 5000, 10000, 20000, 50000]
-use_sterics: [True, False]
-n_replicates_neq: 100
-traj_prefix: benzene_naphthalene
-eq_time: 1000 #ps
-eq_write_interval: 20 #ps
-dask_scheduler: None #whether to use a dask scheduler
