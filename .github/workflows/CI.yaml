@@ -92,7 +92,6 @@ jobs:
       - name: Test the package
         shell: bash -l {0}
         run: |
-          export OE_LICENSE="$HOME/oe_license.txt"
           export TRAVIS=true
           pushd .
           pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto

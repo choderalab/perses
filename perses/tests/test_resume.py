@@ -24,12 +24,12 @@ def test_cli_resume_repex():
         os.chdir(temp_dir)
         # Need to get path to examples dir
         protein_pdb = resource_filename(
-            "perses", os.path.join("examples", "cdk2-example", "CDK2_protein.pdb")
-        ).replace("/perses", "", 1)
+            "perses", os.path.join("data", "cdk2-example", "CDK2_protein.pdb")
+        )
         ligand_file = resource_filename(
             "perses",
-            os.path.join("examples", "cdk2-example", "CDK2_ligands_shifted.sdf"),
-        ).replace("/perses", "", 1)
+            os.path.join("data", "cdk2-example", "CDK2_ligands_shifted.sdf"),
+        )
 
         document = """
         atom_selection: not water
@@ -66,8 +66,6 @@ def test_cli_resume_repex():
             yaml.dump(y_doc, outfile)
 
         env = os.environ.copy()
-        if os.environ.get('GITHUB_ACTIONS', False):
-            shutil.copy("/home/runner/work/perses/perses/oe_license.txt", ".")
         subprocess.run("perses-relative test.yml", shell=True, check=True, env=env)
 
         # Now we change the yaml to run longer
@@ -162,12 +160,12 @@ def test_resume_protein_mutation_with_checkpoint(tmp_path):
         pdb_filename,
         "1",
         "2",
-        "ASP",
+        "THR",
         flatten_torsions=True,
         flatten_exceptions=True,
         conduct_endstate_validation=False,
         barostat=None,
-        phase="vaccum",
+        phase="vacuum",
         periodic_forcefield_kwargs=None,
         nonperiodic_forcefield_kwargs={"nonbondedMethod": app.NoCutoff},
     )
