@@ -2225,9 +2225,9 @@ class GeometrySystemGenerator(object):
                 growth_idx = self._calculate_growth_idx(topology_index_map, growth_indices)
                 atom_names = [torsion.a.GetName(), torsion.b.GetName(), torsion.c.GetName(), torsion.d.GetName()]
 
-            #print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
-            #If this is a CustomTorsionForce, we need to pass the parameters as a list, and it will have the growth_idx parameter.
-            #If it's a regular PeriodicTorsionForce, there is no growth_index and the parameters are passed separately.
+                #print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
+                #If this is a CustomTorsionForce, we need to pass the parameters as a list, and it will have the growth_idx parameter.
+                #If it's a regular PeriodicTorsionForce, there is no growth_index and the parameters are passed separately.
 
                 p1, p2, p3, p4 = topology_index_map
                 possible_omissions = [(p1,p2), (p2,p3), (p3,p4), (p2,p1), (p3,p2), (p4,p3)]
