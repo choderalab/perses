@@ -77,7 +77,9 @@ class PointMutationExecutor(object):
                                                                                   n_restart_attempts=20,
                                                                                   splitting="V R R R O R R R V",
                                                                                   constraint_tolerance=1e-06),
-                                                                                  hybrid_factory=htf, online_analysis_interval=10)
+                                                                                  hybrid_factory=htf,
+                                                                                  online_analysis_interval=10,
+                                                                                  context_cache=cache.ContextCache(capacity=None, time_to_live=None))
             hss.setup(n_states=n_states, temperature=300*unit.kelvin, storage_file=reporter, lambda_protocol=lambda_protocol, endstates=False)
             hss.extend(n_cycles)
 
@@ -178,7 +180,7 @@ class PointMutationExecutor(object):
         if ligand_input:
             if isinstance(ligand_input, str):
                 if ligand_input.endswith('.sdf'): # small molecule
-                        ligand_mol = createOEMolFromSDF(ligand_file, index=ligand_index, allow_undefined_stereo=allow_undefined_stereo_sdf)
+                        ligand_mol = createOEMolFromSDF(ligand_input, index=ligand_index, allow_undefined_stereo=allow_undefined_stereo_sdf)
                         molecules.append(Molecule.from_openeye(ligand_mol, allow_undefined_stereo=False))
                         ligand_positions, ligand_topology = extractPositionsFromOEMol(ligand_mol),  forcefield_generators.generateTopologyFromOEMol(ligand_mol)
                         ligand_md_topology = md.Topology.from_openmm(ligand_topology)
@@ -208,6 +210,12 @@ class PointMutationExecutor(object):
             complex_positions = unit.Quantity(np.zeros([protein_n_atoms + ligand_n_atoms, 3]), unit=unit.nanometers)
             complex_positions[:protein_n_atoms, :] = protein_positions
             complex_positions[protein_n_atoms:, :] = ligand_positions
+
+            # Convert positions back to openmm vec3 objects
+            complex_positions_vec3 = []
+            for position in complex_positions:
+                complex_positions_vec3.append(openmm.Vec3(*position.value_in_unit_system(unit.md_unit_system)))
+            complex_positions = unit.Quantity(value=complex_positions_vec3, unit=unit.nanometer)
 
         # Now for a system_generator
         self.system_generator = SystemGenerator(forcefields=forcefield_files,
@@ -251,13 +259,34 @@ class PointMutationExecutor(object):
 
             topology_proposal = point_mutation_engine.propose(sys, top)
 
+            # Fix naked charges in old and new systems
+            old_topology_atom_map = {atom.index: atom.residue.name for atom in topology_proposal.old_topology.atoms()}
+            new_topology_atom_map = {atom.index: atom.residue.name for atom in topology_proposal.new_topology.atoms()}
+            for i, system in enumerate([topology_proposal.old_system, topology_proposal.new_system]):
+                force_dict = {i.__class__.__name__: i for i in system.getForces()}
+                atom_map = old_topology_atom_map if i == 0 else new_topology_atom_map
+                if 'NonbondedForce' in [k for k in force_dict.keys()]:
+                    nb_force = force_dict['NonbondedForce']
+                    for idx in range(nb_force.getNumParticles()):
+                        if atom_map[idx] in ['HOH', 'WAT']: # Do not add naked charge fix to water hydrogens
+                            continue
+                        charge, sigma, epsilon = nb_force.getParticleParameters(idx)
+                        if sigma == 0*unit.nanometer:
+                            sigma = 0.06*unit.nanometer
+                            nb_force.setParticleParameters(idx, charge, sigma, epsilon)
+                        if epsilon == 0*unit.kilojoule_per_mole:
+                            epsilon = 0.0001*unit.kilojoule_per_mole
+                            nb_force.setParticleParameters(idx, charge, sigma, epsilon)
+
             # Only validate energy bookkeeping if the WT and proposed residues do not involve rings
             old_res = [res for res in top.residues() if res.id == mutation_residue_id][0]
             validate_bool = False if old_res.name in ring_amino_acids or proposed_residue in ring_amino_acids else True
             new_positions, logp_proposal = geometry_engine.propose(topology_proposal, pos, beta,
                                                                    validate_energy_bookkeeping=validate_bool)
+            logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta,
+                                                        validate_energy_bookkeeping=validate_bool)
 
-            #check for charge change...
+            # Check for charge change...
             charge_diff = point_mutation_engine._get_charge_difference(current_resname=topology_proposal.old_topology.residue_topology.name,
                                                                        new_resname=topology_proposal.new_topology.residue_topology.name)
             _logger.info(f"charge diff: {charge_diff}")
@@ -268,9 +297,6 @@ class PointMutationExecutor(object):
                 self._transform_waters_into_ions(new_water_indices_to_ionize, topology_proposal.new_system, charge_diff)
                 PointMutationExecutor._modify_atom_classes(new_water_indices_to_ionize, topology_proposal)
 
-
-            logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta,
-                                                        validate_energy_bookkeeping=validate_bool)
             if generate_unmodified_hybrid_topology_factory:
                 repartitioned_endstate = None
                 self.generate_htf(HybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
@@ -361,7 +387,7 @@ class PointMutationExecutor(object):
         '''
         Get the charge, sigma, and epsilon for the positive and negative ions. Also get the charge of the water atoms. Set
         these parameters as class variables.
-          
+
         Parameters
         ----------
         system : simtk.openmm.System
@@ -374,9 +400,9 @@ class PointMutationExecutor(object):
             the residue name of each negative ion
         water_name : str, "HOH"
             the residue name of each water
-        
+
         '''
-    
+
         # Get the indices
         pos_index = None
         neg_index = None
@@ -395,8 +421,8 @@ class PointMutationExecutor(object):
         assert pos_index is not None, f"Error occurred when trying to turn a water into an ion: No positive ions with residue name {positive_ion_name} found"
         assert neg_index is not None, f"Error occurred when trying to turn a water into an ion: No negative ions with residue name {negative_ion_name} found"
         assert O_index is not None, f"Error occurred when trying to turn a water into an ion: No O atoms with residue name {water_name} and atom name O found"
-        assert H_index is not None, f"Error occurred when trying to turn a water into an ion: No water atoms with residue name {water_name} and atom name H1 found" 
-    
+        assert H_index is not None, f"Error occurred when trying to turn a water into an ion: No water atoms with residue name {water_name} and atom name H1 found"
+
         # Get parameters from nonbonded force
         force_dict = {i.__class__.__name__: i for i in system.getForces()}
         if 'NonbondedForce' in [i for i in force_dict.keys()]:
@@ -405,7 +431,7 @@ class PointMutationExecutor(object):
             neg_charge, neg_sigma, neg_epsilon = nbf.getParticleParameters(neg_index)
             O_charge, _, _ = nbf.getParticleParameters(O_index)
             H_charge, _, _ = nbf.getParticleParameters(H_index)
-    
+
         self._pos_charge = pos_charge
         self._pos_sigma = pos_sigma
         self._pos_epsilon = pos_epsilon

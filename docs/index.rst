@@ -77,6 +77,8 @@ Developers
 * Dominic A. Rufa
 * Jaime Rodríguez-Guerra
 * Ivy Zhang
+* Mike Henry
+* Iván Pulido 
 * John D. Chodera
 
 Indices and tables

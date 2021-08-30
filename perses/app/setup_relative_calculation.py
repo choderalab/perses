@@ -5,13 +5,14 @@ import os
 import sys
 import simtk.unit as unit
 import logging
+from pathlib import Path
 
 from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_setup import RelativeFEPSetup
 from perses.annihilation.lambda_protocol import LambdaProtocol
 
-from openmmtools import mcmc
+from openmmtools import mcmc, cache
 from openmmtools.multistate import MultiStateReporter
 from perses.utils.smallmolecules import render_atom_mapping
 from perses.tests.utils import validate_endstate_energies
@@ -31,12 +32,13 @@ class TimeFilter(logging.Filter):
 
 fmt = logging.Formatter(fmt="%(asctime)s:(%(relative)ss):%(name)s:%(message)s")
 #logging.basicConfig(level = logging.NOTSET)
+LOGLEVEL = os.environ.get("LOGLEVEL", "INFO").upper()
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.INFO,
+    level=LOGLEVEL,
     datefmt='%Y-%m-%d %H:%M:%S')
 _logger = logging.getLogger()
-_logger.setLevel(logging.INFO)
+_logger.setLevel(LOGLEVEL)
 [hndl.addFilter(TimeFilter()) for hndl in _logger.handlers]
 [hndl.setFormatter(fmt) for hndl in _logger.handlers]
 
@@ -104,6 +106,9 @@ def getSetupOptions(filename):
 
     if 'complex_box_dimensions' not in setup_options:
         setup_options['complex_box_dimensions'] = None
+    # If complex_box_dimensions is None, nothing to do
+    elif setup_options['complex_box_dimensions'] is None:
+        pass
     else:
         setup_options['complex_box_dimensions'] = tuple([float(x) for x in setup_options['complex_box_dimensions']])
 
@@ -298,8 +303,11 @@ def getSetupOptions(filename):
         _logger.info(f"\t'softcore_v2' not specified: default to 'False'")
 
     _logger.info(f"\tCreating '{trajectory_directory}'...")
-    assert (not os.path.exists(trajectory_directory)), f'Output trajectory directory "{trajectory_directory}" already exists. Refusing to overwrite'
-    os.makedirs(trajectory_directory)
+
+    if not 'rmsd_restraint' in setup_options:
+        setup_options['rmsd_restraint'] = False
+
+    os.makedirs(trajectory_directory, exist_ok=True)
 
 
     return setup_options
@@ -327,8 +335,6 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     #   such as deferring to defaults for modules we call unless the user
     #   chooses to override them.
 
-    if not 'rmsd_restraint' in setup_options:
-        setup_options['rmsd_restraint'] = False
 
     if 'use_given_geometries' not in list(setup_options.keys()):
         use_given_geometries = False
@@ -613,7 +619,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                 else:
                     selection_indices = None
 
-                storage_name = str(trajectory_directory)+'/'+str(trajectory_prefix)+'-'+str(phase)+'.nc'
+                storage_name = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
                 _logger.info(f'\tstorage_name: {storage_name}')
                 _logger.info(f'\tselection_indices {selection_indices}')
                 _logger.info(f'\tcheckpoint interval {checkpoint_interval}')
@@ -634,7 +640,8 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                                                                         collision_rate=1.0 / unit.picosecond,
                                                                                         n_steps=n_steps_per_move_application,
                                                                                         reassign_velocities=False,
-                                                                                        n_restart_attempts=20,constraint_tolerance=1e-06),
+                                                                                        n_restart_attempts=20,constraint_tolerance=1e-06,
+                                                                                        context_cache=cache.ContextCache(capacity=None, time_to_live=None)),
                                                    hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                    online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
                                                    gamma0=setup_options['gamma0'])
@@ -644,8 +651,9 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                                                                          collision_rate=1.0 / unit.picosecond,
                                                                                          n_steps=n_steps_per_move_application,
                                                                                          reassign_velocities=False,
-                                                                                         n_restart_attempts=20,constraint_tolerance=1e-06),
-                                                                                         hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
+                                                                                         n_restart_attempts=20,constraint_tolerance=1e-06,
+                                                                                         context_cache=cache.ContextCache(capacity=None, time_to_live=None)),
+                                                                                         hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'],)
                     hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
             else:
                 _logger.info(f"omitting sampler construction")
@@ -680,7 +688,31 @@ def run(yaml_filename=None):
            _logger.critical(f"You must specify the setup yaml file as an argument to the script.")
 
     _logger.info(f"Getting setup options from {yaml_filename}")
+
     setup_options = getSetupOptions(yaml_filename)
+
+    # We want to make sure that if the file is in a directory, we put the parsed file in
+    # the same directory
+    yaml_path = Path(yaml_filename)
+    yaml_name = yaml_path.name
+    time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    yaml_parse_name = f"parsed-{time}-{yaml_name}"
+    with open(Path.joinpath(yaml_path.parents[0], yaml_parse_name), "w") as outfile:
+            yaml.dump(setup_options, outfile)
+
+    # The name of the reporter file includes the phase name, so we need to check each
+    # one
+    for phase in setup_options['phases']:
+        trajectory_directory = setup_options['trajectory_directory']
+        trajectory_prefix = setup_options['trajectory_prefix']
+        reporter_file = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
+        # Once we find one, we are good to resume the simulation
+        if os.path.isfile(reporter_file):
+            _resume_run(setup_options)
+            # There is a loop in _resume_run for each phase so once we extend each phase
+            # we are done
+            exit()
+
     if 'lambdas' in setup_options:
         if type(setup_options['lambdas']) == int:
             lambdas = {}
@@ -873,6 +905,50 @@ def run(yaml_filename=None):
                 _logger.info(f"\n\n")
 
                 _logger.info(f"\t\tFinished phase {phase}")
+
+def _resume_run(setup_options):
+    if setup_options['fe_type'] == 'sams':
+        logZ = dict()
+        free_energies = dict()
+
+        _logger.info(f"Iterating through phases for sams...")
+        for phase in setup_options['phases']:
+            trajectory_directory = setup_options['trajectory_directory']
+            trajectory_prefix = setup_options['trajectory_prefix']
+
+            reporter_file = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
+            reporter = MultiStateReporter(reporter_file)
+            simulation = HybridSAMSSampler.from_storage(reporter)
+            total_steps = setup_options['n_cycles']
+            run_so_far = simulation.iteration
+            left_to_do = total_steps - run_so_far
+            _logger.info(f"\t\textending simulation...\n\n")
+            simulation.extend(n_iterations=left_to_do)
+            logZ[phase] = simulation._logZ[-1] - simulation._logZ[0]
+            free_energies[phase] = simulation._last_mbar_f_k[-1] - simulation._last_mbar_f_k[0]
+            _logger.info(f"\t\tFinished phase {phase}")
+        for phase in free_energies:
+            print(f"Comparing ligand {setup_options['old_ligand_index']} to {setup_options['new_ligand_index']}")
+            print(f"{phase} phase has a free energy of {free_energies[phase]}")
+
+    elif setup_options['fe_type'] == 'repex':
+        for phase in setup_options['phases']:
+            print(f'Running {phase} phase')
+            trajectory_directory = setup_options['trajectory_directory']
+            trajectory_prefix = setup_options['trajectory_prefix']
+
+            reporter_file = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
+            reporter = MultiStateReporter(reporter_file)
+            simulation = HybridRepexSampler.from_storage(reporter)
+            total_steps = setup_options['n_cycles']
+            run_so_far = simulation.iteration
+            left_to_do = total_steps - run_so_far
+            _logger.info(f"\t\textending simulation...\n\n")
+            simulation.extend(n_iterations=left_to_do)
+            _logger.info(f"\n\n")
+            _logger.info(f"\t\tFinished phase {phase}")
+    else:
+        raise("Can't resume")
 
 if __name__ == "__main__":
     run()

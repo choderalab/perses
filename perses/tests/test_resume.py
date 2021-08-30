@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 import subprocess
 import tempfile
 
@@ -17,18 +18,18 @@ from perses.app.relative_setup import RelativeFEPSetup
 from perses.samplers.multistate import HybridRepexSampler
 
 
-def test_cli_resume():
+def test_cli_resume_repex():
 
     with tempfile.TemporaryDirectory() as temp_dir:
         os.chdir(temp_dir)
         # Need to get path to examples dir
         protein_pdb = resource_filename(
-            "perses", os.path.join("examples", "cdk2-example", "CDK2_protein.pdb")
-        ).replace("/perses", "", 1)
+            "perses", os.path.join("data", "cdk2-example", "CDK2_protein.pdb")
+        )
         ligand_file = resource_filename(
             "perses",
-            os.path.join("examples", "cdk2-example", "CDK2_ligands_shifted.sdf"),
-        ).replace("/perses", "", 1)
+            os.path.join("data", "cdk2-example", "CDK2_ligands_shifted.sdf"),
+        )
 
         document = """
         atom_selection: not water
@@ -60,9 +61,26 @@ def test_cli_resume():
         y_doc = yaml.load(document, Loader=yaml.UnsafeLoader)
         y_doc["protein_pdb"] = protein_pdb
         y_doc["ligand_file"] = ligand_file
+
         with open("test.yml", "w") as outfile:
             yaml.dump(y_doc, outfile)
-        subprocess.run(["perses-relative", "test.yml"])
+
+        env = os.environ.copy()
+        subprocess.run("perses-relative test.yml", shell=True, check=True, env=env)
+
+        # Now we change the yaml to run longer
+        y_doc["n_cycles"] = 20
+        with open("test.yml", "w") as outfile:
+            yaml.dump(y_doc, outfile)
+        subprocess.run("perses-relative test.yml", shell=True, check=True, env=env)
+
+        # Check to see if we have a total of 20
+        reporter = MultiStateReporter(
+            "cdk2_repex_hbonds/cdk2-vacuum.nc", checkpoint_interval=10
+        )
+        simulation = HybridRepexSampler.from_storage(reporter)
+
+        assert simulation.iteration == 20
 
 
 def test_resume_small_molecule(tmp_path):
@@ -135,19 +153,19 @@ def test_resume_small_molecule(tmp_path):
     assert simulation.iteration == 15
 
 
-def test_resume_protien_mutation_with_checkpoint(tmp_path):
+def test_resume_protein_mutation_with_checkpoint(tmp_path):
 
     pdb_filename = resource_filename("perses", "data/ala_vacuum.pdb")
     solvent_delivery = PointMutationExecutor(
         pdb_filename,
         "1",
         "2",
-        "ASP",
+        "THR",
         flatten_torsions=True,
         flatten_exceptions=True,
         conduct_endstate_validation=False,
         barostat=None,
-        phase="vaccum",
+        phase="vacuum",
         periodic_forcefield_kwargs=None,
         nonperiodic_forcefield_kwargs={"nonbondedMethod": app.NoCutoff},
     )
