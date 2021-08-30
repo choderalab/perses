@@ -678,7 +678,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         # index_to_new_residues : dict, key : int (index) , value : str (three letter name of proposed residue)
         _logger.debug(f"\tconstructing atom map for TopologyProposal...")
-        atom_map, old_res_to_oemol_map, new_res_to_oemol_map, local_atom_map_stereo_sidechain, current_oemol_sidechain, proposed_oemol_sidechain, old_oemol_res_copy, new_oemol_res_copy  = self._construct_atom_map(residue_map, old_topology, index_to_new_residues, new_topology)
+        atom_map, old_res_to_oemol_map, new_res_to_oemol_map, local_atom_map_stereo_sidechain, current_oemol_sidechain, proposed_oemol_sidechain, old_oemol_res_copy, new_oemol_res_copy  = self._construct_atom_map(residue_map, old_topology, index_to_new_residues, new_topology, ignore_sidechain_atoms=True)
 
         _logger.debug(f"\tadding indices of the 'C' backbone atom in the next residue and the 'N' atom in the previous")
         _logger.debug(f"\t{list(index_to_new_residues.keys())[0]}")
@@ -1110,7 +1110,8 @@ class PolymerProposalEngine(ProposalEngine):
                             residue_map,
                             old_topology,
                             index_to_new_residues,
-                            new_topology):
+                            new_topology,
+                            ignore_sidechain_atoms=False):
         """
         Construct atom map (key: index to new residue, value: index to old residue) to supply as an argument to the TopologyProposal.
 
@@ -1124,6 +1125,8 @@ class PolymerProposalEngine(ProposalEngine):
             key : int (index) , value : str (three letter name of proposed residue)
         new_topology : simtk.openmm.app.Topology
             topology of new system
+        ignore_sidechain_atoms : bool, default False
+            whether to ignore sidechain atoms (CB atoms and beyond) in the atom map
 
         Returns
         -------
@@ -1163,12 +1166,9 @@ class PolymerProposalEngine(ProposalEngine):
 
         # old_to_new_residues : dict, key : str old residue name, key : simtk.openmm.app.topology.Residue new residue
         old_to_new_residues = {}
+        new_residues = [residue for residue in new_topology.residues()] # Assumes all residue indices start from 0 and are contiguous
         for old_residue in old_topology.residues():
-            for new_residue in new_topology.residues():
-                if old_residue.index == new_residue.index:
-                    #old_to_new_residues[old_residue.name] = new_residue
-                    old_to_new_residues[old_residue] = new_residue
-                    break
+            old_to_new_residues[old_residue] = new_residues[old_residue.index]
         #_logger.debug(f"\t\told_to_new_residues: {old_to_new_residues}")
 
         # modified_residues : dict, key : index of old residue, value : proposed residue
@@ -1269,7 +1269,8 @@ class PolymerProposalEngine(ProposalEngine):
 
         #now we can get the mol atom map of the sidechain
         #NOTE: since the sidechain oemols are NOT zero-indexed anymore, we need to match by name (since they are unique identifiers)
-        break_bool = False if old_res_name == 'TRP' or new_res_name == 'TRP' else True # Set allow_ring_breaking to be False if the transformation involves TRP
+        ring_aas = ['TRP', 'TYR', 'PHE', 'HIS', 'HID', 'HIE', 'HIP']
+        break_bool = False if old_res_name in ring_aas or new_res_name in ring_aas else True
         _logger.debug(f"\t\t\t allow ring breaking: {break_bool}")
         # TODO: Refactor to re-use atom_mapper for all ligands?
         # TODO: Generate atom mapping using only geometries if requested
@@ -1299,11 +1300,15 @@ class PolymerProposalEngine(ProposalEngine):
         # TODO: Glue AtomMapping in more broadly
         sidechain_fixed_map = {}
         mapped_names = []
+        backbone_atoms = ['N', 'H', 'C', 'O', 'CA', 'HA']
+        sidechain_atom_indices = []
         for new_sidechain_idx, old_sidechain_idx in atom_mapping.new_to_old_atom_map.items():
             try:
                 new_name, old_name = atom_mapping.new_mol.atoms[new_sidechain_idx].name, atom_mapping.old_mol.atoms[old_sidechain_idx].name
                 mapped_names.append((new_name, old_name))
                 new_full_oemol_idx, old_full_oemol_idx = new_oemol_name_idx[new_name], old_oemol_name_idx[old_name]
+                if new_name not in backbone_atoms:
+                    sidechain_atom_indices.append(new_full_oemol_idx)
                 sidechain_fixed_map[new_full_oemol_idx] = old_full_oemol_idx
             except KeyError as e:
                 # Report more information on failure
@@ -1312,14 +1317,9 @@ class PolymerProposalEngine(ProposalEngine):
 
         _logger.debug(f"\t\t\toemol sidechain fixed map: {sidechain_fixed_map}")
 
-        #make sure that CB is mapped; otherwise the residue will not be contiguous
-        found_CB = False
-        if any(item[0] == 'CB' and item[1] == 'CB' for item in mapped_names):
-            found_CB = True
-
-        if not found_CB:
-            _logger.debug(f"\t\t\tno 'CB' found!!!.  removing local atom map stereo sidechain...")
-            sidechain_fixed_map = {}
+        if ignore_sidechain_atoms:
+            for index in sidechain_atom_indices:
+                del[sidechain_fixed_map[index]]
 
         _logger.debug(f"\t\t\tthe local atom map (backbone) is {local_atom_map}")
         #update the local map
