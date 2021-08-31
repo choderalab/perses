@@ -442,10 +442,10 @@ class PolymerProposalEngine(ProposalEngine):
     This base class is not meant to be invoked directly.
     """
 
-    _aminos = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'PHE',
+    _aminos = ['ALA', 'ARG', 'ASH', 'ASN', 'ASP', 'CYS', 'GLN', 'GLH', 'GLU', 'GLY', 'HID', 'HIE', 'HIP', 'HIS', 'ILE', 'LEU', 'LYN',  'LYS',  'MET', 'PHE',
                     'SER', 'THR', 'TRP', 'TYR', 'VAL'] # common naturally-occurring amino acid names
                     # Note this does not include PRO since there's a problem with OpenMM's template DEBUG
-    _positive_aminos = ['ARG', 'HIS', 'LYS']
+    _positive_aminos = ['ARG', 'LYS', 'HIP']
     _negative_aminos = ['ASP', 'GLU']
 
     def _get_neutrals(aminos, positive, negative):
@@ -479,26 +479,6 @@ class PolymerProposalEngine(ProposalEngine):
         _logger.debug(f"Instantiating PolymerProposalEngine")
         super(PolymerProposalEngine,self).__init__(system_generator=system_generator, proposal_metadata=proposal_metadata, always_change=always_change)
         self._chain_id = chain_id # chain identifier defining polymer to be modified
-        self._aminos_3letter_to_1letter_map = {'ALA' : 'A' ,
-                                                'ARG' : 'R' ,
-                                                'ASN' : 'N' ,
-                                                'ASP' : 'D' ,
-                                                'CYS' : 'C' ,
-                                                'GLN' : 'Q' ,
-                                                'GLU' : 'E' ,
-                                                'GLY' : 'G' ,
-                                                'HIS' : 'H' ,
-                                                'ILE' : 'I' ,
-                                                'LEU' : 'L' ,
-                                                'LYS' : 'K' ,
-                                                'MET' : 'M' ,
-                                                'PHE' : 'F' ,
-                                                'PRO' : 'P' ,
-                                                'SER' : 'S' ,
-                                                'THR' : 'T' ,
-                                                'TRP' : 'W' ,
-                                                'TYR' : 'Y' ,
-                                                'VAL' : 'V' }
         self._aggregate = aggregate # ?????????
 
     @staticmethod
@@ -927,6 +907,13 @@ class PolymerProposalEngine(ProposalEngine):
                 replace_with = 'HIE'
             template = self._templates[replace_with]
 
+            if replace_with == 'LYN': # Rename HZ3 to HZ1 s.t. the topology matches the naming in amino_acid_templates/LYN.pdb
+                for atom in template.atoms:
+                    if atom.name == 'HZ3':
+                        atom.name = 'HZ1'
+                template.atomIndices['HZ1'] = template.atomIndices['HZ3']
+                del template.atomIndices['HZ3']
+
             # template_atom_names : dict, key : template atom index, value : template atom name
             template_atom_names = {}
             for atom in template.atoms:
@@ -1215,15 +1202,6 @@ class PolymerProposalEngine(ProposalEngine):
 
         old_res_name = old_res.name
         new_res_name = new_res.name
-
-        #make correction for HIS
-        his_templates = ['HIE', 'HID']
-        if old_res_name in his_templates:
-            old_res_name = 'HIS'
-        if new_res_name in his_templates:
-            new_res_name = 'HIS'
-        else:
-            pass
 
         current_residue_pdb_filename = resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{old_res_name}.pdb"))
         proposed_residue_pdb_filename = resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{new_res_name}.pdb"))
@@ -1835,9 +1813,6 @@ class PointMutationEngine(PolymerProposalEngine):
                             " If you wish to modify one of these residues, make sure you have added cap residues to the input topology.")
 
         # Check if mutated residue's name is same as residue's name in old topology
-        if original_residue.name in ['HID', 'HIE']:
-            # original_residue.name = 'HIS'
-            pass
         if original_residue.name == residue_name: #there is no mutation to be done
             return index_to_new_residues
 
@@ -1845,12 +1820,6 @@ class PointMutationEngine(PolymerProposalEngine):
         # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
         index_to_new_residues[residue_id_to_index[residue_id]] = residue_name
 
-        # Randomly choose HIS template ('HIS' does not exist as a template)
-        # if residue_name == 'HIS':
-        #     his_state = ['HIE','HID']
-        #     his_prob = [1/len(his_state)] * len(his_state)
-        #     his_choice = np.random.choice(range(len(his_state)), p=his_prob)
-        #     index_to_new_residues[residue_id_to_index[residue_id]] = his_state[his_choice]
         return index_to_new_residues
 
     def _propose_mutation(self, topology, chain_id, index_to_new_residues):
@@ -1905,13 +1874,7 @@ class PointMutationEngine(PolymerProposalEngine):
         # Propose a location at which to mutate the residue
         # proposed_location : int, index of chosen entry in location_prob
         proposed_location = np.random.choice(range(num_residues), p=location_prob)
-
-        # Rename residue to HIS if it uses one of the HIS-derived templates
-        # original_residue : simtk.openmm.app.topology.Residue
         original_residue = chain_residues[proposed_location]
-        if original_residue.name in ['HIE', 'HID']:
-            #original_residue.name = 'HIS'
-            pass
 
         if self._residues_allowed_to_mutate is None:
             proposed_location = original_residue.index
@@ -1933,13 +1896,6 @@ class PointMutationEngine(PolymerProposalEngine):
         # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
         index_to_new_residues[proposed_location] = aminos[proposed_amino_index]
 
-        # Randomly choose HIS template ('HIS' does not exist as a template)
-        if aminos[proposed_amino_index] == 'HIS':
-            # his_state = ['HIE','HID']
-            # his_prob = [1 / len(his_state)] * len(his_state)
-            # his_choice = np.random.choice(range(len(his_state)), p=his_prob)
-            # index_to_new_residues[proposed_location] = his_state[his_choice]
-            pass
         return index_to_new_residues
 
     def _mutable_residues(self, chain):
@@ -2081,12 +2037,6 @@ class PeptideLibraryEngine(PolymerProposalEngine):
                 continue
             # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
             index_to_new_residues[residue_index] = residue_name
-            if residue_name == 'HIS':
-                # his_state = ['HIE','HID']
-                # his_prob = np.array([0.5 for i in range(len(his_state))])
-                # his_choice = np.random.choice(range(len(his_state)),p=his_prob)
-                # index_to_new_residues[residue_index] = his_state[his_choice]
-                pass
 
         # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
         return index_to_new_residues, metadata
