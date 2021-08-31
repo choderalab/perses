@@ -7,8 +7,6 @@ Utility functions for simulations using openeye toolkits
 __author__ = 'John D. Chodera'
 
 
-from openeye import oechem, oegraphsim
-from openmoltools.openeye import generate_conformers
 from simtk import unit
 from simtk.openmm import app
 import simtk.unit as unit
@@ -51,6 +49,8 @@ def system_generator_wrapper(oemols,
     """
     from openff.toolkit.topology import Molecule
     from openmmforcefields.generators import SystemGenerator
+    from openeye import oechem
+
     system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
                                          small_molecule_forcefield = small_molecule_forcefield, molecules=[Molecule.from_openeye(oemol) for oemol in oemols], cache=None)
     return system_generator
@@ -72,7 +72,7 @@ def smiles_to_oemol(smiles, title='MOL', max_confs=1):
     molecule : openeye.oechem.OEMol
         OEMol object of the molecule
     """
-    from openeye import oeomega
+    from openeye import oeomega, oechem
 
     # Create molecule
     molecule = oechem.OEMol()
@@ -127,7 +127,7 @@ def iupac_to_oemol(iupac, title='MOL', max_confs=1):
     molecule : openeye.oechem.OEMol
         OEMol object of the molecule
     """
-    from openeye import oeiupac, oeomega
+    from openeye import oeiupac, oeomega, oechem
 
     # Create molecule
     molecule = oechem.OEMol()
@@ -243,6 +243,8 @@ def createSystemFromIUPAC(iupac_name, title="MOL", **system_generator_kwargs):
     topology : openmm.app.Topology object
         Topology
     """
+    from openeye import oechem
+    from openmoltools.openeye import generate_conformers
 
     # Create OEMol
     # TODO write our own of this function so we can be
@@ -339,6 +341,8 @@ def createOEMolFromSDF(sdf_filename, index=0, add_hydrogens=True, allow_undefine
     mol : openeye.oechem.OEMol object
         The loaded oemol object
     """
+    from openeye import oechem
+
     # TODO this needs a test
     ifs = oechem.oemolistream()
     ifs.open(sdf_filename)
@@ -376,6 +380,8 @@ def calculate_mol_similarity(molA, molB):
     :param molB: oemol object of molecule B
     :return: float, tanimoto score of the two molecules, between 0 and 1
     """
+    from openeye import oegraphsim
+
     fpA = oegraphsim.OEFingerPrint()
     fpB = oegraphsim.OEFingerPrint()
     oegraphsim.OEMakeFP(fpA, molA, oegraphsim.OEFPType_MACCS166)
@@ -385,6 +391,8 @@ def calculate_mol_similarity(molA, molB):
 
 
 def createSMILESfromOEMol(molecule):
+    from openeye import oechem
+
     smiles = oechem.OECreateSmiString(molecule,
                                       oechem.OESMILESFlag_DEFAULT |
                                       oechem.OESMILESFlag_Hydrogens)
@@ -405,6 +413,8 @@ def generate_unique_atom_names(molecule):
         oemol, either unchanged if atom names are
         already unique, or newly generated atom names
     """
+    from openeye import oechem
+
     atom_names = []
 
     atom_count = 0
@@ -423,7 +433,7 @@ def generate_unique_atom_names(molecule):
         try:
             from openmm.app.element import Element
         except ModuleNotFoundError:  # <=7.5.0
-            from simtk.openmm.app.element import Element
+            from simtk.openmm.app import Element
         _logger.info(f'molecule {molecule.GetTitle()} \
                      does not have unique atom names. Generating now...')
         element_counts = defaultdict(int)
@@ -451,6 +461,7 @@ def has_undefined_stereocenters(mol):
     bool : True if undefined Stereochemistry
            False if no stereochemistry or all stereocenter's are labelled
     """
+    from openeye import oechem
 
     assert oechem.OEPerceiveChiral(mol), f"chirality perception failed"
 
@@ -483,6 +494,8 @@ def generate_expression(list):
         Integer that openeye magically understands for matching expressions
 
     """
+    from openeye import oechem
+
     total_expr = 0
 
     for string in list:
@@ -522,6 +535,11 @@ def get_scaffold(molecule, adjustHcount=False):
     openeye.oechem.oemol
         scaffold oemol of the input mol. New oemol.
     """
+    from openeye import oechem
+
+    # Make a copy so as not to modify original molecule
+    molecule = oechem.OEMol(molecule)
+
     def TraverseForRing(visited, atom):
         visited.add(atom.GetIdx())
 

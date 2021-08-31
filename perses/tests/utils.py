@@ -11,11 +11,12 @@ __author__ = 'John D. Chodera'
 import copy
 from simtk import openmm, unit
 from simtk.openmm import app
-import sys
 import numpy as np
+import os
+import shutil
+import tempfile
 from perses.rjmc import geometry
 from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
-from openeye import oechem
 from openmmtools.constants import kB
 from openmmtools import states
 import contextlib
@@ -38,23 +39,25 @@ import logging
 _logger = logging.getLogger("tests-utils")
 _logger.setLevel(logging.INFO)
 
+
 @contextlib.contextmanager
 def enter_temp_directory():
     """Create and enter a temporary directory; used as context manager."""
-    import tempfile
     temp_dir = tempfile.mkdtemp()
-    import os
     cwd = os.getcwd()
-    os.chdir(temp_dir)
-    yield temp_dir
-    os.chdir(cwd)
-    import shutil
-    shutil.rmtree(temp_dir)
+    try:
+        os.chdir(temp_dir)
+        yield temp_dir
+    finally:
+        os.chdir(cwd)
+        shutil.rmtree(temp_dir)
 
 # TODO: Move some of these utility routines to openmoltools.
 
+
 class NaNException(Exception):
     pass
+
 
 def quantity_is_finite(quantity):
     """
@@ -74,6 +77,7 @@ def quantity_is_finite(quantity):
     if np.any( np.isnan( np.array(quantity / quantity.unit) ) ):
         return False
     return True
+
 
 def compare_at_lambdas(context, functions):
     """
@@ -566,6 +570,8 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     new_positions : np.array, unit-bearing
         The positions of the new system
     """
+    # TODO: Modify this to use openff.toolkit.topology.Molecule instead of openeye
+
     from openmoltools import forcefield_generators
     from openmmtools import testsystems
     from openmmforcefields.generators import SystemGenerator
@@ -580,6 +586,7 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     current_mol = forcefield_generators.generateOEMolFromTopologyResidue(ligand_topology[1]) # guest is second residue in topology
     proposed_mol = smiles_to_oemol('C1CC2(CCC1(CC2)C)C')
 
+    from openeye import oechem
     initial_smiles = oechem.OEMolToSmiles(current_mol)
     final_smiles = oechem.OEMolToSmiles(proposed_mol)
 
@@ -592,8 +599,7 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     gaff_filename = get_data_filename('data/gaff.xml')
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False},nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff})
     geometry_engine = geometry.FFAllAngleGeometryEngine()
-    proposal_engine = SmallMoleculeSetProposalEngine(
-        [current_mol, proposed_mol], system_generator, residue_name=current_mol_name,atom_expr=atom_expr,bond_expr=bond_expr)
+    proposal_engine = SmallMoleculeSetProposalEngine([current_mol, proposed_mol], system_generator, residue_name=current_mol_name)
 
     # Generate topology proposal
     topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol_id=0, proposed_mol_id=1)
