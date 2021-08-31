@@ -33,7 +33,7 @@ New features
 - (PR `#834 <https://github.com/choderalab/perses/pull/834>`_)
   Enable protein mutation transformations involving nonstandard amino acids, specifically: ASH, GLH, HID, HIE, HIP, LYN.
 - (PR `#838 <https://github.com/choderalab/perses/pull/838>`_)
-  Official Docker image hosted on docker hub ``docker pull choderalab/perses:0.9.1``.
+  Official Docker image hosted on docker hub ``docker pull choderalab/perses:0.9.2``.
   Resolves `#832 <https://github.com/choderalab/perses/pull/832>`_.
 
 0.9.1 - Bugfix release
