@@ -1,0 +1,118 @@
+name: self-hosted-gpu-test
+on: pull_request
+jobs:
+  start-runner:
+    name: Start self-hosted EC2 runner
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.start-ec2-runner.outputs.label }}
+      ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Start EC2 runner
+        id: start-ec2-runner
+        uses: machulav/ec2-github-runner@main
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ami-0c333824ebb036ed1
+          ec2-instance-type: p2.xlarge
+          subnet-id: subnet-0e82552b8c708a999
+          security-group-id: sg-0589e74ec03965add
+          # iam-role-name: self-hosted-runner # optional, requires additional permissions
+          aws-resource-tags: > # optional, requires additional permissions
+            [
+              {"Key": "Name", "Value": "ec2-github-runner"},
+              {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
+            ]
+  do-the-job:
+    name: Do the job on the runner
+    needs: start-runner # required to start the main job when the runner is ready
+    runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
+    env:
+      TEST_MODE: GPU
+      OPENMM: ${{ matrix.cfg.openmm }}
+      OE_LICENSE: ${{ github.workspace }}/oe_license.txt
+
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          installer-url: https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh
+          python-version: 3.8
+          activate-environment: test
+          channels: conda-forge,defaults,omnia-dev,openeye
+          environment-file: devtools/conda-envs/test_env.yaml
+          auto-activate-base: false
+          auto-update-conda: true
+          show-channel-urls: true
+      
+      - name: Additional info about the build
+        shell: bash
+        run: |
+          uname -a
+          df -h
+          ulimit -a
+
+      - name: Install package
+        shell: bash -l {0}
+        run: |
+          python -m pip install --no-deps -v .
+
+      - name: Environment Information
+        shell: bash -l {0}
+        run: |
+          conda info -a
+          conda list
+
+      - name: Decrypt OpenEye license
+        shell: bash -l {0}
+        env:
+          OE_LICENSE_TEXT: ${{ secrets.OE_LICENSE }}
+        run: |
+          echo "${OE_LICENSE_TEXT}" > ${OE_LICENSE}
+          python -c "import openeye; assert openeye.oechem.OEChemIsLicensed(), 'OpenEye license checks failed!'"
+
+      - name: Test the package
+        shell: bash -l {0}
+        run: |
+          export TRAVIS=true
+          pushd .
+          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto
+          popd
+
+      - name: Codecov
+        uses: codecov/codecov-action@v1
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: true
+
+  stop-runner:
+    name: Stop self-hosted EC2 runner
+    needs:
+      - start-runner # required to get output from the start-runner job
+      - do-the-job # required to wait when the main job is done
+    runs-on: ubuntu-latest
+    if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Stop EC2 runner
+        uses: machulav/ec2-github-runner@main
+        with:
+          mode: stop
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          label: ${{ needs.start-runner.outputs.label }}
+          ec2-instance-id: ${{ needs.start-runner.outputs.ec2-instance-id }}
