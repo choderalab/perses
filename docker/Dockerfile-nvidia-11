@@ -34,7 +34,7 @@ RUN wget -qO- https://micromamba.snakepit.net/api/micromamba/linux-64/latest | t
     ./bin/micromamba shell init -s bash -p "$MAMBA_ROOT_PREFIX" && \
     echo "micromamba activate $ENV_NAME" >> "$BASH_ENV" && \
     chmod -R a+rwx "$HOME" "$BASH_ENV" "$MAMBA_ROOT_PREFIX" && \
-    micromamba install -n "$ENV_NAME" -c jaimergp/label/unsupported-cudatoolkit-shim -c conda-forge -c openeye --strict-channel-priority --yes perses==0.9.1 openeye-toolkits && \
+    micromamba install -n "$ENV_NAME" -c jaimergp/label/unsupported-cudatoolkit-shim -c conda-forge -c openeye --strict-channel-priority --yes perses==0.9.2 openeye-toolkits && \
     micromamba clean -a
 
 # Make directory and tell openeye where to find
