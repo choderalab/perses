@@ -201,7 +201,8 @@ def generate_dipeptide_top_pos_sys(topology,
                                    system,
                                    positions,
                                    system_generator,
-                                   conduct_geometry_prop = True,
+                                   extra_sidechain_map=None,
+                                   conduct_geometry_prop=True,
                                    conduct_htf_prop = False,
                                    validate_energy_bookkeeping=True,
                                    repartitioned=False,
@@ -226,7 +227,7 @@ def generate_dipeptide_top_pos_sys(topology,
 
     # Create a top proposal
     print(f"making topology proposal")
-    topology_proposal = point_mutation_engine.propose(current_system=system, current_topology=topology)
+    topology_proposal = point_mutation_engine.propose(current_system=system, current_topology=topology, extra_sidechain_map=extra_sidechain_map)
 
     if not conduct_geometry_prop:
         return topology_proposal
@@ -335,6 +336,71 @@ def test_mutate_from_alanine():
             _ = generate_dipeptide_top_pos_sys(ala.topology, amino, ala.system, ala.positions, system_generator, conduct_htf_prop=True)
         else:
             _ = generate_dipeptide_top_pos_sys(ala.topology, amino, ala.system, ala.positions, system_generator, conduct_geometry_prop=False)
+
+def test_protein_atom_maps():
+    
+    # Get alanine dipeptide in vacuum test system
+    ala, system_generator = generate_atp()
+    
+    
+    # Define function for checking that the atom map is correct
+    def check_atom_map(topology_proposal, reference_map):
+        # Retrieve atom index to name mapping for old and new residues
+        old_res = [res for res in topology_proposal.old_topology.residues() if res.name == topology_proposal.old_residue_name][0]
+        new_res = [res for res in topology_proposal.new_topology.residues() if res.name == topology_proposal.new_residue_name][0]
+        old_res_index_to_name = {atom.index: atom.name for atom in old_res.atoms()}
+        new_res_index_to_name = {atom.index: atom.name for atom in new_res.atoms()}
+        print("old map: ", old_res_index_to_name)
+        print("new map: ", new_res_index_to_name)        
+
+        # Check whether the atom map generated matches the reference map
+        atom_map = topology_proposal._core_new_to_old_atom_map
+        
+        mapped_atoms = [(new_res_index_to_name[new_idx], old_res_index_to_name[old_idx]) for new_idx, old_idx in atom_map.items() if new_idx in new_res_index_to_name.keys() and old_idx in old_res_index_to_name.keys()]
+        assert sorted(reference_map) == sorted(mapped_atoms), f"{topology_proposal.old_residue_name}->{topology_proposal.new_residue_name} map does not match reference map"
+    
+    # ALA -> SER
+    topology_proposal, new_positions, logp_proposal, logp_reverse = generate_dipeptide_top_pos_sys(ala.topology, 'SER', ala.system, ala.positions, system_generator, conduct_geometry_prop=True)
+    ser_topology, ser_system = topology_proposal.new_topology, topology_proposal.new_system
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB'), ('HB2', 'HB2'), ('HB3', 'HB3')]
+    check_atom_map(topology_proposal, reference_map)
+    
+    # SER -> ALA
+    topology_proposal = generate_dipeptide_top_pos_sys(ser_topology, 'ALA', ser_system, new_positions, system_generator, conduct_geometry_prop=False)
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB'), ('HB2', 'HB2'), ('HB3', 'HB3')]
+    check_atom_map(topology_proposal, reference_map)
+    
+    # ALA -> VAL
+    topology_proposal, new_positions, logp_proposal, logp_reverse = generate_dipeptide_top_pos_sys(ala.topology, 'VAL', ala.system, ala.positions, system_generator, conduct_geometry_prop=True) 
+    val_topology, val_system = topology_proposal.new_topology, topology_proposal.new_system
+    reference_map =  [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB'), ('HB', 'HB2')]
+    check_atom_map(topology_proposal, reference_map)
+    
+    # VAL -> ALA
+    topology_proposal = generate_dipeptide_top_pos_sys(val_topology, 'ALA', val_system, new_positions, system_generator, conduct_geometry_prop=False)
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB'), ('HB2', 'HB')]
+    check_atom_map(topology_proposal, reference_map)
+    
+    # VAL -> ILE
+    topology_proposal = generate_dipeptide_top_pos_sys(val_topology, 'ILE', val_system, new_positions, system_generator, conduct_geometry_prop=False)
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB'), ('HB', 'HB')]
+    check_atom_map(topology_proposal, reference_map)
+
+    # VAL -> ILE with extra sidechain map
+    topology_proposal = generate_dipeptide_top_pos_sys(val_topology, 'ILE', val_system, new_positions, system_generator, extra_sidechain_map={17: 18, 18: 19, 19: 20, 20: 21}, conduct_geometry_prop=False)
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB'), ('HB', 'HB'), ('CG2', 'CG2'), ('HG21', 'HG21'), ('HG22', 'HG22'), ('HG23', 'HG23')]
+    check_atom_map(topology_proposal, reference_map)
+    
+    # ALA -> GLY
+    topology_proposal, new_positions, logp_proposal, logp_reverse = generate_dipeptide_top_pos_sys(ala.topology, 'GLY', ala.system, ala.positions, system_generator, conduct_geometry_prop=True)
+    gly_topology, gly_system = topology_proposal.new_topology, topology_proposal.new_system
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('C', 'C'), ('O', 'O')]
+    check_atom_map(topology_proposal, reference_map)
+    
+    # GLY -> ALA
+    topology_proposal = generate_dipeptide_top_pos_sys(gly_topology, 'ALA', gly_system, new_positions, system_generator, conduct_geometry_prop=False)
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('C', 'C'), ('O', 'O')]
+    check_atom_map(topology_proposal, reference_map)
 
 #@attr('advanced')
 def test_specify_allowed_mutants():
