@@ -350,7 +350,7 @@ def test_protein_atom_maps():
         new_res = [res for res in topology_proposal.new_topology.residues() if res.name == topology_proposal.new_residue_name][0]
         old_res_index_to_name = {atom.index: atom.name for atom in old_res.atoms()}
         new_res_index_to_name = {atom.index: atom.name for atom in new_res.atoms()}
-        print("old map: ", old_res_index_to_name)
+       
         print("new map: ", new_res_index_to_name)        
 
         # Check whether the atom map generated matches the reference map
