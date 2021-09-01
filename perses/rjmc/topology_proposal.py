@@ -1156,7 +1156,7 @@ class PolymerProposalEngine(ProposalEngine):
             old_to_new_residues[old_residue] = new_residues[old_residue.index]
 
         # Retrieve old and new residues
-        assert len(residue_map) == 1, f"residue_map is not of length 1"
+        assert len(residue_map) == 1, "residue_map is not of length 1"
         old_res = residue_map[0][0]
         new_res = old_to_new_residues[old_res]
         old_res_name = old_res.name
