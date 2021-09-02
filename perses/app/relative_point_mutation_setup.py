@@ -137,7 +137,7 @@ class PointMutationExecutor(object):
             allow_undefined_stereo_sdf : bool, default False
                 whether to allow an SDF file to contain undefined stereocenters
             extra_sidechain_map : dict, key: int, value: int, default None
-                map of new to old sidechain atom indices to add to the default map (by default, we only map backbone atoms, CBs, and HBs)
+                map of new to old sidechain atom indices to add to the default map (by default, we only map backbone atoms and CBs)
             water_model : str, default 'tip3p'
                 solvent model to use for solvation
             ionic_strength : float * unit.molar, default 0.15 * unit.molar

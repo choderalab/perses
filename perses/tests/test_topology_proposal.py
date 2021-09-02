@@ -360,32 +360,32 @@ def test_protein_atom_maps():
     # ALA -> SER
     topology_proposal, new_positions, logp_proposal, logp_reverse = generate_dipeptide_top_pos_sys(ala.topology, 'SER', ala.system, ala.positions, system_generator, conduct_geometry_prop=True)
     ser_topology, ser_system = topology_proposal.new_topology, topology_proposal.new_system
-    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB'), ('HB2', 'HB2'), ('HB3', 'HB3')]
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB')]
     check_atom_map(topology_proposal, reference_map)
     
     # SER -> ALA
     topology_proposal = generate_dipeptide_top_pos_sys(ser_topology, 'ALA', ser_system, new_positions, system_generator, conduct_geometry_prop=False)
-    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB'), ('HB2', 'HB2'), ('HB3', 'HB3')]
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB')]
     check_atom_map(topology_proposal, reference_map)
     
     # ALA -> VAL
     topology_proposal, new_positions, logp_proposal, logp_reverse = generate_dipeptide_top_pos_sys(ala.topology, 'VAL', ala.system, ala.positions, system_generator, conduct_geometry_prop=True) 
     val_topology, val_system = topology_proposal.new_topology, topology_proposal.new_system
-    reference_map =  [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB'), ('HB', 'HB2')]
+    reference_map =  [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB')]
     check_atom_map(topology_proposal, reference_map)
     
     # VAL -> ALA
     topology_proposal = generate_dipeptide_top_pos_sys(val_topology, 'ALA', val_system, new_positions, system_generator, conduct_geometry_prop=False)
-    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB'), ('HB2', 'HB')]
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB')]
     check_atom_map(topology_proposal, reference_map)
     
     # VAL -> ILE
     topology_proposal = generate_dipeptide_top_pos_sys(val_topology, 'ILE', val_system, new_positions, system_generator, conduct_geometry_prop=False)
-    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB'), ('HB', 'HB')]
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB')]
     check_atom_map(topology_proposal, reference_map)
 
     # VAL -> ILE with extra sidechain map
-    topology_proposal = generate_dipeptide_top_pos_sys(val_topology, 'ILE', val_system, new_positions, system_generator, extra_sidechain_map={17: 18, 18: 19, 19: 20, 20: 21}, conduct_geometry_prop=False)
+    topology_proposal = generate_dipeptide_top_pos_sys(val_topology, 'ILE', val_system, new_positions, system_generator, extra_sidechain_map={13:13, 17: 18, 18: 19, 19: 20, 20: 21}, conduct_geometry_prop=False)
     reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB'), ('HB', 'HB'), ('CG2', 'CG2'), ('HG21', 'HG21'), ('HG22', 'HG22'), ('HG23', 'HG23')]
     check_atom_map(topology_proposal, reference_map)
     

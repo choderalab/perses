@@ -590,7 +590,7 @@ class PolymerProposalEngine(ProposalEngine):
             The current topology
         current_metadata : dict -- OPTIONAL
         extra_sidechain_map : dict, key: int, value: int, default None
-            map of new to old sidechain atom indices to add the default map (by default, we only map backbone atoms, CBs, and HBs)
+            map of new to old sidechain atom indices to add the default map (by default, we only map backbone atoms and CBs)
 
         Returns
         -------
@@ -1113,7 +1113,7 @@ class PolymerProposalEngine(ProposalEngine):
         
         By default, the atom map:
         1) Maps all backbone atoms (exception: for GLY, do not map HA2 and HA3)
-        2) Map CBs and HBs only (no other sidechain atoms)
+        2) Map CBs only (no other sidechain atoms)
         
         If additional sidechains should be mapped, extra_sidechain_map can be supplied to supplement the default map.
         
@@ -1179,7 +1179,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         # Iterate over the old res atoms to fill in the local atom map
         backbone_atoms = ['C', 'CA', 'N', 'O', 'H', 'HA']
-        sidechain_atoms = ['CB', 'HB', 'HB2', 'HB3']
+        sidechain_atoms = ['CB']
         for atom in old_res.atoms():
             old_atom_index = atom.index
             old_atom_name = atom.name
@@ -1196,20 +1196,6 @@ class PolymerProposalEngine(ProposalEngine):
             elif old_atom_name in sidechain_atoms:
                 if new_res_name == 'GLY': # Do not map sidechain atoms if GLY
                     continue
-                elif old_res_name in ['THR', 'VAL', 'ILE'] and new_res_name not in ['THR', 'VAL', 'ILE']: # If old residue contains HB and new residue contains HB2/HB3
-                    if old_atom_name == 'HB':
-                        new_atom_index = new_res_name_to_index[old_atom_name + '2'] # Map HB to HB2
-                        local_atom_map[new_atom_index] = old_atom_index
-                    elif old_atom_name == 'CB':
-                        new_atom_index = new_res_name_to_index[old_atom_name]
-                        local_atom_map[new_atom_index] = old_atom_index
-                elif old_res_name not in ['THR', 'VAL', 'ILE'] and new_res_name in ['THR', 'VAL', 'ILE']: # If old residue contains HB2/HB3 and new residue contains HB
-                    if old_atom_name == 'HB2':
-                        new_atom_index = new_res_name_to_index[old_atom_name[:-1]] # Map HB2 to HB
-                        local_atom_map[new_atom_index] = old_atom_index
-                    elif old_atom_name == 'CB':
-                        new_atom_index = new_res_name_to_index[old_atom_name]
-                        local_atom_map[new_atom_index] = old_atom_index
                 else:
                     new_atom_index = new_res_name_to_index[old_atom_name]
                     local_atom_map[new_atom_index] = old_atom_index
