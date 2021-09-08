@@ -5,6 +5,7 @@ for each additional atom that must be added.
 from simtk import unit
 
 import numpy as np
+import os
 import networkx as nx
 
 from perses.storage import NetCDFStorageView
@@ -168,10 +169,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                  storage=None,
                  bond_softening_constant=1.0,
                  angle_softening_constant=1.0,
-                 neglect_angles = False,
-                 use_14_nonbondeds = True):
+                 neglect_angles=False,
+                 use_14_nonbondeds=True,
+                 proposal_pdb_file=None):
         self._metadata = metadata
-        self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
+        self._proposal_pdbfile = proposal_pdb_file
         self.pdb_filename_prefix = 'geometry-proposal' # PDB file prefix for writing sequential atom placements
         self.nproposed = 0 # number of times self.propose() has been called
         self.verbose = verbose
@@ -1621,20 +1623,22 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp_torsions = logq - logsumexp(logq)
 
         # Write proposed torsion energies to a PDB file for visualization or debugging, if desired
-        if hasattr(self, '_proposal_pdbfile'):
-            # Write proposal probabilities to PDB file as B-factors for inert atoms
-            f_i = -logp_torsions
-            f_i -= f_i.min() # minimum free energy is zero
-            f_i[f_i > 999.99] = 999.99
-            self._proposal_pdbfile.write('MODEL\n')
-            for i, xyz in enumerate(xyzs):
-                self._proposal_pdbfile.write('ATOM  %5d %4s %3s %c%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n' % (i+1, ' Ar ', 'Ar ', ' ', atom_idx+1, 10*xyz[0], 10*xyz[1], 10*xyz[2], np.exp(logp_torsions[i]), f_i[i]))
-            self._proposal_pdbfile.write('TER\n')
-            self._proposal_pdbfile.write('ENDMDL\n')
-            # TODO: Write proposal PMFs to storage
-            # atom_proposal_indices[order]
-            # atom_positions[order,k]
-            # torsion_pmf[order, division_index]
+        if self._proposal_pdbfile:
+            proposal_pdbfile_path = os.path.join('.', self._proposal_pdbfile)
+            with open(proposal_pdbfile_path, 'a') as pdb_proposal_file:
+                # Write proposal probabilities to PDB file as B-factors for inert atoms
+                f_i = -logp_torsions
+                f_i -= f_i.min() # minimum free energy is zero
+                f_i[f_i > 999.99] = 999.99
+                pdb_proposal_file.write('MODEL\n')
+                for i, xyz in enumerate(xyzs):
+                    pdb_proposal_file.write('ATOM  %5d %4s %3s %c%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n' % (i+1, ' Ar ', 'Ar ', ' ', atom_idx+1, 10*xyz[0], 10*xyz[1], 10*xyz[2], np.exp(logp_torsions[i]), f_i[i]))
+                pdb_proposal_file.write('TER\n')
+                pdb_proposal_file.write('ENDMDL\n')
+                # TODO: Write proposal PMFs to storage
+                # atom_proposal_indices[order]
+                # atom_positions[order,k]
+                # torsion_pmf[order, division_index]
 
         assert check_dimensionality(logp_torsions, float)
         assert check_dimensionality(phis, float)
