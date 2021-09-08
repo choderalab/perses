@@ -2519,12 +2519,14 @@ class NetworkXProposalOrder(object):
             self._new_atoms = self._topology_proposal.unique_new_atoms
             self._destination_topology = self._topology_proposal.new_topology
             self._atoms_with_positions = self._topology_proposal.new_to_old_atom_map.keys()
+            # TODO: simtk.openmm.app.topology.Topology object doesn't have _get_networkx_molecule attr.
             _nx_graph = self._topology_proposal._new_topology._get_networkx_molecule()
         elif direction == "reverse":
             self._destination_system = self._topology_proposal.old_system
             self._new_atoms = self._topology_proposal.unique_old_atoms
             self._destination_topology = self._topology_proposal.old_topology
             self._atoms_with_positions = self._topology_proposal.old_to_new_atom_map.keys()
+            # TODO: simtk.openmm.app.topology.Topology object doesn't have _get_networkx_molecule attr.
             _nx_graph = self._topology_proposal._old_topology._get_networkx_molecule()
         else:
             raise ValueError("Direction must be either forward or reverse.")
