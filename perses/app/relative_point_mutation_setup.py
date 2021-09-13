@@ -330,9 +330,9 @@ class PointMutationExecutor(object):
             else:
                 subtracted_valence_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
 
-
-            if conduct_endstate_validation and repartitioned_endstate is None:
-                zero_state_error, one_state_error = validate_endstate_energies(forward_htf._topology_proposal, forward_htf, added_valence_energy, subtracted_valence_energy, beta=beta, ENERGY_THRESHOLD=ENERGY_THRESHOLD)
+            if conduct_endstate_validation and generate_unmodified_hybrid_topology_factory:
+                htf = self.get_complex_htf() if is_complex else self.get_apo_htf()
+                zero_state_error, one_state_error = validate_endstate_energies(htf._topology_proposal, htf, added_valence_energy, subtracted_valence_energy, beta=beta, ENERGY_THRESHOLD=ENERGY_THRESHOLD)
                 if zero_state_error > ENERGY_THRESHOLD:
                     _logger.warning(f"Reduced potential difference of the nonalchemical and alchemical Lambda = 0 state is above the threshold ({ENERGY_THRESHOLD}): {zero_state_error}")
                 if one_state_error > ENERGY_THRESHOLD:
