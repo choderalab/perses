@@ -22,7 +22,7 @@ requirements:
     - numpy >=1.14
     - scipy
     - pymbar
-    - openmm >=7.5.0 # constraint slowdown has fixed https://github.com/openmm/openmm/pull/2818
+    - openmm >=7.6.0 # constraint slowdown has fixed https://github.com/openmm/openmm/pull/2818
     - parmed
     - openmoltools >=0.8.4
     - openmmtools
