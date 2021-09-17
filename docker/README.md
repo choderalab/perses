@@ -2,7 +2,19 @@
 
 The container can be downloaded with `docker pull choderalab/perses:0.9.2`
 
-## OpenEye License
+Table of Contents
+=================
+
+* [Perses Container](#perses-container)
+   * [Setup](#setup)
+      * [OpenEye License](#openeye-license)
+      * [GPU Support](#gpu-support)
+   * [Cloud Support](#cloud-support)
+      * [Google Cloud Platform (GCP)](#google-cloud-platform-gcp)
+
+## Setup
+
+### OpenEye License
 
 The open eye license file is not included and must be passed in as a mount point.
 The container expects `oe_license.txt` in `/openeye/` because we set `ENV OE_LICENSE=/openeye/oe_license.txt` in the Dockerfile.
@@ -14,7 +26,7 @@ For example, if you have an `oe_license.txt` file in `$HOME/.openeye/`.
 $ docker run --rm --mount type=bind,source=$HOME/.openeye/,target=/perses/,readonly choderalab/perses:0.9.2 python -c "import openeye; assert openeye.oechem.OEChemIsLicensed(), 'OpenEye license checks failed!'"
 ```
 
-## GPU Support
+### GPU Support
 
 Pass the option `--gpus device=0` to use the host's GPU:
 
@@ -39,3 +51,9 @@ All differences are within tolerance.
 ```
 Note: `perses` currently works best on a single GPU. 
 See the documentation [here](https://docs.docker.com/config/containers/resource_constraints/#access-an-nvidia-gpu) for how to specify a single GPU on a multi-GPU system.
+
+## Cloud Support
+
+### Google Cloud Platform (GCP)
+
+On GCP, when using the image `cos-stable-89`, be sure to use the `choderalab/perses:0.9.2-cuda-11.0.3` container to ensure CUDA compatibility.
