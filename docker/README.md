@@ -1,6 +1,6 @@
 # Perses Container
 
-The container can be downloaded with `docker pull choderalab/perses:0.9.1`
+The container can be downloaded with `docker pull choderalab/perses:0.9.2`
 
 ## OpenEye License
 

@@ -63,10 +63,6 @@ jobs:
              #conda install --quiet -c conda-forge/label/openmm_rc openmm;;
             nightly)
               echo "Using OpenMM nightly dev build."
-              # need this until we cut a new openmoltools release
-              pip install git+https://github.com/choderalab/openmoltools.git
-              # need to install from master until parmed updates to a new release
-              pip install git+https://github.com/ParmEd/ParmEd.git
               conda install --quiet -c omnia-dev openmm;;
           esac
 
