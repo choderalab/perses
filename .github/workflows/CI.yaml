@@ -63,10 +63,6 @@ jobs:
              #conda install --quiet -c conda-forge/label/openmm_rc openmm;;
             nightly)
               echo "Using OpenMM nightly dev build."
-              # need this until we cut a new openmoltools release/merge in PR
-              pip install git+https://github.com/choderalab/openmoltools.git@feat/fix_openmm_nightly
-              # need this until parmed updates to a new release
-              pip install git+https://github.com/mikemhenry/ParmEd.git@fix/openmm_namespace_change_1
               conda install --quiet -c omnia-dev openmm;;
           esac
 
@@ -92,10 +88,9 @@ jobs:
       - name: Test the package
         shell: bash -l {0}
         run: |
-          export OE_LICENSE="$HOME/oe_license.txt"
           export TRAVIS=true
           pushd .
-          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced"
+          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto
           popd
 
       - name: Codecov

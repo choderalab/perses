@@ -237,7 +237,6 @@ def test_host_guest_deterministic_geometries():
                  temperature=300.0 * unit.kelvin,
                  solvent_padding=9.0 * unit.angstroms,
                  ionic_strength=0.15 * unit.molar,
-                 atom_map=None,
                  hmass=4*unit.amus,
                  neglect_angles=False,
                  map_strength='default',
@@ -252,7 +251,6 @@ def test_host_guest_deterministic_geometries():
                  nonbonded_method = 'PME',
                  complex_box_dimensions=None,
                  solvent_box_dimensions=None,
-                 map_strategy='geometry',
                  remove_constraints=False,
                  use_given_geometries = True
                  )
