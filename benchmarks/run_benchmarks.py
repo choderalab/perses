@@ -12,6 +12,10 @@ import urllib.request
 import yaml
 
 
+# global variables
+base_repo_url = "https://github.com/openforcefield/protein-ligand-benchmark"
+
+
 # helper functions
 def concatenate_files(input_files, output_file):
     """
@@ -29,7 +33,7 @@ def run_relative_perturbation(lig_a_idx, lig_b_idx, tidy=True):
     Perform relative free energy simulation using perses CLI.
 
     Parameters
-        ----------
+    ----------
         lig_a_idx : int
             Index for first ligand (ligand A)
         lig_b_idx : int
@@ -67,7 +71,6 @@ def run_relative_perturbation(lig_a_idx, lig_b_idx, tidy=True):
 
 # Defining command line arguments
 # fetching targets from github repo
-base_repo_url = "https://github.com/openforcefield/protein-ligand-benchmark"
 targets_url = f"{base_repo_url}/raw/master/data/targets.yml"
 with urllib.request.urlopen(targets_url) as response:
     targets_dict = yaml.safe_load(response.read())
@@ -86,12 +89,12 @@ arg_parser.add_argument(
 arg_parser.add_argument(
     "--edge",
     type=int,
-    nargs=2,
-    help="Edge (ligand pair) 0-based indices to compute. Ex. --edge 0 5",
+    help="Edge index (0-based) according to edges yaml file in dataset. Ex. --edge 5 (for sixth edge)",
     required=True
 )
 args = arg_parser.parse_args()
 target = args.target
+edge_index = args.edge
 
 # Fetch protein pdb file
 target_dir = targets_dict[target]['dir']
@@ -123,7 +126,14 @@ edges_url = f"{base_repo_url}/raw/master/data/{target_dir}/00_data/edges.yml"
 with urllib.request.urlopen(edges_url) as response:
     edges_dict = yaml.safe_load(response.read())
 edges_list = list(edges_dict.values())  # suscriptable edges object - note dicts are ordered for py>=3.7
-lig_a_index, lig_b_index = args.edge[0], args.edge[1]
+# edge list to access by index
+edge = edges_list[edge_index]
+ligand_a_name = edge['ligand_a']
+ligand_b_name = edge['ligand_b']
+# ligands list to get indices
+ligands_list = list(ligands_dict.keys())
+lig_a_index = ligands_list.index(ligand_a_name)
+lig_b_index = ligands_list.index(ligand_b_name)
 run_relative_perturbation(lig_a_index, lig_b_index)
 
 # TODO: this part
