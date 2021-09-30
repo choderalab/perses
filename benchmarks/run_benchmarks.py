@@ -85,7 +85,6 @@ arg_parser.add_argument(
     choices=target_choices,
     required=True
 )
-# TODO: make it edge index (single int), not pair
 arg_parser.add_argument(
     "--edge",
     type=int,
@@ -135,6 +134,3 @@ ligands_list = list(ligands_dict.keys())
 lig_a_index = ligands_list.index(ligand_a_name)
 lig_b_index = ligands_list.index(ligand_b_name)
 run_relative_perturbation(lig_a_index, lig_b_index)
-
-# TODO: this part
-# obtain and process results

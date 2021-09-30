@@ -64,7 +64,6 @@ class Simulation(object):
         std error in relative hydration free energy (kcal/mol)
 
     """
-    from simtk import unit
 
     def __init__(self, directory):
         self.directory = directory
@@ -103,7 +102,8 @@ class Simulation(object):
             print('Both solvent and complex legs need to be run for binding free energies')
 
     def _load_data(self):
-        """ Calculate relative free energy details from the simulation by performing MBAR on the vacuum and solvent legs of the simualtion.
+        """ Calculate relative free energy details from the simulation by performing MBAR on the vacuum and solvent legs
+        of the simulation.
 
         Parameters
         ----------
