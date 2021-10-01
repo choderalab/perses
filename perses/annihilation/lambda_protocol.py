@@ -219,6 +219,18 @@ class RESTProtocol(object):
     def __init__(self):
         self.functions = RESTProtocol.default_functions
 
+class RESTProtocolV3(object):
+    default_functions = {'lambda_rest_bonds': lambda beta0, beta :  np.sqrt(beta / beta0),
+                         'lambda_rest_angles' : lambda beta0, beta : np.sqrt(beta / beta0),
+                         'lambda_rest_torsions' : lambda beta0, beta :  np.sqrt(beta / beta0),
+                         'lambda_rest_electrostatics' : lambda beta0, beta : np.sqrt(beta / beta0),
+                         'lambda_rest_sterics': lambda beta0, beta : np.sqrt(beta / beta0),
+                         'lambda_rest_electrostatics_exceptions': lambda beta0, beta: np.sqrt(beta / beta0),
+                         'lambda_rest_sterics_exceptions': lambda beta0, beta: np.sqrt(beta / beta0)
+                         }
+    def __init__(self):
+        self.functions = RESTProtocolV3.default_functions
+
 
 class RelativeAlchemicalState(AlchemicalState):
     """
@@ -299,6 +311,48 @@ class RESTState(AlchemicalState):
            The new value for all defined parameters.
        """
        lambda_protocol = RESTProtocol()
+       for parameter_name in lambda_protocol.functions:
+           lambda_value = lambda_protocol.functions[parameter_name](beta0, beta)
+           setattr(self, parameter_name, lambda_value)
+
+class RESTStateV3(AlchemicalState):
+    """
+    REST State to handle all lambda parameters required for REST2 implementation.
+
+    Attributes
+    ----------
+    solute_scale : solute scaling parameter
+    inter_scale : inter-region scaling parameter
+    """
+
+    class _LambdaParameter(AlchemicalState._LambdaParameter):
+        @staticmethod
+        def lambda_validator(self, instance, parameter_value):
+            if parameter_value is None:
+                return parameter_value
+            return float(parameter_value)
+
+    lambda_rest_bonds = _LambdaParameter('lambda_rest_bonds')
+    lambda_rest_angles = _LambdaParameter('lambda_rest_angles')
+    lambda_rest_torsions = _LambdaParameter('lambda_rest_torsions')
+    lambda_rest_electrostatics = _LambdaParameter('lambda_rest_electrostatics')
+    lambda_rest_sterics = _LambdaParameter('lambda_rest_sterics')
+    lambda_rest_electrostatics_exceptions = _LambdaParameter('lambda_rest_electrostatics_exceptions')
+    lambda_rest_sterics_exceptions = _LambdaParameter('lambda_rest_sterics_exceptions')
+
+    def set_alchemical_parameters(self,
+                                  beta0,
+                                  beta):
+       """Set each lambda value according to the lambda_functions protocol.
+       The undefined parameters (i.e. those being set to None) remain
+       undefined.
+
+       Parameters
+       ----------
+       lambda_value : float
+           The new value for all defined parameters.
+       """
+       lambda_protocol = RESTProtocolV3()
        for parameter_name in lambda_protocol.functions:
            lambda_value = lambda_protocol.functions[parameter_name](beta0, beta)
            setattr(self, parameter_name, lambda_value)
