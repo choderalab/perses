@@ -16,6 +16,7 @@ from perses.tests import utils
 from openmmtools.states import SamplerState
 import openmmtools.mcmc as mcmc
 import openmmtools.cache as cache
+from openmmtools.integrators import LangevinIntegrator
 from unittest import skipIf
 
 import pymbar.timeseries as timeseries
@@ -447,8 +448,8 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene",atom_express
     system = system_generator.create_system(topology)
     positions = extractPositionsFromOEMol(refmol)
 
-    proposal_engine = SmallMoleculeSetProposalEngine([refmol, mol], system_generator)
-    proposal = proposal_engine.propose(system, topology, atom_expr = atom_expr, bond_expr = bond_expr)
+    proposal_engine = SmallMoleculeSetProposalEngine([refmol, mol], system_generator, atom_expr=atom_expr, bond_expr=bond_expr, allow_ring_breaking=True)
+    proposal = proposal_engine.propose(system, topology)
     geometry_engine = FFAllAngleGeometryEngine()
     new_positions, _ = geometry_engine.propose(proposal, positions, beta = beta, validate_energy_bookkeeping = False)
     _ = geometry_engine.logp_reverse(proposal, new_positions, positions, beta)
@@ -616,7 +617,6 @@ def test_RMSD_restraint():
              nonbonded_method = 'PME',
              complex_box_dimensions=None,
              solvent_box_dimensions=None,
-             map_strategy='matching_criterion',
              remove_constraints=False,
              use_given_geometries = False
              )
@@ -656,19 +656,33 @@ def RepartitionedHybridTopologyFactory_energies(topology, chain, system, positio
     """
     Test whether the difference in the nonalchemical zero and alchemical zero states is the forward valence energy.  Also test for the one states.
     Note that two RepartitionedHybridTopologyFactorys need to be generated (one for each endstate) because the energies need to be validated separately for each endstate.
+    Tests all mutants.
+    """
+    for res in topology.residues():
+        if res.id == '2':
+            wt_res = res.name
+    aminos_updated = [amino for amino in aminos if amino not in [wt_res, 'PRO', 'HIS', 'TRP', 'PHE', 'TYR']]
+    for mutant in aminos_updated:
+        RepartitionedHybridTopologyFactory_energy_mutant(topology, chain, system, positions, system_generator, mutant)
+
+
+def RepartitionedHybridTopologyFactory_energy_mutant(topology, chain, system, positions, system_generator, mutant):
+    """
+    Test whether the difference in the nonalchemical zero and alchemical zero states is the forward valence energy.  Also test for the one states.
+    Note that two RepartitionedHybridTopologyFactorys need to be generated (one for each endstate) because the energies need to be validated separately for each endstate.
+    Tests a single mutant.
     """
 
     from perses.rjmc.topology_proposal import PointMutationEngine
     from perses.annihilation.relative import RepartitionedHybridTopologyFactory
     from perses.tests.utils import validate_endstate_energies
 
-    ENERGY_THRESHOLD = 1e-6
+    ENERGY_THRESHOLD = 1e-4
 
     for res in topology.residues():
         if res.id == '2':
             wt_res = res.name
-    aminos_updated = [amino for amino in aminos if amino not in [wt_res, 'PRO', 'HIS', 'TRP', 'PHE', 'TYR']]
-    mutant = random.choice(aminos_updated)
+
     print(f'Making mutation {wt_res}->{mutant}')
 
     # Create point mutation engine to mutate residue at id 2 to random amino acid
@@ -698,10 +712,24 @@ def RepartitionedHybridTopologyFactory_energies(topology, chain, system, positio
                                                use_14_nonbondeds=True)
 
     # Create geometry proposal
-    new_positions, logp_proposal = geometry_engine.propose(topology_proposal, positions, beta,
+    for _ in range(5):
+        new_positions, logp_proposal = geometry_engine.propose(topology_proposal, positions, beta,
                                                                    validate_energy_bookkeeping=True)
-    logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, positions, beta,
+        logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, positions, beta,
                                                 validate_energy_bookkeeping=True)
+        # Check potential energy
+        platform = openmm.Platform.getPlatformByName('Reference')
+        integrator = LangevinIntegrator(temperature=temperature)
+        context = openmm.Context(topology_proposal.new_system, integrator, platform)
+        context.setPeriodicBoxVectors(*topology_proposal.new_system.getDefaultPeriodicBoxVectors())
+        context.setPositions(new_positions)
+        context.setVelocitiesToTemperature(temperature)
+        potential_energy = context.getState(getEnergy=True).getPotentialEnergy()
+
+        if potential_energy < 1e8 * unit.kilojoule_per_mole:
+            break
+    else:  # Max number of tries reached
+        raise Exception("Was not able to generate a decent proposal after 5 iterations")
 
     if not topology_proposal.unique_new_atoms:
         assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
@@ -802,7 +830,7 @@ def flattenedHybridTopologyFactory_energies(topology, chain, system, positions, 
     from perses.annihilation.relative import RepartitionedHybridTopologyFactory
     from perses.tests.utils import validate_endstate_energies
 
-    ENERGY_THRESHOLD = 1e-6
+    ENERGY_THRESHOLD = 1e-6 #kJ/mol
 
     # Create point mutation engine to mutate residue at id 2 to a random amino acid
     aminos_updated = [amino for amino in aminos if amino not in ['ALA', 'PRO', 'HIS', 'TRP', 'PHE', 'TYR']]
@@ -853,10 +881,24 @@ def flattenedHybridTopologyFactory_energies(topology, chain, system, positions, 
                                                    use_14_nonbondeds=True)
 
         # Create geometry proposals
-        new_positions, logp_proposal = geometry_engine.propose(topology_proposal, positions, beta,
+        for _ in range(5):
+            new_positions, logp_proposal = geometry_engine.propose(topology_proposal, positions, beta,
                                                                        validate_energy_bookkeeping=True)
-        logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, positions, beta,
+            logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, positions, beta,
                                                     validate_energy_bookkeeping=True)
+            # Check potential energy
+            platform = openmm.Platform.getPlatformByName('Reference')
+            integrator = LangevinIntegrator(temperature=temperature)
+            context = openmm.Context(topology_proposal.new_system, integrator, platform)
+            context.setPeriodicBoxVectors(*topology_proposal.new_system.getDefaultPeriodicBoxVectors())
+            context.setPositions(new_positions)
+            context.setVelocitiesToTemperature(temperature)
+            potential_energy = context.getState(getEnergy=True).getPotentialEnergy()
+
+            if potential_energy < 1e8 * unit.kilojoule_per_mole:
+                break
+        else:  # Max number of tries reached
+            raise Exception("Was not able to generate a decent proposal after 5 iterations")
 
         if not topology_proposal.unique_new_atoms:
             assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
