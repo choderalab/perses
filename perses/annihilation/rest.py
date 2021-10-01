@@ -8,6 +8,7 @@ Imports
 import simtk.openmm as openmm
 import copy
 from perses.annihilation.relative import HybridTopologyFactory
+import simtk.unit as unit
 
 #######LOGGING#############################
 import logging
@@ -324,8 +325,8 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         # "is_both_solvent = is_nonrest_solvent1 * is_nonrest_solvent2;",
 
         # Define rest scale factors (scaled water rest)
-        "p1_electrostatics_rest_scale = lambda_electrostatics_rest * (is_rest1 + is_nonrest_solvent1 * is_rest2);",
-        "p2_electrostatics_rest_scale = lambda_electrostatics_rest * (is_rest2 + is_nonrest_solvent2 * is_rest1);",
+        "p1_electrostatics_rest_scale = lambda_rest_electrostatics * (is_rest1 + is_nonrest_solvent1 * is_rest2);",
+        "p2_electrostatics_rest_scale = lambda_rest_electrostatics * (is_rest2 + is_nonrest_solvent2 * is_rest1);",
 
         # Define alpha
         "alpha = sqrt(-log(2 * delta) / r_cutoff);",
@@ -360,8 +361,8 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         # "is_both_solvent = is_nonrest_solvent1 * is_nonrest_solvent2;",
 
         # Define rest scale factors (scaled water rest)
-        "p1_sterics_rest_scale = lambda_sterics_rest * (is_rest1 + is_nonrest_solvent1 * is_rest2);",
-        "p2_sterics_rest_scale = lambda_sterics_rest * (is_rest2 + is_nonrest_solvent2 * is_rest1);",
+        "p1_sterics_rest_scale = lambda_rest_sterics * (is_rest1 + is_nonrest_solvent1 * is_rest2);",
+        "p2_sterics_rest_scale = lambda_rest_sterics * (is_rest2 + is_nonrest_solvent2 * is_rest1);",
 
         # Define r_eff
         "r_eff_sterics = sqrt(r^2);"
@@ -380,8 +381,8 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         f"U_electrostatics = {ONE_4PI_EPS0} * chargeProd * erfc(alpha * r)/ r_eff_electrostatics;",
 
         # Define sterics functional form
-        "U_sterics = 4 * epsilon * x * (x - 1.0);"
-        "x = (sigma / r_eff_sterics)^6;"
+        "U_sterics = 4 * epsilon * x * (x - 1.0);",
+        "x = (sigma / r_eff_sterics)^6;",
 
         # Define alpha
         "alpha = sqrt(-log(2 * delta) / r_cutoff);",
@@ -390,7 +391,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
 
         # Define r_eff
         "r_eff_electrostatics = sqrt(r^2);",
-        "r_eff_sterics = sqrt(r^2);",
+        "r_eff_sterics = sqrt(r^2);"
 
     ]
 
@@ -466,7 +467,6 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
                 self._default_exceptions_expression = ' '.join(self._default_exceptions_expression_list)
         else:
             self._r_cutoff = r_cutoff
-        self._w_scale = w_scale
         self._delta = delta
         self._use_dispersion_correction = use_dispersion_correction
 
@@ -715,7 +715,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         custom_nb_force.addPerParticleParameter('charge')
 
         # Handle some nonbonded attributes
-        old_system_nbf = self.og_forces['NonbondedForce']
+        old_system_nbf = self._og_system_forces['NonbondedForce']
         standard_nonbonded_method = old_system_nbf.getNonbondedMethod()
         if standard_nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME,
                                          openmm.NonbondedForce.Ewald]:
@@ -754,7 +754,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         custom_nb_force.addPerParticleParameter('epsilon')
 
         # Handle some nonbonded attributes
-        old_system_nbf = self.og_forces['NonbondedForce']
+        old_system_nbf = self._og_system_forces['NonbondedForce']
         standard_nonbonded_method = old_system_nbf.getNonbondedMethod()
         if standard_nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME,
                                          openmm.NonbondedForce.Ewald]:
@@ -796,14 +796,14 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         custom_bond_force.addPerBondParameter('epsilon')
 
         # Handle some nonbonded attributes
-        old_system_nbf = self.og_forces['NonbondedForce']
+        old_system_nbf = self._og_system_forces['NonbondedForce']
         standard_nonbonded_method = old_system_nbf.getNonbondedMethod()
         if standard_nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME,
                                          openmm.NonbondedForce.Ewald]:
-            custom_force.setUsesPeriodicBoundaryConditions(True)
+            custom_bond_force.setUsesPeriodicBoundaryConditions(True)
 
         elif standard_nonbonded_method == openmm.NonbondedForce.NoCutoff:
-            custom_force.setUsesPeriodicBoundaryConditions(False)
+            custom_bond_force.setUsesPeriodicBoundaryConditions(False)
 
         else:
             raise Exception(f"nonbonded method is not recognized")
@@ -927,7 +927,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
             q, sigma, epsilon = og_nb_force.getParticleParameters(particle_idx)
 
             # Given atom index, get rest identifier
-            rest_id = self.get_identifier(particle_idx)
+            rest_id = self.get_rest_identifier(particle_idx)
 
             # Add particle to electrostatics force
             custom_electrostatics_force.addParticle(rest_id + [q])
@@ -947,14 +947,14 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
             p1, p2, chargeProd, sigma, epsilon = og_nb_force.getExceptionParameters(exception_idx)
 
             # Given atom indices, get rest identifier
-            rest_id = self.get_identifier(set([p1, p2]))
+            rest_id = self.get_rest_identifier(set([p1, p2]))
 
             # Add exception
-            custom_exceptions_force.addException(p1, p2, rest_id + [chargeProd, sigma, epsilon])
+            custom_exceptions_force.addBond(p1, p2, rest_id + [chargeProd, sigma, epsilon])
 
             # Add exclusions to custom nb forces
             custom_electrostatics_force.addExclusion(p1, p2)
-            custom_sterics_force.addException(p1, p2)
+            custom_sterics_force.addExclusion(p1, p2)
 
     def _copy_nonbondeds_reciprocal_space(self):
         og_nb_force = self._og_system_forces['NonbondedForce']
