@@ -308,7 +308,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         "U_electrostatics;",
 
         # Define electrostatics functional form
-        f"U_electrostatics = {ONE_4PI_EPS0} * chargeProd  * erfc(alpha * r)/ r_eff_electrostatics;",
+        f"U_electrostatics = {ONE_4PI_EPS0} * chargeProd  * erfc(alpha * r)/ r;",
 
         # Define chargeProd (with REST scaling)
         "chargeProd = (charge1 * p1_electrostatics_rest_scale) * (charge2 * p2_electrostatics_rest_scale);",
@@ -325,16 +325,17 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         # "is_both_solvent = is_nonrest_solvent1 * is_nonrest_solvent2;",
 
         # Define rest scale factors (scaled water rest)
-        "p1_electrostatics_rest_scale = lambda_rest_electrostatics * (is_rest1 + is_nonrest_solvent1 * is_rest2);",
-        "p2_electrostatics_rest_scale = lambda_rest_electrostatics * (is_rest2 + is_nonrest_solvent2 * is_rest1);",
+        #"p1_electrostatics_rest_scale = lambda_rest_electrostatics * (is_rest1 + is_nonrest_solvent1 * is_rest2) + 1 * (is_nonrest_solute1 + is_nonrest_solvent1 * is_nonrest_solute2 + is_nonrest_solvent1 * is_nonrest_solvent2);",
+        #"p2_electrostatics_rest_scale = lambda_rest_electrostatics * (is_rest2 + is_nonrest_solvent2 * is_rest1) + 1 * (is_nonrest_solute2 + is_nonrest_solvent2 * is_nonrest_solute1 + is_nonrest_solvent2 * is_nonrest_solvent1);",
+
+        "p1_electrostatics_rest_scale = 1;",
+        "p2_electrostatics_rest_scale = 1;",
 
         # Define alpha
         "alpha = sqrt(-log(2 * delta) / r_cutoff);",
         "delta = {delta};",
         "r_cutoff = {r_cutoff};",
 
-        # Define r_eff
-        "r_eff_electrostatics = sqrt(r^2);"
     ]
 
     _default_sterics_expression_list = [
@@ -343,7 +344,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
 
         # Define sterics functional form
         "U_sterics = 4 * epsilon * x * (x - 1.0);"
-        "x = (sigma / r_eff_sterics)^6;"
+        "x = (sigma / r)^6;"
 
         # Define sigma
         "sigma = (sigma1 + sigma2) / 2;",
@@ -361,12 +362,11 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         # "is_both_solvent = is_nonrest_solvent1 * is_nonrest_solvent2;",
 
         # Define rest scale factors (scaled water rest)
-        "p1_sterics_rest_scale = lambda_rest_sterics * (is_rest1 + is_nonrest_solvent1 * is_rest2);",
-        "p2_sterics_rest_scale = lambda_rest_sterics * (is_rest2 + is_nonrest_solvent2 * is_rest1);",
+        #"p1_sterics_rest_scale = lambda_rest_sterics * (is_rest1 + is_nonrest_solvent1 * is_rest2) + 1 * (is_nonrest_solute1 + is_nonrest_solvent1 * is_nonrest_solute2 + is_nonrest_solvent1 * is_nonrest_solvent2);",
+        #"p2_sterics_rest_scale = lambda_rest_sterics * (is_rest2 + is_nonrest_solvent2 * is_rest1) + 1 * (is_nonrest_solute2 + is_nonrest_solvent2 * is_nonrest_solute1 + is_nonrest_solvent2 * is_nonrest_solvent1);",
 
-        # Define r_eff
-        "r_eff_sterics = sqrt(r^2);"
-
+        "p1_sterics_rest_scale = 1;",
+        "p2_sterics_rest_scale = 1;"
     ]
 
     _default_exceptions_expression_list = [
@@ -378,20 +378,16 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         "sterics_rest_scale = is_rest * lambda_rest_sterics_exceptions * lambda_rest_sterics_exceptions + is_inter * lambda_rest_sterics_exceptions + is_nonrest;",
 
         # Define electrostatics functional form
-        f"U_electrostatics = {ONE_4PI_EPS0} * chargeProd * erfc(alpha * r)/ r_eff_electrostatics;",
+        f"U_electrostatics = {ONE_4PI_EPS0} * chargeProd * erfc(alpha * r)/ r;",
 
         # Define sterics functional form
         "U_sterics = 4 * epsilon * x * (x - 1.0);",
-        "x = (sigma / r_eff_sterics)^6;",
+        "x = (sigma / r)^6;",
 
         # Define alpha
         "alpha = sqrt(-log(2 * delta) / r_cutoff);",
         "delta = {delta};",
         "r_cutoff = {r_cutoff};",
-
-        # Define r_eff
-        "r_eff_electrostatics = sqrt(r^2);",
-        "r_eff_sterics = sqrt(r^2);"
 
     ]
 
