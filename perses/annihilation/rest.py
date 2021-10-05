@@ -385,7 +385,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         "x = (sigma / r)^6;",
 
         # Define alpha
-        "alpha = sqrt(-log(2 * delta) / r_cutoff);",
+        "alpha = sqrt(-log(2 * delta)) / r_cutoff;",
         "delta = {delta};",
         "r_cutoff = {r_cutoff};",
 
@@ -755,7 +755,9 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         if standard_nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME,
                                          openmm.NonbondedForce.Ewald]:
             custom_nb_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(standard_nonbonded_method))
-            custom_nb_force.setUseSwitchingFunction(False)
+            if old_system_nbf.getUseSwitchingFunction(): # This should be copied for sterics force, but not for electrostatics force
+                custom_nb_force.setUseSwitchingFunction(True)
+                custom_nb_force.setSwitchingDistance(old_system_nbf.getSwitchingDistance())
             custom_nb_force.setCutoffDistance(self._r_cutoff)
             custom_nb_force.setUseLongRangeCorrection(True) # This should be on for sterics, but off for electrostatics
 
