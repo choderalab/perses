@@ -71,6 +71,7 @@ def run_relative_perturbation(lig_a_idx, lig_b_idx, tidy=True):
 
 # Defining command line arguments
 # fetching targets from github repo
+# TODO: This part should be done using plbenchmarks API - once there is a conda pkg
 targets_url = f"{base_repo_url}/raw/master/data/targets.yml"
 with urllib.request.urlopen(targets_url) as response:
     targets_dict = yaml.safe_load(response.read())
@@ -93,14 +94,15 @@ arg_parser.add_argument(
 )
 args = arg_parser.parse_args()
 target = args.target
-edge_index = args.edge
 
 # Fetch protein pdb file
+# TODO: This part should be done using plbenchmarks API - once there is a conda pkg
 target_dir = targets_dict[target]['dir']
 pdb_url = f"{base_repo_url}/raw/master/data/{target_dir}/01_protein/crd/protein.pdb"
 pdb_file, _ = urllib.request.urlretrieve(pdb_url)
 
 # Fetch cofactors crystalwater pdb file
+# TODO: This part should be done using plbenchmarks API - once there is a conda pkg
 cofactors_url = f"{base_repo_url}/raw/master/data/{target_dir}/01_protein/crd/cofactors_crystalwater.pdb"
 cofactors_file, _ = urllib.request.urlretrieve(cofactors_url)
 
@@ -108,6 +110,7 @@ cofactors_file, _ = urllib.request.urlretrieve(cofactors_url)
 concatenate_files((pdb_file, cofactors_file), 'target.pdb')
 
 # Fetch ligands sdf files and concatenate them in one
+# TODO: This part should be done using plbenchmarks API - once there is a conda pkg
 ligands_url = f"{base_repo_url}/raw/master/data/{target_dir}/00_data/ligands.yml"
 with urllib.request.urlopen(ligands_url) as response:
     ligands_dict = yaml.safe_load(response.read())
@@ -121,15 +124,17 @@ concatenate_files(ligand_files, 'ligands.sdf')
 
 # run simulation
 # fetch edges information
+# TODO: This part should be done using plbenchmarks API - once there is a conda pkg
 edges_url = f"{base_repo_url}/raw/master/data/{target_dir}/00_data/edges.yml"
 with urllib.request.urlopen(edges_url) as response:
     edges_dict = yaml.safe_load(response.read())
 edges_list = list(edges_dict.values())  # suscriptable edges object - note dicts are ordered for py>=3.7
 # edge list to access by index
+edge_index = args.edge  # read from cli arguments
 edge = edges_list[edge_index]
 ligand_a_name = edge['ligand_a']
 ligand_b_name = edge['ligand_b']
-# ligands list to get indices
+# ligands list to get indices -- preserving same order as upstream yaml file
 ligands_list = list(ligands_dict.keys())
 lig_a_index = ligands_list.index(ligand_a_name)
 lig_b_index = ligands_list.index(ligand_b_name)
