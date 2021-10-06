@@ -61,6 +61,11 @@ jobs:
           auto-activate-base: false
           auto-update-conda: true
           show-channel-urls: true
+
+      - name: Refine test env
+        shell: bash
+        run: |
+          mamba install -y cudatoolkit==11.0.3
       
       - name: Additional info about the build
         shell: bash
