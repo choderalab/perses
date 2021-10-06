@@ -1,5 +1,9 @@
 name: self-hosted-gpu-test
-on: pull_request
+on: 
+  workflow_dispatch:
+  schedule:
+    # nightly tests
+    - cron: "0 0 * * *"
 jobs:
   start-runner:
     name: Start self-hosted EC2 runner
