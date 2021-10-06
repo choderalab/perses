@@ -332,7 +332,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         "p2_electrostatics_rest_scale = 1;",
 
         # Define alpha
-        "alpha = sqrt(-log(2 * delta) / r_cutoff);",
+        "alpha = sqrt(-log(2 * delta)) / r_cutoff;",
         "delta = {delta};",
         "r_cutoff = {r_cutoff};",
 
@@ -378,7 +378,11 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         "sterics_rest_scale = is_rest * lambda_rest_sterics_exceptions * lambda_rest_sterics_exceptions + is_inter * lambda_rest_sterics_exceptions + is_nonrest;",
 
         # Define electrostatics functional form
-        f"U_electrostatics = {ONE_4PI_EPS0} * chargeProd * erfc(alpha * r)/ r;",
+        # Note that we need to subtract off the reciprocal space for exceptions
+        # See explanation for why here: https://github.com/openmm/openmm/issues/3269#issuecomment-934686324
+        f"U_electrostatics = U_electrostatics_direct - U_electrostatics_reciprocal;",
+        f"U_electrostatics_direct = {ONE_4PI_EPS0} * chargeProd_exceptions * erfc(alpha * r) / r;",
+        f"U_electrostatics_reciprocal = {ONE_4PI_EPS0} * chargeProd_product * erf(alpha * r) / r;",
 
         # Define sterics functional form
         "U_sterics = 4 * epsilon * x * (x - 1.0);",
@@ -789,9 +793,10 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         custom_bond_force.addPerBondParameter("is_nonrest")
 
         # Add per-bond parameters for defining energy
-        custom_bond_force.addPerBondParameter('chargeProd')
+        custom_bond_force.addPerBondParameter('chargeProd_exceptions)
         custom_bond_force.addPerBondParameter('sigma')
         custom_bond_force.addPerBondParameter('epsilon')
+        custom_bond_force.addPerBondParameter('chargeProd_product')
 
         # Handle some nonbonded attributes
         old_system_nbf = self._og_system_forces['NonbondedForce']
@@ -947,8 +952,13 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
             # Given atom indices, get rest identifier
             rest_id = self.get_rest_identifier(set([p1, p2]))
 
+            # Compute chargeProd_product from original particle parameters
+            p1_params = custom_electrostatics_force.getParticleParameters(p1)
+            p2_params = custom_electrostatics_force.getParticleParameters(p2)
+            chargeProd_product = p1_params[-1] * p2_params[-1]
+
             # Add exception
-            custom_exceptions_force.addBond(p1, p2, rest_id + [chargeProd, sigma, epsilon])
+            custom_exceptions_force.addBond(p1, p2, rest_id + [chargeProd, sigma, epsilon, chargeProd_product])
 
             # Add exclusions to custom nb forces
             custom_electrostatics_force.addExclusion(p1, p2)
