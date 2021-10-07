@@ -578,7 +578,8 @@ class PolymerProposalEngine(ProposalEngine):
                 current_system,
                 current_topology,
                 current_metadata=None,
-                extra_sidechain_map=None):
+                extra_sidechain_map=None,
+                demap_CBs=False):
         """
         Generate a TopologyProposal
 
@@ -591,7 +592,8 @@ class PolymerProposalEngine(ProposalEngine):
         current_metadata : dict -- OPTIONAL
         extra_sidechain_map : dict, key: int, value: int, default None
             map of new to old sidechain atom indices to add the default map (by default, we only map backbone atoms and CBs)
-
+        demap_CBs : bool, default False
+            whether to remove CBs from the mapping
         Returns
         -------
         topology_proposal : TopologyProposal
