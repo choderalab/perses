@@ -1107,7 +1107,8 @@ class PolymerProposalEngine(ProposalEngine):
                             residue_map,
                             old_topology,
                             new_topology,
-                           extra_sidechain_map=None):
+                            extra_sidechain_map=None,
+                            demap_CBs=False):
         """
         Construct atom map (key: index to atom in new residue, value: index to atom in old residue) to supply as an argument to the TopologyProposal.
         
@@ -1116,6 +1117,7 @@ class PolymerProposalEngine(ProposalEngine):
         2) Map CBs only (no other sidechain atoms)
         
         If additional sidechains should be mapped, extra_sidechain_map can be supplied to supplement the default map.
+        If CBs should be demapped, set demap_CBs=True.
         
         Parameters
         ----------
@@ -1127,6 +1129,8 @@ class PolymerProposalEngine(ProposalEngine):
             topology of new system
         extra_sidechain_map : dict, key: int, value: int, default None
             map of new to old sidechain atom indices to add to the local_atom_map
+        demap_CBs : bool, default False
+            whether to remove CBs from the mapping
 
         Returns
         -------
@@ -1179,7 +1183,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         # Iterate over the old res atoms to fill in the local atom map
         backbone_atoms = ['C', 'CA', 'N', 'O', 'H', 'HA']
-        sidechain_atoms = ['CB']
+        sidechain_atoms = [] if demap_CBs else ['CB']
         for atom in old_res.atoms():
             old_atom_index = atom.index
             old_atom_name = atom.name
