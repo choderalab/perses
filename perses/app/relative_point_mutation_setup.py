@@ -296,6 +296,7 @@ class PointMutationExecutor(object):
                                 new_sigma = 0.06*unit.nanometer
                                 nb_force.setParticleParameters(idx, charge, new_sigma, epsilon)
                                 _logger.info(f"Changed particle {idx}'s sigma from {sigma} to {new_sigma}")
+
             # Only validate energy bookkeeping if the WT and proposed residues do not involve rings
             old_res = [res for res in top.residues() if res.id == mutation_residue_id][0]
             validate_bool = False if old_res.name in ring_amino_acids or proposed_residue in ring_amino_acids else True
