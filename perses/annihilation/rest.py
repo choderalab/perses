@@ -9,6 +9,14 @@ import simtk.openmm as openmm
 import copy
 from perses.annihilation.relative import HybridTopologyFactory
 import simtk.unit as unit
+import numpy as np
+
+# Constants copied from: https://github.com/openmm/openmm/blob/master/platforms/reference/include/SimTKOpenMMRealType.h#L89
+M_PI = 3.14159265358979323846
+E_CHARGE = (1.602176634e-19)
+AVOGADRO = (6.02214076e23)
+EPSILON0 = (1e-6*8.8541878128e-12/(E_CHARGE*E_CHARGE*AVOGADRO))
+ONE_4PI_EPS0 = (1/(4*M_PI*EPSILON0))
 
 #######LOGGING#############################
 import logging
@@ -302,7 +310,6 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
 
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
 
-    from openmmtools.constants import ONE_4PI_EPS0
     _default_electrostatics_expression_list = [
 
         "U_electrostatics;",
@@ -332,9 +339,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         "p2_electrostatics_rest_scale = 1;",
 
         # Define alpha
-        "alpha = sqrt(-log(2 * delta)) / r_cutoff;",
-        "delta = {delta};",
-        "r_cutoff = {r_cutoff};",
+        "alpha = {alpha_ewald};"
 
     ]
 
@@ -381,7 +386,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         # Note that we need to subtract off the reciprocal space for exceptions
         # See explanation for why here: https://github.com/openmm/openmm/issues/3269#issuecomment-934686324
         f"U_electrostatics = U_electrostatics_direct - U_electrostatics_reciprocal;",
-        f"U_electrostatics_direct = {ONE_4PI_EPS0} * chargeProd_exceptions * erfc(alpha * r) / r;",
+        f"U_electrostatics_direct = {ONE_4PI_EPS0} * chargeProd_exceptions / r;",
         f"U_electrostatics_reciprocal = {ONE_4PI_EPS0} * chargeProd_product * erf(alpha * r) / r;",
 
         # Define sterics functional form
@@ -389,9 +394,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         "x = (sigma / r)^6;",
 
         # Define alpha
-        "alpha = sqrt(-log(2 * delta)) / r_cutoff;",
-        "delta = {delta};",
-        "r_cutoff = {r_cutoff};",
+        "alpha = {alpha_ewald};"
 
     ]
 
@@ -404,10 +407,6 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
                  topology,
                  rest_region,
                  use_dispersion_correction=False, # TODO: remove this?
-
-                 # PME parameters
-                 r_cutoff=None,
-                 delta=1e-4, # ewaldErrorTolerance
                  **kwargs):
         """
         arguments
@@ -455,19 +454,16 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
 
         # Set nonbonded parameters
         self._nonbonded_method = self._og_system_forces['NonbondedForce'].getNonbondedMethod()
-        if not r_cutoff:  # Set the cutoff based on the old system's cutoff
-            if self._nonbonded_method != openmm.NonbondedForce.NoCutoff:
-                self._r_cutoff = self._og_system_forces['NonbondedForce'].getCutoffDistance()
-            else:
-                self._r_cutoff = 100 * unit.nanometer
-                # If the nonbonded method is NoCutoff, set alpha to 0
-                self._default_electrostatics_expression_list[5] = "alpha = 0;"
-                self._default_exceptions_expression_list[6] = "alpha = 0;"
-                self._default_electrostatics_expression = ' '.join(self._default_electrostatics_expression_list)
-                self._default_exceptions_expression = ' '.join(self._default_exceptions_expression_list)
+        if self._nonbonded_method == openmm.NonbondedForce.NoCutoff:
+            self._alpha_ewald = 0
         else:
-            self._r_cutoff = r_cutoff
-        self._delta = delta
+            [alpha_ewald, nx, ny, nz] = self._og_system_forces['NonbondedForce'].getPMEParameters()
+            if (alpha_ewald / alpha_ewald.unit) == 0.0:
+                # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
+                tol = self._og_system_forces['NonbondedForce'].getEwaldErrorTolerance()
+                alpha_ewald = (1.0 / self._og_system_forces['NonbondedForce'].getCutoffDistance()) * np.sqrt(-np.log(2.0 * tol))
+            self._alpha_ewald = alpha_ewald.value_in_unit_system(unit.md_unit_system)
+        _logger.info(f"alpha_ewald is {self._alpha_ewald}")
         self._use_dispersion_correction = use_dispersion_correction
 
         # Create REST system and add particles to it
@@ -695,8 +691,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
 
         # Define the custom expression
         expression = self._default_electrostatics_expression
-        formatted_expression = expression.format(r_cutoff=self._r_cutoff.value_in_unit_system(unit.md_unit_system),
-                                                 delta=self._delta)
+        formatted_expression = expression.format(alpha_ewald=self._alpha_ewald)
 
         # Create the custom force
         custom_nb_force = openmm.CustomNonbondedForce(formatted_expression)
@@ -721,7 +716,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
                                          openmm.NonbondedForce.Ewald]:
             custom_nb_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(standard_nonbonded_method))
             custom_nb_force.setUseSwitchingFunction(False)
-            custom_nb_force.setCutoffDistance(self._r_cutoff)
+            custom_nb_force.setCutoffDistance(old_system_nbf.getCutoffDistance())
             custom_nb_force.setUseLongRangeCorrection(False) # This should be off for electrostatics, but on for sterics
 
         elif standard_nonbonded_method == openmm.NonbondedForce.NoCutoff:
@@ -762,7 +757,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
             if old_system_nbf.getUseSwitchingFunction(): # This should be copied for sterics force, but not for electrostatics force
                 custom_nb_force.setUseSwitchingFunction(True)
                 custom_nb_force.setSwitchingDistance(old_system_nbf.getSwitchingDistance())
-            custom_nb_force.setCutoffDistance(self._r_cutoff)
+            custom_nb_force.setCutoffDistance(old_system_nbf.getCutoffDistance())
             custom_nb_force.setUseLongRangeCorrection(True) # This should be on for sterics, but off for electrostatics
 
         elif standard_nonbonded_method == openmm.NonbondedForce.NoCutoff:
@@ -775,8 +770,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
 
         # Define the custom expression
         expression = self._default_exceptions_expression
-        formatted_expression = expression.format(r_cutoff=self._r_cutoff.value_in_unit_system(unit.md_unit_system),
-                                                 delta=self._delta)
+        formatted_expression = expression.format(alpha_ewald=self._alpha_ewald)
 
         # Create the custom force
         custom_bond_force = openmm.CustomBondForce(formatted_expression)
@@ -793,7 +787,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         custom_bond_force.addPerBondParameter("is_nonrest")
 
         # Add per-bond parameters for defining energy
-        custom_bond_force.addPerBondParameter('chargeProd_exceptions)
+        custom_bond_force.addPerBondParameter('chargeProd_exceptions')
         custom_bond_force.addPerBondParameter('sigma')
         custom_bond_force.addPerBondParameter('epsilon')
         custom_bond_force.addPerBondParameter('chargeProd_product')
