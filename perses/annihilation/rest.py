@@ -332,11 +332,8 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         # "is_both_solvent = is_nonrest_solvent1 * is_nonrest_solvent2;",
 
         # Define rest scale factors (scaled water rest)
-        #"p1_electrostatics_rest_scale = lambda_rest_electrostatics * (is_rest1 + is_nonrest_solvent1 * is_rest2) + 1 * (is_nonrest_solute1 + is_nonrest_solvent1 * is_nonrest_solute2 + is_nonrest_solvent1 * is_nonrest_solvent2);",
-        #"p2_electrostatics_rest_scale = lambda_rest_electrostatics * (is_rest2 + is_nonrest_solvent2 * is_rest1) + 1 * (is_nonrest_solute2 + is_nonrest_solvent2 * is_nonrest_solute1 + is_nonrest_solvent2 * is_nonrest_solvent1);",
-
-        "p1_electrostatics_rest_scale = 1;",
-        "p2_electrostatics_rest_scale = 1;",
+        "p1_electrostatics_rest_scale = lambda_rest_electrostatics * (is_rest1 + is_nonrest_solvent1 * is_rest2) + 1 * (is_nonrest_solute1 + is_nonrest_solvent1 * is_nonrest_solute2 + is_nonrest_solvent1 * is_nonrest_solvent2);",
+        "p2_electrostatics_rest_scale = lambda_rest_electrostatics * (is_rest2 + is_nonrest_solvent2 * is_rest1) + 1 * (is_nonrest_solute2 + is_nonrest_solvent2 * is_nonrest_solute1 + is_nonrest_solvent2 * is_nonrest_solvent1);",
 
         # Define alpha
         "alpha = {alpha_ewald};"
@@ -367,11 +364,9 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         # "is_both_solvent = is_nonrest_solvent1 * is_nonrest_solvent2;",
 
         # Define rest scale factors (scaled water rest)
-        #"p1_sterics_rest_scale = lambda_rest_sterics * (is_rest1 + is_nonrest_solvent1 * is_rest2) + 1 * (is_nonrest_solute1 + is_nonrest_solvent1 * is_nonrest_solute2 + is_nonrest_solvent1 * is_nonrest_solvent2);",
-        #"p2_sterics_rest_scale = lambda_rest_sterics * (is_rest2 + is_nonrest_solvent2 * is_rest1) + 1 * (is_nonrest_solute2 + is_nonrest_solvent2 * is_nonrest_solute1 + is_nonrest_solvent2 * is_nonrest_solvent1);",
+        "p1_sterics_rest_scale = lambda_rest_sterics * (is_rest1 + is_nonrest_solvent1 * is_rest2) + 1 * (is_nonrest_solute1 + is_nonrest_solvent1 * is_nonrest_solute2 + is_nonrest_solvent1 * is_nonrest_solvent2);",
+        "p2_sterics_rest_scale = lambda_rest_sterics * (is_rest2 + is_nonrest_solvent2 * is_rest1) + 1 * (is_nonrest_solute2 + is_nonrest_solvent2 * is_nonrest_solute1 + is_nonrest_solvent2 * is_nonrest_solvent1);",
 
-        "p1_sterics_rest_scale = 1;",
-        "p2_sterics_rest_scale = 1;"
     ]
 
     _default_exceptions_expression_list = [
