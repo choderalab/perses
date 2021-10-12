@@ -63,16 +63,18 @@ jobs:
           show-channel-urls: true
 
       - name: Refine test env
-        shell: bash
+        shell: bash -l {0}
         run: |
           mamba install -y cudatoolkit==11.0.3 openmm==7.6
       
       - name: Additional info about the build
-        shell: bash
+        shell: bash -l {0}
         run: |
           uname -a
           df -h
           ulimit -a
+          conda info -a
+          conda list
           python -c "import openmm; print(openmm.Platform.getPluginLoadFailures())"
           python -m openmm.testInstallation
 
