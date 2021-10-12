@@ -293,7 +293,7 @@ class PointMutationExecutor(object):
                             nb_force.setParticleParameters(idx, charge, sigma, new_epsilon)
                             _logger.info(f"Changed particle {idx}'s epsilon from {epsilon} to {new_epsilon}")
                             if sigma == 1.0 * unit.nanometer: # in protein.ff14SB, hydroxyl hydrogens have sigma=1 and epsilon=0
-                                new_sigma = 0.06*unit.nanometer
+                                new_sigma = 0.1*unit.nanometer
                                 nb_force.setParticleParameters(idx, charge, new_sigma, epsilon)
                                 _logger.info(f"Changed particle {idx}'s sigma from {sigma} to {new_sigma}")
 
