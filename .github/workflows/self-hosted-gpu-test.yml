@@ -73,6 +73,8 @@ jobs:
           uname -a
           df -h
           ulimit -a
+          python -c "import openmm; print(openmm.Platform.getPluginLoadFailures())"
+          python -m openmm.testInstallation
 
       - name: Install package
         shell: bash -l {0}
