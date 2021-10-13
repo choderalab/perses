@@ -400,8 +400,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
     def __init__(self,
                  system,
                  topology,
-                 rest_region,
-                 use_dispersion_correction=False, # TODO: remove this?
+                 rest_region
                  **kwargs):
         """
         arguments
@@ -411,8 +410,6 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
                 topology of the system that will be rewritten
             rest_region : list of ints
                 list of atom indices that will be define the rest region
-            use_dispersion_correction : bool, default False
-                whether to use a dispersion correction
             r_cutoff : value in units of distance
                 cutoff distance (in nm) beyond which electrostatics are not calculated
             delta : float
@@ -459,7 +456,6 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
                 alpha_ewald = (1.0 / self._og_system_forces['NonbondedForce'].getCutoffDistance()) * np.sqrt(-np.log(2.0 * tol))
             self._alpha_ewald = alpha_ewald.value_in_unit_system(unit.md_unit_system)
         _logger.info(f"alpha_ewald is {self._alpha_ewald}")
-        self._use_dispersion_correction = use_dispersion_correction
 
         # Create REST system and add particles to it
         self._out_system = openmm.System()
@@ -507,8 +503,6 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
         self._copy_torsions()
 
         # Create custom nonbonded and custom bond forces and add particles/bonds to them
-        # self._add_nonbonded_force_terms()
-        # self._add_nonbondeds()
         self._create_nonbonded_electrostatics_force()
         self._create_nonbonded_sterics_force()
         self._copy_nonbondeds()
@@ -753,7 +747,7 @@ class RESTTopologyFactoryV3(HybridTopologyFactory):
                 custom_nb_force.setUseSwitchingFunction(True)
                 custom_nb_force.setSwitchingDistance(old_system_nbf.getSwitchingDistance())
             custom_nb_force.setCutoffDistance(old_system_nbf.getCutoffDistance())
-            custom_nb_force.setUseLongRangeCorrection(True) # This should be on for sterics, but off for electrostatics
+            custom_nb_force.setUseLongRangeCorrection(old_system_nbf.getUseDispersionCorrection()) # This should be copied from the og nbf for sterics, but off for electrostatics
 
         elif standard_nonbonded_method == openmm.NonbondedForce.NoCutoff:
             custom_nb_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(standard_nonbonded_method))
