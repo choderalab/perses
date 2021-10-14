@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import tempfile
 
+import pytest
 import simtk.openmm.app as app
 import yaml
 from openmmtools import mcmc
@@ -18,6 +19,7 @@ from perses.app.relative_setup import RelativeFEPSetup
 from perses.samplers.multistate import HybridRepexSampler
 
 
+@pytest.mark.gpu_ci
 def test_cli_resume_repex():
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -83,6 +85,7 @@ def test_cli_resume_repex():
         assert simulation.iteration == 20
 
 
+@pytest.mark.gpu_ci
 def test_resume_small_molecule(tmp_path):
 
     os.chdir(tmp_path)
@@ -153,6 +156,7 @@ def test_resume_small_molecule(tmp_path):
     assert simulation.iteration == 15
 
 
+@pytest.mark.gpu_ci
 def test_resume_protein_mutation_with_checkpoint(tmp_path):
 
     pdb_filename = resource_filename("perses", "data/ala_vacuum.pdb")
@@ -217,6 +221,7 @@ def test_resume_protein_mutation_with_checkpoint(tmp_path):
     assert simulation.iteration == 15
 
 
+@pytest.mark.gpu_ci
 def test_resume_protein_mutation_no_checkpoint(tmp_path):
 
     pdb_filename = resource_filename("perses", "data/ala_vacuum.pdb")
