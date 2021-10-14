@@ -44,7 +44,7 @@ See the documentation [here](https://docs.docker.com/config/containers/resource_
 
 If you plan to use our docker container and CUDA/GPUs, quick instructions to get the examples running are as follows.
 
-We have our examples with minimalistic setups to satisfy our current continuous integration (CI) workflow. To get more "realistic" simulations I recommend making the following modifications.
+We have our examples with minimalistic setups to satisfy our current continuous integration (CI) workflow. To get more "realistic" simulations we recommend making the following modifications.
 
 1) Clone our repository (say it lives in `$HOME/repos/perses`)
 
