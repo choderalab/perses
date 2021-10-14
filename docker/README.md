@@ -46,7 +46,7 @@ If you plan to use our docker container and CUDA/GPUs, quick instructions to get
 
 We have our examples with minimalistic setups to satisfy our current continuous integration (CI) workflow. To get more "realistic" simulations we recommend making the following modifications.
 
-1) Clone our repository (say it lives in `$HOME/repos/perses`)
+1) Clone the repository (say it lives in `$HOME/repos/perses`) with `git clone https://github.com/choderalab/perses.git`
 
 2) Modify the `run_neq_distrib_flattened.py` inside each of the examples you want to run:
 - Change the platform name to 'CUDA '(it is CPU by default to satisfy our continuous integration). Should be in line 21 in the script.
