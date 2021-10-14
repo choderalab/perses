@@ -48,7 +48,7 @@ We have our examples with minimalistic setups to satisfy our current continuous 
 
 1) Clone the repository (say it lives in `$HOME/repos/perses`) with `git clone https://github.com/choderalab/perses.git`
 
-2) Modify the `run_neq_distrib_flattened.py` inside each of the examples you want to run:
+2) Modify the `run_neq_distrib_flattened.py` inside each of the examples (e.g. `examples/kinase-neq-switching/run_neq_distrib_flattened.py`) you want to run:
 - Change the platform name to 'CUDA '(it is CPU by default to satisfy our continuous integration). Should be in line 21 in the script.
 - (recommended) You might want to change the nsteps_eq and nsteps_neq (number of steps for equilibrium and nonequilibrium, respectively) to a larger value. Something around 250000 steps (1ns in time) for each should be okay. These should be lines 17 and 18 in the scripts.
 - (recommended) Please change the save frequency or else you would be storing A LOT! I guess the actual value depends on what you actually want to see, but please do change it if you increase the number of steps as in the previous item.
