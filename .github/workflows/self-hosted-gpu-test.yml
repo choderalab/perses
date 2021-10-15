@@ -101,14 +101,13 @@ jobs:
         shell: bash -l {0}
         run: |
           export TRAVIS=true
-          pushd .
+          cd perses
           pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto --gpu-ci
-          popd
 
       - name: Codecov
         uses: codecov/codecov-action@v1
         with:
-          file: ./coverage.xml
+          file: ./perses/coverage.xml
           fail_ci_if_error: true
 
   stop-runner:
