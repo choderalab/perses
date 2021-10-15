@@ -46,7 +46,7 @@ fe_type: repex
 checkpoint_interval: 50
 
 #number of iterations
-n_cycles: 5
+n_cycles: 5000
 
 #The number of SAMS states
 n_states: 11
@@ -70,6 +70,6 @@ phases:
     - vacuum
 
 #timestep in fs
-timestep: 2.
+timestep: 4.
 
-h_constraints: false
+# remove_constraints: false
