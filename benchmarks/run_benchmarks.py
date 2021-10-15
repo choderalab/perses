@@ -7,10 +7,21 @@ It requires internet connection to function properly, by connecting to the menti
 # TODO: Use plbenchmarks when conda package is available.
 
 import argparse
+import logging
 import os
 import urllib.request
 import yaml
 
+from perses.app.setup_relative_calculation import run
+
+# Setting logging level config
+LOGLEVEL = os.environ.get("LOGLEVEL", "DEBUG").upper()
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=LOGLEVEL,
+    datefmt='%Y-%m-%d %H:%M:%S')
+_logger = logging.getLogger()
+_logger.setLevel(LOGLEVEL)
 
 # global variables
 base_repo_url = "https://github.com/openforcefield/protein-ligand-benchmark"
@@ -48,25 +59,60 @@ def run_relative_perturbation(lig_a_idx, lig_b_idx, tidy=True):
     trajectory_directory = f'out_{lig_a_idx}_{lig_b_idx}'
     new_yaml = f'relative_{lig_a_idx}_{lig_b_idx}.yaml'
 
-    # generate yaml file
+    # read base template yaml file
     # TODO: template.yaml file is configured for Tyk2, check if the same options work for others.
     with open(f'template.yaml', "r") as yaml_file:
         options = yaml.load(yaml_file, Loader=yaml.FullLoader)
-    options['protein_pdb'] = 'target.pdb'
-    options['ligand_file'] = 'ligands.sdf'
-    options['old_ligand_index'] = lig_a_idx
-    options['new_ligand_index'] = lig_b_idx
-    options['trajectory_directory'] = f'{trajectory_directory}'
-    with open(new_yaml, 'w') as outfile:
-        yaml.dump(options, outfile)
 
-    # run the simulation
-    os.system(f'perses-relative {new_yaml}')
+    # Try resuming if FileNotFound or AssertionError then run complete simulation
+    try:
+        for phase in options['phases']:
+            print(f"WARNING: Trying to resume {phase} simulation from checkpoint.")
+            resume_relative_perturbation(trajectory_directory, phase, options['n_cycles'])
+    except (FileNotFoundError, AssertionError):
+        print("WARNING: No suitable checkpoints found. Running complete simulation.")
+        # generate yaml file from template
+        options['protein_pdb'] = 'target.pdb'
+        options['ligand_file'] = 'ligands.sdf'
+        options['old_ligand_index'] = lig_a_idx
+        options['new_ligand_index'] = lig_b_idx
+        options['trajectory_directory'] = f'{trajectory_directory}'
+        with open(new_yaml, 'w') as outfile:
+            yaml.dump(options, outfile)
+
+        # run the simulation - using API point to respect logging level
+        run(new_yaml)
 
     print(f'Relative calculation of ligand {lig_a_idx} to {lig_b_idx} complete')
 
     if tidy:
         os.remove(new_yaml)
+
+
+def resume_relative_perturbation(sim_directory, phase, n_cycles):
+    """
+    Resume phase simulation if checkpoint is found and n_cycles match the template yaml options.
+    """
+    from perses.samplers.multistate import HybridRepexSampler
+    from openmmtools.multistate import MultiStateReporter
+
+    import logging
+
+    logging.basicConfig(level=logging.NOTSET)
+    _logger = logging.getLogger("utils.openeye")
+    _logger.setLevel(logging.DEBUG)
+
+    reporter = MultiStateReporter(storage=f'{sim_directory}/out-{phase}.nc')
+    simulation = HybridRepexSampler.from_storage(reporter)
+    # Check that number of iterations match. Sometimes the checkpoint/nc exists but iterations do not match.
+    total_steps = simulation.number_of_iterations
+    assert total_steps == n_cycles
+
+    run_so_far = simulation.iteration
+    left_to_do = total_steps - run_so_far
+    _logger.info(f'{left_to_do} steps left to do.')
+    _logger.debug('debugging')
+    simulation.extend(n_iterations=left_to_do)
 
 
 # Defining command line arguments
@@ -138,4 +184,5 @@ ligand_b_name = edge['ligand_b']
 ligands_list = list(ligands_dict.keys())
 lig_a_index = ligands_list.index(ligand_a_name)
 lig_b_index = ligands_list.index(ligand_b_name)
+# Perform the simulation
 run_relative_perturbation(lig_a_index, lig_b_index)
