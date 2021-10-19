@@ -55,7 +55,7 @@ def run_relative_perturbation(lig_a_idx, lig_b_idx, tidy=True):
     Expects the target/protein pdb file in the same directory to be called 'target.pdb', and ligands file
     to be called 'ligands.sdf'.
     """
-    print(f'Starting relative calculation of ligand {lig_a_idx} to {lig_b_idx}')
+    _logger.info(f'Starting relative calculation of ligand {lig_a_idx} to {lig_b_idx}')
     trajectory_directory = f'out_{lig_a_idx}_{lig_b_idx}'
     new_yaml = f'relative_{lig_a_idx}_{lig_b_idx}.yaml'
 
@@ -65,54 +65,23 @@ def run_relative_perturbation(lig_a_idx, lig_b_idx, tidy=True):
         options = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
     # Try resuming if FileNotFound or AssertionError then run complete simulation
-    try:
-        for phase in options['phases']:
-            print(f"WARNING: Trying to resume {phase} simulation from checkpoint.")
-            resume_relative_perturbation(trajectory_directory, phase, options['n_cycles'])
-    except (FileNotFoundError, AssertionError):
-        print("WARNING: No suitable checkpoints found. Running complete simulation.")
-        # generate yaml file from template
-        options['protein_pdb'] = 'target.pdb'
-        options['ligand_file'] = 'ligands.sdf'
-        options['old_ligand_index'] = lig_a_idx
-        options['new_ligand_index'] = lig_b_idx
-        options['trajectory_directory'] = f'{trajectory_directory}'
-        with open(new_yaml, 'w') as outfile:
-            yaml.dump(options, outfile)
+    _logger.info("WARNING: No suitable checkpoints found. Running complete simulation.")
+    # generate yaml file from template
+    options['protein_pdb'] = 'target.pdb'
+    options['ligand_file'] = 'ligands.sdf'
+    options['old_ligand_index'] = lig_a_idx
+    options['new_ligand_index'] = lig_b_idx
+    options['trajectory_directory'] = f'{trajectory_directory}'
+    with open(new_yaml, 'w') as outfile:
+        yaml.dump(options, outfile)
 
-        # run the simulation - using API point to respect logging level
-        run(new_yaml)
+    # run the simulation - using API point to respect logging level
+    run(new_yaml)
 
-    print(f'Relative calculation of ligand {lig_a_idx} to {lig_b_idx} complete')
+    _logger.info(f'Relative calculation of ligand {lig_a_idx} to {lig_b_idx} complete')
 
     if tidy:
         os.remove(new_yaml)
-
-
-def resume_relative_perturbation(sim_directory, phase, n_cycles):
-    """
-    Resume phase simulation if checkpoint is found and n_cycles match the template yaml options.
-    """
-    from perses.samplers.multistate import HybridRepexSampler
-    from openmmtools.multistate import MultiStateReporter
-
-    import logging
-
-    logging.basicConfig(level=logging.NOTSET)
-    _logger = logging.getLogger("utils.openeye")
-    _logger.setLevel(logging.DEBUG)
-
-    reporter = MultiStateReporter(storage=f'{sim_directory}/out-{phase}.nc')
-    simulation = HybridRepexSampler.from_storage(reporter)
-    # Check that number of iterations match. Sometimes the checkpoint/nc exists but iterations do not match.
-    total_steps = simulation.number_of_iterations
-    assert total_steps == n_cycles
-
-    run_so_far = simulation.iteration
-    left_to_do = total_steps - run_so_far
-    _logger.info(f'{left_to_do} steps left to do.')
-    _logger.debug('debugging')
-    simulation.extend(n_iterations=left_to_do)
 
 
 # Defining command line arguments
