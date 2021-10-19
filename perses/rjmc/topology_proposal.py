@@ -677,7 +677,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         # index_to_new_residues : dict, key : int (index) , value : str (three letter name of proposed residue)
         _logger.debug(f"\tconstructing atom map for TopologyProposal...")
-        atom_map, old_res_to_oemol_map, new_res_to_oemol_map, old_oemol_res, new_oemol_res  = self._construct_atom_map(residue_map, old_topology, new_topology, extra_sidechain_map=extra_sidechain_map)
+        atom_map, old_res_to_oemol_map, new_res_to_oemol_map, old_oemol_res, new_oemol_res  = self._construct_atom_map(residue_map, old_topology, new_topology, extra_sidechain_map=extra_sidechain_map, demap_CBs=demap_CBs)
 
         _logger.debug(f"\tadding indices of the 'C' backbone atom in the next residue and the 'N' atom in the previous")
         _logger.debug(f"\t{list(index_to_new_residues.keys())[0]}")
