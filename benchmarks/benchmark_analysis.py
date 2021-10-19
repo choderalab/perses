@@ -9,7 +9,11 @@ import glob
 import numpy as np
 import urllib.request
 import yaml
+
+from openmmtools.constants import kB
 from perses.analysis.load_simulations import Simulation
+
+from simtk import unit
 
 # global variables
 base_repo_url = "https://github.com/openforcefield/protein-ligand-benchmark"
@@ -77,7 +81,7 @@ def make_mm_graph(mm_results, expt, d_expt):
                       calc_dDDG=sim.bindingddg/sim.bindingddg.unit,
                       exp_DDG=(expt[ligB] - expt[ligA]),
                       exp_dDDG=exp_dDDG)  # add edge to the digraph
-    absolute_from_relative(mm_g, expt, d_expt)
+    # absolute_from_relative(mm_g, expt, d_expt)
     return mm_g
 
 
@@ -110,10 +114,17 @@ with urllib.request.urlopen(ligands_url) as response:
 ligands_exp_values = []  # list where to store experimental values
 for _, ligand_data in ligands_dict.items():
     ligands_exp_values.append(ligand_data['measurement']['value'])
+# converting to kcal/mol
+kBT = kB * 300 * unit.kelvin
+ligands_exp_values = -kBT.in_units_of(unit.kilocalorie_per_mole) * np.log(ligands_exp_values)
 
 # Load simulation from directories
 out_dirs = [filepath.split('/')[0] for filepath in glob.glob('out*/*complex.nc')]
 simulations = [Simulation(out_dir) for out_dir in out_dirs]
+
+# Make sure simulations are completed
+for simulation in simulations:
+
 
 # create graph with results
 results_graph = make_mm_graph(simulations, ligands_exp_values, [0]*len(ligands_exp_values))
