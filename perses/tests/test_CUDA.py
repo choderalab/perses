@@ -1,12 +1,13 @@
 import pytest
 
+
 @pytest.mark.gpu_needed
 def test_example_barnase_barstar_neq_switching():
     import logging
     import os
     import pathlib
-    import time
     import tempfile
+    import time
 
     import numpy as np
     from openmmtools.integrators import PeriodicNonequilibriumIntegrator
