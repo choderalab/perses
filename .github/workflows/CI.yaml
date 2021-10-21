@@ -26,7 +26,7 @@ jobs:
           - { os: ubuntu-latest, python-version: 3.7, openmm: conda-forge }
           - { os: ubuntu-latest, python-version: 3.8, openmm: conda-forge }
           - { os: ubuntu-latest, python-version: 3.9, openmm: conda-forge }
-          - { os: ubuntu-latest, python-version: 3.10, openmm: conda-forge }
+          - { os: ubuntu-latest, python-version: "3.10", openmm: conda-forge }
 
     env:
       OPENMM: ${{ matrix.cfg.openmm }}
