@@ -8,6 +8,33 @@ This section lists features and improvements of note in each release.
 
 The full release history can be viewed `at the GitHub perses releases page <https://github.com/choderalab/perses/releases>`_.
 
+0.9.2 - Bugfix release
+-----------------------
+Bugfixes
+^^^^^^^^
+- (PR `#835 <https://github.com/choderalab/perses/pull/835>`_)
+  Write out YAML file after all options are parsed and set. Saved as YAML original file name + date + time. Resolves
+  `#817 <https://github.com/choderalab/perses/issues/817>`_.
+- (PR `#840 <https://github.com/choderalab/perses/pull/840>`_)
+  Minor improvements to point mutation executor. Make sure reverse geometry proposal is directly after forward proposal.
+  Fixes formatting problem for complex positions.
+- (PR `#841 <https://github.com/choderalab/perses/pull/841>`_)
+  Minor improvements to PolymerProposalEngine.
+- (PR `#844 <https://github.com/choderalab/perses/pull/844>`_)
+  Minimal examples of amino acid (small molecule), protein-ligand and ligand mutations, with automated testing.
+- (PR `#849 <https://github.com/choderalab/perses/pull/849>`_)
+  Use an instance of ContextCache instead of the default global instance.
+  More info at `#613 (comment) <https://github.com/choderalab/perses/issues/613#issuecomment-899746348>`_.
+
+New features
+^^^^^^^^
+- (PR `#708 <https://github.com/choderalab/perses/pull/708>`_)
+  Create visualization module for generating PyMOL movies.
+- (PR `#834 <https://github.com/choderalab/perses/pull/834>`_)
+  Enable protein mutation transformations involving nonstandard amino acids, specifically: ASH, GLH, HID, HIE, HIP, LYN.
+- (PR `#838 <https://github.com/choderalab/perses/pull/838>`_)
+  Official Docker image hosted on docker hub ``docker pull choderalab/perses:0.9.2``.
+  Resolves `#832 <https://github.com/choderalab/perses/pull/832>`_.
 
 0.9.1 - Bugfix release
 -----------------------
