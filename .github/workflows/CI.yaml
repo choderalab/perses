@@ -18,10 +18,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cfg:
-          - os: [ubuntu-latest]
-          - python-version: [3.7, 3.8, 3.9, "3.10"]
-          - openmm: [nightly, conda-forge, latest]
+        - os: [ubuntu-latest]
+        - python-version: [3.7, 3.8, 3.9, "3.10"]
+        - openmm: [nightly, conda-forge, latest]
 
     env:
       OPENMM: ${{ matrix.cfg.openmm }}
