@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: [3.7, 3.8, 3.9, "3.10"]
-        openmm: [nightly, conda-forge, latest]
+        openmm: ["nightly", "7.5.1.", "7.6.0"]
 
     env:
       OPENMM: ${{ matrix.openmm }}
@@ -53,15 +53,12 @@ jobs:
         shell: bash -l {0}
         run: |
           case ${{ matrix.openmm }} in
-            latest)
-              echo "Using latest release OpenMM."
-              mamba install --quiet -c conda-forge openmm;;
-           #rc) # We can uncomment this case when we have this label on conda-forge
-             #echo "Using OpenMM rc" 
-             #mamba install --quiet -c conda-forge/label/openmm_rc openmm;;
             nightly)
-              echo "Using OpenMM nightly dev build."
-              mamba install --quiet -c omnia-dev openmm;;
+              echo "Using nightly dev build of OpenMM."
+              mamba install --quiet -c conda-forge openmm;;
+            *)
+              echo "installing OpenMM version ${{ matrix.openmm }}"
+              mamba install -c conda-forge openmm=${{ matrix.openmm }}
           esac
 
       - name: Install package
