@@ -47,4 +47,3 @@ dependencies:
   - pytest-attrib
   - pytest-xdist
   - fsspec=2021.10.0
-  - libopenblas=0.3.17
