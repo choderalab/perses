@@ -46,11 +46,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
           mamba-version: "*"
           environment-file: devtools/conda-envs/test_env.yaml
-          channels: conda-forge,defaults,omnia-dev,openeye
+          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge,defaults,omnia-dev,openeye
           activate-environment: test
           auto-update-conda: true
           auto-activate-base: false
           show-channel-urls: true
+          channel-priority: true
 
       - name: Refine test environment
         shell: bash -l {0}
