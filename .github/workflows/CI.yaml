@@ -40,12 +40,14 @@ jobs:
       - uses: conda-incubator/setup-miniconda@v2
         with:
           python-version: ${{ matrix.python-version }}
+          mamba-version: "*"
           environment-file: devtools/conda-envs/test_env.yaml
-          channels: conda-forge,defaults,omnia-dev,openeye
+          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge,defaults,omnia-dev,openeye
           activate-environment: test
           auto-update-conda: true
           auto-activate-base: false
           show-channel-urls: true
+          channel-priority: true
 
       - name: Refine test environment
         shell: bash -l {0}
@@ -53,13 +55,13 @@ jobs:
           case ${{ matrix.openmm }} in
             latest)
               echo "Using latest release OpenMM."
-              conda install --quiet -c conda-forge openmm;;
+              mamba install --quiet -c conda-forge openmm;;
            #rc) # We can uncomment this case when we have this label on conda-forge
              #echo "Using OpenMM rc" 
-             #conda install --quiet -c conda-forge/label/openmm_rc openmm;;
+             #mamba install --quiet -c conda-forge/label/openmm_rc openmm;;
             nightly)
               echo "Using OpenMM nightly dev build."
-              conda install --quiet -c omnia-dev openmm;;
+              mamba install --quiet -c omnia-dev openmm;;
           esac
 
       - name: Install package
@@ -70,8 +72,8 @@ jobs:
       - name: Environment Information
         shell: bash -l {0}
         run: |
-          conda info -a
-          conda list
+          mamba info -a
+          mamba list
 
       - name: Decrypt OpenEye license
         shell: bash -l {0}
