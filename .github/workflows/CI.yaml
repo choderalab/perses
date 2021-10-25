@@ -13,17 +13,17 @@ on:
 
 jobs:
   test:
-    name: Test on ${{ matrix.cfg.os }}, Python ${{ matrix.cfg.python-version }}, OpenMM ${{ matrix.cfg.openmm }}
-    runs-on: ${{ matrix.cfg.os }}
+    name: Test on ${{ matrix.os }}, Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        - os: [ubuntu-latest]
+        - os: ubuntu-latest
         - python-version: [3.7, 3.8, 3.9, "3.10"]
         - openmm: [nightly, conda-forge, latest]
 
     env:
-      OPENMM: ${{ matrix.cfg.openmm }}
+      OPENMM: ${{ matrix.openmm }}
       OE_LICENSE: ${{ github.workspace }}/oe_license.txt
 
     steps:
@@ -50,7 +50,7 @@ jobs:
       - name: Refine test environment
         shell: bash -l {0}
         run: |
-          case ${{ matrix.cfg.openmm }} in
+          case ${{ matrix.openmm }} in
             latest)
               echo "Using latest release OpenMM."
               conda install --quiet -c conda-forge openmm;;
