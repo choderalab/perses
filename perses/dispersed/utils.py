@@ -2,6 +2,7 @@ import simtk.openmm as openmm
 import os
 import copy
 
+from openmmtools import cache
 import openmmtools.mcmc as mcmc
 import openmmtools.integrators as integrators
 import openmmtools.states as states
@@ -307,7 +308,8 @@ def run_equilibrium(task):
     n_atoms = subset_topology.n_atoms
 
     #construct the MCMove:
-    mc_move = mcmc.LangevinSplittingDynamicsMove(n_steps=inputs['nsteps_equil'], splitting=inputs['splitting'], timestep = inputs['timestep'])
+    mc_move = mcmc.LangevinSplittingDynamicsMove(n_steps=inputs['nsteps_equil'],
+            splitting=inputs['splitting'], timestep = inputs['timestep'], context_cache = cache.ContextCache(capacity=None, time_to_live=None))
     mc_move.n_restart_attempts = 10
 
     #create a numpy array for the trajectory

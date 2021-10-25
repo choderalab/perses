@@ -20,7 +20,7 @@ ENERGY_THRESHOLD = 1e-2
 temperature = 300 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
-ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS']
+ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS', 'HID', 'HIE', 'HIP']
 
 # Set up logger
 import logging
@@ -77,7 +77,9 @@ class PointMutationExecutor(object):
                                                                                   n_restart_attempts=20,
                                                                                   splitting="V R R R O R R R V",
                                                                                   constraint_tolerance=1e-06),
-                                                                                  hybrid_factory=htf, online_analysis_interval=10)
+                                                                                  hybrid_factory=htf,
+                                                                                  online_analysis_interval=10,
+                                                                                  context_cache=cache.ContextCache(capacity=None, time_to_live=None))
             hss.setup(n_states=n_states, temperature=300*unit.kelvin, storage_file=reporter, lambda_protocol=lambda_protocol, endstates=False)
             hss.extend(n_cycles)
 
@@ -87,6 +89,7 @@ class PointMutationExecutor(object):
                  mutation_chain_id,
                  mutation_residue_id,
                  proposed_residue,
+                 old_residue=None,
                  phase='complex',
                  conduct_endstate_validation=True,
                  ligand_input=None,
@@ -111,12 +114,16 @@ class PointMutationExecutor(object):
         arguments
             protein_filename : str
                 path to protein (to mutate); .pdb
+                Note: if there are nonstandard residues, the PDB should contain the standard residue name but the atoms/positions should correspond to the nonstandard residue. E.g. if I want to include HID, the PDB should contain HIS for the residue name, but the atoms should correspond to the atoms present in HID. You can use openmm.app.Modeller.addHydrogens() to generate a PDB like this. The same is true for the ligand_input, if its a PDB. 
             mutation_chain_id : str
                 name of the chain to be mutated
             mutation_residue_id : str
                 residue id to change
             proposed_residue : str
                 three letter code of the residue to mutate to
+            old_residue : str, default None
+                name of the old residue, if is a nonstandard amino acid (e.g. LYN, ASH, HID, etc)
+                if not specified, the old residue name will be inferred from the input PDB.
             phase : str, default complex
                 if phase == vacuum, then the complex will not be solvated with water; else, it will be solvated with tip3p
             conduct_endstate_validation : bool, default True
@@ -247,6 +254,14 @@ class PointMutationExecutor(object):
         # Run pipeline...
         htfs = []
         for is_complex, (top, pos, sys) in enumerate(inputs):
+            # Change the name of the old residue to its nonstandard name, if necessary
+            # Note this needs to happen after generating the system, as the system generator requires standard residue names
+            if old_residue:
+                for residue in top.residues():
+                    if residue.id == mutation_residue_id:
+                        residue.name = old_residue
+                        print(f"Changed resid {mutation_residue_id} to {residue.name}")
+
             point_mutation_engine = PointMutationEngine(wildtype_topology=top,
                                                                  system_generator=self.system_generator,
                                                                  chain_id=mutation_chain_id, # Denote the chain id allowed to mutate (it's always a string variable)
@@ -270,11 +285,17 @@ class PointMutationExecutor(object):
                             continue
                         charge, sigma, epsilon = nb_force.getParticleParameters(idx)
                         if sigma == 0*unit.nanometer:
-                            sigma = 0.06*unit.nanometer
-                            nb_force.setParticleParameters(idx, charge, sigma, epsilon)
+                            new_sigma = 0.06*unit.nanometer
+                            nb_force.setParticleParameters(idx, charge, new_sigma, epsilon)
+                            _logger.info(f"Changed particle {idx}'s sigma from {sigma} to {new_sigma}")
                         if epsilon == 0*unit.kilojoule_per_mole:
-                            epsilon = 0.0001*unit.kilojoule_per_mole
-                            nb_force.setParticleParameters(idx, charge, sigma, epsilon)
+                            new_epsilon = 0.0001*unit.kilojoule_per_mole
+                            nb_force.setParticleParameters(idx, charge, sigma, new_epsilon)
+                            _logger.info(f"Changed particle {idx}'s epsilon from {epsilon} to {new_epsilon}")
+                            if sigma == 1.0 * unit.nanometer: # in protein.ff14SB, hydroxyl hydrogens have sigma=1 and epsilon=0
+                                new_sigma = 0.1*unit.nanometer
+                                nb_force.setParticleParameters(idx, charge, new_sigma, epsilon)
+                                _logger.info(f"Changed particle {idx}'s sigma from {sigma} to {new_sigma}")
 
             # Only validate energy bookkeeping if the WT and proposed residues do not involve rings
             old_res = [res for res in top.residues() if res.id == mutation_residue_id][0]
@@ -315,9 +336,9 @@ class PointMutationExecutor(object):
             else:
                 subtracted_valence_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
 
-
-            if conduct_endstate_validation and repartitioned_endstate is None:
-                zero_state_error, one_state_error = validate_endstate_energies(forward_htf._topology_proposal, forward_htf, added_valence_energy, subtracted_valence_energy, beta=beta, ENERGY_THRESHOLD=ENERGY_THRESHOLD)
+            if conduct_endstate_validation and generate_unmodified_hybrid_topology_factory:
+                htf = self.get_complex_htf() if is_complex else self.get_apo_htf()
+                zero_state_error, one_state_error = validate_endstate_energies(htf._topology_proposal, htf, added_valence_energy, subtracted_valence_energy, beta=beta, ENERGY_THRESHOLD=ENERGY_THRESHOLD)
                 if zero_state_error > ENERGY_THRESHOLD:
                     _logger.warning(f"Reduced potential difference of the nonalchemical and alchemical Lambda = 0 state is above the threshold ({ENERGY_THRESHOLD}): {zero_state_error}")
                 if one_state_error > ENERGY_THRESHOLD:
@@ -385,7 +406,7 @@ class PointMutationExecutor(object):
         '''
         Get the charge, sigma, and epsilon for the positive and negative ions. Also get the charge of the water atoms. Set
         these parameters as class variables.
-          
+
         Parameters
         ----------
         system : simtk.openmm.System
@@ -398,9 +419,9 @@ class PointMutationExecutor(object):
             the residue name of each negative ion
         water_name : str, "HOH"
             the residue name of each water
-        
+
         '''
-    
+
         # Get the indices
         pos_index = None
         neg_index = None
@@ -419,8 +440,8 @@ class PointMutationExecutor(object):
         assert pos_index is not None, f"Error occurred when trying to turn a water into an ion: No positive ions with residue name {positive_ion_name} found"
         assert neg_index is not None, f"Error occurred when trying to turn a water into an ion: No negative ions with residue name {negative_ion_name} found"
         assert O_index is not None, f"Error occurred when trying to turn a water into an ion: No O atoms with residue name {water_name} and atom name O found"
-        assert H_index is not None, f"Error occurred when trying to turn a water into an ion: No water atoms with residue name {water_name} and atom name H1 found" 
-    
+        assert H_index is not None, f"Error occurred when trying to turn a water into an ion: No water atoms with residue name {water_name} and atom name H1 found"
+
         # Get parameters from nonbonded force
         force_dict = {i.__class__.__name__: i for i in system.getForces()}
         if 'NonbondedForce' in [i for i in force_dict.keys()]:
@@ -429,7 +450,7 @@ class PointMutationExecutor(object):
             neg_charge, neg_sigma, neg_epsilon = nbf.getParticleParameters(neg_index)
             O_charge, _, _ = nbf.getParticleParameters(O_index)
             H_charge, _, _ = nbf.getParticleParameters(H_index)
-    
+
         self._pos_charge = pos_charge
         self._pos_sigma = pos_sigma
         self._pos_epsilon = pos_epsilon
