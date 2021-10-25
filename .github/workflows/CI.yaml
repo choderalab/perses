@@ -13,8 +13,9 @@ on:
 
 jobs:
   test:
-    name: Test on ${{ matrix.os }}, Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm }}
-    runs-on: ${{ matrix.os }}
+    name: Test on ubuntu-latest, Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm }}
+    runs-on: ubuntu-latest
+
     strategy:
       fail-fast: false
       matrix:
