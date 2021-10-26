@@ -2969,7 +2969,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                 alpha_ewald = (1.0 / self._r_cutoff) * np.sqrt(-np.log(2.0 * tol))
             self._alpha_ewald = alpha_ewald.value_in_unit_system(unit.md_unit_system)
         self._w_scale = w_scale
-        _logger.info(f"r_cutoff is {r_cutoff}")
+        _logger.info(f"r_cutoff is {self.r_cutoff}")
         _logger.info(f"alpha_ewald is {self._alpha_ewald}")
         _logger.info(f"w_scale is {self._w_scale}")
 
