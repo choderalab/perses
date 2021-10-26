@@ -2642,12 +2642,15 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         - REST scaling
         - 4th dimension softcore
     with custom forces. Supports one alchemical region and one REST region.
+
     Bonds, angles, and torsions are handled using custom forces.
+
     Each custom force has 3 global lambda parameters:
     - lambda_rest_{name_of_valence_force} - this is sqrt(beta/beta0)
     - lambda_alchemical_{name_of_valence_force}_old - this goes from 1 to 0 (on to off)
     - lambda_alchemical_{name_of_valence_force}_new - this goes from 0 to 1 (off to on)
     The alchemical lambdas are separated into old and new for further controllability when troubleshooting difficult transformations.
+
     Each custom force has per bond/angle/torsion parameters that classify how the bond/angle/torsion should be scaled
     by rest and alchemically:
     - is_rest - indicates whether the bond/angle/torsion is in the rest region (1), otherwise 0
@@ -2657,16 +2660,20 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
     - is_core - indicates whether the bond/angle/torsion is considered core (1), otherwise 0
     - is_unique_old - indicates whether the bond/angle/torsion is considered unique old (1), otherwise 0
     - is_unique_new - indicates whether the bond/angle/torsion is considered unique new(1), otherwise 0
+
     Each custom force also has old and new per bond/angle/torsion parameters necessary for computing the energy.
     For example, for each bond, the additional parameters are: length_old, K_old, length_new, K_new
-    The nonbonded interactions are handled with 3 forces:
-    - CustomNonbondedForce - direct space nonbonded interactions
-    - CustomBondForce - direct space nonbonded exceptions
-    - NonbondedForce - reciprocal space nonbonded interactions/exceptions
+
+    The nonbonded interactions are handled with 4 forces:
+    - CustomNonbondedForce - direct space PME electrostatics interactions (with long range correction off)
+    - CustomNonbondedForce - steric interactions (with long range correction on)
+    - CustomBondForce - direct space PME and steric exceptions
+    - NonbondedForce - reciprocal space PME electrostatics interactions/exceptions
+
     For the custom nonbonded/bond forces:
-    TODO: add details about defining the functional form for the custom nonbonded/bond forces
     The global parameters are defined similarly to how they are defined for the valence forces, except there are separate
     global lambdas for electrostatics and sterics to allow for more controllability when troubleshooting difficult transformations.
+
     The per particle/bond parameters are defined as described above for the valence forces, except for the per particle
     parameters in the CustomNonbondedForce related to rest:
     - is_rest - indicates whether the atom is in the rest region (1), otherwise 0
@@ -2674,35 +2681,16 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
     - is_nonrest_solvent - indicates whether the atom is outside the rest region and is solvent (1), otherwise 0
     These per particle parameters are defined to allow for scaling of rest-solvent interactions by beta/beta0, if desired. 
     If the scaling of rest-solvent interactions is desired, the functional form will need to be changed.
-    In order to avoid singularities in the alchemical region (specifically in interactions of unique new/old atoms),
+
+    In order to avoid singularities in the alchemical region (specifically in interactions of unique old/new atoms),
     we introduce a decoupling in the 4th dimensional distance. Decoupling does not affect core or env atoms.
-    However, the unique old/new atoms are 'lifted' into the 4th dimension 'w' upon 'alchemification' and the length of the 4th dimension is
+    The unique old/new atoms are 'lifted' into the 4th dimension 'w' upon 'alchemification' and the length of the 4th dimension is
     given by r_cutoff * w_scale. w_scale is a user-defined scalar between 0 (non-inclusive) and 1. Taking 'w_scale' to 1
     means that once the term is maximally 'lifted' into the 4th dimension, the 4th dimension is effectively of length 'r_cutoff'.
+
     For the standard NonbondedForce, global parameters (to be used with particle parameter offsets) are defined to allow
     for alchemical scaling, but not rest scaling. Computation of contributions from the direct space is disabled.
-    Parameters
-    ----------
-    topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
-        topology proposal of the old-to-new transformation
-    current_positions : [n,3] np.ndarray of float
-        positions of coordinates of old system
-    new_positions : [m,3] np.ndarray of float
-        positions of coordinates of new system
-    scale_regions : list of list of int
-        each list represents hybrid-indexed particles that exist in the scale region i;
-        i is the ith inded of the scale_regions list.
-        Note that the scale regions must be disjoint. (this is asserted)
-    r_cutoff : value in units of distance
-        cutoff distance (in nm) beyond which electrostatics are not calculated
-    w_scale : float
-        maximum offset to add for the 4th dimension lifting
-    delta : float
-        error tolerance for alpha in electrostatics
-    use_dispersion_correction : bool
-        whether to use a steric dispersion correction (not recommended for neq switching)
-    generate_htf_for_testing : bool
-        whether to generate the htf for testing
+
     """
 
     from openmmtools.constants import ONE_4PI_EPS0
@@ -2710,9 +2698,9 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
     # global parameters:
     #
     # - lambda_rest_electrostatics{_exceptions} - this is sqrt(beta/beta0)
-    # - lambda_rest_sterics{_exceptions} - this is sqrt(beta/beta0) and is separated from electrostatics to allow for more controllability
     # - lambda_alchemical_electrostatics_old - this goes from 1 to 0 (on to off) and is split from lambda_electrostatics_new to enable additional control of the unique old vs. new atoms
     # - lambda_alchemical_electrostatics_new - this goes from 0 to 1 (off to on)
+    # - lambda_rest_sterics{_exceptions} - this is sqrt(beta/beta0) and is separated from electrostatics to allow for more controllability
     # - lambda_alchemical_sterics_old - this goes from 1 to 0 (on to off)
     # - lambda_alchemical_sterics_new - this goes from 0 to 1 (off to on)
 
@@ -2729,10 +2717,10 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
     #     is_unique_new - indicates whether the atom is considered unique new(1), otherwise 0
     # for defining energy:
     #     charge_old - charge of the atom in the old system
-    #     sigma_old - sigma of the atom in the old system
-    #     epsilon_old - epsilon of the atom in the old system
     #     charge_new - charge of the atom in the new system
+    #     sigma_old - sigma of the atom in the old system
     #     sigma_new - sigma of the atom in the new system
+    #     epsilon_old - epsilon of the atom in the old system
     #     epsilon_new - epsilon of the atom in the new system
 
     # per bond parameters:
@@ -2754,16 +2742,12 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
     #     sigma_new - sigma of the atoms forming the exception in the new system
     #     epsilon_new - epsilon of the atoms forming the exception in the new system
 
-    _default_nonbonded_expression_list = [
+    _default_electrostatics_expression_list = [
 
-        "U_electrostatics + U_sterics;",
+        "U_electrostatics;",
 
         # Define electrostatics functional form
         f"U_electrostatics = {ONE_4PI_EPS0} * chargeProd  * erfc(alpha * r)/ r_eff_electrostatics;",
-
-        # Define sterics functional form
-        "U_sterics = 4 * epsilon * x * (x - 1.0);"
-        "x = (sigma / r_eff_sterics)^6;"
 
         # Define chargeProd (with REST scaling)
         "chargeProd = (charge1 * p1_electrostatics_rest_scale) * (charge2 * p2_electrostatics_rest_scale);",
@@ -2776,6 +2760,37 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         "charge2 = (is_unique_old2 * old_charge_scaled2) + (is_unique_new2 * new_charge_scaled2) + is_core2 * (old_charge_scaled2 + new_charge_scaled2) + is_environment2 * (old_charge_scaled2 + new_charge_scaled2);",
         "old_charge_scaled2 = lambda_alchemical_electrostatics_old * charge_old2;",
         "new_charge_scaled2 = lambda_alchemical_electrostatics_new * charge_new2;",
+
+        # Define rest scale factors (normal rest)
+        "p1_electrostatics_rest_scale = is_rest1 * lambda_rest_electrostatics + is_nonrest_solute1 + is_nonrest_solvent1;",
+        "p2_electrostatics_rest_scale = is_rest2 * lambda_rest_electrostatics + is_nonrest_solute2 + is_nonrest_solvent2;",
+
+        # # Define rest scale factors (scaled water rest)
+        # "p1_electrostatics_rest_scale = lambda_rest_electrostatics * (is_rest1 + is_nonrest_solvent1 * is_rest2) + 1 * (is_nonrest_solute1 + is_nonrest_solvent1 * is_nonrest_solute2 + is_nonrest_solvent1 * is_nonrest_solvent2);",
+        # "p2_electrostatics_rest_scale = lambda_rest_electrostatics * (is_rest2 + is_nonrest_solvent2 * is_rest1) + 1 * (is_nonrest_solute2 + is_nonrest_solvent2 * is_nonrest_solute1 + is_nonrest_solvent2 * is_nonrest_solvent1);",
+
+        # Define alpha
+        "alpha = {alpha_ewald};"
+
+        # Define r_eff
+        "r_eff_electrostatics = sqrt(r^2 + w_electrostatics^2);",
+
+        # Define 4th dimension terms:
+        "w_electrostatics = w_scale * r_cutoff * (is_unique_old * lambda_alchemical_electrostatics_new + is_unique_new * lambda_alchemical_electrostatics_old);", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
+        "is_unique_old = step(is_unique_old1 + is_unique_old2 - 0.1);", # if at least one of the particles in the interaction is unique old
+        "is_unique_new = step(is_unique_new1 + is_unique_new2 - 0.1);", # if at least one of the particles in the interaction is unique new
+        "w_scale = {w_scale};",
+        "r_cutoff = {r_cutoff};"
+
+    ]
+
+    _default_sterics_expression_list = [
+
+        "U_sterics;",
+
+        # Define sterics functional form
+        "U_sterics = 4 * epsilon * x * (x - 1.0);"
+        "x = (sigma / r_eff_sterics)^6;"
 
         # Define sigma
         "sigma = (sigma1 + sigma2) / 2;",
@@ -2802,37 +2817,26 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         "new_epsilon_scaled2 = lambda_alchemical_sterics_new * epsilon_new2;",
 
         # Define rest scale factors (normal rest)
-        "p1_electrostatics_rest_scale = is_rest1 * lambda_rest_electrostatics + is_nonrest_solute1 + is_nonrest_solvent1;",
-        "p2_electrostatics_rest_scale = is_rest2 * lambda_rest_electrostatics + is_nonrest_solute2 + is_nonrest_solvent2;",
         "p1_sterics_rest_scale = is_rest1 * lambda_rest_sterics + is_nonrest_solute1 + is_nonrest_solvent1;",
         "p2_sterics_rest_scale = is_rest2 * lambda_rest_sterics + is_nonrest_solute2 + is_nonrest_solvent2;",
 
-        # Define rest scale factors (scaled water rest)
-        # "p1_electrostatics_rest_scale = select(1 - is_both_solvent, is_rest1 * lambda_electrostatics_rest + is_nonrest_solute1 + is_nonrest_solvent1 * lambda_electrostatics_rest, 1);",
-        # "p2_electrostatics_rest_scale = select(1 - is_both_solvent, is_rest2 * lambda_electrostatics_rest_ + is_nonrest_solute2 + is_nonrest_solvent2 * lambda_electrostatics_rest, 1);",
-        # "p1_sterics_rest_scale = select(1 - is_both_solvent, is_rest1 * lambda_sterics_rest + is_nonrest_solute1 + is_nonrest_solvent1 * lambda_sterics_rest, 1);",
-        # "p2_sterics_rest_scale = select(1 - is_both_solvent, is_rest2 * lambda_sterics_rest_ + is_nonrest_solute2 + is_nonrest_solvent2 * lambda_sterics_rest, 1);",
-        # "is_both_solvent = is_nonrest_solvent1 * is_nonrest_solvent2;",
-
-        # Define alpha
-        "alpha = sqrt(-log(2 * delta) / r_cutoff);",
-        "delta = {delta};",
+        # # Define rest scale factors (scaled water rest)
+        # "p1_sterics_rest_scale = lambda_rest_sterics * (is_rest1 + is_nonrest_solvent1 * is_rest2) + 1 * (is_nonrest_solute1 + is_nonrest_solvent1 * is_nonrest_solute2 + is_nonrest_solvent1 * is_nonrest_solvent2);",
+        # "p2_sterics_rest_scale = lambda_rest_sterics * (is_rest2 + is_nonrest_solvent2 * is_rest1) + 1 * (is_nonrest_solute2 + is_nonrest_solvent2 * is_nonrest_solute1 + is_nonrest_solvent2 * is_nonrest_solvent1);",
 
         # Define r_eff
-        "r_eff_electrostatics = sqrt(r^2 + w_electrostatics^2);",
         "r_eff_sterics = sqrt(r^2 + w_sterics^2);",
 
         # Define 4th dimension terms:
-        "w_electrostatics = is_unique_old * lambda_alchemical_electrostatics_new * w_scale * r_cutoff + is_unique_new * lambda_alchemical_electrostatics_old * w_scale * r_cutoff;", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
-        "w_sterics = is_unique_old * lambda_alchemical_sterics_new * w_scale * r_cutoff + is_unique_new * lambda_alchemical_sterics_old * w_scale * r_cutoff;",
-        "is_unique_old = step(is_unique_old1 + is_unique_old2 - 0.1);",
-        "is_unique_new = step(is_unique_new1 + is_unique_new2 - 0.1);",
+        "w_sterics = w_scale * r_cutoff * (is_unique_old * lambda_alchemical_sterics_new + is_unique_new * lambda_alchemical_sterics_old);", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
+        "is_unique_old = step(is_unique_old1 + is_unique_old2 - 0.1);", # if at least one of the particles in the interaction is unique old
+        "is_unique_new = step(is_unique_new1 + is_unique_new2 - 0.1);", # if at least one of the particles in the interaction is unique new
         "w_scale = {w_scale};",
         "r_cutoff = {r_cutoff};"
+
     ]
 
-    # electrostatic exception
-    _default_exception_expression_list = [
+    _default_exceptions_expression_list = [
 
         "U_electrostatics * electrostatics_rest_scale + U_sterics * sterics_rest_scale;",
 
@@ -2841,16 +2845,24 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         "sterics_rest_scale = is_rest * lambda_rest_sterics_exceptions * lambda_rest_sterics_exceptions + is_inter * lambda_rest_sterics_exceptions + is_nonrest;",
 
         # Define electrostatics functional form
-        f"U_electrostatics = {ONE_4PI_EPS0} * chargeProd * erfc(alpha * r)/ r_eff_electrostatics;",
+        # Note that we need to subtract off the reciprocal space for exceptions
+        # See explanation for why here: https://github.com/openmm/openmm/issues/3269#issuecomment-934686324
+        f"U_electrostatics = U_electrostatics_direct - U_electrostatics_reciprocal;",
+        f"U_electrostatics_direct = {ONE_4PI_EPS0} * chargeProd_exceptions / r_eff_electrostatics;",
+        f"U_electrostatics_reciprocal = {ONE_4PI_EPS0} * chargeProd_product * erf(alpha * r) / r_eff_electrostatics;",
 
         # Define sterics functional form
         "U_sterics = 4 * epsilon * x * (x - 1.0);"
         "x = (sigma / r_eff_sterics)^6;"
 
         # Define chargeProd (with alchemical scaling)
-        "chargeProd = is_unique_old * old_charge_scaled + is_unique_new * new_charge_scaled + is_core * (old_charge_scaled + new_charge_scaled) + is_environment * (old_charge_scaled + new_charge_scaled);",
-        "old_charge_scaled = lambda_alchemical_electrostatics_exceptions_old * chargeProd_old;",
-        "new_charge_scaled = lambda_alchemical_electrostatics_exceptions_new * chargeProd_new;",
+        "chargeProd_exceptions = is_unique_old * old_chargeProd_exceptions_scaled + is_unique_new * new_chargeProd_exceptions_scaled + is_core * (old_chargeProd_exceptions_scaled + new_chargeProd_exceptions_scaled) + is_environment * (old_chargeProd_exceptions_scaled + new_chargeProd_exceptions_scaled);",
+        "old_chargeProd_exceptions_scaled = lambda_alchemical_electrostatics_exceptions_old * chargeProd_exceptions_old;",
+        "new_chargeProd_exceptions_scaled = lambda_alchemical_electrostatics_exceptions_new * chargeProd_exceptions_new;",
+
+        "chargeProd_product = is_unique_old * old_chargeProd_product_scaled + is_unique_new * new_chargeProd_product_scaled + is_core * (old_chargeProd_product_scaled + new_chargeProd_product_scaled) + is_environment * (old_chargeProd_product_scaled + new_chargeProd_product_scaled);",
+        "old_chargeProd_product_scaled = lambda_alchemical_electrostatics_exceptions_old * chargeProd_product_old;",
+        "new_chargeProd_product_scaled = lambda_alchemical_electrostatics_exceptions_new * chargeProd_product_new;",
 
         # Define sigma (with alchemical scaling)
         "sigma = is_unique_old * old_sigma_scaled + is_unique_new * new_sigma_scaled + is_core * (old_sigma_scaled + new_sigma_scaled) + is_environment * (old_sigma_scaled + new_sigma_scaled);",
@@ -2863,23 +2875,24 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         "new_epsilon_scaled = lambda_alchemical_sterics_exceptions_new * epsilon_new;",
 
         # Define alpha
-        "alpha = sqrt(-log(2 * delta) / r_cutoff);",
-        "delta = {delta};",
+        "alpha = {alpha_ewald};",
 
         # Define r_eff
         "r_eff_electrostatics = sqrt(r^2 + w_electrostatics^2);",
         "r_eff_sterics = sqrt(r^2 + w_sterics^2);",
 
         # Define 4th dimension terms:
-        "w_electrostatics = is_unique_old * lambda_alchemical_electrostatics_exceptions_new * w_scale * r_cutoff + is_unique_new * lambda_alchemical_electrostatics_exceptions_old * w_scale * r_cutoff;",
-        "w_sterics = is_unique_old * lambda_alchemical_sterics_exceptions_new * w_scale * r_cutoff + is_unique_new * lambda_alchemical_sterics_exceptions_old * w_scale * r_cutoff;",
+        "w_electrostatics = w_scale * r_cutoff * (is_unique_old * lambda_alchemical_electrostatics_exceptions_new + is_unique_new * lambda_alchemical_electrostatics_exceptions_old);",
+        "w_sterics = w_scale * r_cutoff * (is_unique_old * lambda_alchemical_sterics_exceptions_new + is_unique_new * lambda_alchemical_sterics_exceptions_old);",
         "w_scale = {w_scale};",
         "r_cutoff = {r_cutoff};"
 
     ]
 
-    _default_nonbonded_expression = ' '.join(_default_nonbonded_expression_list)
-    _default_exception_expression = ' '.join(_default_exception_expression_list)
+    _default_electrostatics_expression = ' '.join(_default_electrostatics_expression_list)
+    _default_sterics_expression = ' '.join(_default_sterics_expression_list)
+    _default_exceptions_expression = ' '.join(_default_exceptions_expression_list)
+
 
     def __init__(self,
                  topology_proposal,
@@ -2890,16 +2903,31 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                  rest_region=None,
 
                  # nonbonded parameters
-                 r_cutoff=None,
                  w_scale=0.1,
-                 delta=1e-4, # ewaldErrorTolerance
 
                  # generate htf for testing
                  generate_htf_for_testing=False,
 
                  # whether to interpolate 14s
-                 interpolate_old_and_new_14s=False,
+                 interpolate_old_and_new_14s=False, # TODO: is this necessary? what about flatten torsions?
                  **kwargs):
+
+        """
+            Parameters
+            ----------
+            topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
+                topology proposal of the old-to-new transformation
+            current_positions : [n,3] np.ndarray of float
+                positions of coordinates of old system
+            new_positions : [m,3] np.ndarray of float
+                positions of coordinates of new system
+            rest_region : list of int
+                list of hybrid-indexed particles that exist in the rest region
+            w_scale : float
+                maximum offset to add for the 4th dimension lifting
+            generate_htf_for_testing : bool
+                whether to generate the htf for testing
+        """
 
         _logger.info("*** Generating RestCapablePMEHybridTopologyFactory ***")
 
@@ -2914,31 +2942,10 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         self._interpolate_14s = interpolate_old_and_new_14s
 
         # Prepare dicts of forces, which will be useful later
-        # TODO: Store this as self._system_forces[name], name in ('old', 'new', 'hybrid') for compactness
         self._old_system_forces = {type(force).__name__ : force for force in self._old_system.getForces()}
         self._new_system_forces = {type(force).__name__ : force for force in self._new_system.getForces()}
         _logger.info(f"Old system forces: {self._old_system_forces.keys()}")
         _logger.info(f"New system forces: {self._new_system_forces.keys()}")
-
-        # Nonbonded parameters
-        if not r_cutoff: # Set the cutoff based on the old system's cutoff
-            if self._old_system_forces['NonbondedForce'].getNonbondedMethod() != openmm.NonbondedForce.NoCutoff:
-                self._r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
-            else:
-                self._r_cutoff = 100 * unit.nanometer
-                # If the nonbonded method is NoCutoff, set alpha to 0
-                self._default_nonbonded_expression_list[27] = "alpha = 0;"
-                self._default_exception_expression_list[13] = "alpha = 0;"
-                self._default_nonbonded_expression = ' '.join(self._default_nonbonded_expression_list)
-                self._default_exception_expression = ' '.join(self._default_exception_expression_list)
-        else:
-            self._r_cutoff = r_cutoff
-        self._w_scale = w_scale
-        self._delta = delta
-
-        # Modify properties for testing:
-        if generate_htf_for_testing:
-            self._w_scale = 0
 
         # Check that there are no unknown forces in the new and old systems:
         for system_name in ('old', 'new'):
@@ -2948,18 +2955,39 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                 raise ValueError(f"Unknown forces {unknown_forces} encountered in {system_name} system")
         _logger.info("No unknown forces.")
 
-        # Get and store the nonbonded method from the system:
+        # Set nonbonded parameters
         self._nonbonded_method = self._old_system_forces['NonbondedForce'].getNonbondedMethod()
-        _logger.info(f"Nonbonded method to be used (i.e. from old system): {self._nonbonded_method}")
+        if self._nonbonded_method == openmm.NonbondedForce.NoCutoff:
+            self._r_cutoff = 100 * unit.nanometer # TODO: what should r_cutoff be for the lifting term in vacuum?
+            self._alpha_ewald = 0
+        else:
+            self._r_cutoff = self._og_system_forces['NonbondedForce'].getCutoffDistance()
+            [alpha_ewald, nx, ny, nz] = self._og_system_forces['NonbondedForce'].getPMEParameters()
+            if (alpha_ewald / alpha_ewald.unit) == 0.0:
+                # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
+                tol = self._og_system_forces['NonbondedForce'].getEwaldErrorTolerance()
+                alpha_ewald = (1.0 / self._r_cutoff) * np.sqrt(-np.log(2.0 * tol))
+            self._alpha_ewald = alpha_ewald.value_in_unit_system(unit.md_unit_system)
+        self._w_scale = w_scale
+        _logger.info(f"r_cutoff is {r_cutoff}")
+        _logger.info(f"alpha_ewald is {self._alpha_ewald}")
+        _logger.info(f"w_scale is {self._w_scale}")
+
+        # Modify properties for testing:
+        if generate_htf_for_testing:
+            self._w_scale = 0
+            _logger.info(f"Set w_scale to 0 for testing")
 
         # Start by creating an empty system. This will become the hybrid system.
+        _logger.info(f"Creating hybrid system")
         self._hybrid_system = openmm.System()
 
         # Build the hybrid system particles...
         self._build_hybrid_particles()
 
-        # Validate rest region
-        self._validate_rest_region(rest_region)
+        # Create the opposite atom maps for use in nonbonded force processing; let's omit this from logger
+        self._hybrid_to_old_map = {value: key for key, value in self._old_to_hybrid_map.items()}
+        self._hybrid_to_new_map = {value: key for key, value in self._new_to_hybrid_map.items()}
 
         # Check that if there is a barostat in the original system, it is added to the hybrid.
         # We copy the barostat from the old system.
@@ -2975,19 +3003,22 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         self._hybrid_system.setDefaultPeriodicBoxVectors(*box_vectors)
         _logger.info(f"getDefaultPeriodicBoxVectors added to hybrid: {box_vectors}")
 
-        # Create the opposite atom maps for use in nonbonded force processing; let's omit this from logger
-        self._hybrid_to_old_map = {value : key for key, value in self._old_to_hybrid_map.items()}
-        self._hybrid_to_new_map = {value : key for key, value in self._new_to_hybrid_map.items()}
-
         # Assign atoms to one of the classes described in the class docstring
         self._atom_classes = self._determine_atom_classes()
         _logger.info("Determined atom classes.")
 
         # Get positions for the hybrid
         self._hybrid_positions = self._compute_hybrid_positions()
+        _logger.info("Computed hybrid positions")
 
         # Generate the topology representation
         self._hybrid_topology = self._create_topology()
+        _logger.info("Created hybrid topology")
+
+        # Validate rest region
+        self._validate_rest_region(rest_region)
+        self._rest_region = rest_region
+        _logger.info(f"Rest region: {self._rest_region}")
 
         # Prep look up dict for determining if atom is solvent
         if 'openmm' in self._hybrid_topology.__module__:
@@ -2997,6 +3028,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         else:
             raise Exception("Topology object must be simtk.openmm.app.topology or mdtraj.core.topology")
         self._atom_idx_to_object = {atom.index: atom for atom in atoms}
+        _logger.info(f"Prepped look up dict for determining if atom is solvent")
 
         # Construct dictionary of exceptions in old and new systems
         _logger.info("Generating old system exceptions dict...")
@@ -3014,14 +3046,67 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         _logger.info("Handling virtual sites...")
         self._handle_virtual_sites()
 
-        # Call each of the methods to add the corresponding force terms and prepare the forces:
-        self._transcribe_bonds()
-        self._transcribe_angles()
-        self._transcribe_torsions()
+        # Create custom bond force and add bonds to it
+        _logger.info("Handling bonds...")
+        self._create_bond_force()
+        self._copy_bonds()
+        # self._transcribe_bonds()
+
+        # Create custom angle force and add angles to it
+        _logger.info("Handling angles...")
+        self._create_angle_force()
+        self._copy_angles()
+        # self._transcribe_angles()
+
+        # Create custom torsion force and add torsions to it
+        _logger.info("Handling torsions...")
+        self._create_torsion_force()
+        self._copy_torsions()
+        # self._transcribe_torsions()
 
         if 'NonbondedForce' in self._old_system_forces or 'NonbondedForce' in self._new_system_forces:
-            self._transcribe_nonbondeds_direct_space()
-            self._transcribe_nonbondeds_reciprocal_space()
+            # Create custom nonbonded and custom bond forces and add particles/bonds to them
+            self._create_electrostatics_force()
+            self._create_sterics_force()
+            self._copy_nonbondeds()
+
+            self._create_exceptions_force()
+            self._copy_exceptions()
+
+            self._create_reciprocal_space_force()
+            self._copy_reciprocal_space()
+
+            # self._transcribe_nonbondeds_direct_space_electrostatics()
+            # self._transcribe_nonbondeds_direct_space_sterics()
+            # self._transcribe_non
+            # self._transcribe_nonbondeds_reciprocal_space()
+
+    def _validate_rest_region(self, rest_region):
+        """
+        Check that scale_regions was defined correctly
+        Parameters
+        ----------
+        rest_region : lists of ints
+            contains the hybrid indices of atoms that should be scaled by rest
+        """
+
+        import itertools
+
+        if rest_region is None:
+            continue
+        else:
+            # Check that rest_region is a list
+            assert type(rest_region) == list
+
+            # Check that the list contains ints
+            assert all(type(element) == int for element in rest_region)
+
+            # Check that the rest region is a subset of the system particles
+            assert set(rest_region).issubset(set(range(self._hybrid_topology.n_atoms))), f"the rest region is not a subset of the system particles"
+
+            # Check that there are no duplicate particles in the rest region
+            assert len(rest_region) == len(set(rest_region)), "There are duplicate atom indices in the rest_region"
+
 
     def _build_hybrid_particles(self):
         """
@@ -3047,25 +3132,6 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             particle_mass = self._new_system.getParticleMass(particle_idx)
             hybrid_idx = self._hybrid_system.addParticle(particle_mass)
             self._new_to_hybrid_map[particle_idx] = hybrid_idx
-
-    def _validate_rest_region(self, rest_region):
-        """
-        Check that scale_regions was defined correctly
-        Parameters
-        ----------
-        rest_region : lists of ints
-            contains the hybrid indices of atoms that should be scaled by rest
-        """
-
-        import itertools
-        if rest_region is None:
-            self._rest_region = None
-        else:
-            # Check that rest_region is a list
-            assert type(rest_region) == list
-
-            # Remove duplicate particles
-            self._rest_region = set(rest_region)
 
     def _validate_disjoint_sets(self):
         """
@@ -3122,7 +3188,6 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                     rest_id = [0, 0, 1]
                 return rest_id
 
-
         elif isinstance(particles, set):
             rest_id = [0, 0, 1] # Set the default scale_id to nonrest solute
             if not self._rest_region:
@@ -3176,16 +3241,9 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         elif particles.issubset(self._atom_classes['environment_atoms']):
             return [1, 0, 0, 0], 'environment_atoms'
 
-    def _transcribe_bonds(self):
+    def _create_bond_force(self):
         """
-        Handle the harmonic bonds...this serves as a template for how to transcribe the old/new system `HarmonicBondForce` to the
-        hybrid system's `CustomBondForce`.
-        Each bond term in the old system corresponds to a core, unique_old, or environment bond term.
-            - core: any term wherein both particles constituting a bond are defined in the topology_proposal._core_new_to_old_atom_map
-                    or one of the particles is in topology_proposal._core_new_to_old_atom_map and the other is environment
-            - unique_old : at least one of the two particles constitutes a unique old atom (i.e. there are no new terms to interpolate w.r.t. the new system)
-            - unique_new : at least of the two particles constitutes a unique new atom (i.e. there are no old terms to interpolate w.r.t. the old system)
-            - environment : both particles are in the environment region (i.e. the old/new terms are identical; this is asserted and will raise an issue if not True)
+        Create hybrid system's `CustomBondForce`.
         """
 
         # Define the custom expression
@@ -3213,6 +3271,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         # Create custom force
         custom_bond_force = openmm.CustomBondForce(bond_expression)
         self._hybrid_system.addForce(custom_bond_force)
+        self._hybrid_system_forces[custom_bond_force.__class__.__name__] = custom_bond_force
 
         # Add global parameters
         custom_bond_force.addGlobalParameter("lambda_rest_bonds", 1.0)
@@ -3231,16 +3290,24 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         custom_bond_force.addPerBondParameter('is_unique_new')
 
         # Add per-bond parameters for defining energy
-        custom_bond_force.addPerBondParameter('length_old') # old bond length
-        custom_bond_force.addPerBondParameter('K_old') # old spring constant
-        custom_bond_force.addPerBondParameter('length_new') # new bond length
-        custom_bond_force.addPerBondParameter('K_new') # new spring constant
+        custom_bond_force.addPerBondParameter('length_old')  # old bond length
+        custom_bond_force.addPerBondParameter('K_old')  # old spring constant
+        custom_bond_force.addPerBondParameter('length_new')  # new bond length
+        custom_bond_force.addPerBondParameter('K_new')  # new spring constant
 
-        # Now add the parameters
+
+    def _copy_bonds(self):
+        """
+        Copy harmonic bonds from the old/new system `HarmonicBondForce` to the hybrid system's `CustomBondForce`.
+        """
+
+        # TODO: Delete the comment below
         # there can only be a_single_term for each atom pair, right?
 
+        # Get old/new and hybrid system forces
         old_system_bond_force = self._old_system_forces['HarmonicBondForce']
         new_system_bond_force = self._new_system_forces['HarmonicBondForce']
+        custom_bond_force = self._hybrid_system_forces['CustomBondForce']
 
         # Set periodicity
         if old_system_bond_force.usesPeriodicBoundaryConditions():
@@ -3280,7 +3347,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             rest_id = self.get_rest_identifier(idx_set)
             alch_id, atom_class = self.get_alch_identifier(idx_set)
 
-            # Get the old terms and new terms, if they exist
+            # Get the old terms and if they exist, the old terms
             old_bond_idx, r0_old, k_old = old_term_collector[hybrid_index_pair]
             try:
                 new_bond_idx, r0_new, k_new = new_term_collector[hybrid_index_pair]
@@ -3327,37 +3394,37 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             # Add to dictionary for bookkeeping
             self._hybrid_to_new_bond_indices[hybrid_bond_idx] = new_bond_idx
 
-
-    def _transcribe_angles(self):
+    def _create_angle_force(self):
         """
-        Handle the harmonic angles -- transcribe the old/new system `HarmonicAngleForce` to the hybrid system's `CustomAngleForce`.
+        Create the hybrid system's `CustomAngleForce`.
         """
 
         # Define the custom expression
         angle_expression = "rest_scale * (K / 2) * (theta - theta0)^2;"
         angle_expression += "rest_scale = is_rest * lambda_rest_angles * lambda_rest_angles " \
-                           "+ is_inter * lambda_rest_angles " \
-                           "+ is_nonrest;"
+                            "+ is_inter * lambda_rest_angles " \
+                            "+ is_nonrest;"
 
         # Define K (with alchemical scaling)
         angle_expression += "K = is_unique_old * old_K_scaled " \
-                           "+ is_unique_new * new_K_scaled " \
-                           "+ is_core * (old_K_scaled + new_K_scaled) " \
-                           "+ is_environment * (old_K_scaled + new_K_scaled);"
+                            "+ is_unique_new * new_K_scaled " \
+                            "+ is_core * (old_K_scaled + new_K_scaled) " \
+                            "+ is_environment * (old_K_scaled + new_K_scaled);"
         angle_expression += "old_K_scaled = lambda_alchemical_angles_old * K_old;"
         angle_expression += "new_K_scaled = lambda_alchemical_angles_new * K_new;"
 
         # Define theta0 (with alchemical scaling)
         angle_expression += "theta0 = is_unique_old * old_theta0_scaled " \
-                           "+ is_unique_new * new_theta0_scaled " \
-                           "+ is_core * (old_theta0_scaled + new_theta0_scaled) " \
-                           "+ is_environment * (old_theta0_scaled + new_theta0_scaled);"
+                            "+ is_unique_new * new_theta0_scaled " \
+                            "+ is_core * (old_theta0_scaled + new_theta0_scaled) " \
+                            "+ is_environment * (old_theta0_scaled + new_theta0_scaled);"
         angle_expression += "old_theta0_scaled = lambda_alchemical_angles_old * theta0_old;"
         angle_expression += "new_theta0_scaled = lambda_alchemical_angles_new * theta0_new;"
 
         # Create custom force
         custom_angle_force = openmm.CustomAngleForce(angle_expression)
         self._hybrid_system.addForce(custom_angle_force)
+        self._hybrid_system_forces[custom_angle_force.__class__.__name__] = custom_angle_force
 
         # Add global parameters
         custom_angle_force.addGlobalParameter("lambda_rest_angles", 1.0)
@@ -3376,16 +3443,23 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         custom_angle_force.addPerAngleParameter('is_unique_new')
 
         # Add per-angle parameters for defining energy
-        custom_angle_force.addPerAngleParameter('theta0_old') # old angle length
-        custom_angle_force.addPerAngleParameter('K_old') # old spring constant
-        custom_angle_force.addPerAngleParameter('theta0_new') # new angle length
-        custom_angle_force.addPerAngleParameter('K_new') # new spring constant
+        custom_angle_force.addPerAngleParameter('theta0_old')  # old angle length
+        custom_angle_force.addPerAngleParameter('K_old')  # old spring constant
+        custom_angle_force.addPerAngleParameter('theta0_new')  # new angle length
+        custom_angle_force.addPerAngleParameter('K_new')  # new spring constant
 
-        # Now add the parameters
-        # there can only be a _single_ term for each atom triple, right?
+    def _copy_angles(self):
+        """
+        Copy harmonic angles from the old/new system `HarmonicAngleForce` to the hybrid system's `CustomAngleForce`.
+        """
 
+        # TODO: Delete the comment below
+        # there can only be a_single_term for each atom pair, right?
+
+        # Get old/new and hybrid system forces
         old_system_angle_force = self._old_system_forces['HarmonicAngleForce']
         new_system_angle_force = self._new_system_forces['HarmonicAngleForce']
+        custom_angle_force = self._hybrid_system_forces['CustomAngleForce']
 
         # Set periodicity
         if old_system_angle_force.usesPeriodicBoundaryConditions():
@@ -3425,7 +3499,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             rest_id = self.get_rest_identifier(idx_set)
             alch_id, atom_class = self.get_alch_identifier(idx_set)
 
-            # Get the old terms and the new terms, if they exist
+            # Get the old terms and if they exist, the new terms
             old_angle_idx, theta0_old, k_old = old_term_collector[hybrid_index_pair]
             try:
                 new_angle_idx, theta0_new, k_new = new_term_collector[hybrid_index_pair]
@@ -3478,6 +3552,55 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             # Add to dictionary for bookkeeping
             self._hybrid_to_new_angle_indices[hybrid_angle_idx] = new_angle_idx
 
+    def _create_torsion_force(self):
+        """
+        Create the hybrid system's `CustomTorsionForce`.
+        """
+
+        # Define the custom expression
+        torsion_expression = "rest_scale * U;"
+        torsion_expression += "rest_scale = is_rest * lambda_rest_torsions * lambda_rest_torsions " \
+                              "+ is_inter * lambda_rest_torsions " \
+                              "+ is_nonrest;"
+
+        # Define U (with alchemical scaling)
+        torsion_expression += "U = is_unique_old * U_old_scaled " \
+                              "+ is_unique_new * U_new_scaled " \
+                              "+ is_core * (U_old_scaled + U_new_scaled) " \
+                              "+ is_environment * (U_old_scaled + U_new_scaled);"
+        torsion_expression += 'U_old_scaled = (K_old * (1 + cos(periodicity_old * theta - phase_old))) * lambda_alchemical_torsions_old;'
+        torsion_expression += 'U_new_scaled = (K_new * (1 + cos(periodicity_new * theta - phase_new))) * lambda_alchemical_torsions_new;'
+
+        # Create custom force
+        custom_torsion_force = openmm.CustomTorsionForce(torsion_expression)
+        self._hybrid_system.addForce(custom_torsion_force)
+        self._hybrid_system_forces[custom_torsion_force.__class__.__name__] = custom_torsion_force
+
+        # Add global parameters
+        custom_torsion_force.addGlobalParameter("lambda_rest_torsions", 1.0)
+        custom_torsion_force.addGlobalParameter("lambda_alchemical_torsions_old", 1.0)
+        custom_torsion_force.addGlobalParameter("lambda_alchemical_torsions_new", 0.0)
+
+        # Add per-torsion parameters for rest scaling -- these sets are disjoint
+        custom_torsion_force.addPerTorsionParameter("is_rest")
+        custom_torsion_force.addPerTorsionParameter("is_inter")
+        custom_torsion_force.addPerTorsionParameter("is_nonrest")
+
+        # Add per-torsion parameters for alchemical scaling -- these sets are also disjoint
+        custom_torsion_force.addPerTorsionParameter('is_environment')
+        custom_torsion_force.addPerTorsionParameter('is_core')
+        custom_torsion_force.addPerTorsionParameter('is_unique_old')
+        custom_torsion_force.addPerTorsionParameter('is_unique_new')
+
+        # Add per-torsion parameters for defining energy
+        custom_torsion_force.addPerTorsionParameter('periodicity_old')
+        custom_torsion_force.addPerTorsionParameter('phase_old')
+        custom_torsion_force.addPerTorsionParameter('K_old')
+
+        custom_torsion_force.addPerTorsionParameter('periodicity_new')
+        custom_torsion_force.addPerTorsionParameter('phase_new')
+        custom_torsion_force.addPerTorsionParameter('K_new')
+
     def _is_torsion_equal(self, hybrid_index_pair_1, terms_1, hybrid_index_pair_2, terms_2):
         """
         Given two torsions (defined by hybrid indices and terms), return whether they are the same
@@ -3523,14 +3646,15 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         """
         for hybrid_index_pair_new, new_terms in new_term_collector.items():
             if self._is_torsion_equal(hybrid_index_pair_new, new_terms, hybrid_index_pair_old, old_terms):
-                _logger.info(f"Hybrid_index_pair {hybrid_index_pair_old} was not found in the new_term_collector, but {hybrid_index_pair_new} has the same atoms and terms, so {hybrid_index_pair_new} will be removed from the new term collector")
+                _logger.info(
+                    f"Hybrid_index_pair {hybrid_index_pair_old} was not found in the new_term_collector, but {hybrid_index_pair_new} has the same atoms and terms, so {hybrid_index_pair_new} will be removed from the new term collector")
                 return hybrid_index_pair_new
         _logger.info(f"No matching key in new_term_collector was found for hybrid_index_pair {hybrid_index_pair_old}!")
         return None
 
-    def _transcribe_torsions(self):
+    def _copy_torsions(self):
         """
-        Handle the periodic torsions -- transcribe the old/new system `PeriodicTorsionForce` to the hybrid system's `CustomTorsionForce`.
+        Copy the old/new system `PeriodicTorsionForce` to the hybrid system's `CustomTorsionForce`.
         Note that here, adding the torsions to the force is done differently from how bonds/angles are added. Since (improper) torsions can be
         in different atom orders, we will:
         - Iterate over the old system torsions,
@@ -3543,53 +3667,10 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             - Core torsions -- same as above
         """
 
-        # Define the custom expression
-        torsion_expression = "rest_scale * U;"
-        torsion_expression += "rest_scale = is_rest * lambda_rest_torsions * lambda_rest_torsions " \
-                              "+ is_inter * lambda_rest_torsions " \
-                              "+ is_nonrest;"
-
-        # Define U (with alchemical scaling)
-        torsion_expression += "U = is_unique_old * U_old_scaled " \
-                              "+ is_unique_new * U_new_scaled " \
-                              "+ is_core * (U_old_scaled + U_new_scaled) " \
-                              "+ is_environment * (U_old_scaled + U_new_scaled);"
-        torsion_expression += 'U_old_scaled = (K_old * (1 + cos(periodicity_old * theta - phase_old))) * lambda_alchemical_torsions_old;'
-        torsion_expression += 'U_new_scaled = (K_new * (1 + cos(periodicity_new * theta - phase_new))) * lambda_alchemical_torsions_new;'
-
-        # Create custom force
-        custom_torsion_force = openmm.CustomTorsionForce(torsion_expression)
-        self._hybrid_system.addForce(custom_torsion_force)
-
-        # Add global parameters
-        custom_torsion_force.addGlobalParameter("lambda_rest_torsions", 1.0)
-        custom_torsion_force.addGlobalParameter("lambda_alchemical_torsions_old", 1.0)
-        custom_torsion_force.addGlobalParameter("lambda_alchemical_torsions_new", 0.0)
-
-        # Add per-torsion parameters for rest scaling -- these sets are disjoint
-        custom_torsion_force.addPerTorsionParameter("is_rest")
-        custom_torsion_force.addPerTorsionParameter("is_inter")
-        custom_torsion_force.addPerTorsionParameter("is_nonrest")
-
-        # Add per-torsion parameters for alchemical scaling -- these sets are also disjoint
-        custom_torsion_force.addPerTorsionParameter('is_environment')
-        custom_torsion_force.addPerTorsionParameter('is_core')
-        custom_torsion_force.addPerTorsionParameter('is_unique_old')
-        custom_torsion_force.addPerTorsionParameter('is_unique_new')
-
-        # Add per-torsion parameters for defining energy
-        custom_torsion_force.addPerTorsionParameter('periodicity_old')
-        custom_torsion_force.addPerTorsionParameter('phase_old')
-        custom_torsion_force.addPerTorsionParameter('K_old')
-
-        custom_torsion_force.addPerTorsionParameter('periodicity_new')
-        custom_torsion_force.addPerTorsionParameter('phase_new')
-        custom_torsion_force.addPerTorsionParameter('K_new')
-
-        # Now add the parameters
-
+        # Get old/new and hybrid system forces
         old_system_torsion_force = self._old_system_forces['PeriodicTorsionForce']
         new_system_torsion_force = self._new_system_forces['PeriodicTorsionForce']
+        custom_torsion_force = self._hybrid_system_forces['CustomTorsionForce']
 
         # Set periodicity
         if old_system_torsion_force.usesPeriodicBoundaryConditions():
@@ -3717,9 +3798,113 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                 if atom_class == 'unique_new_atoms':
                     self._hybrid_to_new_torsion_indices[hybrid_torsion_idx] = new_torsion_idx
 
-    def _transcribe_nonbondeds_direct_space(self):
+    def _create_electrostatics_force(self):
         """
-        Add particles to each of the custom forces for nonbonded interactions and exceptions.
+        Create `CustomNonbondedForce` for direct space PME electrostatics.
+        """
+
+        import itertools
+
+        # Create the force
+        expression = self._default_electrostatics_expression
+        formatted_expression = expression.format(alpha_ewald=self._alpha_ewald,
+                                                 w_scale=self._w_scale,
+                                                 r_cutoff=self._r_cutoff.value_in_unit_system(unit.md_unit_system))
+        custom_force = openmm.CustomNonbondedForce(formatted_expression)
+        self._hybrid_system.addForce(custom_force)
+        self._hybrid_system_forces[custom_force.__class__.__name__ + '_electrostatics'] = custom_force
+
+        # Add global parameters
+        custom_force.addGlobalParameter(f"lambda_rest_electrostatics", 1.0)
+        custom_force.addGlobalParameter(f"lambda_alchemical_electrostatics_old", 1.0)
+        custom_force.addGlobalParameter(f"lambda_alchemical_electrostatics_new", 0.0)
+
+        # Add per-particle parameters for rest scaling -- these three sets are disjoint
+        custom_force.addPerParticleParameter("is_rest")
+        custom_force.addPerParticleParameter("is_nonrest_solute")
+        custom_force.addPerParticleParameter("is_nonrest_solvent")
+
+        # Add per-particle parameters for alchemical scaling -- these sets are also disjoint
+        custom_force.addPerParticleParameter('is_environment')
+        custom_force.addPerParticleParameter('is_core')
+        custom_force.addPerParticleParameter('is_unique_old')
+        custom_force.addPerParticleParameter('is_unique_new')
+
+        # Add per-particle parameters for defining energy
+        custom_force.addPerParticleParameter('charge_old')
+        custom_force.addPerParticleParameter('charge_new')
+
+        # Handle some nonbonded attributes
+        old_system_nbf = self._old_system_forces['NonbondedForce']
+        if self._nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME,
+                                         openmm.NonbondedForce.Ewald]:
+            custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(self._nonbonded_method))
+            custom_force.setUseSwitchingFunction(False)
+            custom_force.setCutoffDistance(self._r_cutoff)
+            custom_force.setUseLongRangeCorrection(False)
+
+        elif self._nonbonded_method == openmm.NonbondedForce.NoCutoff:
+                custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(standard_nonbonded_method))
+        else:
+            raise Exception(f"nonbonded method is not recognized")
+
+    def _create_sterics_force(self):
+        """
+        Create `CustomNonbondedForce` for sterics.
+        """
+
+        import itertools
+
+        # Create the force
+        expression = self._default_sterics_expression
+        formatted_expression = expression.format(w_scale=self._w_scale,
+                                                 r_cutoff=self._r_cutoff.value_in_unit_system(unit.md_unit_system))
+        custom_force = openmm.CustomNonbondedForce(formatted_expression)
+        self._hybrid_system.addForce(custom_force)
+        self._hybrid_system_forces[custom_force.__class__.__name__ + '_sterics'] = custom_force
+
+        # Add global parameters
+        custom_force.addGlobalParameter(f"lambda_rest_sterics", 1.0)
+        custom_force.addGlobalParameter(f"lambda_alchemical_sterics_old", 1.0)
+        custom_force.addGlobalParameter(f"lambda_alchemical_sterics_new", 0.0)
+
+        # Add per-particle parameters for rest scaling -- these three sets are disjoint
+        custom_force.addPerParticleParameter("is_rest")
+        custom_force.addPerParticleParameter("is_nonrest_solute")
+        custom_force.addPerParticleParameter("is_nonrest_solvent")
+
+        # Add per-particle parameters for alchemical scaling -- these sets are also disjoint
+        custom_force.addPerParticleParameter('is_environment')
+        custom_force.addPerParticleParameter('is_core')
+        custom_force.addPerParticleParameter('is_unique_old')
+        custom_force.addPerParticleParameter('is_unique_new')
+
+        # Add per-particle parameters for defining energy
+        custom_force.addPerParticleParameter('sigma_old')
+        custom_force.addPerParticleParameter('sigma_new')
+        custom_force.addPerParticleParameter('epsilon_old')
+        custom_force.addPerParticleParameter('epsilon_new')
+
+        # Handle some nonbonded attributes
+        old_system_nbf = self._old_system_forces['NonbondedForce']
+        if self._nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME,
+                                      openmm.NonbondedForce.Ewald]:
+            custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(self._nonbonded_method))
+            if old_system_nbf.getUseSwitchingFunction():  # This should be copied for sterics force, but not for electrostatics force
+                custom_force.setUseSwitchingFunction(True)
+                custom_force.setSwitchingDistance(old_system_nbf.getSwitchingDistance())
+            custom_force.setUseSwitchingFunction(False)
+            custom_force.setCutoffDistance(self._r_cutoff)
+            custom_force.setUseLongRangeCorrection(old_system_nbf.getUseDispersionCorrection()) # This should be copied from the og nbf for sterics, but off for electrostatics
+
+        elif self._nonbonded_method == openmm.NonbondedForce.NoCutoff:
+            custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(standard_nonbonded_method))
+        else:
+            raise Exception(f"nonbonded method is not recognized")
+
+    def _copy_nonbondeds(self):
+        """
+        Add particles to each of the custom forces for nonbonded electrostatics and sterics interactions (not exceptions).
         These only account for the direct space, not the reciprocal space.
         """
 
@@ -3727,12 +3912,14 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         old_system_nbf = self._old_system_forces['NonbondedForce']
         new_system_nbf = self._new_system_forces['NonbondedForce']
 
-        # Define custom nb force
-        custom_nb_force = self._get_custom_nonbonded_force()
+        # Retrieve custom electrostatic and steric forces
+        custom_nb_force_electrostatics = self._hybrid_system_forces['CustomNonbondedForce_electrostatics']
+        custom_nb_force_sterics = self._hybrid_system_forces['CustomNonbondedForce_sterics']
 
         # Iterate over particles in the old system and add them to the custom nonbonded force
         done_indices = []
         for old_idx in range(old_system_nbf.getNumParticles()):
+            # Given the atom index, get rest and alchemical identifiers
             charge_old, sigma_old, epsilon_old = old_system_nbf.getParticleParameters(old_idx)  # Grab the old parameters
             hybrid_idx = self._old_to_hybrid_map[old_idx]
             rest_id = self.get_rest_identifier(hybrid_idx)
@@ -3757,28 +3944,108 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             else:
                 raise Exception(f"iterating over old terms yielded unique new atom.")
 
-            custom_nb_force.addParticle(rest_id + alch_id + [charge_old, sigma_old, epsilon_old, charge_new, sigma_new, epsilon_new])
+            # Add particle
+            custom_nb_force_electrostatics.addParticle(rest_id + alch_id + [charge_old, charge_new])
+            custom_nb_force_sterics.addParticle(rest_id + alch_id + [sigma_old,  sigma_new, epsilon_old,epsilon_new])
             done_indices.append(hybrid_idx)
 
         # Iterate over unique_new particles and add them to the custom nonbonded force
         unique_new_hybrid_indices = set(range(self._hybrid_system.getNumParticles())).difference(set(done_indices))
         for hybrid_idx in list(unique_new_hybrid_indices):
+            # Given the atom index, get rest and alchemical identifiers
             new_idx = self._hybrid_to_new_map[hybrid_idx]
-            charge_new, sigma_new, epsilon_new = new_system_nbf.getParticleParameters(new_idx)
             rest_id = self.get_rest_identifier(hybrid_idx)
             alch_id, _ = self.get_alch_identifier(hybrid_idx)
             assert alch_id == [0, 0, 0, 1], f"encountered a problem iterating over what should only be unique new atoms; got {alch_id}"
-            custom_nb_force.addParticle(rest_id + alch_id + [charge_new, sigma_new, epsilon_new, charge_new, sigma_new, epsilon_new])
+
+            # Get new terms
+            charge_new, sigma_new, epsilon_new = new_system_nbf.getParticleParameters(new_idx)
+
+            # Add particle
+            custom_nb_force_electrostatics.addParticle(rest_id + alch_id + [charge_old, charge_new])
+            custom_nb_force_sterics.addParticle(rest_id + alch_id + [sigma_old, sigma_new, epsilon_old, epsilon_new])
+
+    def _create_exceptions_force(self):
+        """
+        Create `CustomBondForce` for exceptions.
+        """
+
+        import itertools
+
+        # Create the force
+        expression = self._default_exceptions_expression
+        formatted_expression = expression.format(alpha_ewald=self._alpha_ewald,
+                                                 w_scale=self._w_scale,
+                                                 r_cutoff=self._r_cutoff.value_in_unit_system(unit.md_unit_system))
+        custom_force = openmm.CustomBondForce(formatted_expression)
+        self._hybrid_system.addForce(custom_force)
+        self._hybrid_system_forces[custom_force.__class__.__name__ + '_exceptions'] = custom_force
+
+        # Add global parameters
+        custom_force.addGlobalParameter(f"lambda_rest_electrostatics_exceptions", 1.0)
+        custom_force.addGlobalParameter(f"lambda_rest_sterics_exceptions", 1.0)
+        custom_force.addGlobalParameter(f"lambda_alchemical_electrostatics_exceptions_old", 1.0)
+        custom_force.addGlobalParameter(f"lambda_alchemical_electrostatics_exceptions_new", 0.0)
+        custom_force.addGlobalParameter(f"lambda_alchemical_sterics_exceptions_old", 1.0)
+        custom_force.addGlobalParameter(f"lambda_alchemical_sterics_exceptions_new", 0.0)
+
+        # Add per-bond parameters for rest scaling -- these sets are disjoint
+        custom_force.addPerBondParameter("is_rest")
+        custom_force.addPerBondParameter("is_inter")
+        custom_force.addPerBondParameter("is_nonrest")
+
+        # Add per-bond parameters for alchemical scaling -- these sets are also disjoint
+        custom_force.addPerBondParameter('is_environment')
+        custom_force.addPerBondParameter('is_core')
+        custom_force.addPerBondParameter('is_unique_old')
+        custom_force.addPerBondParameter('is_unique_new')
+
+        # Add per-bond parameters for defining energy
+        custom_force.addPerBondParameter('chargeProd_exceptions_old') # chargeProd in old system to be used in exception
+        custom_force.addPerBondParameter('chargeProd_exceptions_new')
+        custom_force.addPerBondParameter('chargeProd_product_old') # original chargeProd in old system that will be replaced by exception
+        custom_force.addPerBondParameter('chargeProd_product_new')
+        custom_force.addPerBondParameter('sigma_old')
+        custom_force.addPerBondParameter('sigma_new')
+        custom_force.addPerBondParameter('epsilon_old')
+        custom_force.addPerBondParameter('epsilon_new')
+
+        # Handle some nonbonded attributes
+        old_system_nbf = self._old_system_forces['NonbondedForce']
+        if self._nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME,
+                                         openmm.NonbondedForce.Ewald]:
+            custom_force.setUsesPeriodicBoundaryConditions(True)
+
+        elif self._nonbonded_method == openmm.NonbondedForce.NoCutoff:
+            custom_force.setUsesPeriodicBoundaryConditions(False)
+
+        else:
+            raise Exception(f"nonbonded method is not recognized")
+
+    def _copy_exceptions(self):
+        """
+        Add exceptions to the CustomBondForce for exceptions.
+        This accounts for the direct space and subtracts out the reciprocal space of interactions to be replaced by exceptions.
+        """
+
+        # Retrieve old and new nb forces
+        old_system_nbf = self._old_system_forces['NonbondedForce']
+        new_system_nbf = self._new_system_forces['NonbondedForce']
+
+        # Retrieve custom bond force for exceptions
+        custom_exception_force = self._hybrid_system_forces['CustomBondForce_exceptions']
+
+        # Retrieve custom electrostatic and steric forces
+        custom_nb_force_electrostatics = self._hybrid_system_forces['CustomNonbondedForce_electrostatics']
+        custom_nb_force_sterics = self._hybrid_system_forces['CustomNonbondedForce_sterics']
 
         # Now remove interactions between unique old/new
         unique_news = self._atom_classes['unique_new_atoms']
         unique_olds = self._atom_classes['unique_old_atoms']
         for new in unique_news:
             for old in unique_olds:
-                custom_nb_force.addExclusion(new, old)
-
-        # Define custom bond force for exceptions
-        custom_exception_force = self._get_custom_nonbonded_force(is_exception=True)
+                custom_nb_force_electrostatics.addExclusion(new, old)
+                custom_nb_force_sterics.addExclusion(new, old)
 
         # Now add add all nonzeroed exceptions to custom bond force
         old_term_collector = {}
@@ -3803,10 +4070,13 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
 
         # Iterate over the old_term_collector and add appropriate bonds
         for hybrid_index_pair in old_term_collector.keys():
+
+            # Given the atom indices, get rest and alchemical identifiers
             idx_set = set(list(hybrid_index_pair))
             rest_id = self.get_rest_identifier(idx_set)
             alch_id, _ = self.get_alch_identifier(idx_set)
 
+            # Get the old terms and if they exist, the new terms
             old_idx, chargeProd_old, sigma_old, epsilon_old = old_term_collector[hybrid_index_pair]
             try:
                 new_bond_idx, chargeProd_new, sigma_new, epsilon_new = new_term_collector[hybrid_index_pair]
@@ -3816,11 +4086,20 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             if alch_id[0] == 1:  # Tf the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
                 assert new_term_collector[hybrid_index_pair][1:] == old_term_collector[hybrid_index_pair][1:], f"hybrid_index_pair {hybrid_index_pair} bond term was identified in old term collector as {old_term_collector[hybrid_index_pair][1:]}, but in new term collector as {new_term_collector[hybrid_index_pair][1:]}"
 
+            # Compute chargeProd_product_old/new from original particle parameters
+            p1, p2 = idx_set
+            p1_params = custom_nb_electrostatics_force.getParticleParameters(p1)
+            p2_params = custom_nb_electrostatics_force.getParticleParameters(p2)
+            chargeProd_product_old = p1_params[-2] * p2_params[-2]
+            chargeProd_product_new = p1_params[-1] * p2_params[-1]
+
+            # Add exclusions to the custon nb forces and exception to the custom bond force
             params = (hybrid_index_pair[0], hybrid_index_pair[1],
                                    rest_id + alch_id +
-                                   [chargeProd_old, sigma_old, epsilon_old, chargeProd_new, sigma_new, epsilon_new])
+                                   [chargeProd_old, chargeProd_new, chargeProd_product_old, chargeProd_product_new, sigma_old, sigma_new, epsilon_old, epsilon_new])
 
-            custom_nb_force.addExclusion(*hybrid_index_pair)
+            custom_nb_force_electrostatics.addExclusion(*hybrid_index_pair)
+            custom_nb_force_sterics.addExclusion(*hybrid_index_pair)
 
             if all([v.value_in_unit_system(unit.md_unit_system) == 0.0 for v in (chargeProd_old, chargeProd_new, epsilon_old, epsilon_new)]):
                 pass
@@ -3833,127 +4112,82 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
 
         # Now iterate over the modified new term collector and add appropriate bonds. these should only be unique new, right?
         for hybrid_index_pair in mod_new_term_collector.keys():
+
+            # Given the atom indices, get rest and alchemical identifiers
             idx_set = set(list(hybrid_index_pair))
             rest_id = self.get_rest_identifier(idx_set)
             alch_id, _ = self.get_alch_identifier(idx_set)
             assert alch_id == [0, 0, 0, 1], f"we are iterating over modified new term collector, but the string identifier returned {alch_id}"
+
+            # Get the new terms
             new_bond_idx, chargeProd_new, sigma_new, epsilon_new = new_term_collector[hybrid_index_pair]
 
+            # Compute chargeProd_product_old/new from original particle parameters
+            p1, p2 = idx_set
+            p1_params = custom_nb_electrostatics_force.getParticleParameters(p1)
+            p2_params = custom_nb_electrostatics_force.getParticleParameters(p2)
+            chargeProd_product_new = p1_params[-1] * p2_params[-1]
+
+            # Add exclusions to the custon nb forces and exception to the custom bond force
             params = (hybrid_index_pair[0], hybrid_index_pair[1],
                                    rest_id + alch_id +
-                                   [chargeProd_new,  sigma_new, epsilon_new, chargeProd_new, sigma_new, epsilon_new])
+                                   [chargeProd_new, chargeProd_new, chargeProd_product_new, chargeProd_product_new, sigma_new, sigma_new, epsilon_new, epsilon_new])
 
-            custom_nb_force.addExclusion(*hybrid_index_pair)
+            custom_nb_force_electrostatics.addExclusion(*hybrid_index_pair)
+            custom_nb_force_sterics.addExclusion(*hybrid_index_pair)
 
             if all([v.value_in_unit_system(unit.md_unit_system) == 0.0 for v in (chargeProd_new, epsilon_new)]):
                 pass
             else:
                 custom_exception_force.addBond(*params)
 
-        self._hybrid_system.addForce(custom_nb_force)
-        self._hybrid_system.addForce(custom_exception_force)
-
-    def _get_custom_nonbonded_force(self, is_exception=False):
+    def _create_reciprocal_space_force(self):
         """
-        Write custom nonbonded or exceptions force.
-        Parameters
-        ----------
-        is_exception : bool
-            indicates whether to write the force for nonbonded exceptions or interactions
+        Create standard NonbondedForce for reciprocal space PME.
         """
 
-        import itertools
-
-        # Create the force
-        if not is_exception:
-            expression = self._default_nonbonded_expression
-            formatted_expression = expression.format(w_scale=self._w_scale,
-                                                     r_cutoff=self._r_cutoff.value_in_unit_system(unit.md_unit_system),
-                                                     delta=self._delta)
-            custom_force = openmm.CustomNonbondedForce(formatted_expression)
-            suffix = ''
-
-        else:
-            expression = self._default_exception_expression
-            formatted_expression = expression.format(w_scale=self._w_scale,
-                                                     r_cutoff=self._r_cutoff.value_in_unit_system(unit.md_unit_system),
-                                                     delta=self._delta)
-            custom_force = openmm.CustomBondForce(formatted_expression)
-            suffix = '_exceptions'
+        # Create force
+        standard_nonbonded_force = openmm.NonbondedForce()
+        self._hybrid_system.addForce(standard_nonbonded_force)
+        self._hybrid_system_forces[standard_nonbonded_force.__class__.__name__] = standard_nonbonded_force
 
         # Add global parameters
-        custom_force.addGlobalParameter(f"lambda_rest_electrostatics{suffix}", 1.0)
-        custom_force.addGlobalParameter(f"lambda_rest_sterics{suffix}", 1.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_electrostatics{suffix}_old", 1.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_electrostatics{suffix}_new", 0.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_sterics{suffix}_old", 1.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_sterics{suffix}_new", 0.0)
+        standard_nonbonded_force.addGlobalParameter("lambda_alchemical_electrostatics_reciprocal", 0.0)
 
-        if not is_exception:
-            # Add per-particle parameters for rest scaling -- these three sets are disjoint
-            custom_force.addPerParticleParameter("is_rest")
-            custom_force.addPerParticleParameter("is_nonrest_solute")
-            custom_force.addPerParticleParameter("is_nonrest_solvent")
-
-            # Add per-particle parameters for alchemical scaling -- these sets are also disjoint
-            custom_force.addPerParticleParameter('is_environment')
-            custom_force.addPerParticleParameter('is_core')
-            custom_force.addPerParticleParameter('is_unique_old')
-            custom_force.addPerParticleParameter('is_unique_new')
-
-            # Add per-particle parameters for defining energy
-            custom_force.addPerParticleParameter('charge_old')
-            custom_force.addPerParticleParameter('sigma_old')
-            custom_force.addPerParticleParameter('epsilon_old')
-            custom_force.addPerParticleParameter('charge_new')
-            custom_force.addPerParticleParameter('sigma_new')
-            custom_force.addPerParticleParameter('epsilon_new')
-
-        else:
-            # Add per-bond parameters for rest scaling -- these sets are disjoint
-            custom_force.addPerBondParameter("is_rest")
-            custom_force.addPerBondParameter("is_inter")
-            custom_force.addPerBondParameter("is_nonrest")
-
-            # Add per-bond parameters for alchemical scaling -- these sets are also disjoint
-            custom_force.addPerBondParameter('is_environment')
-            custom_force.addPerBondParameter('is_core')
-            custom_force.addPerBondParameter('is_unique_old')
-            custom_force.addPerBondParameter('is_unique_new')
-
-            # Add per-bond parameters for defining energy
-            custom_force.addPerBondParameter('chargeProd_old')
-            custom_force.addPerBondParameter('sigma_old')
-            custom_force.addPerBondParameter('epsilon_old')
-            custom_force.addPerBondParameter('chargeProd_new')
-            custom_force.addPerBondParameter('sigma_new')
-            custom_force.addPerBondParameter('epsilon_new')
-
-
-        # Handle some nonbonded attributes
+        # Set nonbonded method and related attributes
         old_system_nbf = self._old_system_forces['NonbondedForce']
-        standard_nonbonded_method = old_system_nbf.getNonbondedMethod()
-        if standard_nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME,
-                                         openmm.NonbondedForce.Ewald]:
-            if is_exception:
-                custom_force.setUsesPeriodicBoundaryConditions(True)
-            else:
-                custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(standard_nonbonded_method))
-                custom_force.setUseSwitchingFunction(False)
-                custom_force.setCutoffDistance(self._r_cutoff)
-                custom_force.setUseLongRangeCorrection(False)
-
-        elif standard_nonbonded_method == openmm.NonbondedForce.NoCutoff:
-            if is_exception:
-                custom_force.setUsesPeriodicBoundaryConditions(False)
-            else:
-                custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(standard_nonbonded_method))
+        standard_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
+        if self._nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.CutoffNonPeriodic]:
+            standard_nonbonded_force.setReactionFieldDielectric(old_system_nbf.getReactionFieldDielectric())
+            standard_nonbonded_force.setCutoffDistance(self._r_cutoff)
+        elif self._nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
+            [alpha_ewald, nx, ny, nz] = old_system_nbf.getPMEParameters()
+            delta = old_system_nbf.getEwaldErrorTolerance()
+            standard_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
+            standard_nonbonded_force.setEwaldErrorTolerance(delta)
+            standard_nonbonded_force.setCutoffDistance(self._r_cutoff)
+        elif self._nonbonded_method in [openmm.NonbondedForce.NoCutoff]:
+            pass
         else:
-            raise Exception(f"nonbonded method is not recognized")
+            raise Exception("Nonbonded method %s not supported yet." % str(self._nonbonded_method))
 
-        return custom_force
+        # Set the use of dispersion correction
+        if old_system_nbf.getUseDispersionCorrection():
+            standard_nonbonded_force.setUseDispersionCorrection(True)
+        else:
+            standard_nonbonded_force.setUseDispersionCorrection(False)
 
-    def _transcribe_nonbondeds_reciprocal_space(self):
+        # Set the use of switching function
+        if old_system_nbf.getUseSwitchingFunction():
+            standard_nonbonded_force.setUseSwitchingFunction(True)
+            standard_nonbonded_force.setSwitchingDistance(old_system_nbf.getSwitchingDistance())
+        else:
+            standard_nonbonded_force.setUseSwitchingFunction(False)
+
+        # Disable direct space interactions
+        standard_nonbonded_force.setIncludeDirectSpace(False)
+
+    def _copy_reciprocal_space(self):
         """
         Add particles to a standard NonbondedForce for reciprocal space nonbonded interactions and exceptions.
         """
@@ -3962,15 +4196,15 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         old_system_nbf = self._old_system_forces['NonbondedForce']
         new_system_nbf = self._new_system_forces['NonbondedForce']
 
+        # Retrieve NonbondedForce for reciprocal space
+        standard_nonbonded_force = self._hybrid_system_forces["NonbondedForce"]
+
         # Retrieve atom index maps from hybrid to old/new
         hybrid_to_old_map = self._hybrid_to_old_map
         hybrid_to_new_map = self._hybrid_to_new_map
 
         # Retrieve atom classes
         atom_classes = self._atom_classes
-
-        # Define standard nonbonded force force
-        standard_nonbonded_force = self._get_nonbonded_force()
 
         # Iterate over the particles in the hybrid system, because nonbonded force does not accept index
         for particle_index in range(self._hybrid_system.getNumParticles()):
@@ -4119,57 +4353,3 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
 
                     exception_index = standard_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old * 0.0, epsilon_old * 0.0)
                     standard_nonbonded_force.addExceptionParameterOffset('lambda_alchemical_electrostatics_reciprocal', exception_index, (chargeProd_new - chargeProd_old), 0.0, 0.0)
-
-        # Disable direct space interactions
-        standard_nonbonded_force.setIncludeDirectSpace(False)
-
-        # Copy NonbondedForce to hybrid system
-        self._hybrid_system.addForce(standard_nonbonded_force)
-
-    def _get_nonbonded_force(self):
-        """
-        Write standard NonbondedForce force.
-        """
-
-        # Create force
-        standard_nonbonded_force = openmm.NonbondedForce()
-
-        # Add global parameters
-        standard_nonbonded_force.addGlobalParameter("lambda_alchemical_electrostatics_reciprocal", 0.0)
-
-        # Set nonbonded method and related attributes
-        old_system_nbf = self._old_system_forces['NonbondedForce']
-        standard_nonbonded_method = old_system_nbf.getNonbondedMethod()
-        standard_nonbonded_force.setNonbondedMethod(standard_nonbonded_method)
-        if standard_nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.CutoffNonPeriodic]:
-            epsilon_solvent = old_system_nbf.getReactionFieldDielectric()
-            r_cutoff = old_system_nbf.getCutoffDistance()
-            standard_nonbonded_force.setReactionFieldDielectric(epsilon_solvent)
-            standard_nonbonded_force.setCutoffDistance(r_cutoff)
-        elif standard_nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
-            [alpha_ewald, nx, ny, nz] = old_system_nbf.getPMEParameters()
-            delta = old_system_nbf.getEwaldErrorTolerance()
-            r_cutoff = old_system_nbf.getCutoffDistance()
-            standard_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
-            standard_nonbonded_force.setEwaldErrorTolerance(delta)
-            standard_nonbonded_force.setCutoffDistance(r_cutoff)
-        elif standard_nonbonded_method in [openmm.NonbondedForce.NoCutoff]:
-            pass
-        else:
-            raise Exception("Nonbonded method %s not supported yet." % str(self._nonbonded_method))
-
-        # Set the use of dispersion correction
-        if old_system_nbf.getUseDispersionCorrection():
-            standard_nonbonded_force.setUseDispersionCorrection(True)
-        else:
-            standard_nonbonded_force.setUseDispersionCorrection(False)
-
-        # Set the use of switching function
-        if old_system_nbf.getUseSwitchingFunction():
-            switching_distance = old_system_nbf.getSwitchingDistance()
-            standard_nonbonded_force.setUseSwitchingFunction(True)
-            standard_nonbonded_force.setSwitchingDistance(switching_distance)
-        else:
-            standard_nonbonded_force.setUseSwitchingFunction(False)
-
-        return standard_nonbonded_force
