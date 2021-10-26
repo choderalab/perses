@@ -46,4 +46,3 @@ dependencies:
   - tinydb
   - pytest-attrib
   - pytest-xdist
-  - libopenblas=0.3.17
