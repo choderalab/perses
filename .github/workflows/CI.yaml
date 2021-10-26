@@ -55,7 +55,7 @@ jobs:
           case ${{ matrix.openmm }} in
             nightly)
               echo "Using nightly dev build of OpenMM."
-              mamba install -c omnia-dev --override-channels --force-reinstall openmm;;
+              conda install -c omnia-dev --override-channels openmm --force-reinstall;;
             *)
               echo "installing OpenMM version ${{ matrix.openmm }}"
               mamba install -c conda-forge openmm=${{ matrix.openmm }}
