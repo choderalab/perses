@@ -3093,7 +3093,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         import itertools
 
         if rest_region is None:
-            continue
+            pass
         else:
             # Check that rest_region is a list
             assert type(rest_region) == list
