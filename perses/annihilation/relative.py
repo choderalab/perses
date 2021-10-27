@@ -2961,15 +2961,15 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             self._r_cutoff = 100 * unit.nanometer # TODO: what should r_cutoff be for the lifting term in vacuum?
             self._alpha_ewald = 0
         else:
-            self._r_cutoff = self._og_system_forces['NonbondedForce'].getCutoffDistance()
-            [alpha_ewald, nx, ny, nz] = self._og_system_forces['NonbondedForce'].getPMEParameters()
+            self._r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
+            [alpha_ewald, nx, ny, nz] = self._old_system_forces['NonbondedForce'].getPMEParameters()
             if (alpha_ewald / alpha_ewald.unit) == 0.0:
                 # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
-                tol = self._og_system_forces['NonbondedForce'].getEwaldErrorTolerance()
+                tol = self._old_system_forces['NonbondedForce'].getEwaldErrorTolerance()
                 alpha_ewald = (1.0 / self._r_cutoff) * np.sqrt(-np.log(2.0 * tol))
             self._alpha_ewald = alpha_ewald.value_in_unit_system(unit.md_unit_system)
         self._w_scale = w_scale
-        _logger.info(f"r_cutoff is {self.r_cutoff}")
+        _logger.info(f"r_cutoff is {self._r_cutoff}")
         _logger.info(f"alpha_ewald is {self._alpha_ewald}")
         _logger.info(f"w_scale is {self._w_scale}")
 
@@ -3066,6 +3066,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
 
         if 'NonbondedForce' in self._old_system_forces or 'NonbondedForce' in self._new_system_forces:
             # Create custom nonbonded and custom bond forces and add particles/bonds to them
+            _logger.info("Handling nonbondeds...")
             self._create_electrostatics_force()
             self._create_sterics_force()
             self._copy_nonbondeds()
@@ -3844,7 +3845,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             custom_force.setUseLongRangeCorrection(False)
 
         elif self._nonbonded_method == openmm.NonbondedForce.NoCutoff:
-                custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(standard_nonbonded_method))
+                custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(self._nonbonded_method))
         else:
             raise Exception(f"nonbonded method is not recognized")
 
@@ -3898,7 +3899,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             custom_force.setUseLongRangeCorrection(old_system_nbf.getUseDispersionCorrection()) # This should be copied from the og nbf for sterics, but off for electrostatics
 
         elif self._nonbonded_method == openmm.NonbondedForce.NoCutoff:
-            custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(standard_nonbonded_method))
+            custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(self._nonbonded_method))
         else:
             raise Exception(f"nonbonded method is not recognized")
 
@@ -4088,8 +4089,8 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
 
             # Compute chargeProd_product_old/new from original particle parameters
             p1, p2 = idx_set
-            p1_params = custom_nb_electrostatics_force.getParticleParameters(p1)
-            p2_params = custom_nb_electrostatics_force.getParticleParameters(p2)
+            p1_params = custom_nb_force_electrostatics.getParticleParameters(p1)
+            p2_params = custom_nb_force_electrostatics.getParticleParameters(p2)
             chargeProd_product_old = p1_params[-2] * p2_params[-2]
             chargeProd_product_new = p1_params[-1] * p2_params[-1]
 
@@ -4124,8 +4125,8 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
 
             # Compute chargeProd_product_old/new from original particle parameters
             p1, p2 = idx_set
-            p1_params = custom_nb_electrostatics_force.getParticleParameters(p1)
-            p2_params = custom_nb_electrostatics_force.getParticleParameters(p2)
+            p1_params = custom_nb_force_electrostatics.getParticleParameters(p1)
+            p2_params = custom_nb_force_electrostatics.getParticleParameters(p2)
             chargeProd_product_new = p1_params[-1] * p2_params[-1]
 
             # Add exclusions to the custon nb forces and exception to the custom bond force
