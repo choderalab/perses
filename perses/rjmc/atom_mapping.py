@@ -22,43 +22,6 @@ except ImportError:
 else:
     HAS_OECHEM = True
 
-# AtomMapper default settings
-if HAS_OECHEM:
-    _AtomMapper_DEFAULT_EXPRESSIONS = {
-        # weak requirements for mapping atoms == more atoms mapped, more in core
-        # atoms need to match in aromaticity. Same with bonds.
-        # maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
-            'weak' : {
-                #'atom' : oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic, #| oechem.OEExprOpts_IntType
-                #'bond' : oechem.OEExprOpts_DefaultBonds
-                'atom' : oechem.OEExprOpts_RingMember,
-                'bond' : oechem.OEExprOpts_RingMember
-            },
-        # default atom expression, requires same aromaticitiy and hybridization
-        # bonds need to match in bond order
-        # ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
-        'default' : {
-            'atom' : oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember,
-            #'atom' : oechem.OEExprOpts_Hybridization, #| oechem.OEExprOpts_IntType
-            'bond' : oechem.OEExprOpts_DefaultBonds
-        },
-        # strong requires same hybridization AND the same atom type
-        # bonds are same as default, require them to match in bond order
-        'strong' : {
-            'atom' : oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_AtomicNumber | oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember,
-            #'atom' : oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms, # This seems broken for biopolymers due to OEExprOpts_HvyDegree, which does not seem to be working properly
-            'bond' : oechem.OEExprOpts_DefaultBonds
-        }
-    }
-else:
-    # TODO...
-    _AtomMapper_DEFAULT_EXPRESSIONS = {
-        'weak': {'atom': 0, 'bond': 0},
-        'default': {'atom': 0, 'bond': 0},
-        'string': {'atom': 0, 'bond': 0},
-    }
-
-
 ################################################################################
 # LOGGER
 ################################################################################
@@ -584,6 +547,44 @@ class AtomMapping(object):
 ################################################################################
 # ATOM MAPPERS
 ################################################################################
+
+# AtomMapper default settings, for each toolkit
+# ideally gives similar(ish) results..
+if HAS_OECHEM:
+    _AtomMapper_DEFAULT_EXPRESSIONS = {
+        # weak requirements for mapping atoms == more atoms mapped, more in core
+        # atoms need to match in aromaticity. Same with bonds.
+        # maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
+            'weak' : {
+                #'atom' : oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic, #| oechem.OEExprOpts_IntType
+                #'bond' : oechem.OEExprOpts_DefaultBonds
+                'atom' : oechem.OEExprOpts_RingMember,
+                'bond' : oechem.OEExprOpts_RingMember
+            },
+        # default atom expression, requires same aromaticitiy and hybridization
+        # bonds need to match in bond order
+        # ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
+        'default' : {
+            'atom' : oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember,
+            #'atom' : oechem.OEExprOpts_Hybridization, #| oechem.OEExprOpts_IntType
+            'bond' : oechem.OEExprOpts_DefaultBonds
+        },
+        # strong requires same hybridization AND the same atom type
+        # bonds are same as default, require them to match in bond order
+        'strong' : {
+            'atom' : oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_AtomicNumber | oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember,
+            #'atom' : oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms, # This seems broken for biopolymers due to OEExprOpts_HvyDegree, which does not seem to be working properly
+            'bond' : oechem.OEExprOpts_DefaultBonds
+        }
+    }
+else:
+    # TODO...
+    _AtomMapper_DEFAULT_EXPRESSIONS = {
+        'weak': {'atom': 0, 'bond': 0},
+        'default': {'atom': 0, 'bond': 0},
+        'string': {'atom': 0, 'bond': 0},
+    }
+
 
 class AtomMapper(object):
     """
