@@ -614,7 +614,7 @@ def _n_atoms(mol):
     if isinstance(mol, Molecule):
         return mol.n_atoms
     else:
-        return mol.GetNumAtoms()  # ?
+        return mol.NumAtoms()
 
 class AtomMapper(object):
     """
@@ -858,7 +858,7 @@ class AtomMapper(object):
         self._assign_ring_ids(new_scaffold, assign_atoms=True, assign_bonds=False)
 
         # Check arguments
-        if (old_oescaffold.NumAtoms()==0) or (new_oescaffold.NumAtoms()==0):
+        if (_n_atoms(old_scaffold) == 0) or (_n_atoms(new_scaffold) == 0):
             # We can't do anything with empty scaffolds
             _logger.debug(f'One or more scaffolds had no atoms')
             scaffold_maps = list()
