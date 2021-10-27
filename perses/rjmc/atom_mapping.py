@@ -19,10 +19,16 @@ try:
     from openeye import oechem
 except ImportError:
     HAS_OECHEM = False
-    from perses.utils.off import get_scaffold
+    from perses.utils.off import get_scaffold as off_get_scaffold
+
+    def is_oechem(mol):
+        return False
 else:
     HAS_OECHEM = True
-    from perses.utils.openeye import get_scaffold
+    from perses.utils.openeye import get_scaffold as oe_get_scaffold
+
+    def is_oechem(mol):
+        return hasattr(mol, 'GetAtoms')
 
 ################################################################################
 # LOGGER
@@ -600,21 +606,20 @@ def _copy_molecule(mol):
     mol: same as input
         A copy of the OEMol, preserving data if provided
     """
-    if HAS_OECHEM and hasattr(mol, 'GetAtoms'):
-        mol = oechem.OEMol(mol)
-    elif isinstance(mol, Molecule):
-        mol = Molecule(mol)
-    else:
+    if not (is_oechem(mol) or isinstance(mol, Molecule))
         raise ValueError(f'Not sure how to copy {mol}; should be openff.toolkit.topology.Molecule '
                          'or openeye.oechem.OEMol')
-
-    return mol
+    if is_oechem(mol):
+        return oechem.OEMol(mol)
+    else:
+        return Molecule(mol)
 
 def _n_atoms(mol):
-    if isinstance(mol, Molecule):
-        return mol.n_atoms
-    else:
+    if is_oechem(mol):
         return mol.NumAtoms()
+    else:
+        return mol.n_atoms
+
 
 class AtomMapper(object):
     """
@@ -801,49 +806,13 @@ class AtomMapper(object):
         """
         atom_mappings = set() # all unique atom mappings found
 
-        # Create OpenFF and OEMol copies of input molecules, retaining properties if provided
-        # TODO: Do we really need to retain OEMol atom/bond inttypes?
-        def copy_molecule(mol):
-            """Generate OpenFF and OEMol copies of a given molecule,
-            retaining OEMol properties (such as atom/bond inttypes) if present.
-
-            Parameters
-            ----------
-            mol : openeye.oechem.OEMol or openeye.oechem.OEGraphMol or openff.toolkit.topology.Molecule
-                Molecule to be copied
-
-            Returns
-            -------
-            offmol : openff.toolkit.topology.Molecule
-                The OpenFF Molecule
-            oemol : openeye.oechem.OEMol
-                A copy of the OEMol, preserving data if provided
-            """
-            from openff.toolkit.topology import Molecule
-            from openeye import oechem
-            if isinstance(mol, Molecule):
-                # OpenFF Molecule
-                offmol = Molecule(mol)
-                oemol = offmol.to_openeye()
-                # Fix atom name retrieval from OEMol objects
-                # TODO: When https://github.com/openforcefield/openff-toolkit/issues/1026 is fixed, remove this
-                for atom, oeatom in zip(offmol.atoms, oemol.GetAtoms()):
-                    atom.name = oeatom.GetName()
-            elif hasattr(mol, 'GetAtoms'):
-                # OpenEye OEMol
-                offmol = Molecule(mol)
-                oemol = oechem.OEMol(mol)
-            else:
-                raise ValueError(f'Not sure how to copy {mol}; should be openff.toolkit.topology.Molecule or openeye.oechem.OEMol')
-
-            return offmol, oemol
-
         old_mol = _copy_molecule(old_mol)
         new_mol = _copy_molecule(new_mol)
 
         if (_n_atoms(old_mol) == 0) or (_n_atoms(new_mol) == 0):
             # TODO: Fix error message
-            raise ValueError(f'old_mol ({old_offmol.n_atoms} atoms) and new_mol ({new_offmol.n_atoms} atoms) must both have more than zero atoms')
+            raise ValueError(f'old_mol ({old_offmol.n_atoms} atoms) and new_mol '
+                             '({new_offmol.n_atoms} atoms) must both have more than zero atoms')
 
         # Annotate with ring IDs
         # TODO: What is all this doing
@@ -863,31 +832,34 @@ class AtomMapper(object):
             _logger.debug(f'One or more scaffolds had no atoms')
             scaffold_maps = list()
         else:
+            if not is_oechem(mol):
+                raise NotImplementedError("TODO: OpenFF alternate scaffold path")
             # Generate scaffold maps
             # TODO: Why are these hard-coded?
             from openeye import oechem
-            scaffold_maps = AtomMapper._get_all_maps(old_oescaffold, new_oescaffold,
-                                                     atom_expr=oechem.OEExprOpts_RingMember | oechem.OEExprOpts_IntType,
-                                                     bond_expr=oechem.OEExprOpts_RingMember,
-                                                     external_inttypes=True,
-                                                     unique=False,
-                                                     matching_criterion=self.matching_criterion)
+            scaffold_maps = self._get_all_maps(old_oescaffold, new_oescaffold,
+                                               atom_expr=oechem.OEExprOpts_RingMember | oechem.OEExprOpts_IntType,
+                                               bond_expr=oechem.OEExprOpts_RingMember,
+                                               external_inttypes=True,
+                                               unique=False,
+                                               matching_criterion=self.matching_criterion)
 
             _logger.debug(f'Scaffold mapping generated {len(scaffold_maps)} maps')
 
         if len(scaffold_maps) == 0:
             # There are no scaffold maps, so attempt to generate maps between molecules using the factory parameters
             _logger.warning('Molecules do not appear to share a common scaffold.')
-            _logger.warning('Proceeding with direct mapping of molecules, but please check atom mapping and the geometry of the ligands.')
+            _logger.warning('Proceeding with direct mapping of molecules, '
+                            'but please check atom mapping and the geometry of the ligands.')
 
             # if no commonality with the scaffold, don't use it.
             # why weren't matching arguments carried to these mapping functions? is there an edge case that i am missing?
             # it still doesn't fix the protein sidechain mapping problem
-            generated_atom_mappings = AtomMapper._get_all_maps(old_oemol, new_oemol,
-                                                        external_inttypes=self.external_inttypes,
-                                                        atom_expr=self.atom_expr,
-                                                        bond_expr=self.bond_expr,
-                                                        matching_criterion=self.matching_criterion)
+            generated_atom_mappings = self._get_all_maps(old_oemol, new_oemol,
+                                                         external_inttypes=self.external_inttypes,
+                                                         atom_expr=self.atom_expr,
+                                                         bond_expr=self.bond_expr,
+                                                         matching_criterion=self.matching_criterion)
             _logger.debug(f'{len(generated_atom_mappings)} mappings were generated by AtomMapper._get_all_maps()')
             for x in generated_atom_mappings:
                 _logger.debug(x)
@@ -1300,16 +1272,17 @@ class AtomMapper(object):
 
         return atom_mapping
 
+    # TODO: Why staticmethod?
     @staticmethod
     def _get_all_maps(old_oemol, new_oemol,
-        external_inttypes=False,
-        atom_expr=None,
-        bond_expr=None,
-        # TODO: Should 'unique' be False by default?
-        # See https://docs.eyesopen.com/toolkits/python/oechemtk/patternmatch.html#section-patternmatch-mcss
-        unique=True,
-        matching_criterion='index',
-        ):
+                      external_inttypes=False,
+                      atom_expr=None,
+                      bond_expr=None,
+                      # TODO: Should 'unique' be False by default?
+                      # See https://docs.eyesopen.com/toolkits/python/oechemtk/patternmatch.html#section-patternmatch-mcss
+                      unique=True,
+                      matching_criterion='index',
+    ):
         """Generate all possible maps between two oemols
 
         Parameters
@@ -1499,7 +1472,7 @@ class AtomMapper(object):
     @staticmethod
     def _assign_ring_ids_OFF(oemol, max_ring_size=10, assign_atoms=True, assign_bonds=True,
                              only_assign_if_zero=False):
-        raise NotImplementedError
+        raise NotImplementedError("TODO: OFF Assign ring ids")
 
     @staticmethod
     def _assign_ring_ids_OEChem(oemol, max_ring_size=10, assign_atoms=True, assign_bonds=True,
