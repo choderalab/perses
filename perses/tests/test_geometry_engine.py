@@ -613,7 +613,7 @@ def test_torsion_scan():
         delta = abs(phi_new - phi)
         error = min(delta, 2*np.pi-delta)
 
-        if error < TORSION_TOLERANCE:
+        if error < TOLERANCE:
             raise Exception("Torsion scan did not match OpenMM torsion")
         if np.abs(r_new - r) > TOLERANCE or np.abs(theta_new - theta) > TOLERANCE:
             raise Exception("Theta or r was disturbed in torsion scan.")
