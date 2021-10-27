@@ -19,8 +19,10 @@ try:
     from openeye import oechem
 except ImportError:
     HAS_OECHEM = False
+    from perses.utils.off import get_scaffold
 else:
     HAS_OECHEM = True
+    from perses.utils.openeye import get_scaffold
 
 ################################################################################
 # LOGGER
@@ -849,12 +851,11 @@ class AtomMapper(object):
             self._assign_ring_ids(old_mol)
             self._assign_ring_ids(new_mol)
 
-        from perses.utils.openeye import get_scaffold
-        old_oescaffold = get_scaffold(old_oemol)
-        new_oescaffold = get_scaffold(new_oemol)
+        old_scaffold = get_scaffold(old_mol)
+        new_scaffold = get_scaffold(new_mol)
 
-        self._assign_ring_ids(old_oescaffold, assign_atoms=True, assign_bonds=False)
-        self._assign_ring_ids(new_oescaffold, assign_atoms=True, assign_bonds=False)
+        self._assign_ring_ids(old_scaffold, assign_atoms=True, assign_bonds=False)
+        self._assign_ring_ids(new_scaffold, assign_atoms=True, assign_bonds=False)
 
         # Check arguments
         if (old_oescaffold.NumAtoms()==0) or (new_oescaffold.NumAtoms()==0):
