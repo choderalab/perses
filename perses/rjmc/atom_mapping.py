@@ -585,6 +585,34 @@ else:
         'string': {'atom': 0, 'bond': 0},
     }
 
+def _copy_molecule(mol):
+    """Copy of a molecule, retaining properties (such as atom/bond inttypes) if present.
+
+    Parameters
+    ----------
+    mol : openeye.oechem.OEMol or openeye.oechem.OEGraphMol or openff.toolkit.topology.Molecule
+        Molecule to be copied
+
+    Returns
+    -------
+    mol: same as input
+        A copy of the OEMol, preserving data if provided
+    """
+    if HAS_OECHEM and hasattr(mol, 'GetAtoms'):
+        mol = oechem.OEMol(mol)
+    elif isinstance(mol, Molecule):
+        mol = Molecule(mol)
+    else:
+        raise ValueError(f'Not sure how to copy {mol}; should be openff.toolkit.topology.Molecule '
+                         'or openeye.oechem.OEMol')
+
+    return mol
+
+def _n_atoms(mol):
+    if isinstance(mol, Molecule):
+        return mol.n_atoms
+    else:
+        return mol.GetNumAtoms()  # ?
 
 class AtomMapper(object):
     """
@@ -808,17 +836,18 @@ class AtomMapper(object):
 
             return offmol, oemol
 
-        old_offmol, old_oemol = copy_molecule(old_mol)
-        new_offmol, new_oemol = copy_molecule(new_mol)
+        old_mol = _copy_molecule(old_mol)
+        new_mol = _copy_molecule(new_mol)
 
-        if (old_offmol.n_atoms==0) or (new_offmol.n_atoms==0):
+        if (_n_atoms(old_mol) == 0) or (_n_atoms(new_mol) == 0):
+            # TODO: Fix error message
             raise ValueError(f'old_mol ({old_offmol.n_atoms} atoms) and new_mol ({new_offmol.n_atoms} atoms) must both have more than zero atoms')
 
-        # Annotate OEMol representations with ring IDs
+        # Annotate with ring IDs
         # TODO: What is all this doing
         if (not self.external_inttypes) or self.allow_ring_breaking:
-            self._assign_ring_ids(old_oemol)
-            self._assign_ring_ids(new_oemol)
+            self._assign_ring_ids(old_mol)
+            self._assign_ring_ids(new_mol)
 
         from perses.utils.openeye import get_scaffold
         old_oescaffold = get_scaffold(old_oemol)
@@ -1441,13 +1470,14 @@ class AtomMapper(object):
         return AtomMapping(old_oemol, new_oemol, new_to_old_atom_map=new_to_old_atom_map)
 
     @staticmethod
-    def _assign_ring_ids(oemol, max_ring_size=10, assign_atoms=True, assign_bonds=True, only_assign_if_zero=False):
+    def _assign_ring_ids(oemol, max_ring_size=10, assign_atoms=True, assign_bonds=True,
+                         only_assign_if_zero=False):
         """ Sets the Int of each atom in the oemol to a number
         corresponding to the ring membership of that atom
 
         Parameters
         ----------
-        oemol : openeye.oechem.OEMol
+        oemol : openeye.oechem.OEMol or openff.toolkit.topology.Molecule
             oemol to assign ring ID to
         assign_atoms : bool, optional, default=True
             If True, assign atoms
@@ -1460,6 +1490,19 @@ class AtomMapper(object):
             bond IntTypes will not be assigned
 
         """
+        if isinstance(mol, Molecule):
+            _assign_ring_ids_OFF(mol, max_ring_size, assign_atoms, assign_bonds, only_assign_if_zero)
+        else:
+            _assign_ring_ids_OEChem(mol, max_ring_size, assign_atoms, assign_bonds, only_assign_if_zero)
+
+    @staticmethod
+    def _assign_ring_ids_OFF(oemol, max_ring_size=10, assign_atoms=True, assign_bonds=True,
+                             only_assign_if_zero=False):
+        raise NotImplementedError
+
+    @staticmethod
+    def _assign_ring_ids_OEChem(oemol, max_ring_size=10, assign_atoms=True, assign_bonds=True,
+                                only_assign_if_zero=False):
         def _assign_ring_id(oeobj, max_ring_size=10):
             import openeye.oechem as oechem
             """Returns the int type based on the ring occupancy of the atom or bond
