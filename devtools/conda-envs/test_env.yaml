@@ -1,5 +1,6 @@
 name: test
 channels:
+  - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
   - defaults
   - omnia-dev
@@ -16,7 +17,7 @@ dependencies:
   - numexpr
   - autograd
   - pymbar
-  - openmm >=7.3.1
+  - openmm=7.5.1
   - openmoltools # may need to sort out ambermini/ambertools/parmed dependencies (we don't want ambertools)
   - openmmtools # may need to sort out ambermini/ambertools/parmed dependencies
   - numba
