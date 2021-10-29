@@ -6,6 +6,10 @@ Intended to be used on systems from https://github.com/openforcefield/protein-li
 
 import argparse
 import glob
+import itertools
+import re
+import warnings
+
 import numpy as np
 import urllib.request
 import yaml
@@ -102,6 +106,11 @@ arg_parser.add_argument(
     choices=target_choices,
     required=True
 )
+arg_parser.add_argument(
+    "--reversed",
+    action='store_true',
+    help="Analyze reversed edge simulations. Helpful for consistency checks."
+)
 args = arg_parser.parse_args()
 target = args.target
 
@@ -113,20 +122,36 @@ with urllib.request.urlopen(ligands_url) as response:
     ligands_dict = yaml.safe_load(response.read())
 ligands_exp_values = []  # list where to store experimental values
 for _, ligand_data in ligands_dict.items():
+    # ligands_exp_values.append(ligand_data['measurement']['value']/1e6)
     ligands_exp_values.append(ligand_data['measurement']['value'])
 # converting to kcal/mol
 kBT = kB * 300 * unit.kelvin
-ligands_exp_values = -kBT.in_units_of(unit.kilocalorie_per_mole) * np.log(ligands_exp_values)
+ligands_exp_values = kBT.in_units_of(unit.kilocalorie_per_mole) * np.log(ligands_exp_values)
 
 # Load simulation from directories
-out_dirs = [filepath.split('/')[0] for filepath in glob.glob('out*/*complex.nc')]
-simulations = [Simulation(out_dir) for out_dir in out_dirs]
+out_dirs = [filepath.split('/')[0] for filepath in glob.glob(f'out*/*complex.nc')]
+reg = re.compile(r'out_[0-9]+_[0-9]+_reversed')  # regular expression to deal with reversed directories
+if args.reversed:
+    # Choose only reversed directories
+    out_dirs = list(filter(reg.search, out_dirs))
+else:
+    # Filter out reversed directories
+    out_dirs = list(itertools.filterfalse(reg.search, out_dirs))
 
-# Make sure simulations are completed
-for simulation in simulations:
-
+simulations = []
+for out_dir in out_dirs:
+    # Load complete or fully working simulations
+    # TODO: Try getting better exceptions from openmmtools -- use non-generic exceptions
+    try:
+        simulation = Simulation(out_dir)
+        simulations.append(simulation)
+    except Exception:
+        warnings.warn(f"Edge in {out_dir} could not be loaded. Check simulation output is complete.")
 
 # create graph with results
 results_graph = make_mm_graph(simulations, ligands_exp_values, [0]*len(ligands_exp_values))
 
-print("DEBUG STOP")
+# Print FE comparison
+for edge in results_graph.edges(data=True):
+    print(edge[0], edge[1], edge[2]['calc_DDG'], edge[2]['exp_DDG'])
+
