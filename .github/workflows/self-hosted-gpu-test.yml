@@ -101,7 +101,6 @@ jobs:
         shell: bash -l {0}
         run: |
           export TRAVIS=true
-          cd perses
           pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto -m "gpu_ci or gpu_needed"
 
       - name: Codecov
