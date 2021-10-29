@@ -2662,7 +2662,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
     - is_unique_new - indicates whether the bond/angle/torsion is considered unique new(1), otherwise 0
 
     Each custom force also has old and new per bond/angle/torsion parameters necessary for computing the energy.
-    For example, for each bond, the additional parameters are: length_old, K_old, length_new, K_new
+    For example, for each bond, the additional parameters are: length_old, length_new, K_old, K_new
 
     The nonbonded interactions are handled with 4 forces:
     - CustomNonbondedForce - direct space PME electrostatics interactions (with long range correction off)
@@ -2735,12 +2735,14 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
     #     is_unique_old - indicates whether the exception is considered unique old (1), otherwise 0
     #     is_unique_new - indicates whether the exception is considered unique new(1), otherwise 0
     # for defining energy:
-    #     chargeProd_old - charge product of the atoms forming the exception in the old system
-    #     sigma_old - sigma of the atoms forming the exception in the old system
-    #     epsilon_old - epsilon of the atoms forming the exception in the old system
-    #     chargeProd_new - charge product of the atoms forming the exception in the new system
-    #     sigma_new - sigma of the atoms forming the exception in the new system
-    #     epsilon_new - epsilon of the atoms forming the exception in the new system
+    #     chargeProd_exceptions_old - charge product to be used in the exception (old system)
+    #     chargeProd_exceptions_new - charge product to be used in the exception (new system)
+    #     chargeProd_product_old - original charge product that will be replaced by the exception chargeProd (old system)
+    #     chargeProd_product_new - original charge product that will be replaced by the exception chargeProd (new system)
+    #     sigma_old - sigma to be used in the exception (old system)
+    #     sigma_new - sigma to be used in the exception (new system)
+    #     epsilon_old - epsilon to be used in the exception (old system)
+    #     epsilon_new - epsilon to be used in the exception (new system)
 
     _default_electrostatics_expression_list = [
 
@@ -3245,6 +3247,28 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
     def _create_bond_force(self):
         """
         Create hybrid system's `CustomBondForce`.
+
+        Details on the custom expression:
+        ---------------------------------
+
+        The custom bond expression is written based on the functional form here: http://docs.openmm.org/latest/userguide/theory/02_standard_forces.html#harmonicbondforce
+
+        A scalar multiplier, rest_scale, is introduced to soften bonds in the following manner:
+            - If the bond is in the rest region, multiply by lambda_rest_bonds * lambda_rest_bonds
+            - If the bond is in the inter region, multiply by lambda_rest_bonds
+            - If the bond is in the nonrest region, multiply by 1 (do not multiply by an rest factors)
+        where lambda_rest_bonds is a global parameter that varies between 1 and sqrt(beta/beta0).
+
+        K is defined by interpolating between K_old and K_new.
+            - At lambda = 0, lambda_alchemical_bonds_old = 1 and lambda_alchemical_bonds_new = 0, so K = K_old.
+            - At lambda = 1, lambda_alchemical_bonds_old = 0 and lambda_alchemical_bonds_new = 1, so K = K_new.
+            - For 0 < lambda < 1, e.g. lambda = 0.5, K = 0.5 * K_old + 0.5 * K_new.
+        For unique old/new atoms, we don't want to interpolate -- we want K_old for unique old atoms and K_new for
+        unique new atoms (regardless of lambda). Therefore, in _copy_bonds(), we set K_new = K_old for unique old atoms.
+        and K_old = K_new for unique new atoms. Also, in _copy_bonds(), we check that K_old = K_new for environment atoms.
+
+        The same logic holds true for length as well.
+
         """
 
         # Define the custom expression
@@ -3254,20 +3278,10 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                            "+ is_nonrest;"
 
         # Define K (with alchemical scaling)
-        bond_expression += "K = is_unique_old * old_K_scaled " \
-                           "+ is_unique_new * new_K_scaled " \
-                           "+ is_core * (old_K_scaled + new_K_scaled) " \
-                           "+ is_environment * (old_K_scaled + new_K_scaled);"
-        bond_expression += "old_K_scaled = lambda_alchemical_bonds_old * K_old;"
-        bond_expression += "new_K_scaled = lambda_alchemical_bonds_new * K_new;"
+        bond_expression += "K = lambda_alchemical_bonds_old * K_old + lambda_alchemical_bonds_new * K_new;"
 
         # Define length (with alchemical scaling)
-        bond_expression += "length = is_unique_old * old_length_scaled " \
-                           "+ is_unique_new * new_length_scaled " \
-                           "+ is_core * (old_length_scaled + new_length_scaled) " \
-                           "+ is_environment * (old_length_scaled + new_length_scaled);"
-        bond_expression += "old_length_scaled = lambda_alchemical_bonds_old * length_old;"
-        bond_expression += "new_length_scaled = lambda_alchemical_bonds_new * length_new;"
+        bond_expression += "length = lambda_alchemical_bonds_old * length_old + lambda_alchemical_bonds_new * length_new;"
 
         # Create custom force
         custom_bond_force = openmm.CustomBondForce(bond_expression)
@@ -3275,9 +3289,9 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         self._hybrid_system_forces[custom_bond_force.__class__.__name__] = custom_bond_force
 
         # Add global parameters
-        custom_bond_force.addGlobalParameter("lambda_rest_bonds", 1.0)
-        custom_bond_force.addGlobalParameter("lambda_alchemical_bonds_old", 1.0)
-        custom_bond_force.addGlobalParameter("lambda_alchemical_bonds_new", 0.0)
+        custom_bond_force.addGlobalParameter("lambda_rest_bonds", 1.0)  # varies between 1 and sqrt(beta/beta0)
+        custom_bond_force.addGlobalParameter("lambda_alchemical_bonds_old", 1.0)  # goes from 1 to 0
+        custom_bond_force.addGlobalParameter("lambda_alchemical_bonds_new", 0.0)  # goes from 0 to 1
 
         # Add per-bond parameters for rest scaling -- these sets are disjoint
         custom_bond_force.addPerBondParameter("is_rest")
@@ -3292,8 +3306,8 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
 
         # Add per-bond parameters for defining energy
         custom_bond_force.addPerBondParameter('length_old')  # old bond length
-        custom_bond_force.addPerBondParameter('K_old')  # old spring constant
         custom_bond_force.addPerBondParameter('length_new')  # new bond length
+        custom_bond_force.addPerBondParameter('K_old')  # old spring constant
         custom_bond_force.addPerBondParameter('K_new')  # new spring constant
 
 
@@ -3301,9 +3315,6 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         """
         Copy harmonic bonds from the old/new system `HarmonicBondForce` to the hybrid system's `CustomBondForce`.
         """
-
-        # TODO: Delete the comment below
-        # there can only be a_single_term for each atom pair, right?
 
         # Get old/new and hybrid system forces
         old_system_bond_force = self._old_system_forces['HarmonicBondForce']
@@ -3358,7 +3369,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                 assert new_term_collector[hybrid_index_pair][1:] == old_term_collector[hybrid_index_pair][1:], f"Hybrid_index_pair {hybrid_index_pair} bond term was identified in old term collector as {old_term_collector[hybrid_index_pair][1:]}, but in new term collector as {new_term_collector[hybrid_index_pair][1:]}"
 
             # Add the bond
-            bond_term = (hybrid_index_pair[0], hybrid_index_pair[1], rest_id + alch_id + [r0_old, k_old, r0_new, k_new])
+            bond_term = (hybrid_index_pair[0], hybrid_index_pair[1], rest_id + alch_id + [r0_old, r0_new, k_old, k_new])
             hybrid_bond_idx = custom_bond_force.addBond(*bond_term)
 
             # Add to dictionary for bookkeeping
@@ -3385,11 +3396,11 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
 
             # Get the old and new terms
             # Since these are unique new bonds, the old terms will be unchanged
-            new_bond_idx, r0_old, k_old = mod_new_term_collector[hybrid_index_pair]
-            r0_new, k_new = r0_old, k_old
+            new_bond_idx, r0_new, k_new = mod_new_term_collector[hybrid_index_pair]
+            r0_old, k_old = r0_new, k_new
 
             # Add the bond
-            bond_term = (hybrid_index_pair[0], hybrid_index_pair[1], rest_id + alch_id + [r0_old, k_old, r0_new, k_new])
+            bond_term = (hybrid_index_pair[0], hybrid_index_pair[1], rest_id + alch_id + [r0_old, r0_new, k_old, k_new])
             hybrid_bond_idx = custom_bond_force.addBond(*bond_term)
 
             # Add to dictionary for bookkeeping
@@ -3398,6 +3409,12 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
     def _create_angle_force(self):
         """
         Create the hybrid system's `CustomAngleForce`.
+
+        The custom angle expression is written based on the functional form here: http://docs.openmm.org/latest/userguide/theory/02_standard_forces.html#harmonicangleforce
+
+        Since the custom expression here is written similiarly to the custom bond expression,
+        see the docstring for _create_bond_force for an explanation of how the expression was written.
+
         """
 
         # Define the custom expression
@@ -3407,20 +3424,10 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                             "+ is_nonrest;"
 
         # Define K (with alchemical scaling)
-        angle_expression += "K = is_unique_old * old_K_scaled " \
-                            "+ is_unique_new * new_K_scaled " \
-                            "+ is_core * (old_K_scaled + new_K_scaled) " \
-                            "+ is_environment * (old_K_scaled + new_K_scaled);"
-        angle_expression += "old_K_scaled = lambda_alchemical_angles_old * K_old;"
-        angle_expression += "new_K_scaled = lambda_alchemical_angles_new * K_new;"
+        angle_expression += "K = lambda_alchemical_angles_old * K_old + lambda_alchemical_angles_new * K_new;"
 
         # Define theta0 (with alchemical scaling)
-        angle_expression += "theta0 = is_unique_old * old_theta0_scaled " \
-                            "+ is_unique_new * new_theta0_scaled " \
-                            "+ is_core * (old_theta0_scaled + new_theta0_scaled) " \
-                            "+ is_environment * (old_theta0_scaled + new_theta0_scaled);"
-        angle_expression += "old_theta0_scaled = lambda_alchemical_angles_old * theta0_old;"
-        angle_expression += "new_theta0_scaled = lambda_alchemical_angles_new * theta0_new;"
+        angle_expression += "theta0 = lambda_alchemical_angles_old * theta0_old + lambda_alchemical_angles_new * theta0_new;"
 
         # Create custom force
         custom_angle_force = openmm.CustomAngleForce(angle_expression)
@@ -3445,17 +3452,14 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
 
         # Add per-angle parameters for defining energy
         custom_angle_force.addPerAngleParameter('theta0_old')  # old angle length
-        custom_angle_force.addPerAngleParameter('K_old')  # old spring constant
         custom_angle_force.addPerAngleParameter('theta0_new')  # new angle length
+        custom_angle_force.addPerAngleParameter('K_old')  # old spring constant
         custom_angle_force.addPerAngleParameter('K_new')  # new spring constant
 
     def _copy_angles(self):
         """
         Copy harmonic angles from the old/new system `HarmonicAngleForce` to the hybrid system's `CustomAngleForce`.
         """
-
-        # TODO: Delete the comment below
-        # there can only be a_single_term for each atom pair, right?
 
         # Get old/new and hybrid system forces
         old_system_angle_force = self._old_system_forces['HarmonicAngleForce']
@@ -3513,7 +3517,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             angle_term = (hybrid_index_pair[0],
                           hybrid_index_pair[1],
                           hybrid_index_pair[2],
-                          rest_id + alch_id + [theta0_old, k_old, theta0_new, k_new])
+                          rest_id + alch_id + [theta0_old, theta0_new, k_old, k_new])
             hybrid_angle_idx = custom_angle_force.addAngle(*angle_term)
 
             # Add to dictionary for bookkeeping
@@ -3547,7 +3551,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             angle_term = (hybrid_index_pair[0],
                           hybrid_index_pair[1],
                           hybrid_index_pair[2],
-                          rest_id + alch_id + [theta0_old, k_old, theta0_new, k_new])
+                          rest_id + alch_id + [theta0_old, theta0_new, k_old, k_new])
             hybrid_angle_idx = custom_angle_force.addAngle(*angle_term)
 
             # Add to dictionary for bookkeeping
@@ -3556,6 +3560,15 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
     def _create_torsion_force(self):
         """
         Create the hybrid system's `CustomTorsionForce`.
+
+        The custom angle expression is written based on the functional form here: http://docs.openmm.org/latest/userguide/theory/02_standard_forces.html#periodictorsionforce
+
+        Since the custom expression here is written similiarly to the custom bond expression,
+        see the docstring for _create_bond_force for an explanation of how the expression was written.
+
+        The only difference is that instead of interpolating each of the per torsion parameters (K, periodicity, and phase),
+        we interpolate the old and new torsion energies.
+
         """
 
         # Define the custom expression
@@ -3565,10 +3578,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                               "+ is_nonrest;"
 
         # Define U (with alchemical scaling)
-        torsion_expression += "U = is_unique_old * U_old_scaled " \
-                              "+ is_unique_new * U_new_scaled " \
-                              "+ is_core * (U_old_scaled + U_new_scaled) " \
-                              "+ is_environment * (U_old_scaled + U_new_scaled);"
+        torsion_expression += "U = U_old_scaled + U_new_scaled;"
         torsion_expression += 'U_old_scaled = (K_old * (1 + cos(periodicity_old * theta - phase_old))) * lambda_alchemical_torsions_old;'
         torsion_expression += 'U_new_scaled = (K_new * (1 + cos(periodicity_new * theta - phase_new))) * lambda_alchemical_torsions_new;'
 
@@ -3595,77 +3605,86 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
 
         # Add per-torsion parameters for defining energy
         custom_torsion_force.addPerTorsionParameter('periodicity_old')
-        custom_torsion_force.addPerTorsionParameter('phase_old')
-        custom_torsion_force.addPerTorsionParameter('K_old')
-
         custom_torsion_force.addPerTorsionParameter('periodicity_new')
+
+        custom_torsion_force.addPerTorsionParameter('phase_old')
         custom_torsion_force.addPerTorsionParameter('phase_new')
+
+        custom_torsion_force.addPerTorsionParameter('K_old')
         custom_torsion_force.addPerTorsionParameter('K_new')
 
-    def _is_torsion_equal(self, hybrid_index_pair_1, terms_1, hybrid_index_pair_2, terms_2):
-        """
-        Given two torsions (defined by hybrid indices and terms), return whether they are the same
-        Parameters
-        ----------
-        hybrid_index_pair_1 : list of ints
-            hybrid atom indices defining torsion 1
-        terms_1 : list of lists
-            each sublist contains torsion parameters torsion 1
-        hybrid_index_pair_2 : list of ints
-            hybrid atom indices defining torsion 2
-        terms_2 : list of lists
-            each sublist contains torsion parameters torsion 2
-        Returns
-        -------
-        bool
-            indicates whether the two torsions are equal
-        """
-        if set(hybrid_index_pair_1) == set(hybrid_index_pair_2):
-            terms_1 = np.array(terms_1)
-            terms_2 = np.array(terms_2)
-            if np.array_equal(terms_1[:, 1:], terms_2[:, 1:]):
-                return True
-        return False
-
-    def _find_torsion_match(self, hybrid_index_pair_old, old_terms, new_term_collector):
-        """
-        For a given torsion (defined by hybrid indices) in the old force, return the hybrid indices for the matching
-        torsion (if it exists) in the new force.
-        Parameters
-        ----------
-        hybrid_index_pair_old : list of ints
-            hybrid atom indices defining a torsion from the old force
-        old_terms : list of lists
-            each sublist contains torsion parameters in the old force for the torsion specified by hybrid_index_pair_old
-        new_term_collector : dict
-            key : list of hybrid atom indices of a torsion in the new force
-            value : list of lists, where each sub list contains torsion parameters in the new force
-        Returns
-        -------
-        list of ints
-            hybrid atom indices for matching torsion in the new force (or None, if it doesn't exist)
-        """
-        for hybrid_index_pair_new, new_terms in new_term_collector.items():
-            if self._is_torsion_equal(hybrid_index_pair_new, new_terms, hybrid_index_pair_old, old_terms):
-                _logger.info(
-                    f"Hybrid_index_pair {hybrid_index_pair_old} was not found in the new_term_collector, but {hybrid_index_pair_new} has the same atoms and terms, so {hybrid_index_pair_new} will be removed from the new term collector")
-                return hybrid_index_pair_new
-        _logger.info(f"No matching key in new_term_collector was found for hybrid_index_pair {hybrid_index_pair_old}!")
-        return None
+    # def _is_torsion_equal(self, hybrid_index_pair_1, terms_1, hybrid_index_pair_2, terms_2):
+    #     """
+    #     Given two torsions (defined by hybrid indices and terms), return whether they are the same
+    #     Parameters
+    #     ----------
+    #     hybrid_index_pair_1 : list of ints
+    #         hybrid atom indices defining torsion 1
+    #     terms_1 : list of lists
+    #         each sublist contains torsion parameters torsion 1
+    #     hybrid_index_pair_2 : list of ints
+    #         hybrid atom indices defining torsion 2
+    #     terms_2 : list of lists
+    #         each sublist contains torsion parameters torsion 2
+    #     Returns
+    #     -------
+    #     bool
+    #         indicates whether the two torsions are equal
+    #     """
+    #     if set(hybrid_index_pair_1) == set(hybrid_index_pair_2):
+    #         terms_1 = np.array(terms_1)
+    #         terms_2 = np.array(terms_2)
+    #         if np.array_equal(terms_1[:, 1:], terms_2[:, 1:]):
+    #             return True
+    #     return False
+    #
+    # def _find_torsion_match(self, hybrid_index_pair_old, old_terms, new_term_collector):
+    #     """
+    #     For a given torsion (defined by hybrid indices) in the old force, return the hybrid indices for the matching
+    #     torsion (if it exists) in the new force.
+    #     Parameters
+    #     ----------
+    #     hybrid_index_pair_old : list of ints
+    #         hybrid atom indices defining a torsion from the old force
+    #     old_terms : list of lists
+    #         each sublist contains torsion parameters in the old force for the torsion specified by hybrid_index_pair_old
+    #     new_term_collector : dict
+    #         key : list of hybrid atom indices of a torsion in the new force
+    #         value : list of lists, where each sub list contains torsion parameters in the new force
+    #     Returns
+    #     -------
+    #     list of ints
+    #         hybrid atom indices for matching torsion in the new force (or None, if it doesn't exist)
+    #     """
+    #     for hybrid_index_pair_new, new_terms in new_term_collector.items():
+    #         if self._is_torsion_equal(hybrid_index_pair_new, new_terms, hybrid_index_pair_old, old_terms):
+    #             _logger.info(
+    #                 f"Hybrid_index_pair {hybrid_index_pair_old} was not found in the new_term_collector, but {hybrid_index_pair_new} has the same atoms and terms, so {hybrid_index_pair_new} will be removed from the new term collector")
+    #             return hybrid_index_pair_new
+    #     _logger.info(f"No matching key in new_term_collector was found for hybrid_index_pair {hybrid_index_pair_old}!")
+    #     return None
 
     def _copy_torsions(self):
         """
         Copy the old/new system `PeriodicTorsionForce` to the hybrid system's `CustomTorsionForce`.
-        Note that here, adding the torsions to the force is done differently from how bonds/angles are added. Since (improper) torsions can be
-        in different atom orders, we will:
+
+        Note that here, adding the torsions to the force is done differently from how bonds/angles are added...
+
+        As in _copy_bonds/angles(), unique old/new torsions will always be kept on.
+
+        Since (improper) torsions can be in different atom orders, we will add core and environment torsions twice --
+        once for the old torsion and once for the new torsion. To avoid double counting each of the core torsions,
+        we will zero out the new terms for the old torsion and the old terms for the new torsion.
+
+        Here is a summary of what we will do:
         - Iterate over the old system torsions,
-            - Unique old torsions -- use old terms for periodicity_old, theta_old, K_old and zero the old terms for periodicity_new, theta_new, K_new
-            - Core torsions -- same as above
-            - Environment torsions -- use old terms for periodicity_old, theta_old, K_old, periodicity_new, theta_new, K_new
-        - Remove environment torsions from the new system torsions
+            - Unique old torsions -- use old terms for periodicity_old, theta_old, K_old, periodicity_new, theta_new, K_new
+            - Core torsions -- use old terms for periodicity_old, theta_old, K_old, and zero periodicity_new, theta_new, K_new
+            - Environment torsions -- use old terms for periodicity_old, theta_old, K_old, and zero periodicity_new, theta_new, K_new
         - Iterate over the new terms
-            - Unique new torsions -- use new terms for periodicity_new, theta_new, K_new and zero the new terms for periodicity_old, theta_old, K_old
-            - Core torsions -- same as above
+            - Unique new torsions -- use new terms for periodicity_old, theta_old, K_old, periodicity_new, theta_new, K_new
+            - Core torsions -- use new terms for periodicity_new, theta_new, K_new and zero periodicity_old, theta_old, K_old
+            - Environment torsions -- use new terms for periodicity_new, theta_new, K_new, and zero periodicity_old, theta_old, K_old
         """
 
         # Get old/new and hybrid system forces
@@ -3718,21 +3737,21 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             rest_id = self.get_rest_identifier(idx_set)
             alch_id, atom_class = self.get_alch_identifier(idx_set)
 
-            if atom_class == 'environment_atoms':
-                # Check that the list of old terms is equal to the list of new terms
-                assert self._is_torsion_equal(hybrid_index_pair,
-                                              old_term_collector[hybrid_index_pair],
-                                              hybrid_index_pair,
-                                              new_term_collector[hybrid_index_pair]), \
-                    f"hybrid_index_pair {hybrid_index_pair} torsion term was identified in old_term_collector as {old_term_collector[hybrid_index_pair]} but in the new_term_collector as {new_term_collector[hybrid_index_pair]}"
-
-                # Remove the entry in the mod_new_term collector
-                if hybrid_index_pair not in mod_new_term_collector:  # If the hybrid_index_pair is not in the mod_new_term_collector, check to see if its there in a different order
-                    hybrid_index_pair = self._find_torsion_match(hybrid_index_pair,
-                                                                 old_term_collector[hybrid_index_pair],
-                                                                 mod_new_term_collector)
-                if hybrid_index_pair: # If hybrid_index_pair is None, do not add it to the dictionary
-                    mod_new_term_collector.pop(hybrid_index_pair)
+            # if atom_class == 'environment_atoms':
+            #     # Check that the list of old terms is equal to the list of new terms
+            #     assert self._is_torsion_equal(hybrid_index_pair,
+            #                                   old_term_collector[hybrid_index_pair],
+            #                                   hybrid_index_pair,
+            #                                   new_term_collector[hybrid_index_pair]), \
+            #         f"hybrid_index_pair {hybrid_index_pair} torsion term was identified in old_term_collector as {old_term_collector[hybrid_index_pair]} but in the new_term_collector as {new_term_collector[hybrid_index_pair]}"
+            #
+            #     # Remove the entry in the mod_new_term collector
+            #     if hybrid_index_pair not in mod_new_term_collector:  # If the hybrid_index_pair is not in the mod_new_term_collector, check to see if its there in a different order
+            #         hybrid_index_pair = self._find_torsion_match(hybrid_index_pair,
+            #                                                      old_term_collector[hybrid_index_pair],
+            #                                                      mod_new_term_collector)
+            #     if hybrid_index_pair: # If hybrid_index_pair is None, do not add it to the dictionary
+            #         mod_new_term_collector.pop(hybrid_index_pair)
 
 
             for torsion_term in old_term_collector[hybrid_index_pair]:
@@ -3740,9 +3759,10 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                 # Get old terms
                 old_torsion_idx, periodicity_old, phase_old, K_old = torsion_term
 
-                if atom_class in ['unique_old_atoms', 'core_atoms']:
+                # Set new terms
+                if atom_class in ['core_atoms', 'environment_atoms']:
                     periodicity_new, phase_new, K_new = periodicity_old * 0., phase_old * 0., K_old * 0.
-                elif atom_class == 'environment_atoms':
+                elif atom_class == 'unique_old_atoms':
                     periodicity_new, phase_new, K_new = periodicity_old, phase_old, K_old
 
                 # Add torsion
@@ -3751,11 +3771,11 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                               hybrid_index_pair[2],
                               hybrid_index_pair[3],
                               rest_id + alch_id + [periodicity_old,
-                                                    phase_old,
-                                                    K_old,
-                                                    periodicity_new,
-                                                    phase_new,
-                                                    K_new])
+                                                   periodicity_new,
+                                                   phase_old,
+                                                   phase_new,
+                                                   K_old,
+                                                   K_new])
                 hybrid_torsion_idx = custom_torsion_force.addTorsion(*torsion_term)
 
                 # Add to dictionary for bookkeeping
@@ -3768,31 +3788,37 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                 else:
                     raise Exception(f"Old torsion index {old_torsion_idx} cannot be a unique new torsion index")
 
-        # Now iterate over the modified new term collector and add appropriate torsions. These should only be unique new or core, right?
+        # Now iterate over the modified new term collector and add appropriate torsions.
         for hybrid_index_pair in mod_new_term_collector.keys():
 
             # Given the atom indices, get rest and alchemical identifiers
             idx_set = set(list(hybrid_index_pair))
             rest_id = self.get_rest_identifier(idx_set)
             alch_id, atom_class = self.get_alch_identifier(idx_set)
-            assert atom_class in ['unique_new_atoms', 'core_atoms'], f"We are iterating over modified new term collector, but the torsion returned is {atom_class}"
+            assert atom_class in ['unique_new_atoms', 'core_atoms', 'environment_atoms'], f"We are iterating over modified new term collector, but the torsion returned is {atom_class}"
 
             for torsion_term in mod_new_term_collector[hybrid_index_pair]:
 
-                # Get new term
+                # Get new terms
                 new_torsion_idx, periodicity_new, phase_new, K_new = torsion_term
+
+                # Set old terms
+                if atom_class in ['core_atoms', 'environment_atoms']:
+                    periodicity_old, phase_old, K_old = periodicity_new * 0., phase_new * 0., K_new * 0.
+                elif atom_class == 'unique_new_atoms':
+                    periodicity_old, phase_old, K_old = periodicity_new, phase_new, K_new
 
                 # Add torsion
                 torsion_term = (hybrid_index_pair[0],
                               hybrid_index_pair[1],
                               hybrid_index_pair[2],
                               hybrid_index_pair[3],
-                              rest_id + alch_id + [periodicity_new * 0.,
-                                                    phase_new * 0.,
-                                                    K_new * 0.,
-                                                    periodicity_new,
-                                                    phase_new,
-                                                    K_new])
+                              rest_id + alch_id + [periodicity_old,
+                                                   periodicity_new,
+                                                   phase_old,
+                                                   phase_new,
+                                                   K_old,
+                                                   K_new])
                 hybrid_torsion_idx = custom_torsion_force.addTorsion(*torsion_term)
 
                 # Add to dictionary for bookkeeping
