@@ -95,6 +95,8 @@ class PointMutationExecutor(object):
                  ligand_input=None,
                  ligand_index=0,
                  allow_undefined_stereo_sdf=False,
+                 extra_sidechain_map=None,
+                 demap_CBs=False,
                  water_model='tip3p',
                  ionic_strength=0.15 * unit.molar,
                  forcefield_files=['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
@@ -135,6 +137,10 @@ class PointMutationExecutor(object):
                 which ligand to use
             allow_undefined_stereo_sdf : bool, default False
                 whether to allow an SDF file to contain undefined stereocenters
+            extra_sidechain_map : dict, key: int, value: int, default None
+                map of new to old sidechain atom indices to add to the default map (by default, we only map backbone atoms and CBs)
+            demap_CBs : bool, default False
+                whether to remove CBs from the mapping
             water_model : str, default 'tip3p'
                 solvent model to use for solvation
             ionic_strength : float * unit.molar, default 0.15 * unit.molar
@@ -270,7 +276,7 @@ class PointMutationExecutor(object):
                                                                  allowed_mutations=[(mutation_residue_id, proposed_residue)], # The residue ids allowed to mutate with the three-letter code allowed to change
                                                                  aggregate=True) # Always allow aggregation
 
-            topology_proposal = point_mutation_engine.propose(sys, top)
+            topology_proposal = point_mutation_engine.propose(sys, top, extra_sidechain_map=extra_sidechain_map, demap_CBs=demap_CBs)
 
             # Fix naked charges in old and new systems
             old_topology_atom_map = {atom.index: atom.residue.name for atom in topology_proposal.old_topology.atoms()}
@@ -285,11 +291,17 @@ class PointMutationExecutor(object):
                             continue
                         charge, sigma, epsilon = nb_force.getParticleParameters(idx)
                         if sigma == 0*unit.nanometer:
-                            sigma = 0.06*unit.nanometer
-                            nb_force.setParticleParameters(idx, charge, sigma, epsilon)
+                            new_sigma = 0.06*unit.nanometer
+                            nb_force.setParticleParameters(idx, charge, new_sigma, epsilon)
+                            _logger.info(f"Changed particle {idx}'s sigma from {sigma} to {new_sigma}")
                         if epsilon == 0*unit.kilojoule_per_mole:
-                            epsilon = 0.0001*unit.kilojoule_per_mole
-                            nb_force.setParticleParameters(idx, charge, sigma, epsilon)
+                            new_epsilon = 0.0001*unit.kilojoule_per_mole
+                            nb_force.setParticleParameters(idx, charge, sigma, new_epsilon)
+                            _logger.info(f"Changed particle {idx}'s epsilon from {epsilon} to {new_epsilon}")
+                            if sigma == 1.0 * unit.nanometer: # in protein.ff14SB, hydroxyl hydrogens have sigma=1 and epsilon=0
+                                new_sigma = 0.1*unit.nanometer
+                                nb_force.setParticleParameters(idx, charge, new_sigma, epsilon)
+                                _logger.info(f"Changed particle {idx}'s sigma from {sigma} to {new_sigma}")
 
             # Only validate energy bookkeeping if the WT and proposed residues do not involve rings
             old_res = [res for res in top.residues() if res.id == mutation_residue_id][0]

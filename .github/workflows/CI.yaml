@@ -13,21 +13,17 @@ on:
 
 jobs:
   test:
-    name: Test on ${{ matrix.cfg.os }}, Python ${{ matrix.cfg.python-version }}, OpenMM ${{ matrix.cfg.openmm }}
-    runs-on: ${{ matrix.cfg.os }}
+    name: Test on ubuntu-latest, Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm }}
+    runs-on: ubuntu-latest
+
     strategy:
       fail-fast: false
       matrix:
-        cfg:
-          - { os: ubuntu-latest, python-version: 3.7, openmm: latest }
-          - { os: ubuntu-latest, python-version: 3.8, openmm: latest }
-          - { os: ubuntu-latest, python-version: 3.7, openmm: nightly }
-          - { os: ubuntu-latest, python-version: 3.8, openmm: nightly }
-          - { os: ubuntu-latest, python-version: 3.7, openmm: conda-forge }
-          - { os: ubuntu-latest, python-version: 3.8, openmm: conda-forge }
+        python-version: [3.7, 3.8, 3.9]
+        openmm: ["nightly", "7.5.1.", "7.6.0"]
 
     env:
-      OPENMM: ${{ matrix.cfg.openmm }}
+      OPENMM: ${{ matrix.openmm }}
       OE_LICENSE: ${{ github.workspace }}/oe_license.txt
 
     steps:
@@ -44,26 +40,25 @@ jobs:
       - uses: conda-incubator/setup-miniconda@v2
         with:
           python-version: ${{ matrix.python-version }}
+          mamba-version: "*"
           environment-file: devtools/conda-envs/test_env.yaml
-          channels: conda-forge,defaults,omnia-dev,openeye
+          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge,defaults,omnia-dev,openeye
           activate-environment: test
           auto-update-conda: true
           auto-activate-base: false
           show-channel-urls: true
+          channel-priority: true
 
       - name: Refine test environment
         shell: bash -l {0}
         run: |
-          case ${{ matrix.cfg.openmm }} in
-            latest)
-              echo "Using latest release OpenMM."
-              conda install --quiet -c conda-forge openmm;;
-           #rc) # We can uncomment this case when we have this label on conda-forge
-             #echo "Using OpenMM rc" 
-             #conda install --quiet -c conda-forge/label/openmm_rc openmm;;
+          case ${{ matrix.openmm }} in
             nightly)
-              echo "Using OpenMM nightly dev build."
-              conda install --quiet -c omnia-dev openmm;;
+              echo "Using nightly dev build of OpenMM."
+              conda install -y -c omnia-dev openmm --override-channels --force-reinstall;;
+            *)
+              echo "installing OpenMM version ${{ matrix.openmm }}"
+              mamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
           esac
 
       - name: Install package
@@ -74,8 +69,8 @@ jobs:
       - name: Environment Information
         shell: bash -l {0}
         run: |
-          conda info -a
-          conda list
+          mamba info -a
+          mamba list
 
       - name: Decrypt OpenEye license
         shell: bash -l {0}
