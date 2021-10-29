@@ -39,7 +39,7 @@ def concatenate_files(input_files, output_file):
                     outfile.write(line)
 
 
-def run_relative_perturbation(lig_a_idx, lig_b_idx, tidy=True):
+def run_relative_perturbation(lig_a_idx, lig_b_idx, reverse=False, tidy=True):
     """
     Perform relative free energy simulation using perses CLI.
 
@@ -49,6 +49,8 @@ def run_relative_perturbation(lig_a_idx, lig_b_idx, tidy=True):
             Index for first ligand (ligand A)
         lig_b_idx : int
             Index for second ligand (ligand B)
+        reverse: bool
+            Run the edge in reverse direction. Swaps the ligands.
         tidy : bool, optional
             remove auto-generated yaml files.
 
@@ -69,8 +71,18 @@ def run_relative_perturbation(lig_a_idx, lig_b_idx, tidy=True):
     # generate yaml file from template
     options['protein_pdb'] = 'target.pdb'
     options['ligand_file'] = 'ligands.sdf'
-    options['old_ligand_index'] = lig_a_idx
-    options['new_ligand_index'] = lig_b_idx
+    if reverse:
+        # Do the other direction of ligands
+        options['old_ligand_index'] = lig_b_idx
+        options['new_ligand_index'] = lig_a_idx
+        # mark the output directory with reversed
+        trajectory_directory = f'{trajectory_directory}_reversed'
+        # mark new yaml file with reversed
+        temp_path = new_yaml.split('.')
+        new_yaml = f'{temp_path[0]}_reversed.{temp_path[1]}'
+    else:
+        options['old_ligand_index'] = lig_a_idx
+        options['new_ligand_index'] = lig_b_idx
     options['trajectory_directory'] = f'{trajectory_directory}'
     with open(new_yaml, 'w') as outfile:
         yaml.dump(options, outfile)
@@ -107,8 +119,14 @@ arg_parser.add_argument(
     help="Edge index (0-based) according to edges yaml file in dataset. Ex. --edge 5 (for sixth edge)",
     required=True
 )
+arg_parser.add_argument(
+    "--reversed",
+    action='store_true',
+    help="Whether to run the edge in reverse direction. Helpful for consistency checks."
+)
 args = arg_parser.parse_args()
 target = args.target
+is_reversed = args.reversed
 
 # Fetch protein pdb file
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
@@ -154,4 +172,4 @@ ligands_list = list(ligands_dict.keys())
 lig_a_index = ligands_list.index(ligand_a_name)
 lig_b_index = ligands_list.index(ligand_b_name)
 # Perform the simulation
-run_relative_perturbation(lig_a_index, lig_b_index)
+run_relative_perturbation(lig_a_index, lig_b_index, reverse=is_reversed)
