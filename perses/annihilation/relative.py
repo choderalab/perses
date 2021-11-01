@@ -3750,14 +3750,14 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         for torsion_idx in range(old_system_torsion_force.getNumTorsions()):
             p1, p2, p3, p4, periodicity, phase, k = old_system_torsion_force.getTorsionParameters(torsion_idx) # Grab the parameters
             hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2], self._old_to_hybrid_map[p3], self._old_to_hybrid_map[p4] # Make hybrid indices
-            old_term_collector[(hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4)] = torsion_idx
+            old_term_collector[torsion_idx] = [hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4, periodicity, phase, k]
 
         # Repeat for the new system torsion force
         new_term_collector = {}
         for torsion_idx in range(new_system_torsion_force.getNumTorsions()):
             p1, p2, p3, p4, periodicity, phase, k = new_system_torsion_force.getTorsionParameters(torsion_idx) # Grab the parameters
             hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2], self._new_to_hybrid_map[p3], self._new_to_hybrid_map[p4] #make hybrid indices
-            new_term_collector[(hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4)] = torsion_idx
+            new_term_collector[torsion_idx] = [hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4, periodicity, phase, k]
 
         # Build generator for debugging purposes
         self._hybrid_to_old_torsion_indices = {}
@@ -3767,10 +3767,11 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
 
         # Iterate over the old_term_collector and add appropriate torsions
         new_torsions_to_ignore = []
-        for atom_indices, old_torsion_idx in old_term_collector.items():
+        for old_torsion_idx, torsion_params in old_term_collector.items():
 
-            # Get old terms
-            _, _, _, _, periodicity_old, phase_old, K_old = old_system_torsion_force.getTorsionParameters(old_torsion_idx)
+            # Get atom indices and old terms
+            atom_indices = torsion_params[:4]
+            periodicity_old, phase_old, K_old = torsion_params[4:]
 
             # Given the atom indices, get rest and alchemical identifiers
             rest_id = self.get_rest_identifier(set(atom_indices))
@@ -3794,21 +3795,20 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
 
             # Set new terms
             if atom_class in ['core_atoms', 'environment_atoms']:
-                if atom_indices in new_term_collector.keys():
-                    new_torsion_idx = new_term_collector[atom_indices]
-                    _, _, _, _, periodicity_new, phase_new, K_new = new_system_torsion_force.getTorsionParmeters(new_torsion_idx)
+                if torsion_params in new_term_collector.values():
+                    periodicity_new, phase_new, K_new = periodicity_old, phase_old, K_old
                     new_torsions_to_ignore.append(atom_indices)
                 else:
-                    print("iterating through old torsions, found torsion that is not present in new system in the same atom order: ", atom_indices)
+                    print("iterating through old torsions, found torsion that is not present in new system in the same atom order with the same params: ", atom_indices)
                     periodicity_new, phase_new, K_new = periodicity_old * 0., phase_old * 0., K_old * 0.
             elif atom_class == 'unique_old_atoms':
                 periodicity_new, phase_new, K_new = periodicity_old, phase_old, K_old
 
             # Add torsion
-            torsion_term = (hybrid_p1,
-                          hybrid_p2,
-                          hybrid_p3,
-                          hybrid_p3,
+            torsion_term = (atom_indices[0],
+                          atom_indices[1],
+                          atom_indices[2],
+                          atom_indices[3],
                           rest_id + alch_id + [periodicity_old,
                                                periodicity_new,
                                                phase_old,
@@ -3828,12 +3828,13 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                 raise Exception(f"Old torsion index {old_torsion_idx} cannot be a unique new torsion index")
 
         # Now iterate over the new term collector and add appropriate torsions.
-        for atom_indices, new_torsion_idx in new_term_collector.items():
+        for new_torsion_idx, torsion_params in new_term_collector.items():
+ 
+            # Get atom indices and new terms
+            atom_indices = torsion_params[:4]
+            periodicity_new, phase_new, K_new = torsion_params[4:]
 
             if atom_indices not in new_torsions_to_ignore:
-
-                # Get new terms
-                _, _, _, _, periodicity_new, phase_new, K_new = new_system_torsion_force.getTorsionParameters(new_torsion_idx)
 
                 # Given the atom indices, get rest and alchemical identifiers
                 rest_id = self.get_rest_identifier(set(atom_indices))
@@ -3848,10 +3849,10 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                     periodicity_old, phase_old, K_old = periodicity_new, phase_new, K_new
 
                 # Add torsion
-                torsion_term = (hybrid_p1,
-                              hybrid_p2,
-                              hybrid_p3,
-                              hybrid_p4,
+                torsion_term = (atom_indices[0],
+                              atom_indices[1],
+                              atom_indices[2],
+                              atom_indices[3],
                               rest_id + alch_id + [periodicity_old,
                                                    periodicity_new,
                                                    phase_old,
