@@ -159,6 +159,8 @@ def test_resume_small_molecule(tmp_path):
 @pytest.mark.gpu_ci
 def test_resume_protein_mutation_with_checkpoint(tmp_path):
 
+    os.chdir(tmp_path)
+
     pdb_filename = resource_filename("perses", "data/ala_vacuum.pdb")
     solvent_delivery = PointMutationExecutor(
         pdb_filename,
@@ -223,6 +225,8 @@ def test_resume_protein_mutation_with_checkpoint(tmp_path):
 
 @pytest.mark.gpu_ci
 def test_resume_protein_mutation_no_checkpoint(tmp_path):
+
+    os.chdir(tmp_path)
 
     pdb_filename = resource_filename("perses", "data/ala_vacuum.pdb")
 
