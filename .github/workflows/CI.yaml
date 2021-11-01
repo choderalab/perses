@@ -55,7 +55,7 @@ jobs:
           case ${{ matrix.openmm }} in
             nightly)
               echo "Using nightly dev build of OpenMM."
-              conda install -y -c omnia-dev openmm --override-channels --force-reinstall;;
+              conda install -y -c omnia-dev openmm --override-channels --force-reinstall
               echo "Using beta build of openeye toolkit"
               conda install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
             *)
