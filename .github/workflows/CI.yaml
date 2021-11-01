@@ -85,7 +85,7 @@ jobs:
         run: |
           export TRAVIS=true
           pushd .
-          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto
+          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto -m "not gpu_needed"
           popd
 
       - name: Codecov
