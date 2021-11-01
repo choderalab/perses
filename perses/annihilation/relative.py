@@ -3733,7 +3733,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         for old_torsion_idx in range(old_system_torsion_force.getNumTorsions()):
 
             # Get old terms and hybrid indices
-            p1, p2, p3, p4, periodicity_old, phase_old, k_old = old_system_torsion_force.getTorsionParameters(old_torsion_idx)  # Grab the parameters
+            p1, p2, p3, p4, periodicity_old, phase_old, K_old = old_system_torsion_force.getTorsionParameters(old_torsion_idx)  # Grab the parameters
             hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2], self._old_to_hybrid_map[p3], self._old_to_hybrid_map[p4] # Get hybrid indices
             hybrid_index_pair = [hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]
 
@@ -3791,7 +3791,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         for new_torsion_idx in range(new_system_torsion_force.getNumTorsions()):
 
             # Get new terms and hybrid indices
-            p1, p2, p3, p4, periodicity_new, phase_new, k_new = new_system_torsion_force.getTorsionParameters(new_torsion_idx)  # Grab the parameters
+            p1, p2, p3, p4, periodicity_new, phase_new, K_new = new_system_torsion_force.getTorsionParameters(new_torsion_idx)  # Grab the parameters
             hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2], self._new_to_hybrid_map[p3], self._new_to_hybrid_map[p4] # Get hybrid indices
             hybrid_index_pair = [hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]
 
