@@ -3700,28 +3700,28 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         old_term_collector = {}
         new_term_collector = {}
 
-        # Gather the old system torsion force terms into a dict
-        for term_idx in range(old_system_torsion_force.getNumTorsions()):
-            p1, p2, p3, p4, periodicity, phase, k = old_system_torsion_force.getTorsionParameters(term_idx) # Grab the parameters
-            hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2], self._old_to_hybrid_map[p3], self._old_to_hybrid_map[p4] # Make hybrid indices
-            sorted_indices = tuple([hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]) if hybrid_p1 < hybrid_p4 else tuple([hybrid_p4, hybrid_p3, hybrid_p2, hybrid_p1])
-            if sorted_indices in old_term_collector.keys():
-                # It _is_ the case that some torsions have the same particle indices...
-                old_term_collector[sorted_indices].append([term_idx, periodicity, phase, k])
-            else:
-                # Make this a nested list to hold multiple terms
-                old_term_collector[sorted_indices] = [[term_idx, periodicity, phase, k]]
-
-        # Repeat for the new system torsion force
-        for term_idx in range(new_system_torsion_force.getNumTorsions()):
-            p1, p2, p3, p4, periodicity, phase, k = new_system_torsion_force.getTorsionParameters(term_idx) # Grab the parameters
-            hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2], self._new_to_hybrid_map[p3], self._new_to_hybrid_map[p4] #make hybrid indices
-            sorted_indices = tuple([hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]) if hybrid_p1 < hybrid_p4 else tuple([hybrid_p4, hybrid_p3, hybrid_p2, hybrid_p1])
-            if sorted_indices in new_term_collector.keys():
-                new_term_collector[sorted_indices].append([term_idx, periodicity, phase, k])
-            else:
-                new_term_collector[sorted_indices] = [[term_idx, periodicity, phase, k]]
-        mod_new_term_collector = {key: val for key, val in new_term_collector.items()}
+        # # Gather the old system torsion force terms into a dict
+        # for term_idx in range(old_system_torsion_force.getNumTorsions()):
+        #     p1, p2, p3, p4, periodicity, phase, k = old_system_torsion_force.getTorsionParameters(term_idx) # Grab the parameters
+        #     hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2], self._old_to_hybrid_map[p3], self._old_to_hybrid_map[p4] # Make hybrid indices
+        #     sorted_indices = tuple([hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]) if hybrid_p1 < hybrid_p4 else tuple([hybrid_p4, hybrid_p3, hybrid_p2, hybrid_p1])
+        #     if sorted_indices in old_term_collector.keys():
+        #         # It _is_ the case that some torsions have the same particle indices...
+        #         old_term_collector[sorted_indices].append([term_idx, periodicity, phase, k])
+        #     else:
+        #         # Make this a nested list to hold multiple terms
+        #         old_term_collector[sorted_indices] = [[term_idx, periodicity, phase, k]]
+        # 
+        # # Repeat for the new system torsion force
+        # for term_idx in range(new_system_torsion_force.getNumTorsions()):
+        #     p1, p2, p3, p4, periodicity, phase, k = new_system_torsion_force.getTorsionParameters(term_idx) # Grab the parameters
+        #     hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2], self._new_to_hybrid_map[p3], self._new_to_hybrid_map[p4] #make hybrid indices
+        #     sorted_indices = tuple([hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]) if hybrid_p1 < hybrid_p4 else tuple([hybrid_p4, hybrid_p3, hybrid_p2, hybrid_p1])
+        #     if sorted_indices in new_term_collector.keys():
+        #         new_term_collector[sorted_indices].append([term_idx, periodicity, phase, k])
+        #     else:
+        #         new_term_collector[sorted_indices] = [[term_idx, periodicity, phase, k]]
+        # mod_new_term_collector = {key: val for key, val in new_term_collector.items()}
 
         # Build generator for debugging purposes
         self._hybrid_to_old_torsion_indices = {}
@@ -3730,10 +3730,15 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         self._hybrid_to_environment_torsion_indices = {}
 
         # Iterate over the old_term_collector and add appropriate torsions
-        for hybrid_index_pair in old_term_collector.keys():
+        for old_torsion_idx in range(old_system_torsion_force.getNumTorsions()):
+
+            # Get old terms and hybrid indices
+            p1, p2, p3, p4, periodicity_old, phase_old, k_old = old_system_torsion_force.getTorsionParameters(old_torsion_idx)  # Grab the parameters
+            hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2], self._old_to_hybrid_map[p3], self._old_to_hybrid_map[p4] # Get hybrid indices
+            hybrid_index_pair = [hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]
 
             # Given the atom indices, get rest and alchemical identifiers
-            idx_set = set(list(hybrid_index_pair))
+            idx_set = set(hybrid_index_pair)
             rest_id = self.get_rest_identifier(idx_set)
             alch_id, atom_class = self.get_alch_identifier(idx_set)
 
@@ -3753,43 +3758,42 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             #     if hybrid_index_pair: # If hybrid_index_pair is None, do not add it to the dictionary
             #         mod_new_term_collector.pop(hybrid_index_pair)
 
+            # Set new terms
+            if atom_class in ['core_atoms', 'environment_atoms']:
+                periodicity_new, phase_new, K_new = periodicity_old * 0., phase_old * 0., K_old * 0.
+            elif atom_class == 'unique_old_atoms':
+                periodicity_new, phase_new, K_new = periodicity_old, phase_old, K_old
 
-            for torsion_term in old_term_collector[hybrid_index_pair]:
+            # Add torsion
+            torsion_term = (hybrid_p1,
+                          hybrid_p2,
+                          hybrid_p3,
+                          hybrid_p3,
+                          rest_id + alch_id + [periodicity_old,
+                                               periodicity_new,
+                                               phase_old,
+                                               phase_new,
+                                               K_old,
+                                               K_new])
+            hybrid_torsion_idx = custom_torsion_force.addTorsion(*torsion_term)
 
-                # Get old terms
-                old_torsion_idx, periodicity_old, phase_old, K_old = torsion_term
-
-                # Set new terms
-                if atom_class in ['core_atoms', 'environment_atoms']:
-                    periodicity_new, phase_new, K_new = periodicity_old * 0., phase_old * 0., K_old * 0.
-                elif atom_class == 'unique_old_atoms':
-                    periodicity_new, phase_new, K_new = periodicity_old, phase_old, K_old
-
-                # Add torsion
-                torsion_term = (hybrid_index_pair[0],
-                              hybrid_index_pair[1],
-                              hybrid_index_pair[2],
-                              hybrid_index_pair[3],
-                              rest_id + alch_id + [periodicity_old,
-                                                   periodicity_new,
-                                                   phase_old,
-                                                   phase_new,
-                                                   K_old,
-                                                   K_new])
-                hybrid_torsion_idx = custom_torsion_force.addTorsion(*torsion_term)
-
-                # Add to dictionary for bookkeeping
-                if atom_class == 'unique_old_atoms':
-                    self._hybrid_to_old_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
-                elif atom_class == 'core_atoms':
-                    self._hybrid_to_core_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
-                elif atom_class == 'environment_atoms':
-                    self._hybrid_to_environment_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
-                else:
-                    raise Exception(f"Old torsion index {old_torsion_idx} cannot be a unique new torsion index")
+            # Add to dictionary for bookkeeping
+            if atom_class == 'unique_old_atoms':
+                self._hybrid_to_old_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
+            elif atom_class == 'core_atoms':
+                self._hybrid_to_core_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
+            elif atom_class == 'environment_atoms':
+                self._hybrid_to_environment_torsion_indices[hybrid_torsion_idx] = old_torsion_idx
+            else:
+                raise Exception(f"Old torsion index {old_torsion_idx} cannot be a unique new torsion index")
 
         # Now iterate over the modified new term collector and add appropriate torsions.
-        for hybrid_index_pair in mod_new_term_collector.keys():
+        for new_torsion_idx in range(new_system_torsion_force.getNumTorsions()):
+
+            # Get new terms and hybrid indices
+            p1, p2, p3, p4, periodicity_new, phase_new, k_new = new_system_torsion_force.getTorsionParameters(new_torsion_idx)  # Grab the parameters
+            hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2], self._new_to_hybrid_map[p3], self._new_to_hybrid_map[p4] # Get hybrid indices
+            hybrid_index_pair = [hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]
 
             # Given the atom indices, get rest and alchemical identifiers
             idx_set = set(list(hybrid_index_pair))
@@ -3797,33 +3801,34 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             alch_id, atom_class = self.get_alch_identifier(idx_set)
             assert atom_class in ['unique_new_atoms', 'core_atoms', 'environment_atoms'], f"We are iterating over modified new term collector, but the torsion returned is {atom_class}"
 
-            for torsion_term in mod_new_term_collector[hybrid_index_pair]:
+            # Set old terms
+            if atom_class in ['core_atoms', 'environment_atoms']:
+                periodicity_old, phase_old, K_old = periodicity_new * 0., phase_new * 0., K_new * 0.
+            elif atom_class == 'unique_new_atoms':
+                periodicity_old, phase_old, K_old = periodicity_new, phase_new, K_new
 
-                # Get new terms
-                new_torsion_idx, periodicity_new, phase_new, K_new = torsion_term
+            # Add torsion
+            torsion_term = (hybrid_p1,
+                          hybrid_p2,
+                          hybrid_p3,
+                          hybrid_p4,
+                          rest_id + alch_id + [periodicity_old,
+                                               periodicity_new,
+                                               phase_old,
+                                               phase_new,
+                                               K_old,
+                                               K_new])
+            hybrid_torsion_idx = custom_torsion_force.addTorsion(*torsion_term)
 
-                # Set old terms
-                if atom_class in ['core_atoms', 'environment_atoms']:
-                    periodicity_old, phase_old, K_old = periodicity_new * 0., phase_new * 0., K_new * 0.
-                elif atom_class == 'unique_new_atoms':
-                    periodicity_old, phase_old, K_old = periodicity_new, phase_new, K_new
-
-                # Add torsion
-                torsion_term = (hybrid_index_pair[0],
-                              hybrid_index_pair[1],
-                              hybrid_index_pair[2],
-                              hybrid_index_pair[3],
-                              rest_id + alch_id + [periodicity_old,
-                                                   periodicity_new,
-                                                   phase_old,
-                                                   phase_new,
-                                                   K_old,
-                                                   K_new])
-                hybrid_torsion_idx = custom_torsion_force.addTorsion(*torsion_term)
-
-                # Add to dictionary for bookkeeping
-                if atom_class == 'unique_new_atoms':
-                    self._hybrid_to_new_torsion_indices[hybrid_torsion_idx] = new_torsion_idx
+            # Add to dictionary for bookkeeping
+            if atom_class == 'unique_new_atoms':
+                self._hybrid_to_new_torsion_indices[hybrid_torsion_idx] = new_torsion_idx
+            elif atom_class == 'core_atoms':
+                self._hybrid_to_core_torsion_indices[hybrid_torsion_idx] = new_torsion_idx
+            elif atom_class == 'environment_atoms':
+                self._hybrid_to_environment_torsion_indices[hybrid_torsion_idx] = new_torsion_idx
+            else:
+                raise Exception(f"New torsion index {new_torsion_idx} cannot be a unique old torsion index")
 
     def _create_electrostatics_force(self):
         """
