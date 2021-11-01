@@ -3750,14 +3750,14 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         for torsion_idx in range(old_system_torsion_force.getNumTorsions()):
             p1, p2, p3, p4, periodicity, phase, k = old_system_torsion_force.getTorsionParameters(torsion_idx) # Grab the parameters
             hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2], self._old_to_hybrid_map[p3], self._old_to_hybrid_map[p4] # Make hybrid indices
-            old_term_collector[[hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]] = torsion_idx
+            old_term_collector[set([hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4])] = torsion_idx
 
         # Repeat for the new system torsion force
         new_term_collector = {}
         for torsion_idx in range(new_system_torsion_force.getNumTorsions()):
             p1, p2, p3, p4, periodicity, phase, k = new_system_torsion_force.getTorsionParameters(torsion_idx) # Grab the parameters
             hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2], self._new_to_hybrid_map[p3], self._new_to_hybrid_map[p4] #make hybrid indices
-            new_term_collector[[hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]] = torsion_idx
+            new_term_collector[set([hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4])] = torsion_idx
 
         # Build generator for debugging purposes
         self._hybrid_to_old_torsion_indices = {}
@@ -3769,15 +3769,12 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         new_torsions_to_ignore = []
         for atom_indices, old_torsion_idx in old_term_collector.items():
 
-            # Get old terms and hybrid indices
+            # Get old terms
             _, _, _, _, periodicity_old, phase_old, K_old = old_system_torsion_force.getTorsionParameters(old_torsion_idx)
-            hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = atom_indices
-            hybrid_index_pair = [hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]
 
             # Given the atom indices, get rest and alchemical identifiers
-            idx_set = set(hybrid_index_pair)
-            rest_id = self.get_rest_identifier(idx_set)
-            alch_id, atom_class = self.get_alch_identifier(idx_set)
+            rest_id = self.get_rest_identifier(atom_indices)
+            alch_id, atom_class = self.get_alch_identifier(atom_indices)
 
             # if atom_class == 'environment_atoms':
             #     # Check that the list of old terms is equal to the list of new terms
@@ -3802,6 +3799,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                     _, _, _, _, periodicity_new, phase_new, K_new = new_system_torsion_force.getTorsionParmeters(new_torsion_idx)
                     new_torsions_to_ignore.append(atom_indices)
                 else:
+                    print("iterating through old torsions, found torsion that is not present in new system in the same atom order: ", atom_indices)
                     periodicity_new, phase_new, K_new = periodicity_old * 0., phase_old * 0., K_old * 0.
             elif atom_class == 'unique_old_atoms':
                 periodicity_new, phase_new, K_new = periodicity_old, phase_old, K_old
@@ -3834,19 +3832,17 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
 
             if atom_indices not in new_torsions_to_ignore:
 
-                # Get new terms and hybrid indices
+                # Get new terms
                 _, _, _, _, periodicity_new, phase_new, K_new = new_system_torsion_force.getTorsionParameters(new_torsion_idx)
-                hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = atom_indices
-                hybrid_index_pair = [hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]
 
                 # Given the atom indices, get rest and alchemical identifiers
-                idx_set = set(list(hybrid_index_pair))
-                rest_id = self.get_rest_identifier(idx_set)
-                alch_id, atom_class = self.get_alch_identifier(idx_set)
+                rest_id = self.get_rest_identifier(atom_indices)
+                alch_id, atom_class = self.get_alch_identifier(atom_indices)
                 assert atom_class in ['unique_new_atoms', 'core_atoms', 'environment_atoms'], f"We are iterating over modified new term collector, but the torsion returned is {atom_class}"
 
                 # Set old terms
                 if atom_class in ['core_atoms', 'environment_atoms']:
+                    print("iterating through new torsions, found torsion that is not present in old system in the same atom order: ", atom_indices)
                     periodicity_old, phase_old, K_old = periodicity_new * 0., phase_new * 0., K_new * 0.
                 elif atom_class == 'unique_old_atoms':
                     periodicity_old, phase_old, K_old = periodicity_new, phase_new, K_new
