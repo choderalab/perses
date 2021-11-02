@@ -24,6 +24,47 @@ base_repo_url = "https://github.com/openforcefield/protein-ligand-benchmark"
 
 
 # Helper functions
+
+def get_simdir_list(reversed=False):
+    """
+    Get list of directories to extract simulation data.
+
+    Attributes
+    ----------
+    reversed: bool, optional, default=False
+        Whether to consider the reversed simulations or not.
+
+    Returns
+    -------
+    dir_list: list
+        List of directories paths for simulation results.
+    """
+    # Load all expected simulation from directories
+    out_dirs = [filepath.split('/')[0] for filepath in glob.glob(f'out*/*complex.nc')]
+    reg = re.compile(r'out_[0-9]+_[0-9]+_reversed')  # regular expression to deal with reversed directories
+    if reversed:
+        # Choose only reversed directories
+        out_dirs = list(filter(reg.search, out_dirs))
+    else:
+        # Filter out reversed directories
+        out_dirs = list(itertools.filterfalse(reg.search, out_dirs))
+    return out_dirs
+
+
+def get_simulations_data(simulation_dirs):
+    """Generates a list of simulation data objects given the simulation directories paths."""
+    simulations = []
+    for out_dir in simulation_dirs:
+        # Load complete or fully working simulations
+        # TODO: Try getting better exceptions from openmmtools -- use non-generic exceptions
+        try:
+            simulation = Simulation(out_dir)
+            simulations.append(simulation)
+        except Exception:
+            warnings.warn(f"Edge in {out_dir} could not be loaded. Check simulation output is complete.")
+    return simulations
+
+
 # Copied straight from https://github.com/choderalab/qmlify
 # TODO: Do all of this with openff.arsenic - make respective PRs if needed 
 def absolute_from_relative(g, experimental, experimental_error):
@@ -82,11 +123,78 @@ def make_mm_graph(mm_results, expt, d_expt):
         mm_g.add_edge(ligA,
                       ligB,
                       calc_DDG=-sim.bindingdg/sim.bindingdg.unit,  # simulation reports A - B
-                      calc_dDDG=sim.bindingddg/sim.bindingddg.unit,
+                      calc_DDG_dev=sim.bindingddg/sim.bindingddg.unit,
                       exp_DDG=(expt[ligB] - expt[ligA]),
-                      exp_dDDG=exp_dDDG)  # add edge to the digraph
+                      exp_DDG_dev=exp_dDDG,
+                      vac_DG=sim._vacdg/sim._vacdg.unit,
+                      vac_DG_dev=sim._vacddg/sim._vacddg.unit,
+                      sol_DG=sim._soldg/sim._soldg.unit,
+                      sol_DG_dev=sim._solddg/sim._solddg.unit,
+                      com_DG=sim._comdg / sim._comdg.unit,
+                      com_DG_dev=sim._comddg / sim._comddg.unit
+                      )  # add edge to the digraph
     # absolute_from_relative(mm_g, expt, d_expt)
     return mm_g
+
+
+def map_from_edge_data(mm_graph, data_key='calc_DDG'):
+    """Creates a map/dictionary from edge data using the given key"""
+    data_map = {(edge[0], edge[1]): edge[2][data_key] for edge in mm_graph.edges(data=True)}
+    return data_map
+
+
+def compare_forward_reverse(data_key='calc_DDG'):
+    """
+    Compare reversed and forward simulations given the phase and the data keyword.
+    """
+    import matplotlib.pyplot as plt
+    # get forward sim directories path
+    forward_dirs = get_simdir_list(reversed=False)
+    # load forward simulations
+    forward_simulations = get_simulations_data(forward_dirs)
+    # Make graph with just he calculated quantities, don't care about experimental here
+    forward_graph = make_mm_graph(forward_simulations, [0]*len(forward_simulations), [0]*len(forward_simulations))
+
+    # Do the same for reversed simulations
+    reversed_dirs = get_simdir_list(reversed=True)
+    reversed_simulations = get_simulations_data(reversed_dirs)
+    reversed_graph = make_mm_graph(reversed_simulations, [0]*len(reversed_simulations), [0]*len(reversed_simulations))
+
+    # get maps/dictionaries with edge and data
+    forward_map = map_from_edge_data(forward_graph, data_key=data_key)
+    reversed_map = map_from_edge_data(reversed_graph, data_key=data_key)
+    # get maps/dictionaries with edge and data errors/deviations
+    forward_map_dev = map_from_edge_data(forward_graph, data_key=f"{data_key}_dev")
+    reversed_map_dev = map_from_edge_data(reversed_graph, data_key=f"{data_key}_dev")
+
+    # Get common edges/keys
+    common_edges = [key for key in forward_map.keys() if key in reversed_map.keys()]
+
+    # extract data and errors/deviations from objects
+    forward_data = [forward_map[edge] for edge in common_edges]
+    reversed_data = [-reversed_map[edge] for edge in common_edges]  # flip the sign for reverse data
+    forward_data_dev = [forward_map_dev[edge] for edge in common_edges]
+    reversed_data_dev = [reversed_map_dev[edge] for edge in common_edges]
+    # make the plot
+    fig, ax = plt.subplots()
+    plt.title(f"{data_key}")
+    plt.xlabel(f"forward")
+    plt.ylabel(f"reverse")
+    ax.scatter(forward_data, reversed_data)
+    ax.errorbar(forward_data,
+                reversed_data,
+                xerr=forward_data_dev,
+                yerr=reversed_data_dev,
+                linewidth=0.0,
+                elinewidth=2.0,
+                zorder=1
+                )
+    lims = [
+        np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
+        np.max([ax.get_xlim(), ax.get_ylim()]),  # max of both axes
+    ]
+    ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
+    plt.show()
 
 
 # Defining command line arguments
@@ -128,30 +236,20 @@ for _, ligand_data in ligands_dict.items():
 kBT = kB * 300 * unit.kelvin
 ligands_exp_values = kBT.in_units_of(unit.kilocalorie_per_mole) * np.log(ligands_exp_values)
 
-# Load simulation from directories
-out_dirs = [filepath.split('/')[0] for filepath in glob.glob(f'out*/*complex.nc')]
-reg = re.compile(r'out_[0-9]+_[0-9]+_reversed')  # regular expression to deal with reversed directories
-if args.reversed:
-    # Choose only reversed directories
-    out_dirs = list(filter(reg.search, out_dirs))
-else:
-    # Filter out reversed directories
-    out_dirs = list(itertools.filterfalse(reg.search, out_dirs))
+# Get paths for simulation output directories
+# out_dirs = get_simdir_list(reversed=args.reversed)
 
-simulations = []
-for out_dir in out_dirs:
-    # Load complete or fully working simulations
-    # TODO: Try getting better exceptions from openmmtools -- use non-generic exceptions
-    try:
-        simulation = Simulation(out_dir)
-        simulations.append(simulation)
-    except Exception:
-        warnings.warn(f"Edge in {out_dir} could not be loaded. Check simulation output is complete.")
+# Generate list with simulation objects
+# simulations = get_simulations_data(out_dirs)
+
+# compare forward and backward simulations
+# TODO: enable the comparison and data_key to be specified via cli
+compare_forward_reverse(data_key='com_DG')
 
 # create graph with results
-results_graph = make_mm_graph(simulations, ligands_exp_values, [0]*len(ligands_exp_values))
+# results_graph = make_mm_graph(simulations, ligands_exp_values, [0]*len(ligands_exp_values))
 
 # Print FE comparison
-for edge in results_graph.edges(data=True):
-    print(edge[0], edge[1], edge[2]['calc_DDG'], edge[2]['exp_DDG'])
+# for edge in results_graph.edges(data=True):
+#     print(edge[0], edge[1], edge[2]['calc_DDG'], edge[2]['exp_DDG'])
 
