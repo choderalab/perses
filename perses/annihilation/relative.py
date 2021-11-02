@@ -2692,8 +2692,14 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
     for alchemical scaling, but not rest scaling. Computation of contributions from the direct space is disabled.
 
     """
-
-    from openmmtools.constants import ONE_4PI_EPS0
+    
+    # Constants copied from: https://github.com/openmm/openmm/blob/master/platforms/reference/include/SimTKOpenMMRealType.h#L89
+    M_PI = 3.14159265358979323846
+    E_CHARGE = (1.602176634e-19)
+    AVOGADRO = (6.02214076e23)
+    EPSILON0 = (1e-6*8.8541878128e-12/(E_CHARGE*E_CHARGE*AVOGADRO))
+    ONE_4PI_EPS0 = (1/(4*M_PI*EPSILON0))
+    #from openmmtools.constants import ONE_4PI_EPS0
 
     # global parameters:
     #
@@ -2840,18 +2846,18 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
 
     _default_exceptions_expression_list = [
 
-        "U_electrostatics * electrostatics_rest_scale + U_sterics * sterics_rest_scale;",
-
-        # Define rest scale
-        "electrostatics_rest_scale = is_rest * lambda_rest_electrostatics_exceptions * lambda_rest_electrostatics_exceptions + is_inter * lambda_rest_electrostatics_exceptions + is_nonrest;",
-        "sterics_rest_scale = is_rest * lambda_rest_sterics_exceptions * lambda_rest_sterics_exceptions + is_inter * lambda_rest_sterics_exceptions + is_nonrest;",
+        "U_electrostatics + U_sterics * sterics_rest_scale;", # electrostatics_rest_scale will be applied in the next line
 
         # Define electrostatics functional form
         # Note that we need to subtract off the reciprocal space for exceptions
         # See explanation for why here: https://github.com/openmm/openmm/issues/3269#issuecomment-934686324
-        f"U_electrostatics = U_electrostatics_direct - U_electrostatics_reciprocal;",
+        f"U_electrostatics = U_electrostatics_direct * electrostatics_rest_scale - U_electrostatics_reciprocal;",
         f"U_electrostatics_direct = {ONE_4PI_EPS0} * chargeProd_exceptions / r_eff_electrostatics;",
-        f"U_electrostatics_reciprocal = {ONE_4PI_EPS0} * chargeProd_product * erf(alpha * r) / r_eff_electrostatics;",
+        f"U_electrostatics_reciprocal = {ONE_4PI_EPS0} * chargeProd_product * erf(alpha * r_eff_electrostatics) / r_eff_electrostatics;",
+
+        # Define rest scale
+        "electrostatics_rest_scale = is_rest * lambda_rest_electrostatics_exceptions * lambda_rest_electrostatics_exceptions + is_inter * lambda_rest_electrostatics_exceptions + is_nonrest;",
+        "sterics_rest_scale = is_rest * lambda_rest_sterics_exceptions * lambda_rest_sterics_exceptions + is_inter * lambda_rest_sterics_exceptions + is_nonrest;",
 
         # Define sterics functional form
         "U_sterics = 4 * epsilon * x * (x - 1.0);"
@@ -2910,8 +2916,6 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                  # generate htf for testing
                  generate_htf_for_testing=False,
 
-                 # whether to interpolate 14s
-                 interpolate_old_and_new_14s=False, # TODO: is this necessary? what about flatten torsions?
                  **kwargs):
 
         """
@@ -2941,7 +2945,6 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
         self._hybrid_system_forces = dict()
         self._old_positions = current_positions
         self._new_positions = new_positions
-        self._interpolate_14s = interpolate_old_and_new_14s
 
         # Prepare dicts of forces, which will be useful later
         self._old_system_forces = {type(force).__name__ : force for force in self._old_system.getForces()}
@@ -4012,14 +4015,14 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                     assert epsilon_old == epsilon_new, f"epsilons do not match: {epsilon_old} (old) and {epsilon_new} (new)"
 
             elif hybrid_idx in self._atom_classes['unique_old_atoms']: # it does not and we just turn the term off
-                charge_new, sigma_new, epsilon_new = charge_old, sigma_old, epsilon_old
+                charge_new, sigma_new, epsilon_new = charge_old * 0, sigma_old * 0, epsilon_old * 0
 
             else:
                 raise Exception(f"iterating over old terms yielded unique new atom.")
 
             # Add particle
             custom_nb_force_electrostatics.addParticle(rest_id + alch_id + [charge_old, charge_new])
-            custom_nb_force_sterics.addParticle(rest_id + alch_id + [sigma_old,  sigma_new, epsilon_old,epsilon_new])
+            custom_nb_force_sterics.addParticle(rest_id + alch_id + [sigma_old, sigma_new, epsilon_old, epsilon_new])
             done_indices.append(hybrid_idx)
 
         # Iterate over unique_new particles and add them to the custom nonbonded force
@@ -4031,8 +4034,9 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             alch_id, _ = self.get_alch_identifier(hybrid_idx)
             assert alch_id == [0, 0, 0, 1], f"encountered a problem iterating over what should only be unique new atoms; got {alch_id}"
 
-            # Get new terms
+            # Get old and new terms
             charge_new, sigma_new, epsilon_new = new_system_nbf.getParticleParameters(new_idx)
+            charge_old, sigma_old, epsilon_old = charge_new * 0, sigma_new * 0, epsilon_new * 0
 
             # Add particle
             custom_nb_force_electrostatics.addParticle(rest_id + alch_id + [charge_old, charge_new])
@@ -4126,20 +4130,19 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
 
         # Gather the old system bond force terms into a dict
         for term_idx in range(old_system_nbf.getNumExceptions()):
-            p1, p2, chargeProd, sigma, epsilon = old_system_nbf.getExceptionParameters(
-                term_idx)  # Grab the parameters
+            p1, p2, chargeProd, sigma, epsilon = old_system_nbf.getExceptionParameters(term_idx)  # Grab the parameters
             hybrid_p1, hybrid_p2 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2]  # Make hybrid indices
-            sorted_list = tuple(sorted([hybrid_p1, hybrid_p2]))  # Sort the indices
-            assert not sorted_list in old_term_collector.keys(), f"this bond already exists"
-            old_term_collector[sorted_list] = [term_idx, chargeProd, sigma, epsilon]
+            sorted_indices = tuple(sorted([hybrid_p1, hybrid_p2]))  # Sort the indices
+            assert not sorted_indices in old_term_collector.keys(), f"this bond already exists"
+            old_term_collector[sorted_indices] = [term_idx, chargeProd, sigma, epsilon]
 
         # Repeat for the new system bond force
         for term_idx in range(new_system_nbf.getNumExceptions()):
             p1, p2, chargeProd, sigma, epsilon = new_system_nbf.getExceptionParameters(term_idx)
             hybrid_p1, hybrid_p2 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2]
-            sorted_list = tuple(sorted([hybrid_p1, hybrid_p2]))
-            assert not sorted_list in new_term_collector.keys(), f"this bond already exists"
-            new_term_collector[sorted_list] = [term_idx, chargeProd, sigma, epsilon]
+            sorted_indices = tuple(sorted([hybrid_p1, hybrid_p2]))
+            assert not sorted_indices in new_term_collector.keys(), f"this bond already exists"
+            new_term_collector[sorted_indices] = [term_idx, chargeProd, sigma, epsilon]
 
         # Iterate over the old_term_collector and add appropriate bonds
         for hybrid_index_pair in old_term_collector.keys():
@@ -4154,7 +4157,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             try:
                 new_bond_idx, chargeProd_new, sigma_new, epsilon_new = new_term_collector[hybrid_index_pair]
             except Exception as e:  # This might be a unique old term
-                chargeProd_new, sigma_new, epsilon_new = chargeProd_old, sigma_old, epsilon_old
+                chargeProd_new, sigma_new, epsilon_new = chargeProd_old * 0, sigma_old * 0, epsilon_old * 0
 
             if alch_id[0] == 1:  # Tf the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
                 assert new_term_collector[hybrid_index_pair][1:] == old_term_collector[hybrid_index_pair][1:], f"hybrid_index_pair {hybrid_index_pair} bond term was identified in old term collector as {old_term_collector[hybrid_index_pair][1:]}, but in new term collector as {new_term_collector[hybrid_index_pair][1:]}"
@@ -4174,10 +4177,10 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             custom_nb_force_electrostatics.addExclusion(*hybrid_index_pair)
             custom_nb_force_sterics.addExclusion(*hybrid_index_pair)
 
-            if all([v.value_in_unit_system(unit.md_unit_system) == 0.0 for v in (chargeProd_old, chargeProd_new, epsilon_old, epsilon_new)]):
-                pass
-            else:
-                custom_exception_force.addBond(*params)
+           #if all([v.value_in_unit_system(unit.md_unit_system) == 0.0 for v in (chargeProd_old, chargeProd_new, epsilon_old, epsilon_new)]):
+           #     pass
+           # else:
+            custom_exception_force.addBond(*params)
 
         # Make a modified new_term_collector that omits the terms that are previously handled
         mod_new_term_collector = {key: val for key, val in new_term_collector.items() if
@@ -4192,7 +4195,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             alch_id, _ = self.get_alch_identifier(idx_set)
             assert alch_id == [0, 0, 0, 1], f"we are iterating over modified new term collector, but the string identifier returned {alch_id}"
 
-            # Get the new terms
+            # Get new terms
             new_bond_idx, chargeProd_new, sigma_new, epsilon_new = new_term_collector[hybrid_index_pair]
 
             # Compute chargeProd_product_old/new from original particle parameters
@@ -4201,18 +4204,21 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             p2_params = custom_nb_force_electrostatics.getParticleParameters(p2)
             chargeProd_product_new = p1_params[-1] * p2_params[-1]
 
+            # Get old terms
+            chargeProd_old, chargeProd_product_old, sigma_old, epsilon_old = chargeProd_new * 0, chargeProd_product_new * 0, sigma_new * 0, epsilon_new * 0
+
             # Add exclusions to the custon nb forces and exception to the custom bond force
             params = (hybrid_index_pair[0], hybrid_index_pair[1],
                                    rest_id + alch_id +
-                                   [chargeProd_new, chargeProd_new, chargeProd_product_new, chargeProd_product_new, sigma_new, sigma_new, epsilon_new, epsilon_new])
+                                   [chargeProd_old, chargeProd_new, chargeProd_product_old, chargeProd_product_new, sigma_old, sigma_new, epsilon_old, epsilon_new])
 
             custom_nb_force_electrostatics.addExclusion(*hybrid_index_pair)
             custom_nb_force_sterics.addExclusion(*hybrid_index_pair)
 
-            if all([v.value_in_unit_system(unit.md_unit_system) == 0.0 for v in (chargeProd_new, epsilon_new)]):
-                pass
-            else:
-                custom_exception_force.addBond(*params)
+            #if all([v.value_in_unit_system(unit.md_unit_system) == 0.0 for v in (chargeProd_new, epsilon_new)]):
+            #    pass
+            #else:
+            custom_exception_force.addBond(*params)
 
     def _create_reciprocal_space_force(self):
         """
@@ -4245,10 +4251,10 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             raise Exception("Nonbonded method %s not supported yet." % str(self._nonbonded_method))
 
         # Set the use of dispersion correction
-        if old_system_nbf.getUseDispersionCorrection():
-            standard_nonbonded_force.setUseDispersionCorrection(True)
-        else:
-            standard_nonbonded_force.setUseDispersionCorrection(False)
+        #if old_system_nbf.getUseDispersionCorrection():
+        #    standard_nonbonded_force.setUseDispersionCorrection(True)
+        #else:
+        standard_nonbonded_force.setUseDispersionCorrection(False)
 
         # Set the use of switching function
         if old_system_nbf.getUseSwitchingFunction():
@@ -4263,6 +4269,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
     def _copy_reciprocal_space(self):
         """
         Add particles to a standard NonbondedForce for reciprocal space nonbonded interactions and exceptions.
+
         """
 
         # Retrieve old and new nb forces
@@ -4318,7 +4325,6 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                 assert (particle_index == check_index), "Attempting to add incorrect particle to hybrid system"
 
                 # Charge is charge_old at lambda_electrostatics = 0, charge_new at lambda_electrostatics = 1
-                # TODO: We could also interpolate the Lennard-Jones here instead of core_sterics force so that core_sterics_force could just be softcore
                 # interpolate between old and new charge with lambda_electrostatics core; make sure to keep sterics off
                 standard_nonbonded_force.addParticleParameterOffset('lambda_alchemical_electrostatics_reciprocal', particle_index, (charge_new - charge_old), 0.0, 0.0)
 
@@ -4357,14 +4363,21 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             index_set = {index1_hybrid, index2_hybrid}
 
             if index_set.issubset(atom_classes['environment_atoms']):
+                # Get new indices
+                index1_new = hybrid_to_new_map[index1_hybrid]
+                index2_new = hybrid_to_new_map[index2_hybrid]
+
+                # Get new exception params
+                new_exception_params = self._find_exception(new_system_nbf, index1_new, index2_new)
+
+                # Assert that the new params are equal to the old params
+                assert exception_parameters == new_exception_params[2:], f"For {index_set} (hybrid indices), the old exception params are {exception_parameters}, but the new exception params are {new_exception_params}"
+
                 standard_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old * 0.0, epsilon_old * 0.0)
 
             # Handle exceptions where at least one atom is unique old
             elif len(index_set.intersection(atom_classes['unique_old_atoms'])) > 0:
-                if self._interpolate_14s:
-                    standard_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_old*0.0, sigma_old * 0, epsilon_old*0.0)
-                else:
-                    standard_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old * 0, epsilon_old * 0)
+                standard_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old * 0.0, epsilon_old * 0.0)
 
             # If the exception particles are neither solely old unique, solely environment, nor contain any unique old atoms, they are either core/environment or core/core
             # In this case, we need to get the parameters from the exception in the other (new) system, and interpolate between the two
@@ -4403,10 +4416,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
 
             # Handle exceptions where at least one atom is unique new
             if len(index_set.intersection(atom_classes['unique_new_atoms'])) > 0:
-                if self._interpolate_14s:
-                    standard_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_new * 0.0, sigma_new * 0.0, epsilon_new * 0.0)
-                else:
-                    standard_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_new, sigma_new * 0.0, epsilon_new * 0.0)
+                standard_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_new, sigma_new * 0.0, epsilon_new * 0.0)
 
             # However, there may be a core exception that exists in one system but not the other (ring closure)
             elif index_set.issubset(atom_classes['core_atoms']):
