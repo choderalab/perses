@@ -2667,7 +2667,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
     The nonbonded interactions are handled with 4 forces:
     - CustomNonbondedForce - direct space PME electrostatics interactions (with long range correction off)
     - CustomNonbondedForce - steric interactions (with long range correction on)
-    - CustomBondForce - direct space PME and steric exceptions
+    - CustomBondForce - electrostatics (uses Coulomb and not PME) and steric exceptions
     - NonbondedForce - reciprocal space PME electrostatics interactions/exceptions
 
     For the custom nonbonded/bond forces:
@@ -2693,7 +2693,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
 
     """
     
-    # Constants copied from: https://github.com/openmm/openmm/blob/master/platforms/reference/include/SimTKOpenMMRealType.h#L89
+    # Constants copied from: https://github.com/openmm/openmm/blob/master/platforms/reference/include/SimTKOpenMMRealType.h#L89. These will be imported directly once we have addresssed https://github.com/choderalab/openmmtools/issues/522
     M_PI = 3.14159265358979323846
     E_CHARGE = (1.602176634e-19)
     AVOGADRO = (6.02214076e23)
@@ -2701,61 +2701,12 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
     ONE_4PI_EPS0 = (1/(4*M_PI*EPSILON0))
     #from openmmtools.constants import ONE_4PI_EPS0
 
-    # global parameters:
-    #
-    # - lambda_rest_electrostatics{_exceptions} - this is sqrt(beta/beta0)
-    # - lambda_alchemical_electrostatics_old - this goes from 1 to 0 (on to off) and is split from lambda_electrostatics_new to enable additional control of the unique old vs. new atoms
-    # - lambda_alchemical_electrostatics_new - this goes from 0 to 1 (off to on)
-    # - lambda_rest_sterics{_exceptions} - this is sqrt(beta/beta0) and is separated from electrostatics to allow for more controllability
-    # - lambda_alchemical_sterics_old - this goes from 1 to 0 (on to off)
-    # - lambda_alchemical_sterics_new - this goes from 0 to 1 (off to on)
-
-    # per particle parameters:
-    #
-    # for rest scaling (these three sets are disjoint):
-    #     is_rest - indicates whether the atom is in the rest region (1), otherwise 0
-    #     is_nonrest_solute - indicates whether the atom is outside the rest region and is solute (1), otherwise 0
-    #     is_nonrest_solvent - indicates whether the atom is outside the rest region and is solvent (1), otherwise 0
-    # for alchemical scaling (these sets are disjoint):
-    #     is_environment - indicates whether the atom is considered environment (1), otherwise 0
-    #     is_core - indicates whether the atom is considered core (1), otherwise 0
-    #     is_unique_old - indicates whether the atom is considered unique old (1), otherwise 0
-    #     is_unique_new - indicates whether the atom is considered unique new(1), otherwise 0
-    # for defining energy:
-    #     charge_old - charge of the atom in the old system
-    #     charge_new - charge of the atom in the new system
-    #     sigma_old - sigma of the atom in the old system
-    #     sigma_new - sigma of the atom in the new system
-    #     epsilon_old - epsilon of the atom in the old system
-    #     epsilon_new - epsilon of the atom in the new system
-
-    # per bond parameters:
-    #
-    # for rest scaling (these three sets are disjoint):
-    #     is_rest - indicates whether the exception is in the rest region (1), otherwise 0
-    #     is_inter - indicates whether the exception straddles the rest region (1), otherwise 0
-    #     is_nonrest - indicates whether the exception is outside the rest region (1), otherwise 0
-    # for alchemical scaling (these sets are disjoint):
-    #     is_environment - indicates whether the exception is considered environment (1), otherwise 0
-    #     is_core - indicates whether the exception is considered core (1), otherwise 0
-    #     is_unique_old - indicates whether the exception is considered unique old (1), otherwise 0
-    #     is_unique_new - indicates whether the exception is considered unique new(1), otherwise 0
-    # for defining energy:
-    #     chargeProd_exceptions_old - charge product to be used in the exception (old system)
-    #     chargeProd_exceptions_new - charge product to be used in the exception (new system)
-    #     chargeProd_product_old - original charge product that will be replaced by the exception chargeProd (old system)
-    #     chargeProd_product_new - original charge product that will be replaced by the exception chargeProd (new system)
-    #     sigma_old - sigma to be used in the exception (old system)
-    #     sigma_new - sigma to be used in the exception (new system)
-    #     epsilon_old - epsilon to be used in the exception (old system)
-    #     epsilon_new - epsilon to be used in the exception (new system)
-
     _default_electrostatics_expression_list = [
 
         "U_electrostatics;",
 
         # Define electrostatics functional form
-        f"U_electrostatics = {ONE_4PI_EPS0} * chargeProd  * erfc(alpha * r)/ r_eff_electrostatics;",
+        f"U_electrostatics = {ONE_4PI_EPS0} * chargeProd  * erfc(alpha * r_eff_electrostatics)/ r_eff_electrostatics;",
 
         # Define chargeProd (with REST scaling)
         "chargeProd = (charge1 * p1_electrostatics_rest_scale) * (charge2 * p2_electrostatics_rest_scale);",
