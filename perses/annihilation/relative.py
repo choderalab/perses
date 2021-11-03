@@ -4054,10 +4054,10 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             charge_old, sigma_old, epsilon_old = old_system_nbf.getParticleParameters(old_idx)  # Grab the old parameters
             hybrid_idx = self._old_to_hybrid_map[old_idx]
             rest_id = self.get_rest_identifier(hybrid_idx)
-            alch_id, _ = self.get_alch_identifier(hybrid_idx)
+            alch_id, atom_class  = self.get_alch_identifier(hybrid_idx)
 
             # Determine what the new parameters are (and meanwhile add particles/offsets to reciprocal space force)
-            if hybrid_idx in self._atom_classes['core_atoms'] or hybrid_idx in self._atom_classes['environment_atoms']:  # Then it has a 'new' counterpart
+            if atom_class in ['core_atoms', 'environment_atoms']:  # Then it has a 'new' counterpart
                 new_idx = self._hybrid_to_new_map[hybrid_idx]
                 charge_new, sigma_new, epsilon_new = new_system_nbf.getParticleParameters(new_idx)
                 assert charge_old * charge_new != 0, "at least one of the charges is zero: {charge_old} (old) and {charge_new} (new)"
@@ -4065,21 +4065,18 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
                 assert epsilon_old * epsilon_new != 0, f"at least one of the epsilons is zero: {epsilon_old} (old) and {epsilon_new} (new)"
 
                 # Add particle to the reciprocal space force
-                particle_idx = standard_nonbonded_force.addParticle(charge_old, (sigma_old + sigma_new) * 0.0, epsilon_old * 0.0)
+                particle_idx = standard_nonbonded_force.addParticle(charge_old, sigma_old * 0.0, epsilon_old * 0.0)
                 assert (particle_idx == hybrid_idx), "Attempting to add incorrect particle to hybrid system"
 
                 # Charge is charge_old at lambda_electrostatics = 0, charge_new at lambda_electrostatics = 1
                 standard_nonbonded_force.addParticleParameterOffset('lambda_alchemical_electrostatics_reciprocal', particle_idx, (charge_new - charge_old), 0.0, 0.0)
 
-                if hybrid_idx in self._atom_classes['environment_atoms']:
+                if atom_class == 'environment_atoms':
                     assert charge_old == charge_new, f"charges do not match: {charge_old} (old) and {charge_new} (new)"
                     assert sigma_old == sigma_new, f"sigmas do not match: {sigma_old} (old) and {sigma_new} (new)"
                     assert epsilon_old == epsilon_new, f"epsilons do not match: {epsilon_old} (old) and {epsilon_new} (new)"
 
-                    # Add particle to the reciprocal space force
-                    standard_nonbonded_force.addParticle(charge_old, sigma_old * 0.0, epsilon_old * 0.0)
-
-            elif hybrid_idx in self._atom_classes['unique_old_atoms']: # it does not and we just turn the term off
+            elif atom_class == 'unique_old_atoms': # it does not and we just turn the term off
                 charge_new, sigma_new, epsilon_new = charge_old * 0, sigma_old * 0, epsilon_old * 0
 
                 # Add particle to reciprocal space force
@@ -4097,13 +4094,13 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             done_indices.append(hybrid_idx)
 
         # Iterate over unique_new particles and add them to the custom nonbonded force
-        unique_new_hybrid_indices = set(range(self._hybrid_system.getNumParticles())).difference(set(done_indices))
-        for hybrid_idx in list(unique_new_hybrid_indices):
+        unique_new_hybrid_indices = sorted(set(range(self._hybrid_system.getNumParticles())).difference(set(done_indices)))
+        for hybrid_idx in unique_new_hybrid_indices:
             # Given the atom index, get rest and alchemical identifiers
             new_idx = self._hybrid_to_new_map[hybrid_idx]
             rest_id = self.get_rest_identifier(hybrid_idx)
-            alch_id, _ = self.get_alch_identifier(hybrid_idx)
-            assert alch_id == [0, 0, 0, 1], f"encountered a problem iterating over what should only be unique new atoms; got {alch_id}"
+            alch_id, atom_class = self.get_alch_identifier(hybrid_idx)
+            assert atom_class == 'unique_new_atoms', f"encountered a problem iterating over what should only be unique new atoms; got {atom_class}"
 
             # Get old and new terms
             charge_new, sigma_new, epsilon_new = new_system_nbf.getParticleParameters(new_idx)
@@ -4245,7 +4242,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             except Exception as e:  # This might be a unique old term
                 chargeProd_new, sigma_new, epsilon_new = chargeProd_old * 0, sigma_old * 0, epsilon_old * 0
 
-            if alch_id[0] == 1:  # Tf the first entry in the alchemical id is 1, that means it is env, so the new/old terms must be identical?
+            if atom_class == 'environment_atoms':  # If it is env, the new/old terms must be identical?
                 assert new_term_collector[hybrid_index_pair][1:] == old_term_collector[hybrid_index_pair][1:], f"hybrid_index_pair {hybrid_index_pair} bond term was identified in old term collector as {old_term_collector[hybrid_index_pair][1:]}, but in new term collector as {new_term_collector[hybrid_index_pair][1:]}"
 
             # Compute chargeProd_product_old/new from original particle parameters
@@ -4297,7 +4294,7 @@ class RestCapablePMEHybridTopologyFactory(HybridTopologyFactory):
             idx_set = set(list(hybrid_index_pair))
             rest_id = self.get_rest_identifier(idx_set)
             alch_id, atom_class = self.get_alch_identifier(idx_set)
-            assert alch_id == [0, 0, 0, 1] or alch_id == [0, 1, 0, 0], f"we are iterating over modified new term collector, but the string identifier returned {alch_id}"
+            assert atom_class in ['unique_new_atoms', 'core_atoms'], f"we are iterating over modified new term collector, but the atom class returned {atom_class}"
 
             # Get new terms
             new_idx, chargeProd_new, sigma_new, epsilon_new = new_term_collector[hybrid_index_pair]
