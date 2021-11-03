@@ -143,11 +143,7 @@ def map_from_edge_data(mm_graph, data_key='calc_DDG'):
     return data_map
 
 
-def compare_forward_reverse(data_key='calc_DDG'):
-    """
-    Compare reversed and forward simulations given the phase and the data keyword.
-    """
-    import matplotlib.pyplot as plt
+def get_forward_reverse_graphs():
     # get forward sim directories path
     forward_dirs = get_simdir_list(reversed=False)
     # load forward simulations
@@ -160,6 +156,60 @@ def compare_forward_reverse(data_key='calc_DDG'):
     reversed_simulations = get_simulations_data(reversed_dirs)
     reversed_graph = make_mm_graph(reversed_simulations, [0]*len(reversed_simulations), [0]*len(reversed_simulations))
 
+    return forward_graph, reversed_graph
+
+
+def make_comparison_plot(xdata, ydata, xerr, yerr, title=None, residues=False):
+    """Create visualization comparing reverse and forward simulations."""
+    import matplotlib.pyplot as plt
+    # make the plot
+    fig, ax = plt.subplots()
+    plt.title(f"{title}")
+    plt.xlabel(f"forward")
+    plt.ylabel(f"reversed")
+    ax.scatter(xdata, ydata)
+    ax.errorbar(xdata,
+                ydata,
+                xerr=xerr,
+                yerr=yerr,
+                linewidth=0.0,
+                elinewidth=2.0,
+                zorder=1
+                )
+    lims = [
+        np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
+        np.max([ax.get_xlim(), ax.get_ylim()]),  # max of both axes
+    ]
+    ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
+    plt.show()
+
+
+def make_residuals_plot(x_data, y_data, uncertainties=None, title=None):
+    """Create visualization for residuals"""
+    import matplotlib.pyplot as plt
+    # If uncertainties not given make them zero
+    if uncertainties is None:
+        uncertainties = [0]*len(y_data)
+    # make the plot
+    fig, ax = plt.subplots()
+    plt.title(f"{title}")
+    plt.xlabel(f"edge")
+    plt.ylabel(f"residual")
+    ax.scatter(x_data, y_data)
+    ax.errorbar(x_data,
+                y_data,
+                yerr=uncertainties,
+                linewidth=0.0,
+                elinewidth=2.0,
+                zorder=1
+                )
+    plt.show()
+
+
+def compare_forward_reverse(forward_graph, reversed_graph, data_key='calc_DDG', residuals=False):
+    """
+    Compare reversed and forward simulations given the forward and revers graphs and the data key to lookup.
+    """
     # get maps/dictionaries with edge and data
     forward_map = map_from_edge_data(forward_graph, data_key=data_key)
     reversed_map = map_from_edge_data(reversed_graph, data_key=data_key)
@@ -171,30 +221,25 @@ def compare_forward_reverse(data_key='calc_DDG'):
     common_edges = [key for key in forward_map.keys() if key in reversed_map.keys()]
 
     # extract data and errors/deviations from objects
-    forward_data = [forward_map[edge] for edge in common_edges]
-    reversed_data = [-reversed_map[edge] for edge in common_edges]  # flip the sign for reverse data
-    forward_data_dev = [forward_map_dev[edge] for edge in common_edges]
-    reversed_data_dev = [reversed_map_dev[edge] for edge in common_edges]
-    # make the plot
-    fig, ax = plt.subplots()
-    plt.title(f"{data_key}")
-    plt.xlabel(f"forward")
-    plt.ylabel(f"reverse")
-    ax.scatter(forward_data, reversed_data)
-    ax.errorbar(forward_data,
-                reversed_data,
-                xerr=forward_data_dev,
-                yerr=reversed_data_dev,
-                linewidth=0.0,
-                elinewidth=2.0,
-                zorder=1
-                )
-    lims = [
-        np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
-        np.max([ax.get_xlim(), ax.get_ylim()]),  # max of both axes
-    ]
-    ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
-    plt.show()
+    x_data = [forward_map[edge] for edge in common_edges]
+    y_data = [-reversed_map[edge] for edge in common_edges]  # flip the sign for reverse data
+    x_data_dev = [forward_map_dev[edge] for edge in common_edges]
+    y_data_dev = [reversed_map_dev[edge] for edge in common_edges]
+
+    # TODO: refactor this part so that it has a function for dealing with residuals
+    if residuals:
+        # compute residuals before changing anything else
+        y_data = np.array(x_data) - np.array(y_data)
+        # x data would just be the edge
+        x_data = [str(x) for x in common_edges]
+        # calculate uncertainty propagation before changing anything on x_data_dev
+        y_data_dev = np.sqrt(np.array(x_data_dev)**2 + np.array(y_data_dev)**2)
+        x_data_dev = [0] * len(x_data)
+        # make residuals visualization
+        make_residuals_plot(x_data, y_data, uncertainties=y_data_dev, title=data_key)
+    else:
+        # Make correlation comparison visualization
+        make_comparison_plot(x_data, y_data, x_data_dev, y_data_dev, title=data_key)
 
 
 # Defining command line arguments
@@ -243,8 +288,11 @@ ligands_exp_values = kBT.in_units_of(unit.kilocalorie_per_mole) * np.log(ligands
 # simulations = get_simulations_data(out_dirs)
 
 # compare forward and backward simulations
+forward_graph, reversed_graph = get_forward_reverse_graphs()
 # TODO: enable the comparison and data_key to be specified via cli
-compare_forward_reverse(data_key='com_DG')
+compare_forward_reverse(forward_graph, reversed_graph, data_key='vac_DG', residuals=True)
+compare_forward_reverse(forward_graph, reversed_graph, data_key='sol_DG', residuals=True)
+compare_forward_reverse(forward_graph, reversed_graph, data_key='calc_DDG', residuals=True)
 
 # create graph with results
 # results_graph = make_mm_graph(simulations, ligands_exp_values, [0]*len(ligands_exp_values))
