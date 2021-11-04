@@ -2635,7 +2635,7 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
                 else:
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(hybrid_p1, hybrid_p2, chargeprod, sigma, epsilon)
 
-class RestCapableHybridTopologyFactory(HybridTopologyFactory):
+class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     """
     A subclass of HybridTopologyFactory that handles:
         - alchemical modification of atoms
@@ -2886,7 +2886,7 @@ class RestCapableHybridTopologyFactory(HybridTopologyFactory):
                 whether to generate the htf for testing
         """
 
-        _logger.info("*** Generating RestCapableHybridTopologyFactory ***")
+        _logger.info("*** Generating RESTCapableHybridTopologyFactory ***")
 
         self._topology_proposal = topology_proposal
         self._old_system = copy.deepcopy(topology_proposal.old_system)
