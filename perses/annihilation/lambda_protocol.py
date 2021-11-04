@@ -392,7 +392,7 @@ class RESTCapableRelativeAlchemicalState(AlchemicalState):
     lambda_alchemical_sterics_exceptions_old = _LambdaParameter('lambda_alchemical_sterics_exceptions_old')
     lambda_alchemical_sterics_exceptions_new = _LambdaParameter('lambda_alchemical_sterics_exceptions_new')
 
-    def set_alchemical_parameters(self, global_lambda, beta0, beta):
+    def set_alchemical_parameters(self, global_lambda, beta0, beta, lambda_protocol=RESTCapableLambdaProtocol()):
         """Set each lambda value according to the lambda_functions protocol.
         The undefined parameters (i.e. those being set to None) remain
         undefined.
@@ -401,7 +401,6 @@ class RESTCapableRelativeAlchemicalState(AlchemicalState):
         lambda_value : float
             The new value for all defined parameters.
         """
-        lambda_protocol = RESTCapableLambdaProtocol()
         self.global_lambda = global_lambda
         for parameter_name in lambda_protocol.functions:
             if 'rest' in parameter_name:
