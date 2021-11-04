@@ -219,6 +219,64 @@ class RESTProtocol(object):
     def __init__(self):
         self.functions = RESTProtocol.default_functions
 
+class RESTCapableLambdaProtocol(object):
+    default_functions = {'lambda_rest_bonds': lambda x, beta0, beta : -2 * (1 - np.sqrt(beta / beta0)) * x + 1 if x < 0.5 else 2 * (1 - np.sqrt(beta / beta0)) * x - 1 + 2 * np.sqrt(beta / beta0),
+                         'lambda_rest_angles': lambda x, beta0, beta : -2 * (1 - np.sqrt(beta / beta0)) * x + 1 if x < 0.5 else 2 * (1 - np.sqrt(beta / beta0)) * x - 1 + 2 * np.sqrt(beta / beta0),
+                         'lambda_rest_torsions':lambda x, beta0, beta : -2 * (1 - np.sqrt(beta / beta0)) * x + 1 if x < 0.5 else 2 * (1 - np.sqrt(beta / beta0)) * x - 1 + 2 * np.sqrt(beta / beta0),
+                         'lambda_rest_electrostatics': lambda x, beta0, beta : -2 * (1 - np.sqrt(beta / beta0)) * x + 1 if x < 0.5 else 2 * (1 - np.sqrt(beta / beta0)) * x - 1 + 2 * np.sqrt(beta / beta0),
+                         'lambda_rest_electrostatics_exceptions': lambda x, beta0, beta : -2 * (1 - np.sqrt(beta / beta0)) * x + 1 if x < 0.5 else 2 * (1 - np.sqrt(beta / beta0)) * x - 1 + 2 * np.sqrt(beta / beta0),
+                         'lambda_rest_sterics':lambda x, beta0, beta : -2 * (1 - np.sqrt(beta / beta0)) * x + 1 if x < 0.5 else 2 * (1 - np.sqrt(beta / beta0)) * x - 1 + 2 * np.sqrt(beta / beta0),
+                         'lambda_rest_sterics_exceptions': lambda x, beta0, beta : -2 * (1 - np.sqrt(beta / beta0)) * x + 1 if x < 0.5 else 2 * (1 - np.sqrt(beta / beta0)) * x - 1 + 2 * np.sqrt(beta / beta0),
+                         'lambda_alchemical_bonds_old': lambda x: 1 - x,
+                         'lambda_alchemical_bonds_new': lambda x: x,
+                         'lambda_alchemical_angles_old': lambda x: 1 - x,
+                         'lambda_alchemical_angles_new': lambda x: x,
+                         'lambda_alchemical_torsions_old': lambda x: 1 - x,
+                         'lambda_alchemical_torsions_new': lambda x: x,
+                         'lambda_alchemical_electrostatics_old': lambda x: 1 - x,
+                         'lambda_alchemical_electrostatics_new': lambda x: x,
+                         'lambda_alchemical_electrostatics_exceptions_old': lambda x: 1 - x,
+                         'lambda_alchemical_electrostatics_exceptions_new': lambda x: x,
+                         'lambda_alchemical_sterics_old': lambda x: 1 - x,
+                         'lambda_alchemical_sterics_new': lambda x: x,
+                         'lambda_alchemical_sterics_exceptions_old': lambda x: 1 - x,
+                         'lambda_alchemical_sterics_exceptions_new': lambda x: x,
+                         }
+
+    no_alchemy_functions = {'lambda_rest_bonds': lambda x, beta0, beta : (np.sqrt(beta / beta0) - 1) * x + 1,
+                                    'lambda_rest_angles': lambda x, beta0, beta : (np.sqrt(beta / beta0) - 1) * x + 1,
+                                    'lambda_rest_torsions': lambda x, beta0, beta : (np.sqrt(beta / beta0) - 1) * x + 1,
+                                    'lambda_rest_electrostatics': lambda x, beta0, beta : (np.sqrt(beta / beta0) - 1) * x + 1,
+                                    'lambda_rest_electrostatics_exceptions': lambda x, beta0, beta : (np.sqrt(beta / beta0) - 1) * x + 1,
+                                    'lambda_rest_sterics': lambda x, beta0, beta : (np.sqrt(beta / beta0) - 1) * x + 1,
+                                    'lambda_rest_sterics_exceptions': lambda x, beta0, beta : (np.sqrt(beta / beta0) - 1) * x + 1,
+                                    'lambda_alchemical_bonds_old': lambda x: 1 - x,
+                                    'lambda_alchemical_bonds_new': lambda x: x,
+                                    'lambda_alchemical_angles_old': lambda x: 1 - x,
+                                    'lambda_alchemical_angles_new': lambda x: x,
+                                    'lambda_alchemical_torsions_old': lambda x: 1 - x,
+                                    'lambda_alchemical_torsions_new': lambda x: x,
+                                    'lambda_alchemical_electrostatics_old': lambda x: 1 - x,
+                                    'lambda_alchemical_electrostatics_new': lambda x: x,
+                                    'lambda_alchemical_electrostatics_exceptions_old': lambda x: 1 - x,
+                                    'lambda_alchemical_electrostatics_exceptions_new': lambda x: x,
+                                    'lambda_alchemical_sterics_old': lambda x: 1 - x,
+                                    'lambda_alchemical_sterics_new': lambda x: x,
+                                    'lambda_alchemical_sterics_exceptions_old': lambda x: 1 - x,
+                                    'lambda_alchemical_sterics_exceptions_new': lambda x: x,
+        }
+
+    def __init__(self, functions='default'):
+        if functions == 'default':
+            self.functions = RESTCapableLambdaProtocol.default_functions
+        elif functions == 'no_alchemy':
+            self.functions = RESTCapableLambdaProtocol.no_alchemy_functions
+        else:
+            raise Exception("User defined lambda protocols are not yet supported")
+
+        # TODO: Do I want to subclass LambdaProtocol to get its methods?
+
+
 
 class RelativeAlchemicalState(AlchemicalState):
     """
@@ -302,3 +360,52 @@ class RESTState(AlchemicalState):
        for parameter_name in lambda_protocol.functions:
            lambda_value = lambda_protocol.functions[parameter_name](beta0, beta)
            setattr(self, parameter_name, lambda_value)
+
+class RESTCapableRelativeAlchemicalState(AlchemicalState):
+
+    class _LambdaParameter(AlchemicalState._LambdaParameter):
+        @staticmethod
+        def lambda_validator(self, instance, parameter_value):
+            if parameter_value is None:
+                return parameter_value
+            return float(parameter_value)
+
+    lambda_rest_bonds = _LambdaParameter('lambda_rest_bonds')
+    lambda_rest_angles = _LambdaParameter('lambda_rest_angles')
+    lambda_rest_torsions = _LambdaParameter('lambda_rest_torsions')
+    lambda_rest_electrostatics = _LambdaParameter('lambda_rest_electrostatics')
+    lambda_rest_electrostatics_exceptions = _LambdaParameter('lambda_rest_electrostatics_exceptions')
+    lambda_rest_sterics = _LambdaParameter('lambda_rest_sterics')
+    lambda_rest_sterics_exceptions = _LambdaParameter('lambda_rest_sterics_exceptions')
+    lambda_alchemical_bonds_old = _LambdaParameter('lambda_alchemical_bonds_old')
+    lambda_alchemical_bonds_new = _LambdaParameter('lambda_alchemical_bonds_new')
+    lambda_alchemical_angles_old = _LambdaParameter('lambda_alchemical_angles_old')
+    lambda_alchemical_angles_new = _LambdaParameter('lambda_alchemical_angles_new')
+    lambda_alchemical_torsions_old = _LambdaParameter('lambda_alchemical_torsions_old')
+    lambda_alchemical_torsions_new = _LambdaParameter('lambda_alchemical_torsions_new')
+    lambda_alchemical_electrostatics_old = _LambdaParameter('lambda_alchemical_electrostatics_old')
+    lambda_alchemical_electrostatics_new = _LambdaParameter('lambda_alchemical_electrostatics_new')
+    lambda_alchemical_electrostatics_exceptions_old = _LambdaParameter('lambda_alchemical_electrostatics_exceptions_old')
+    lambda_alchemical_electrostatics_exceptions_new = _LambdaParameter('lambda_alchemical_electrostatics_exceptions_new')
+    lambda_alchemical_sterics_old = _LambdaParameter('lambda_alchemical_sterics_old')
+    lambda_alchemical_sterics_new = _LambdaParameter('lambda_alchemical_sterics_new')
+    lambda_alchemical_sterics_exceptions_old = _LambdaParameter('lambda_alchemical_sterics_exceptions_old')
+    lambda_alchemical_sterics_exceptions_new = _LambdaParameter('lambda_alchemical_sterics_exceptions_new')
+
+    def set_alchemical_parameters(self, global_lambda, beta0, beta):
+        """Set each lambda value according to the lambda_functions protocol.
+        The undefined parameters (i.e. those being set to None) remain
+        undefined.
+        Parameters
+        ----------
+        lambda_value : float
+            The new value for all defined parameters.
+        """
+        lambda_protocol = RESTCapableLambdaProtocol()
+        self.global_lambda = global_lambda
+        for parameter_name in lambda_protocol.functions:
+            if 'rest' in parameter_name:
+                lambda_value = lambda_protocol.functions[parameter_name](global_lambda, beta0, beta)
+            else:
+                lambda_value = lambda_protocol.functions[parameter_name](global_lambda)
+            setattr(self, parameter_name, lambda_value)
