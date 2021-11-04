@@ -269,7 +269,7 @@ class RESTCapableLambdaProtocol(object):
     def __init__(self, functions='default'):
         if functions == 'default':
             self.functions = RESTCapableLambdaProtocol.default_functions
-        elif functions == 'no_alchemy':
+        elif functions == 'no-alchemy':
             self.functions = RESTCapableLambdaProtocol.no_alchemy_functions
         else:
             raise Exception("User defined lambda protocols are not yet supported")
