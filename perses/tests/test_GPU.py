@@ -2,7 +2,8 @@ import pytest
 
 
 @pytest.mark.gpu_needed
-def test_example_barnase_barstar_neq_switching():
+@pytest.mark.parametrize("platform_type", ["CUDA","OpenCL"])
+def test_gpu_platforms(platform_type):
     import logging
     import os
     import pathlib
@@ -29,7 +30,7 @@ def test_example_barnase_barstar_neq_switching():
         nsteps_neq = 32
         neq_splitting = "V R H O R V"
         timestep = 4.0 * unit.femtosecond
-        platform_name = "CUDA"
+        platform_name = platform_type
         temperature = 300 * unit.kelvin
         save_freq_eq = 1
         save_freq_neq = 2
