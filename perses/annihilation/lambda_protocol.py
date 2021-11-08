@@ -406,9 +406,9 @@ class RESTCapableRelativeAlchemicalState(AlchemicalState):
             if 'rest' in parameter_name:
                 lambda_value = lambda_protocol.functions[parameter_name](global_lambda, beta0, beta)
             else:
-                if endstate:
+                if endstate is None:
+                    lambda_value = lambda_protocol.functions[parameter_name](global_lambda)
+                else:
                     assert endstate in [0, 1], f"`endstate` should be 0 or 1, but was {endstate}"
                     lambda_value = lambda_protocol.functions[parameter_name](endstate)
-                else:
-                    lambda_value = lambda_protocol.functions[parameter_name](global_lambda)
             setattr(self, parameter_name, lambda_value)
