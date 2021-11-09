@@ -3052,11 +3052,18 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             list of hybrid indices that form the rest region
         """
 
-        for res in self._hybrid_topology.residues:
-            if res.resSeq == int(self._topology_proposal.mutation_residue_id) and res.chain.index == 0: # the residue to mutate will be in the first chain
-                mutated_res = res
+        # Retrieve the residue index of the residue that is being alchemified based on the first unique old atom
+        atom_index = list(self._atom_classes['unique_old_atoms'])[0]
+        hybrid_topology_atoms = list(self._hybrid_topology.atoms)
+        alchemical_residue_index = hybrid_topology_atoms[atom_index].residue.index
+
+        # Retrieve indices of all atoms in the alchemical residue
+        hybrid_topology_residues = list(self._hybrid_topology.residues)
+        mutated_res = hybrid_topology_residues[alchemical_residue_index]
         query_indices = [atom.index for atom in mutated_res.atoms]
         _logger.info(f"Generating rest_region with query indices: {query_indices}")
+
+        # Retrieve neighboring atoms within self._rest_radius nm of the query atoms
         traj = md.Trajectory(np.array(self._hybrid_positions), self._hybrid_topology)
         solute_atoms = list(traj.topology.select("is_protein"))
         rest_atoms = list(md.compute_neighbors(traj, self._rest_radius, query_indices, haystack_indices=solute_atoms)[0])

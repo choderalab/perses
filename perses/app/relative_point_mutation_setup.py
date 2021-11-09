@@ -283,7 +283,6 @@ class PointMutationExecutor(object):
                                                                  aggregate=True) # Always allow aggregation
 
             topology_proposal = point_mutation_engine.propose(sys, top, extra_sidechain_map=extra_sidechain_map, demap_CBs=demap_CBs)
-            topology_proposal.mutation_residue_id = mutation_residue_id
 
             # Fix naked charges in old and new systems
             old_topology_atom_map = {atom.index: atom.residue.name for atom in topology_proposal.old_topology.atoms()}
