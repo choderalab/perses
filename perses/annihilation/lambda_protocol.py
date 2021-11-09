@@ -237,10 +237,11 @@ class RESTCapableLambdaProtocol(object):
                          'lambda_alchemical_electrostatics_new': lambda x: x,
                          'lambda_alchemical_electrostatics_exceptions_old': lambda x: 1 - x,
                          'lambda_alchemical_electrostatics_exceptions_new': lambda x: x,
+                         'lambda_alchemical_electrostatics_reciprocal': lambda x: x,
                          'lambda_alchemical_sterics_old': lambda x: 1 - x,
                          'lambda_alchemical_sterics_new': lambda x: x,
                          'lambda_alchemical_sterics_exceptions_old': lambda x: 1 - x,
-                         'lambda_alchemical_sterics_exceptions_new': lambda x: x,
+                         'lambda_alchemical_sterics_exceptions_new': lambda x: x
                          }
 
     no_alchemy_functions = {'lambda_rest_bonds': lambda x, beta0, beta : (np.sqrt(beta / beta0) - 1) * x + 1,
@@ -260,10 +261,11 @@ class RESTCapableLambdaProtocol(object):
                                     'lambda_alchemical_electrostatics_new': lambda x: x,
                                     'lambda_alchemical_electrostatics_exceptions_old': lambda x: 1 - x,
                                     'lambda_alchemical_electrostatics_exceptions_new': lambda x: x,
+                                    'lambda_alchemical_electrostatics_reciprocal': lambda x: x,
                                     'lambda_alchemical_sterics_old': lambda x: 1 - x,
                                     'lambda_alchemical_sterics_new': lambda x: x,
                                     'lambda_alchemical_sterics_exceptions_old': lambda x: 1 - x,
-                                    'lambda_alchemical_sterics_exceptions_new': lambda x: x,
+                                    'lambda_alchemical_sterics_exceptions_new': lambda x: x
         }
 
     def __init__(self, functions='default'):
