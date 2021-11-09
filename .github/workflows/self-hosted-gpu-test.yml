@@ -102,12 +102,12 @@ jobs:
         run: |
           export TRAVIS=true
           cd perses
-          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto -m "gpu_ci or gpu_needed" --runslow
+          pytest -v --durations=0 -a "not advanced" -n auto -m "gpu_ci or gpu_needed" --runslow
 
       - name: Codecov
         uses: codecov/codecov-action@v1
         with:
-          file: ./perses/coverage.xml
+          file: ./coverage.xml
           fail_ci_if_error: true
 
   stop-runner:

@@ -15,14 +15,14 @@ Test that the examples in the repo run without errors.
 import pathlib
 import pytest
 import subprocess
-from perses.tests.utils import enter_temp_directory
+from tempfile import TemporaryDirectory
 
 ROOT_DIR_PATH = pathlib.Path(__file__).joinpath("../../../").resolve()
 
 
 def run_script_file(file_path, cmd_args=None):
     """Run through the shell a python script."""
-    with enter_temp_directory():
+    with TemporaryDirectory():
         cmd = ["python", file_path]
         print(cmd)
         # Extend cmd list with given cmd_args
