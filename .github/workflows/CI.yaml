@@ -13,21 +13,17 @@ on:
 
 jobs:
   test:
-    name: Test on ${{ matrix.cfg.os }}, Python ${{ matrix.cfg.python-version }}, OpenMM ${{ matrix.cfg.openmm }}
-    runs-on: ${{ matrix.cfg.os }}
+    name: Test on ubuntu-latest, Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm }}
+    runs-on: ubuntu-latest
+
     strategy:
       fail-fast: false
       matrix:
-        cfg:
-          - { os: ubuntu-latest, python-version: 3.7, openmm: latest }
-          - { os: ubuntu-latest, python-version: 3.8, openmm: latest }
-          - { os: ubuntu-latest, python-version: 3.7, openmm: nightly }
-          - { os: ubuntu-latest, python-version: 3.8, openmm: nightly }
-          - { os: ubuntu-latest, python-version: 3.7, openmm: conda-forge }
-          - { os: ubuntu-latest, python-version: 3.8, openmm: conda-forge }
+        python-version: [3.7, 3.8, 3.9]
+        openmm: ["nightly", "7.5.1.", "7.6.0"]
 
     env:
-      OPENMM: ${{ matrix.cfg.openmm }}
+      OPENMM: ${{ matrix.openmm }}
       OE_LICENSE: ${{ github.workspace }}/oe_license.txt
 
     steps:
@@ -56,16 +52,15 @@ jobs:
       - name: Refine test environment
         shell: bash -l {0}
         run: |
-          case ${{ matrix.cfg.openmm }} in
-            latest)
-              echo "Using latest release OpenMM."
-              mamba install --quiet -c conda-forge openmm;;
-           #rc) # We can uncomment this case when we have this label on conda-forge
-             #echo "Using OpenMM rc" 
-             #mamba install --quiet -c conda-forge/label/openmm_rc openmm;;
+          case ${{ matrix.openmm }} in
             nightly)
-              echo "Using OpenMM nightly dev build."
-              mamba install --quiet -c omnia-dev openmm;;
+              echo "Using nightly dev build of OpenMM."
+              conda install -y -c omnia-dev openmm --override-channels --force-reinstall
+              echo "Using beta build of openeye toolkit"
+              conda install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
+            *)
+              echo "installing OpenMM version ${{ matrix.openmm }}"
+              mamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
           esac
 
       - name: Install package
@@ -92,7 +87,7 @@ jobs:
         run: |
           export TRAVIS=true
           pushd .
-          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto
+          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto -m "not gpu_needed"
           popd
 
       - name: Codecov
