@@ -107,7 +107,9 @@ class PointMutationExecutor(object):
                  apo_box_dimensions=None,
                  flatten_torsions=False,
                  flatten_exceptions=False,
+                 rest_radius=None,
                  generate_unmodified_hybrid_topology_factory=True,
+                 generate_repartitioned_hybrid_topology_factory=False,
                  generate_rest_capable_hybrid_topology_factory=False,
                  **kwargs):
         """
@@ -163,10 +165,14 @@ class PointMutationExecutor(object):
                 in the htf, flatten torsions involving unique new atoms at lambda = 0 and unique old atoms are lambda = 1
             flatten_exceptions : bool, default False
                 in the htf, flatten exceptions involving unique new atoms at lambda = 0 and unique old atoms at lambda = 1
+            rest_radius : float, default None
+                radius for rest region, in nanometers
             generate_unmodified_hybrid_topology_factory : bool, default True
                 whether to generate a vanilla HybridTopologyFactory
-            generate_rest_capable_hybrid_topology_factory : bool, default False
+            generate_repartitioned_hybrid_topology_factory : bool, default False
                 whether to generate a RepartitionedHybridTopologyFactory
+            generate_rest_capable_hybrid_topology_factory : bool, default False
+                whether to generate a RESTCapableHybridTopologyFactory
         TODO : allow argument for spectator ligands besides the 'ligand_file'
 
         """
@@ -271,6 +277,7 @@ class PointMutationExecutor(object):
                                                                  aggregate=True) # Always allow aggregation
 
             topology_proposal = point_mutation_engine.propose(sys, top)
+            topology_proposal.mutation_residue_id = mutation_residue_id
 
             # Fix naked charges in old and new systems
             old_topology_atom_map = {atom.index: atom.residue.name for atom in topology_proposal.old_topology.atoms()}
@@ -318,10 +325,16 @@ class PointMutationExecutor(object):
 
             if generate_unmodified_hybrid_topology_factory:
                 repartitioned_endstate = None
-                self.generate_htf(HybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
+                self.generate_htf(HybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex, rest_radius)
+            if generate_repartitioned_hybrid_topology_factory:
+                for repartitioned_endstate in [0, 1]:
+                    self.generate_htf(RepartitionedHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex, rest_radius)
             if generate_rest_capable_hybrid_topology_factory:
-                 for repartitioned_endstate in [0, 1]:
-                    self.generate_htf(RepartitionedHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
+                repartitioned_endstate = None
+                if rest_radius is None:
+                    _logger.info("Trying to generate a RESTCapableHybridTopologyFactory, but rest_radius was not specified. Using 0.2 nm...")
+                    rest_radius = 0.2
+                self.generate_htf(RESTCapableHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex, rest_radius)
 
             if not topology_proposal.unique_new_atoms:
                 assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
@@ -346,7 +359,7 @@ class PointMutationExecutor(object):
             else:
                 pass
 
-    def generate_htf(self, factory, topology_proposal, old_positions, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex):
+    def generate_htf(self, factory, topology_proposal, old_positions, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex, rest_radius):
         htf = factory(topology_proposal=topology_proposal,
                                       current_positions=old_positions,
                                       new_positions=new_positions,
@@ -366,9 +379,10 @@ class PointMutationExecutor(object):
                                       interpolate_old_and_new_14s=flatten_exceptions,
                                       omitted_terms=None,
                                       endstate=repartitioned_endstate,
-                                      flatten_torsions=flatten_torsions)
+                                      flatten_torsions=flatten_torsions,
+                                      rest_radius=rest_radius)
         if is_complex:
-            if factory == HybridTopologyFactory:
+            if factory in [HybridTopologyFactory, RESTCapableHybridTopologyFactory]:
                 self.complex_htf = htf
             elif factory == RepartitionedHybridTopologyFactory:
                 if repartitioned_endstate == 0:
@@ -376,7 +390,7 @@ class PointMutationExecutor(object):
                 elif repartitioned_endstate == 1:
                     self.complex_rhtf_1 = htf
         else:
-            if factory == HybridTopologyFactory:
+            if factory in [HybridTopologyFactory, RESTCapableHybridTopologyFactory]:
                 self.apo_htf = htf
             elif factory == RepartitionedHybridTopologyFactory:
                 if repartitioned_endstate == 0:

@@ -2859,7 +2859,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                  new_positions,
 
                  # rest scaling arguments
-                 rest_region=None,
+                 rest_radius=0.2,
 
                  # nonbonded parameters
                  w_scale=0.1,
@@ -2878,8 +2878,8 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                 positions of coordinates of old system
             new_positions : [m,3] np.ndarray of float
                 positions of coordinates of new system
-            rest_region : list of int
-                list of hybrid-indexed particles that exist in the rest region
+            rest_radius : float, default 0.2
+                radius for rest region, in nanometers
             w_scale : float
                 maximum offset to add for the 4th dimension lifting
             generate_htf_for_testing : bool
@@ -2971,9 +2971,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         self._hybrid_topology = self._create_topology()
         _logger.info("Created hybrid topology")
 
-        # Validate rest region
-        self._validate_rest_region(rest_region)
-        self._rest_region = rest_region
+        # Generate rest region
+        self._rest_radius = rest_radius
+        self._rest_region = self._generate_rest_region()
+        _logger.info(f"Rest radius: {self._rest_radius} nm")
         _logger.info(f"Rest region: {self._rest_region}")
 
         # Prep look up dict for determining if atom is solvent
@@ -3041,32 +3042,26 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             # self._transcribe_non
             # self._transcribe_nonbondeds_reciprocal_space()
 
-    def _validate_rest_region(self, rest_region):
+    def _generate_rest_region(self):
         """
-        Check that scale_regions was defined correctly
-        Parameters
-        ----------
-        rest_region : lists of ints
-            contains the hybrid indices of atoms that should be scaled by rest
+        Generate rest region.
+        
+        Returns
+        -------
+        rest_atoms
+            list of hybrid indices that form the rest region
         """
 
-        import itertools
+        for res in self._hybrid_topology.residues:
+            if res.resSeq == int(self._topology_proposal.mutation_residue_id) and res.chain.index == 0: # the residue to mutate will be in the first chain
+                mutated_res = res
+        query_indices = [atom.index for atom in mutated_res.atoms]
+        _logger.info(f"Generating rest_region with query indices: {query_indices}")
+        traj = md.Trajectory(np.array(self._hybrid_positions), self._hybrid_topology)
+        solute_atoms = list(traj.topology.select("is_protein"))
+        rest_atoms = list(md.compute_neighbors(traj, self._rest_radius, query_indices, haystack_indices=solute_atoms)[0])
 
-        if rest_region is None:
-            pass
-        else:
-            # Check that rest_region is a list
-            assert type(rest_region) == list
-
-            # Check that the list contains ints
-            assert all(type(element) == int for element in rest_region)
-
-            # Check that the rest region is a subset of the system particles
-            assert set(rest_region).issubset(set(range(self._hybrid_topology.n_atoms))), f"the rest region is not a subset of the system particles"
-
-            # Check that there are no duplicate particles in the rest region
-            assert len(rest_region) == len(set(rest_region)), "There are duplicate atom indices in the rest_region"
-
+        return rest_atoms
 
     def _build_hybrid_particles(self):
         """
