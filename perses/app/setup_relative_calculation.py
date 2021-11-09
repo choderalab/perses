@@ -573,9 +573,9 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
             _logger.info(f"\t\tphase: {phase}:")
             #TODO write a SAMSFEP class that mirrors NonequilibriumSwitchingFEP
             _logger.info(f"\t\twriting HybridTopologyFactory for phase {phase}...")
-            if setup_options['rest_over_protocol']:
-                from perses.annihilation.relative import RestCapablePMEHybridTopologyFactory
-                factory = RestCapablePMEHybridTopologyFactory
+            if 'rest_over_protocol' in setup_options.keys() and setup_options['rest_over_protocol']:
+                from perses.annihilation.relative import RESTCapableHybridTopologyFactory
+                factory = RESTCapableHybridTopologyFactory
             else:
                 factory = HybridTopologyFactory
             htf[phase] = factory(top_prop['%s_topology_proposal' % phase],
