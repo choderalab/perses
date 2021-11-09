@@ -102,7 +102,7 @@ jobs:
         run: |
           export TRAVIS=true
           cd perses
-          pytest -v --durations=0 -a "not advanced" -n auto -m "gpu_ci or gpu_needed" --runslow
+          pytest -v --durations=0 -a "not advanced" -n auto -m "gpu_ci or gpu_needed"
 
       - name: Codecov
         uses: codecov/codecov-action@v1

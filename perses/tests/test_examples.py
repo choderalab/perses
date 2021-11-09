@@ -57,7 +57,6 @@ def find_example_scripts():
 # ======================================================================
 # TESTS
 # ======================================================================
-@pytest.mark.gpu_ci
 @pytest.mark.parametrize("example_file_path", find_example_scripts())
 def test_examples(example_file_path):
     """Test that the example run without errors."""
