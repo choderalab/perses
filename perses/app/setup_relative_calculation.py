@@ -576,8 +576,13 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
             if 'rest_over_protocol' in setup_options.keys() and setup_options['rest_over_protocol']:
                 from perses.annihilation.relative import RESTCapableHybridTopologyFactory
                 factory = RESTCapableHybridTopologyFactory
+                if 'rest_region' in setup_options:
+                    rest_radius = setup_options['rest_region']
+                else:
+                    rest_radius = 0.2
             else:
                 factory = HybridTopologyFactory
+                rest_radius = None
             htf[phase] = factory(top_prop['%s_topology_proposal' % phase],
                                                top_prop['%s_old_positions' % phase],
                                                top_prop['%s_new_positions' % phase],
@@ -586,7 +591,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                                softcore_LJ_v2 = setup_options['softcore_v2'],
                                                interpolate_old_and_new_14s = setup_options['anneal_1,4s'],
                                                rmsd_restraint=setup_options['rmsd_restraint'],
-                                               rest_region=setup_options['rest_region']
+                                               rest_radius=rest_radius
                                                )
 
         for phase in phases:
