@@ -389,6 +389,7 @@ class RESTCapableRelativeAlchemicalState(AlchemicalState):
     lambda_alchemical_electrostatics_new = _LambdaParameter('lambda_alchemical_electrostatics_new')
     lambda_alchemical_electrostatics_exceptions_old = _LambdaParameter('lambda_alchemical_electrostatics_exceptions_old')
     lambda_alchemical_electrostatics_exceptions_new = _LambdaParameter('lambda_alchemical_electrostatics_exceptions_new')
+    lambda_alchemical_electrostatics_reciprocal = _LambdaParameter('lambda_alchemical_electrostatics_reciprocal')
     lambda_alchemical_sterics_old = _LambdaParameter('lambda_alchemical_sterics_old')
     lambda_alchemical_sterics_new = _LambdaParameter('lambda_alchemical_sterics_new')
     lambda_alchemical_sterics_exceptions_old = _LambdaParameter('lambda_alchemical_sterics_exceptions_old')
