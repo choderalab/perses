@@ -1,8 +1,9 @@
 name: self-hosted-gpu-test
-on: 
-  pull_request:
+on:
+  push:
     branches:
-      - "master"
+      - master
+      - main
   workflow_dispatch:
   schedule:
     # nightly tests
