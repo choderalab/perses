@@ -4011,7 +4011,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                 assert epsilon_old * epsilon_new != 0, f"at least one of the epsilons is zero: {epsilon_old} (old) and {epsilon_new} (new)"
 
                 # Add particle to the reciprocal space force
-                particle_idx = standard_nonbonded_force.addParticle(charge_old, sigma_old * 0.0, epsilon_old * 0.0)
+                particle_idx = standard_nonbonded_force.addParticle(charge_old, sigma_old, epsilon_old * 0.0)
                 assert (particle_idx == hybrid_idx), "Attempting to add incorrect particle to hybrid system"
 
                 # Charge is charge_old at lambda_electrostatics = 0, charge_new at lambda_electrostatics = 1
@@ -4023,10 +4023,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                     assert epsilon_old == epsilon_new, f"epsilons do not match: {epsilon_old} (old) and {epsilon_new} (new)"
 
             elif atom_class == 'unique_old_atoms': # it does not and we just turn the term off
-                charge_new, sigma_new, epsilon_new = charge_old * 0, sigma_old * 0, epsilon_old * 0
+                charge_new, sigma_new, epsilon_new = charge_old * 0, sigma_old, epsilon_old * 0
 
                 # Add particle to reciprocal space force
-                particle_idx = standard_nonbonded_force.addParticle(charge_old, sigma_old * 0.0, epsilon_old * 0.0)
+                particle_idx = standard_nonbonded_force.addParticle(charge_old, sigma_old, epsilon_old * 0.0)
                 assert (particle_idx == hybrid_idx), "Attempting to add incorrect particle to hybrid system"
 
                 # Charge  will be turned on at lambda = 0 and turned off at lambda = 1
@@ -4050,14 +4050,14 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
             # Get old and new terms
             charge_new, sigma_new, epsilon_new = new_system_nbf.getParticleParameters(new_idx)
-            charge_old, sigma_old, epsilon_old = charge_new * 0, sigma_new * 0, epsilon_new * 0
+            charge_old, sigma_old, epsilon_old = charge_new * 0, sigma_new, epsilon_new * 0
 
             # Add particle to custom forces
             custom_nb_force_electrostatics.addParticle(rest_id + alch_id + [charge_old, charge_new])
             custom_nb_force_sterics.addParticle(rest_id + alch_id + [sigma_old, sigma_new, epsilon_old, epsilon_new])
 
             # Add particle to reciprocal space force
-            particle_idx = standard_nonbonded_force.addParticle(charge_new * 0.0, sigma_new * 0.0, epsilon_new * 0.0)  # charge and epsilon start at zero
+            particle_idx = standard_nonbonded_force.addParticle(charge_new * 0.0, sigma_new, epsilon_new * 0.0)  # charge and epsilon start at zero
             assert (particle_idx == hybrid_idx), "Attempting to add incorrect particle to hybrid system"
 
             # Charge will be turned off at lambda = 0 and turned on at lambda = 1
@@ -4215,7 +4215,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             # In this case, we need to get the parameters from the exception in the other (new) system, and interpolate between the two
             else:
                 # If there's no new exception, then we should just set the exception parameters to be the nonbonded parameters
-                if chargeProd_new == 0 and sigma_new == 0 and epsilon_new == 0:
+                if chargeProd_new == 0 and epsilon_new == 0:
                     index1_new = self._hybrid_to_new_map[hybrid_index_pair[0]]
                     index2_new = self._hybrid_to_new_map[hybrid_index_pair[1]]
                     charge1_new, sigma1_new, epsilon1_new = new_system_nbf.getParticleParameters(index1_new)
