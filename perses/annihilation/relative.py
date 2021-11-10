@@ -4188,7 +4188,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             try:
                 new_idx, chargeProd_new, sigma_new, epsilon_new = new_term_collector[hybrid_index_pair]
             except Exception as e:  # This might be a unique old term
-                chargeProd_new, sigma_new, epsilon_new = chargeProd_old * 0, sigma_old * 0, epsilon_old * 0
+                chargeProd_new, sigma_new, epsilon_new = chargeProd_old * 0, sigma_old, epsilon_old * 0
 
             if atom_class == 'environment_atoms':  # If it is env, the new/old terms must be identical?
                 assert new_term_collector[hybrid_index_pair][1:] == old_term_collector[hybrid_index_pair][1:], f"hybrid_index_pair {hybrid_index_pair} bond term was identified in old term collector as {old_term_collector[hybrid_index_pair][1:]}, but in new term collector as {new_term_collector[hybrid_index_pair][1:]}"
@@ -4211,7 +4211,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
             ### Handle copying exceptions to reciprocal space force ###
             if atom_class in ['environment_atoms', 'unique_old_atoms']:
-                standard_nonbonded_force.addException(hybrid_index_pair[0], hybrid_index_pair[1], chargeProd_old, sigma_old * 0.0, epsilon_old * 0.0)
+                standard_nonbonded_force.addException(hybrid_index_pair[0], hybrid_index_pair[1], chargeProd_old, sigma_old, epsilon_old * 0.0)
 
             # If the exception particles are neither solely old unique, solely environment, nor contain any unique old atoms, they are either core/environment or core/core
             # In this case, we need to get the parameters from the exception in the other (new) system, and interpolate between the two
@@ -4226,63 +4226,60 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
                 # Interpolate between old and new
                 exception_index = standard_nonbonded_force.addException(hybrid_index_pair[0], hybrid_index_pair[1],
-                                                                        chargeProd_old, sigma_old * 0.0, epsilon_old * 0.0)
+                                                                        chargeProd_old, sigma_old, epsilon_old * 0.0)
                 standard_nonbonded_force.addExceptionParameterOffset('lambda_alchemical_electrostatics_reciprocal',
                                                                      exception_index, (chargeProd_new - chargeProd_old),
                                                                      0.0, 0.0)
 
-        # Make a modified new_term_collector that omits the terms that are previously handled
-        mod_new_term_collector = {key: val for key, val in new_term_collector.items() if
-                                  key not in list(old_term_collector.keys())}
-
         # Now iterate over the modified new term collector and add appropriate bonds. these should only be unique new, right?
-        for hybrid_index_pair in mod_new_term_collector.keys():
+        for hybrid_index_pair in new_term_collector.keys():
 
-            # Given the atom indices, get rest and alchemical identifiers
-            idx_set = set(list(hybrid_index_pair))
-            rest_id = self.get_rest_identifier(idx_set)
-            alch_id, atom_class = self.get_alch_identifier(idx_set)
-            assert atom_class in ['unique_new_atoms', 'core_atoms'], f"we are iterating over modified new term collector, but the atom class returned {atom_class}"
+            if hybrid_index_pair not in old_term_collector.keys():
+                # Given the atom indices, get rest and alchemical identifiers
+                idx_set = set(list(hybrid_index_pair))
+                rest_id = self.get_rest_identifier(idx_set)
+                alch_id, atom_class = self.get_alch_identifier(idx_set)
+                assert atom_class in ['unique_new_atoms', 'core_atoms'], f"we are iterating over modified new term collector, but the atom class returned {atom_class}"
 
-            # Get new terms
-            new_idx, chargeProd_new, sigma_new, epsilon_new = new_term_collector[hybrid_index_pair]
+                # Get new terms
+                new_idx, chargeProd_new, sigma_new, epsilon_new = new_term_collector[hybrid_index_pair]
 
-            # Compute chargeProd_product_old/new from original particle parameters
-            p1, p2 = idx_set
-            p1_params = custom_nb_force_electrostatics.getParticleParameters(p1)
-            p2_params = custom_nb_force_electrostatics.getParticleParameters(p2)
-            chargeProd_product_new = p1_params[-1] * p2_params[-1]
+                # Compute chargeProd_product_old/new from original particle parameters
+                p1, p2 = idx_set
+                p1_params = custom_nb_force_electrostatics.getParticleParameters(p1)
+                p2_params = custom_nb_force_electrostatics.getParticleParameters(p2)
+                chargeProd_product_new = p1_params[-1] * p2_params[-1]
 
-            # Get old terms
-            chargeProd_old, chargeProd_product_old, sigma_old, epsilon_old = chargeProd_new * 0, chargeProd_product_new * 0, sigma_new * 0, epsilon_new * 0
+                # Get old terms
+                chargeProd_old, chargeProd_product_old, sigma_old, epsilon_old = chargeProd_new * 0, chargeProd_product_new * 0, sigma_new, epsilon_new * 0
 
-            # Add exclusions to the custom nb forces and exception to the custom bond force
-            params = (hybrid_index_pair[0], hybrid_index_pair[1],
+                # Add exclusions to the custom nb forces and exception to the custom bond force
+                params = (hybrid_index_pair[0], hybrid_index_pair[1],
                                    rest_id + alch_id +
                                    [chargeProd_old, chargeProd_new, chargeProd_product_old, chargeProd_product_new, sigma_old, sigma_new, epsilon_old, epsilon_new])
 
-            custom_nb_force_electrostatics.addExclusion(*hybrid_index_pair)
-            custom_nb_force_sterics.addExclusion(*hybrid_index_pair)
-            custom_exception_force.addBond(*params)
+                custom_nb_force_electrostatics.addExclusion(*hybrid_index_pair)
+                custom_nb_force_sterics.addExclusion(*hybrid_index_pair)
+                custom_exception_force.addBond(*params)
 
-            ### Handle copying exceptions to reciprocal space force ###
-            if atom_class == 'unique_new_atoms':
-                standard_nonbonded_force.addException(hybrid_index_pair[0], hybrid_index_pair[1], chargeProd_new, sigma_new * 0.0, epsilon_new * 0.0)
+                ### Handle copying exceptions to reciprocal space force ###
+                if atom_class == 'unique_new_atoms':
+                    standard_nonbonded_force.addException(hybrid_index_pair[0], hybrid_index_pair[1], chargeProd_new, sigma_new, epsilon_new * 0.0)
 
-            # However, there may be a core exception that exists in one system but not the other (ring closure)
-            elif atom_class == 'core_atoms':
-                # Assume that this exception is not in the old system, since we already removed old system exceptions from the new_term_collector
-                # Therefore we will construct chargeProd_old from the nonbonded parameters
-                index1_old = self._hybrid_to_old_map[hybrid_index_pair[0]]
-                index2_old = self._hybrid_to_old_map[hybrid_index_pair[1]]
-                charge1_old, sigma1_old, epsilon1_old = old_system_nbf.getParticleParameters(index1_old)
-                charge2_old, sigma2_old, epsilon2_old = old_system_nbf.getParticleParameters(index2_old)
-                chargeProd_old = charge1_old * charge2_old
+                # However, there may be a core exception that exists in one system but not the other (ring closure)
+                elif atom_class == 'core_atoms':
+                    # Assume that this exception is not in the old system, since we already removed old system exceptions from the new_term_collector
+                    # Therefore we will construct chargeProd_old from the nonbonded parameters
+                    index1_old = self._hybrid_to_old_map[hybrid_index_pair[0]]
+                    index2_old = self._hybrid_to_old_map[hybrid_index_pair[1]]
+                    charge1_old, sigma1_old, epsilon1_old = old_system_nbf.getParticleParameters(index1_old)
+                    charge2_old, sigma2_old, epsilon2_old = old_system_nbf.getParticleParameters(index2_old)
+                    chargeProd_old = charge1_old * charge2_old
 
-                exception_index = standard_nonbonded_force.addException(hybrid_index_pair[0], hybrid_index_pair[1],
-                                                                        chargeProd_old, sigma_old * 0.0,
+                    exception_index = standard_nonbonded_force.addException(hybrid_index_pair[0], hybrid_index_pair[1],
+                                                                        chargeProd_old, sigma_old,
                                                                         epsilon_old * 0.0)
-                standard_nonbonded_force.addExceptionParameterOffset('lambda_alchemical_electrostatics_reciprocal',
+                    standard_nonbonded_force.addExceptionParameterOffset('lambda_alchemical_electrostatics_reciprocal',
                                                                      exception_index,
                                                                      (chargeProd_new - chargeProd_old), 0.0, 0.0)
 

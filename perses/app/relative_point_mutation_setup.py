@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 from perses.utils.openeye import createOEMolFromSDF, extractPositionsFromOEMol
-from perses.annihilation.relative import HybridTopologyFactory, RepartitionedHybridTopologyFactory
+from perses.annihilation.relative import HybridTopologyFactory, RepartitionedHybridTopologyFactory, RESTCapableHybridTopologyFactory
 from perses.rjmc.topology_proposal import PointMutationEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 

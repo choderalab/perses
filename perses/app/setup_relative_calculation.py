@@ -573,20 +573,14 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
             _logger.info(f"\t\tphase: {phase}:")
             #TODO write a SAMSFEP class that mirrors NonequilibriumSwitchingFEP
             _logger.info(f"\t\twriting HybridTopologyFactory for phase {phase}...")
-            if setup_options['rest_over_protocol']:
-                from perses.annihilation.relative import RestCapablePMEHybridTopologyFactory
-                factory = RestCapablePMEHybridTopologyFactory
-            else:
-                factory = HybridTopologyFactory
-            htf[phase] = factory(top_prop['%s_topology_proposal' % phase],
+            htf[phase] = HybridTopologyFactory(top_prop['%s_topology_proposal' % phase],
                                                top_prop['%s_old_positions' % phase],
                                                top_prop['%s_new_positions' % phase],
                                                neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
                                                neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
                                                softcore_LJ_v2 = setup_options['softcore_v2'],
                                                interpolate_old_and_new_14s = setup_options['anneal_1,4s'],
-                                               rmsd_restraint=setup_options['rmsd_restraint'],
-                                               rest_region=setup_options['rest_region']
+                                               rmsd_restraint=setup_options['rmsd_restraint']
                                                )
 
         for phase in phases:
@@ -596,7 +590,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
             _forward_added_valence_energy = top_prop['%s_added_valence_energy' % phase]
             _reverse_subtracted_valence_energy = top_prop['%s_subtracted_valence_energy' % phase]
 
-            if not use_given_geometries and setup_options['validate_endstate_energies']:
+            if not use_given_geometries:
                 zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD)#, trajectory_directory=f'{xml_directory}{phase}')
                 _logger.info(f"\t\terror in zero state: {zero_state_error}")
                 _logger.info(f"\t\terror in one state: {one_state_error}")
