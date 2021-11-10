@@ -2709,14 +2709,14 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         f"U_electrostatics = {ONE_4PI_EPS0} * chargeProd  * erfc(alpha * r_eff_electrostatics)/ r_eff_electrostatics;",
 
         # Define chargeProd (with REST scaling)
-        "chargeProd = (charge1 * p1_electrostatics_rest_scale) * (charge2 * p2_electrostatics_rest_scale);",
+        "chargeProd = charge1 * p1_electrostatics_rest_scale * charge2 * p2_electrostatics_rest_scale;",
 
         # Define charge1 and charge2 (with alchemical scaling)
-        "charge1 = (is_unique_old1 * old_charge_scaled1) + (is_unique_new1 * new_charge_scaled1) + is_core1 * (old_charge_scaled1 + new_charge_scaled1) + is_environment1 * (old_charge_scaled1 + new_charge_scaled1);",
+        "charge1 = is_unique_old1 * old_charge_scaled1 + is_unique_new1 * new_charge_scaled1 + is_core1 * (old_charge_scaled1 + new_charge_scaled1) + is_environment1 * charge_old1;",
         "old_charge_scaled1 = lambda_alchemical_electrostatics_old * charge_old1;",
         "new_charge_scaled1 = lambda_alchemical_electrostatics_new * charge_new1;",
 
-        "charge2 = (is_unique_old2 * old_charge_scaled2) + (is_unique_new2 * new_charge_scaled2) + is_core2 * (old_charge_scaled2 + new_charge_scaled2) + is_environment2 * (old_charge_scaled2 + new_charge_scaled2);",
+        "charge2 = is_unique_old2 * old_charge_scaled2 + is_unique_new2 * new_charge_scaled2 + is_core2 * (old_charge_scaled2 + new_charge_scaled2) + is_environment2 * charge_old2;",
         "old_charge_scaled2 = lambda_alchemical_electrostatics_old * charge_old2;",
         "new_charge_scaled2 = lambda_alchemical_electrostatics_new * charge_new2;",
 
@@ -2797,8 +2797,8 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         # Define electrostatics functional form
         # Note that we need to subtract off the reciprocal space for exceptions
         # See explanation for why here: https://github.com/openmm/openmm/issues/3269#issuecomment-934686324
-        f"U_electrostatics = U_electrostatics_direct * electrostatics_rest_scale - U_electrostatics_reciprocal;",
-        f"U_electrostatics_direct = {ONE_4PI_EPS0} * chargeProd_exceptions / r_eff_electrostatics;",
+        f"U_electrostatics = U_electrostatics_coulomb * electrostatics_rest_scale - U_electrostatics_reciprocal;",
+        f"U_electrostatics_coulomb = {ONE_4PI_EPS0} * chargeProd_exceptions / r_eff_electrostatics;",
         f"U_electrostatics_reciprocal = {ONE_4PI_EPS0} * chargeProd_product * erf(alpha * r_eff_electrostatics) / r_eff_electrostatics;",
 
         # Define rest scale
@@ -2810,21 +2810,19 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         "x = (sigma / r_eff_sterics)^6;"
 
         # Define chargeProd (with alchemical scaling)
-        "chargeProd_exceptions = is_unique_old * old_chargeProd_exceptions_scaled + is_unique_new * new_chargeProd_exceptions_scaled + is_core * (old_chargeProd_exceptions_scaled + new_chargeProd_exceptions_scaled) + is_environment * (old_chargeProd_exceptions_scaled + new_chargeProd_exceptions_scaled);",
+        "chargeProd_exceptions = is_unique_old * old_chargeProd_exceptions_scaled + is_unique_new * new_chargeProd_exceptions_scaled + is_core * (old_chargeProd_exceptions_scaled + new_chargeProd_exceptions_scaled) + is_environment * chargeProd_exceptions_old;",
         "old_chargeProd_exceptions_scaled = lambda_alchemical_electrostatics_exceptions_old * chargeProd_exceptions_old;",
         "new_chargeProd_exceptions_scaled = lambda_alchemical_electrostatics_exceptions_new * chargeProd_exceptions_new;",
 
-        "chargeProd_product = is_unique_old * old_chargeProd_product_scaled + is_unique_new * new_chargeProd_product_scaled + is_core * (old_chargeProd_product_scaled + new_chargeProd_product_scaled) + is_environment * (old_chargeProd_product_scaled + new_chargeProd_product_scaled);",
+        "chargeProd_product = is_unique_old * old_chargeProd_product_scaled + is_unique_new * new_chargeProd_product_scaled + is_core * (old_chargeProd_product_scaled + new_chargeProd_product_scaled) + is_environment * chargeProd_product_old;",
         "old_chargeProd_product_scaled = lambda_alchemical_electrostatics_exceptions_old * chargeProd_product_old;",
         "new_chargeProd_product_scaled = lambda_alchemical_electrostatics_exceptions_new * chargeProd_product_new;",
 
         # Define sigma (with alchemical scaling)
-        "sigma = is_unique_old * old_sigma_scaled + is_unique_new * new_sigma_scaled + is_core * (old_sigma_scaled + new_sigma_scaled) + is_environment * (old_sigma_scaled + new_sigma_scaled);",
-        "old_sigma_scaled = lambda_alchemical_sterics_exceptions_old * sigma_old;",
-        "new_sigma_scaled = lambda_alchemical_sterics_exceptions_new * sigma_new;",
+        "sigma = is_unique_old * sigma_old + is_unique_new * sigma_new + is_core * (lambda_alchemical_sterics_exceptions_old * sigma_old + lambda_alchemical_sterics_exceptions_new * sigma_new) + is_environment * sigma_old;",
 
         # Define epsilon (with alchemical scaling)
-        "epsilon = is_unique_old * old_epsilon_scaled + is_unique_new * new_epsilon_scaled + is_core * (old_epsilon_scaled + new_epsilon_scaled) + is_environment * (old_epsilon_scaled + new_epsilon_scaled);",
+        "epsilon = is_unique_old * old_epsilon_scaled + is_unique_new * new_epsilon_scaled + is_core * (old_epsilon_scaled + new_epsilon_scaled) + is_environment * epsilon_old;",
         "old_epsilon_scaled = lambda_alchemical_sterics_exceptions_old * epsilon_old;",
         "new_epsilon_scaled = lambda_alchemical_sterics_exceptions_new * epsilon_new;",
 
