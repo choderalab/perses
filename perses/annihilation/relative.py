@@ -2755,23 +2755,18 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         "sigma = (sigma1 + sigma2) / 2;",
 
         # Define sigma1 and sigma2 (with alchemical scaling)
-        "sigma1 = (is_unique_old1 * old_sigma_scaled1) + (is_unique_new1 * new_sigma_scaled1) + is_core1 * (old_sigma_scaled1 + new_sigma_scaled1) + is_environment1 * (old_sigma_scaled1 + new_sigma_scaled1);",
-        "old_sigma_scaled1 = lambda_alchemical_sterics_old * sigma_old1;",
-        "new_sigma_scaled1 = lambda_alchemical_sterics_new * sigma_new1;",
-
-        "sigma2 = (is_unique_old2 * old_sigma_scaled2) + (is_unique_new2 * new_sigma_scaled2) + is_core2 * (old_sigma_scaled2 + new_sigma_scaled2) + is_environment2 * (old_sigma_scaled2 + new_sigma_scaled2);",
-        "old_sigma_scaled2 = lambda_alchemical_sterics_old * sigma_old2;",
-        "new_sigma_scaled2 = lambda_alchemical_sterics_new * sigma_new2;",
+        "sigma1 = is_unique_old1 * sigma_old1 + is_unique_new1 * sigma_new1 + is_core1 * (min(0.05, lambda_alchemical_sterics_old * sigma_old1 + lambda_alchemical_sterics_new * sigma_new1)) + is_environment1 * sigma_old1;",
+        "sigma2 = is_unique_old2 * sigma_old2 + is_unique_new2 * sigma_new2 + is_core2 * (min(0.05, lambda_alchemical_sterics_old * sigma_old2 + lambda_alchemical_sterics_new * sigma_new2)) + is_environment2 * sigma_old2;",
 
         # Define epsilon (with rest scaling)
         "epsilon = p1_sterics_rest_scale * p2_sterics_rest_scale * sqrt(epsilon1 * epsilon2);",
 
         # Define epsilon1 and epsilon2 (with alchemical scaling)
-        "epsilon1 = (is_unique_old1 * old_epsilon_scaled1) + (is_unique_new1 * new_epsilon_scaled1) + is_core1 * (old_epsilon_scaled1 + new_epsilon_scaled1) + is_environment1 * (old_epsilon_scaled1 + new_epsilon_scaled1);",
+        "epsilon1 = is_unique_old1 * old_epsilon_scaled1 + is_unique_new1 * new_epsilon_scaled1 + is_core1 * (old_epsilon_scaled1 + new_epsilon_scaled1) + is_environment1 * epsilon_old1;",
         "old_epsilon_scaled1 = lambda_alchemical_sterics_old * epsilon_old1;",
         "new_epsilon_scaled1 = lambda_alchemical_sterics_new * epsilon_new1;",
 
-        "epsilon2 = (is_unique_old2 * old_epsilon_scaled2) + (is_unique_new2 * new_epsilon_scaled2) + is_core2 * (old_epsilon_scaled2 + new_epsilon_scaled2) + is_environment2 * (old_epsilon_scaled2 + new_epsilon_scaled2);",
+        "epsilon2 = is_unique_old2 * old_epsilon_scaled2 + is_unique_new2 * new_epsilon_scaled2 + is_core2 * (old_epsilon_scaled2 + new_epsilon_scaled2) + is_environment2 * epsilon_old2;",
         "old_epsilon_scaled2 = lambda_alchemical_sterics_old * epsilon_old2;",
         "new_epsilon_scaled2 = lambda_alchemical_sterics_new * epsilon_new2;",
 
