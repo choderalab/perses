@@ -4006,9 +4006,9 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             if atom_class in ['core_atoms', 'environment_atoms']:  # Then it has a 'new' counterpart
                 new_idx = self._hybrid_to_new_map[hybrid_idx]
                 charge_new, sigma_new, epsilon_new = new_system_nbf.getParticleParameters(new_idx)
-                assert charge_old.value_in_unit_system(unit.md_unit_system) * charge_new.value_in_unit_system(unit.md_unit_system) != 0, "at least one of the charges is zero: {charge_old} (old) and {charge_new} (new)"
-                assert sigma_old.value_in_unit_system(unit.md_unit_system) * sigma_new.value_in_unit_system(unit.md_unit_system) != 0, "at least one of the sigmas is zero: {sigma_old} (old) and {sigma_new} (new)"
-                assert epsilon_old.value_in_unit_system(unit.md_unit_system) * epsilon_new.value_in_unit_system(unit.md_unit_system) != 0, f"at least one of the epsilons is zero: {epsilon_old} (old) and {epsilon_new} (new)"
+                #assert charge_old.value_in_unit_system(unit.md_unit_system) * charge_new.value_in_unit_system(unit.md_unit_system) != 0, "at least one of the charges is zero for atom index {hybrid_idx}: {charge_old} (old) and {charge_new} (new)"
+                #assert sigma_old.value_in_unit_system(unit.md_unit_system) * sigma_new.value_in_unit_system(unit.md_unit_system) != 0, "at least one of the sigmas is zero for atom index {hybrid_idx}: {sigma_old} (old) and {sigma_new} (new)"
+                #assert epsilon_old.value_in_unit_system(unit.md_unit_system) * epsilon_new.value_in_unit_system(unit.md_unit_system) != 0, f"at least one of the epsilons is zero for atom index {hybrid_idx}: {epsilon_old} (old) and {epsilon_new} (new)"
 
                 # Add particle to the reciprocal space force
                 particle_idx = standard_nonbonded_force.addParticle(charge_old, sigma_old, epsilon_old * 0.0)
