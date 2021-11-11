@@ -4221,7 +4221,6 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                     charge1_new, sigma1_new, epsilon1_new = new_system_nbf.getParticleParameters(index1_new)
                     charge2_new, sigma2_new, epsilon2_new = new_system_nbf.getParticleParameters(index2_new)
                     chargeProd_new = charge1_new * charge2_new
-                    sigma_old = (sigma1_new + sigma2_new)/2
 
                 # Interpolate between old and new
                 exception_index = standard_nonbonded_force.addException(hybrid_index_pair[0], hybrid_index_pair[1],
