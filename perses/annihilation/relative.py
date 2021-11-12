@@ -3018,13 +3018,6 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             _logger.info("Handling nonbondeds (copying nonbonded exceptions)...")
             self._copy_exceptions()
 
-            #self._copy_reciprocal_space()
-
-            # self._transcribe_nonbondeds_direct_space_electrostatics()
-            # self._transcribe_nonbondeds_direct_space_sterics()
-            # self._transcribe_non
-            # self._transcribe_nonbondeds_reciprocal_space()
-
     def _generate_rest_region(self):
         """
         Generate rest region.
@@ -3095,10 +3088,12 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     def get_rest_identifier(self, particles):
         """
         For a given particle or set of particles, get the rest_id which is a list of binary ints that defines which
-        region the particle(s) belong to.
+        (mutually exclusive) region the particle(s) belong to.
+
         If there is a single particle, the regions are: is_rest, is_nonrest_solute, is_nonrest_solvent
         If there is a set of particles, the regions are: is_rest, is_inter, is_nonrest
         Example: if there is a single particle that is in the nonrest_solute region, the rest_id is [0, 1, 0]
+
         Arguments
         ---------
         particles : set or int
@@ -3107,6 +3102,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         -------
         rest_id : list
             list of binaries indicating which region the particle(s) belong to
+
         """
 
         def _is_solvent(particle_index, positive_ion_name="NA", negative_ion_name="CL", water_name="HOH"):
@@ -3152,8 +3148,11 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         """
         For a particle or set of particles, get the alch_id, which is a list of binary integers that specifies whether the particle(s)
         is environment, core, unique_old, or unique_new: [environment, core, unique_old, unique_new]
-        The list should sum to 1.
+
+        The regions are mutually exclusive, so the list should sum to 1.
+
         Example: if I want to specify a particle is unique_old, the alch_id would be [0, 0, 1, 0]
+
         Arguments
         ---------
         particles : set or int
@@ -3164,6 +3163,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             list of binaries that specifies whether the particle(s) is environment, core, unique_old, or unique_new
         atom_class : str
             one of {'environment_atoms', 'unique_old_atoms', 'unique_new_atoms', 'core_atoms'}
+
         """
 
         # Check that particles is either a set or an int. If its the latter, make it a set
@@ -3354,7 +3354,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
         The custom angle expression is written based on the functional form here: http://docs.openmm.org/latest/userguide/theory/02_standard_forces.html#harmonicangleforce
 
-        Since the custom expression here is written similiarly to the custom bond expression,
+        Since the custom expression here is written similarly to the custom bond expression,
         see the docstring for _create_bond_force for an explanation of how the expression was written.
 
         """
@@ -3505,7 +3505,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
         The custom angle expression is written based on the functional form here: http://docs.openmm.org/latest/userguide/theory/02_standard_forces.html#periodictorsionforce
 
-        Since the custom expression here is written similiarly to the custom bond expression,
+        Since the custom expression here is written similarly to the custom bond expression,
         see the docstring for _create_bond_force for an explanation of how the expression was written.
 
         The only difference is that instead of interpolating each of the per torsion parameters (K, periodicity, and phase),
@@ -3555,57 +3555,6 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         custom_torsion_force.addPerTorsionParameter('K_old')
         custom_torsion_force.addPerTorsionParameter('K_new')
 
-    # def _is_torsion_equal(self, hybrid_index_pair_1, terms_1, hybrid_index_pair_2, terms_2):
-    #     """
-    #     Given two torsions (defined by hybrid indices and terms), return whether they are the same
-    #     Parameters
-    #     ----------
-    #     hybrid_index_pair_1 : list of ints
-    #         hybrid atom indices defining torsion 1
-    #     terms_1 : list of lists
-    #         each sublist contains torsion parameters torsion 1
-    #     hybrid_index_pair_2 : list of ints
-    #         hybrid atom indices defining torsion 2
-    #     terms_2 : list of lists
-    #         each sublist contains torsion parameters torsion 2
-    #     Returns
-    #     -------
-    #     bool
-    #         indicates whether the two torsions are equal
-    #     """
-    #     if set(hybrid_index_pair_1) == set(hybrid_index_pair_2):
-    #         terms_1 = np.array(terms_1)
-    #         terms_2 = np.array(terms_2)
-    #         if np.array_equal(terms_1[:, 1:], terms_2[:, 1:]):
-    #             return True
-    #     return False
-    #
-    # def _find_torsion_match(self, hybrid_index_pair_old, old_terms, new_term_collector):
-    #     """
-    #     For a given torsion (defined by hybrid indices) in the old force, return the hybrid indices for the matching
-    #     torsion (if it exists) in the new force.
-    #     Parameters
-    #     ----------
-    #     hybrid_index_pair_old : list of ints
-    #         hybrid atom indices defining a torsion from the old force
-    #     old_terms : list of lists
-    #         each sublist contains torsion parameters in the old force for the torsion specified by hybrid_index_pair_old
-    #     new_term_collector : dict
-    #         key : list of hybrid atom indices of a torsion in the new force
-    #         value : list of lists, where each sub list contains torsion parameters in the new force
-    #     Returns
-    #     -------
-    #     list of ints
-    #         hybrid atom indices for matching torsion in the new force (or None, if it doesn't exist)
-    #     """
-    #     for hybrid_index_pair_new, new_terms in new_term_collector.items():
-    #         if self._is_torsion_equal(hybrid_index_pair_new, new_terms, hybrid_index_pair_old, old_terms):
-    #             _logger.info(
-    #                 f"Hybrid_index_pair {hybrid_index_pair_old} was not found in the new_term_collector, but {hybrid_index_pair_new} has the same atoms and terms, so {hybrid_index_pair_new} will be removed from the new term collector")
-    #             return hybrid_index_pair_new
-    #     _logger.info(f"No matching key in new_term_collector was found for hybrid_index_pair {hybrid_index_pair_old}!")
-    #     return None
-
     def _copy_torsions(self):
         """
         Copy the old/new system `PeriodicTorsionForce` to the hybrid system's `CustomTorsionForce`.
@@ -3629,26 +3578,6 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
              - Core torsions -- use new terms for periodicity_new, theta_new, K_new and zero periodicity_old, theta_old, K_old
              - Environment torsions -- use new terms for periodicity_new, theta_new, K_new, and zero periodicity_old, theta_old, K_old
 
-        #Since (improper) torsions can be in different atom orders (and we don't want to assume that they will always be
-        #parametrized in the same order), we will check to see if each core/environment torsion is present in both the old
-        #and new systems in the same atom order. If they are, then we will interpolate between the old and new parameters.
-        #If they are not, the core torsions unique to the old system will be interpolated from old parameters to 0 and the
-        #core torsions unique to the new system will be interpolated from 0 to new parameters.
-
-        #Here is a summary of what we will do:
-        #- Make a dict of old torsions (key: atom indices, value: torsion index in old system)
-        #- Make a dict of new torsions (key: atom indices, value: torsion index in new system)
-        #- Iterate over the old system torsions,
-        #    - Unique old torsions -- use old terms for periodicity_old, theta_old, K_old, periodicity_new, theta_new, K_new
-        #    - Core torsions -- check to see if torsion exists (in the same atom index order) in the dict of new torsions.
-        #      if so, add torsion s.t. we interpolate between old and new terms and then remove the torsion from the list of new torsions.
-        #      if not, add torsion s.t. old terms are copied from old system and new terms are zeroed.
-        #    - Environment torsions -- same as core torsions
-        #- Iterate over the new system torsions
-        #    - Unique new torsions -- use new terms for periodicity_old, theta_old, K_old, periodicity_new, theta_new, K_new
-        #    - Core torsions -- add torsion s.t. new terms are copied from new system and old terms are zeroed.
-        #    - Environment torsions -- same as core torsions
-
         """
 
         # Get old/new and hybrid system forces
@@ -3659,47 +3588,6 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         # Set periodicity
         if old_system_torsion_force.usesPeriodicBoundaryConditions():
             custom_torsion_force.setUsesPeriodicBoundaryConditions(True)
-
-        # # Make a list of hybrid-indexed torsion terms
-        # old_term_collector = {}
-        # new_term_collector = {}
-
-        # # Gather the old system torsion force terms into a dict
-        # for term_idx in range(old_system_torsion_force.getNumTorsions()):
-        #     p1, p2, p3, p4, periodicity, phase, k = old_system_torsion_force.getTorsionParameters(term_idx) # Grab the parameters
-        #     hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2], self._old_to_hybrid_map[p3], self._old_to_hybrid_map[p4] # Make hybrid indices
-        #     sorted_indices = tuple([hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]) if hybrid_p1 < hybrid_p4 else tuple([hybrid_p4, hybrid_p3, hybrid_p2, hybrid_p1])
-        #     if sorted_indices in old_term_collector.keys():
-        #         # It _is_ the case that some torsions have the same particle indices...
-        #         old_term_collector[sorted_indices].append([term_idx, periodicity, phase, k])
-        #     else:
-        #         # Make this a nested list to hold multiple terms
-        #         old_term_collector[sorted_indices] = [[term_idx, periodicity, phase, k]]
-        # 
-        # # Repeat for the new system torsion force
-        # for term_idx in range(new_system_torsion_force.getNumTorsions()):
-        #     p1, p2, p3, p4, periodicity, phase, k = new_system_torsion_force.getTorsionParameters(term_idx) # Grab the parameters
-        #     hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2], self._new_to_hybrid_map[p3], self._new_to_hybrid_map[p4] #make hybrid indices
-        #     sorted_indices = tuple([hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4]) if hybrid_p1 < hybrid_p4 else tuple([hybrid_p4, hybrid_p3, hybrid_p2, hybrid_p1])
-        #     if sorted_indices in new_term_collector.keys():
-        #         new_term_collector[sorted_indices].append([term_idx, periodicity, phase, k])
-        #     else:
-        #         new_term_collector[sorted_indices] = [[term_idx, periodicity, phase, k]]
-        # mod_new_term_collector = {key: val for key, val in new_term_collector.items()}
-
-        # Gather the old system torsion force terms into a dict
-        #old_term_collector = {}
-        #for torsion_idx in range(old_system_torsion_force.getNumTorsions()):
-        #    p1, p2, p3, p4, periodicity, phase, k = old_system_torsion_force.getTorsionParameters(torsion_idx) # Grab the parameters
-        #    hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._old_to_hybrid_map[p1], self._old_to_hybrid_map[p2], self._old_to_hybrid_map[p3], self._old_to_hybrid_map[p4] # Make hybrid indices
-        #    old_term_collector[torsion_idx] = [hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4, periodicity, phase, k]
-
-        # Repeat for the new system torsion force
-        #new_term_collector = {}
-        #for torsion_idx in range(new_system_torsion_force.getNumTorsions()):
-        #    p1, p2, p3, p4, periodicity, phase, k = new_system_torsion_force.getTorsionParameters(torsion_idx) # Grab the parameters
-        #    hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2], self._new_to_hybrid_map[p3], self._new_to_hybrid_map[p4] #make hybrid indices
-        #    new_term_collector[torsion_idx] = [hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4, periodicity, phase, k]
 
         # Generate dicts for bookkeeping
         self._hybrid_to_old_torsion_indices = {}
@@ -3719,22 +3607,6 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             # Given the atom indices, get rest and alchemical identifiers
             rest_id = self.get_rest_identifier(set(hybrid_index_pair))
             alch_id, atom_class = self.get_alch_identifier(set(hybrid_index_pair))
-
-            # if atom_class == 'environment_atoms':
-            #     # Check that the list of old terms is equal to the list of new terms
-            #     assert self._is_torsion_equal(hybrid_index_pair,
-            #                                   old_term_collector[hybrid_index_pair],
-            #                                   hybrid_index_pair,
-            #                                   new_term_collector[hybrid_index_pair]), \
-            #         f"hybrid_index_pair {hybrid_index_pair} torsion term was identified in old_term_collector as {old_term_collector[hybrid_index_pair]} but in the new_term_collector as {new_term_collector[hybrid_index_pair]}"
-            #
-            #     # Remove the entry in the mod_new_term collector
-            #     if hybrid_index_pair not in mod_new_term_collector:  # If the hybrid_index_pair is not in the mod_new_term_collector, check to see if its there in a different order
-            #         hybrid_index_pair = self._find_torsion_match(hybrid_index_pair,
-            #                                                      old_term_collector[hybrid_index_pair],
-            #                                                      mod_new_term_collector)
-            #     if hybrid_index_pair: # If hybrid_index_pair is None, do not add it to the dictionary
-            #         mod_new_term_collector.pop(hybrid_index_pair)
 
             # Set new terms
             if atom_class in ['core_atoms', 'environment_atoms']:
@@ -3996,8 +3868,9 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             if atom_class in ['core_atoms', 'environment_atoms']:  # Then it has a 'new' counterpart
                 new_idx = self._hybrid_to_new_map[hybrid_idx]
                 charge_new, sigma_new, epsilon_new = new_system_nbf.getParticleParameters(new_idx)
-                #assert charge_old.value_in_unit_system(unit.md_unit_system) * charge_new.value_in_unit_system(unit.md_unit_system) != 0, "at least one of the charges is zero for atom index {hybrid_idx}: {charge_old} (old) and {charge_new} (new)"
-                #assert sigma_old.value_in_unit_system(unit.md_unit_system) * sigma_new.value_in_unit_system(unit.md_unit_system) != 0, "at least one of the sigmas is zero for atom index {hybrid_idx}: {sigma_old} (old) and {sigma_new} (new)"
+                assert charge_old.value_in_unit_system(unit.md_unit_system) * charge_new.value_in_unit_system(unit.md_unit_system) != 0, "at least one of the charges is zero for atom index {hybrid_idx}: {charge_old} (old) and {charge_new} (new)"
+                assert sigma_old.value_in_unit_system(unit.md_unit_system) * sigma_new.value_in_unit_system(unit.md_unit_system) != 0, "at least one of the sigmas is zero for atom index {hybrid_idx}: {sigma_old} (old) and {sigma_new} (new)"
+                # The epsilon check is commented out because H's can have epsilon = 0..
                 #assert epsilon_old.value_in_unit_system(unit.md_unit_system) * epsilon_new.value_in_unit_system(unit.md_unit_system) != 0, f"at least one of the epsilons is zero for atom index {hybrid_idx}: {epsilon_old} (old) and {epsilon_new} (new)"
 
                 # Add particle to the reciprocal space force
@@ -4056,7 +3929,9 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     def _create_exceptions_force(self):
         """
         Create `CustomBondForce` for exceptions.
-        This accounts for the direct space and subtracts out the reciprocal space of interactions to be replaced by exceptions.
+            - Accounts for electrostatic and steric exceptions
+            - Subtracts out the reciprocal space of interactions to be replaced by exceptions.
+            - Does not use lifting
         """
 
         import itertools
@@ -4269,174 +4144,3 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                     standard_nonbonded_force.addExceptionParameterOffset('lambda_alchemical_electrostatics_reciprocal',
                                                                      exception_index,
                                                                      (chargeProd_new - chargeProd_old), 0.0, 0.0)
-
-    # def _copy_reciprocal_space(self):
-    #     """
-    #     Add particles to a standard NonbondedForce for reciprocal space nonbonded interactions and exceptions.
-    #
-    #     """
-    #
-    #     # Retrieve old and new nb forces
-    #     old_system_nbf = self._old_system_forces['NonbondedForce']
-    #     new_system_nbf = self._new_system_forces['NonbondedForce']
-    #
-    #     # Retrieve NonbondedForce for reciprocal space
-    #     standard_nonbonded_force = self._hybrid_system_forces["NonbondedForce"]
-    #
-    #     # Retrieve atom index maps from hybrid to old/new
-    #     hybrid_to_old_map = self._hybrid_to_old_map
-    #     hybrid_to_new_map = self._hybrid_to_new_map
-    #
-    #     # Retrieve atom classes
-    #     atom_classes = self._atom_classes
-    #
-    #     # Iterate over the particles in the hybrid system, because nonbonded force does not accept index
-    #     for particle_index in range(self._hybrid_system.getNumParticles()):
-    #
-    #         if particle_index in atom_classes['unique_old_atoms']:
-    #             # Get the parameters in the old system
-    #             old_index = hybrid_to_old_map[particle_index]
-    #             charge, sigma, epsilon = old_system_nbf.getParticleParameters(old_index)
-    #
-    #             # Add particle to the standard nonbonded force
-    #             check_index = standard_nonbonded_force.addParticle(charge, sigma * 0.0, epsilon * 0.0)
-    #             assert (particle_index == check_index), "Attempting to add incorrect particle to hybrid system"
-    #
-    #             # Charge and epsilon will be turned on at lambda = 0 and turned off at lambda = 1
-    #             standard_nonbonded_force.addParticleParameterOffset('lambda_alchemical_electrostatics_reciprocal', particle_index, -charge, 0.0, 0.0)
-    #
-    #         elif particle_index in atom_classes['unique_new_atoms']:
-    #             # Get the parameters in the new system
-    #             new_index = hybrid_to_new_map[particle_index]
-    #             charge, sigma, epsilon = new_system_nbf.getParticleParameters(new_index)
-    #
-    #             # Add particle to the standard nonbonded force
-    #             check_index = standard_nonbonded_force.addParticle(charge * 0.0, sigma * 0.0, epsilon * 0.0) # charge and epsilon start at zero
-    #             assert (particle_index == check_index), "Attempting to add incorrect particle to hybrid system"
-    #
-    #             # Charge and epsilon will be turned off at lambda = 0 and turned on at lambda = 1
-    #             standard_nonbonded_force.addParticleParameterOffset('lambda_alchemical_electrostatics_reciprocal', particle_index, charge, 0.0, 0.0)
-    #
-    #         elif particle_index in atom_classes['core_atoms']:
-    #             # Get the parameters in the new and old systems:
-    #             old_index = hybrid_to_old_map[particle_index]
-    #             charge_old, sigma_old, epsilon_old = old_system_nbf.getParticleParameters(old_index)
-    #             new_index = hybrid_to_new_map[particle_index]
-    #             charge_new, sigma_new, epsilon_new = new_system_nbf.getParticleParameters(new_index)
-    #
-    #             # Add the particle to the standard nonbonded force
-    #             check_index = standard_nonbonded_force.addParticle(charge_old, (sigma_old + sigma_new) * 0.0, epsilon_old * 0.0)
-    #             assert (particle_index == check_index), "Attempting to add incorrect particle to hybrid system"
-    #
-    #             # Charge is charge_old at lambda_electrostatics = 0, charge_new at lambda_electrostatics = 1
-    #             # interpolate between old and new charge with lambda_electrostatics core; make sure to keep sterics off
-    #             standard_nonbonded_force.addParticleParameterOffset('lambda_alchemical_electrostatics_reciprocal', particle_index, (charge_new - charge_old), 0.0, 0.0)
-    #
-    #         # Otherwise, the particle is in the environment
-    #         else:
-    #             # The parameters will be the same in new and old system, so just take the old parameters
-    #             old_index = hybrid_to_old_map[particle_index]
-    #             charge_old, sigma_old, epsilon_old = old_system_nbf.getParticleParameters(old_index)
-    #             new_index = hybrid_to_new_map[particle_index]
-    #             charge_new, sigma_new, epsilon_new = new_system_nbf.getParticleParameters(new_index)
-    #             assert charge_old == charge_new, "charges do not match: {charge_old} (old) and {charge_new} (new)"
-    #             assert sigma_old == sigma_new, f"sigmas do not match: {sigma_old} (old) and {sigma_new} (new)"
-    #             assert epsilon_old == epsilon_new, f"epsilons do not match: {epsilon_old} (old) and {epsilon_new} (new)"
-    #
-    #             # Add the environment atoms to the stanard nonbonded force
-    #             standard_nonbonded_force.addParticle(charge_old, sigma_old * 0.0, epsilon_old * 0.0)
-    #
-    #     # Add exceptions for unique/old so that they never interact
-    #     for old in atom_classes['unique_old_atoms']:
-    #         for new in atom_classes['unique_new_atoms']:
-    #             standard_nonbonded_force.addException(old,
-    #                                                   new,
-    #                                                   0.0 * unit.elementary_charge ** 2,
-    #                                                   1.0 * unit.nanometers,
-    #                                                   0.0 * unit.kilojoules_per_mole)
-    #
-    #     # Iterate over the old system's exceptions and add them to standard nonbonded force:
-    #     for exception_pair, exception_parameters in self._old_system_exceptions.items():
-    #
-    #         index1_old, index2_old = exception_pair
-    #         chargeProd_old, sigma_old, epsilon_old = exception_parameters
-    #
-    #         # Get hybrid indices:
-    #         index1_hybrid = self._old_to_hybrid_map[index1_old]
-    #         index2_hybrid = self._old_to_hybrid_map[index2_old]
-    #         index_set = {index1_hybrid, index2_hybrid}
-    #
-    #         if index_set.issubset(atom_classes['environment_atoms']):
-    #             # Get new indices
-    #             index1_new = hybrid_to_new_map[index1_hybrid]
-    #             index2_new = hybrid_to_new_map[index2_hybrid]
-    #
-    #             # Get new exception params
-    #             new_exception_params = self._find_exception(new_system_nbf, index1_new, index2_new)
-    #
-    #             # Assert that the new params are equal to the old params
-    #             assert exception_parameters == new_exception_params[2:], f"For {index_set} (hybrid indices), the old exception params are {exception_parameters}, but the new exception params are {new_exception_params}"
-    #
-    #             standard_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old * 0.0, epsilon_old * 0.0)
-    #
-    #         # Handle exceptions where at least one atom is unique old
-    #         elif len(index_set.intersection(atom_classes['unique_old_atoms'])) > 0:
-    #             standard_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old * 0.0, epsilon_old * 0.0)
-    #
-    #         # If the exception particles are neither solely old unique, solely environment, nor contain any unique old atoms, they are either core/environment or core/core
-    #         # In this case, we need to get the parameters from the exception in the other (new) system, and interpolate between the two
-    #         else:
-    #             # First get the new indices.
-    #             index1_new = hybrid_to_new_map[index1_hybrid]
-    #             index2_new = hybrid_to_new_map[index2_hybrid]
-    #
-    #             # Get the exception parameters:
-    #             new_exception_parms = self._find_exception(new_system_nbf, index1_new, index2_new)
-    #
-    #             # If there's no new exception, then we should just set the exception parameters to be the nonbonded parameters
-    #             if not new_exception_parms:
-    #                 charge1_new, sigma1_new, epsilon1_new = new_system_nbf.getParticleParameters(index1_new)
-    #                 charge2_new, sigma2_new, epsilon2_new = new_system_nbf.getParticleParameters(index2_new)
-    #                 chargeProd_new = charge1_new * charge2_new
-    #             else:
-    #                 index1_new, index2_new, chargeProd_new, sigma_new, epsilon_new = new_exception_parms
-    #
-    #             # Interpolate between old and new
-    #             exception_index = standard_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old * 0.0, epsilon_old * 0.0)
-    #             standard_nonbonded_force.addExceptionParameterOffset('lambda_alchemical_electrostatics_reciprocal', exception_index, (chargeProd_new - chargeProd_old), 0.0, 0.0)
-    #
-    #     # Now, loop through the new system to collect remaining interactions. The only that remain here are
-    #     # unique new - unique new, unique new - core, and unique new - environment. There might also be core-core, since not all
-    #     # core-core exceptions exist in both
-    #     for exception_pair, exception_parameters in self._new_system_exceptions.items():
-    #
-    #         index1_new, index2_new = exception_pair
-    #         chargeProd_new, sigma_new, epsilon_new = exception_parameters
-    #
-    #         # Get hybrid indices:
-    #         index1_hybrid = self._new_to_hybrid_map[index1_new]
-    #         index2_hybrid = self._new_to_hybrid_map[index2_new]
-    #         index_set = {index1_hybrid, index2_hybrid}
-    #
-    #         # Handle exceptions where at least one atom is unique new
-    #         if len(index_set.intersection(atom_classes['unique_new_atoms'])) > 0:
-    #             standard_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_new, sigma_new * 0.0, epsilon_new * 0.0)
-    #
-    #         # However, there may be a core exception that exists in one system but not the other (ring closure)
-    #         elif index_set.issubset(atom_classes['core_atoms']):
-    #             # Get the old indices
-    #             try:
-    #                 index1_old = self._topology_proposal.new_to_old_atom_map[index1_new]
-    #                 index2_old = self._topology_proposal.new_to_old_atom_map[index2_new]
-    #             except KeyError:
-    #                 continue
-    #
-    #             # See if it's also in the old nonbonded force. if it is, then we don't need to add it.
-    #             # But if it's not, we need to interpolate
-    #             if not self._find_exception(old_system_nbf, index1_old, index2_old):
-    #                 charge1_old, sigma1_old, epsilon1_old = old_system_nbf.getParticleParameters(index1_old)
-    #                 charge2_old, sigma2_old, epsilon2_old = old_system_nbf.getParticleParameters(index2_old)
-    #                 chargeProd_old = charge1_old * charge2_old
-    #
-    #                 exception_index = standard_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old * 0.0, epsilon_old * 0.0)
-    #                 standard_nonbonded_force.addExceptionParameterOffset('lambda_alchemical_electrostatics_reciprocal', exception_index, (chargeProd_new - chargeProd_old), 0.0, 0.0)
