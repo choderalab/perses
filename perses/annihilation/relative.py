@@ -2798,8 +2798,8 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         # Note that we need to subtract off the reciprocal space for exceptions
         # See explanation for why here: https://github.com/openmm/openmm/issues/3269#issuecomment-934686324
         f"U_electrostatics = U_electrostatics_coulomb * electrostatics_rest_scale - U_electrostatics_reciprocal;",
-        f"U_electrostatics_coulomb = {ONE_4PI_EPS0} * chargeProd_exceptions / r_eff_electrostatics;",
-        f"U_electrostatics_reciprocal = {ONE_4PI_EPS0} * chargeProd_product * erf(alpha * r_eff_electrostatics) / r_eff_electrostatics;",
+        f"U_electrostatics_coulomb = {ONE_4PI_EPS0} * chargeProd_exceptions / r;",
+        f"U_electrostatics_reciprocal = {ONE_4PI_EPS0} * chargeProd_product * erf(alpha * r) / r;",
 
         # Define rest scale
         "electrostatics_rest_scale = is_rest * lambda_rest_electrostatics_exceptions * lambda_rest_electrostatics_exceptions + is_inter * lambda_rest_electrostatics_exceptions + is_nonrest;",
@@ -2807,7 +2807,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
         # Define sterics functional form
         "U_sterics = 4 * epsilon * x * (x - 1.0);"
-        "x = (sigma / r_eff_sterics)^6;"
+        "x = (sigma / r)^6;"
 
         # Define chargeProd (with alchemical scaling)
         "chargeProd_exceptions = is_unique_old * old_chargeProd_exceptions_scaled + is_unique_new * new_chargeProd_exceptions_scaled + is_core * (old_chargeProd_exceptions_scaled + new_chargeProd_exceptions_scaled) + is_environment * chargeProd_exceptions_old;",
@@ -2827,17 +2827,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         "new_epsilon_scaled = lambda_alchemical_sterics_exceptions_new * epsilon_new;",
 
         # Define alpha
-        "alpha = {alpha_ewald};",
-
-        # Define r_eff
-        "r_eff_electrostatics = sqrt(r^2 + w_electrostatics^2);",
-        "r_eff_sterics = sqrt(r^2 + w_sterics^2);",
-
-        # Define 4th dimension terms:
-        "w_electrostatics = w_scale * r_cutoff * (is_unique_old * lambda_alchemical_electrostatics_exceptions_new + is_unique_new * lambda_alchemical_electrostatics_exceptions_old);",
-        "w_sterics = w_scale * r_cutoff * (is_unique_old * lambda_alchemical_sterics_exceptions_new + is_unique_new * lambda_alchemical_sterics_exceptions_old);",
-        "w_scale = {w_scale};",
-        "r_cutoff = {r_cutoff};"
+        "alpha = {alpha_ewald};"
 
     ]
 
@@ -4073,9 +4063,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
         # Create the force
         expression = self._default_exceptions_expression
-        formatted_expression = expression.format(alpha_ewald=self._alpha_ewald,
-                                                 w_scale=self._w_scale,
-                                                 r_cutoff=self._r_cutoff.value_in_unit_system(unit.md_unit_system))
+        formatted_expression = expression.format(alpha_ewald=self._alpha_ewald)
         custom_force = openmm.CustomBondForce(formatted_expression)
         self._hybrid_system.addForce(custom_force)
         self._hybrid_system_forces[custom_force.__class__.__name__ + '_exceptions'] = custom_force
