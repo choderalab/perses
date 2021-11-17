@@ -72,4 +72,8 @@ phases:
 #timestep in fs
 timestep: 4.
 
+# Use geometry-derived mapping
+use_given_geometries: true
+given_geometries_tolerance: 0.2 # angstroms
+
 # remove_constraints: false
