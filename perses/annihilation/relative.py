@@ -3706,8 +3706,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                                                  w_scale=self._w_scale,
                                                  r_cutoff=self._r_cutoff.value_in_unit_system(unit.md_unit_system))
         custom_force = openmm.CustomNonbondedForce(formatted_expression)
+        name = custom_force.__class__.__name__ + '_electrostatics'
+        custom_force.setName(name)
         self._hybrid_system.addForce(custom_force)
-        self._hybrid_system_forces[custom_force.__class__.__name__ + '_electrostatics'] = custom_force
+        self._hybrid_system_forces[name] = custom_force
 
         # Add global parameters
         custom_force.addGlobalParameter(f"lambda_rest_electrostatics", 1.0)
@@ -3755,8 +3757,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         formatted_expression = expression.format(w_scale=self._w_scale,
                                                  r_cutoff=self._r_cutoff.value_in_unit_system(unit.md_unit_system))
         custom_force = openmm.CustomNonbondedForce(formatted_expression)
+        name = custom_force.__class__.__name__ + '_sterics'
+        custom_force.setName(name)
         self._hybrid_system.addForce(custom_force)
-        self._hybrid_system_forces[custom_force.__class__.__name__ + '_sterics'] = custom_force
+        self._hybrid_system_forces[name] = custom_force
 
         # Add global parameters
         custom_force.addGlobalParameter(f"lambda_rest_sterics", 1.0)
@@ -3948,8 +3952,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         expression = self._default_exceptions_expression
         formatted_expression = expression.format(alpha_ewald=self._alpha_ewald)
         custom_force = openmm.CustomBondForce(formatted_expression)
+        name = custom_force.__class__.__name__ + '_exceptions'
+        custom_force.setName(name)
         self._hybrid_system.addForce(custom_force)
-        self._hybrid_system_forces[custom_force.__class__.__name__ + '_exceptions'] = custom_force
+        self._hybrid_system_forces[name] = custom_force
 
         # Add global parameters
         custom_force.addGlobalParameter(f"lambda_rest_electrostatics_exceptions", 1.0)
