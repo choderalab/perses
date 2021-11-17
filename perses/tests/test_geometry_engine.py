@@ -36,7 +36,7 @@ small_molecule_forcefield = 'gaff-2.11'
 # NOTE implicit solvent not supported by SystemGenerator yet
 system_generator = SystemGenerator(forcefields = forcefield_files,
                                                 barostat = None,
-                                                forcefield_kwargs = {'implicitSolvent' : None, 'constraints' : None },
+                                                forcefield_kwargs = {'constraints' : None },
                                                 nonperiodic_forcefield_kwargs = {'nonbondedMethod' : app.NoCutoff},
                                                 small_molecule_forcefield = small_molecule_forcefield)
 
