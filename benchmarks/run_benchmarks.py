@@ -66,8 +66,7 @@ def run_relative_perturbation(lig_a_idx, lig_b_idx, reverse=False, tidy=True):
     with open(f'template.yaml', "r") as yaml_file:
         options = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
-    # Try resuming if FileNotFound or AssertionError then run complete simulation
-    _logger.info("WARNING: No suitable checkpoints found. Running complete simulation.")
+    # TODO: add a step to perform some minimization - should help with NaNs
     # generate yaml file from template
     options['protein_pdb'] = 'target.pdb'
     options['ligand_file'] = 'ligands.sdf'
