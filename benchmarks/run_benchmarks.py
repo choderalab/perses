@@ -28,6 +28,26 @@ base_repo_url = "https://github.com/openforcefield/protein-ligand-benchmark"
 
 
 # helper functions
+def retrieve_file_url(url, retries=5):
+    """Retrieves a file from url. Retries if it encounters an undesired exception. """
+    remaining_tries = retries
+
+    while remaining_tries > 0:
+        try:
+            file_path, _ = urllib.request.urlretrieve(url)
+        except (urllib.error.URLError, urllib.error.HTTPError) as e:
+            _logger.warning(f"Error downloading {url}. Retrying...")
+            remaining_tries = remaining_tries - 1
+            last_error = e
+            continue
+        else:
+            break
+    else:
+        _logger.error(f"Could not fetch data.")
+        raise last_error
+    return file_path
+
+
 def concatenate_files(input_files, output_file):
     """
     Concatenate files given in input_files iterator into output_file.
@@ -131,12 +151,12 @@ is_reversed = args.reversed
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
 target_dir = targets_dict[target]['dir']
 pdb_url = f"{base_repo_url}/raw/master/data/{target_dir}/01_protein/crd/protein.pdb"
-pdb_file, _ = urllib.request.urlretrieve(pdb_url)
+pdb_file = retrieve_file_url(pdb_url)
 
 # Fetch cofactors crystalwater pdb file
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
 cofactors_url = f"{base_repo_url}/raw/master/data/{target_dir}/01_protein/crd/cofactors_crystalwater.pdb"
-cofactors_file, _ = urllib.request.urlretrieve(cofactors_url)
+cofactors_file = retrieve_file_url(cofactors_url)
 
 # Concatenate protein with cofactors pdbs
 concatenate_files((pdb_file, cofactors_file), 'target.pdb')
@@ -149,7 +169,7 @@ with urllib.request.urlopen(ligands_url) as response:
 ligand_files = []
 for ligand in ligands_dict.keys():
     ligand_url = f"{base_repo_url}/raw/master/data/{target_dir}/02_ligands/{ligand}/crd/{ligand}.sdf"
-    ligand_file, _ = urllib.request.urlretrieve(ligand_url)
+    ligand_file = retrieve_file_url(ligand_url)
     ligand_files.append(ligand_file)
 # concatenate sdfs
 concatenate_files(ligand_files, 'ligands.sdf')
