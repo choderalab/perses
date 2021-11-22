@@ -206,7 +206,8 @@ def generate_dipeptide_top_pos_sys(topology,
                                    conduct_geometry_prop=True,
                                    conduct_htf_prop = False,
                                    validate_energy_bookkeeping=True,
-                                   repartitioned=False,
+                                   generate_repartitioned_hybrid_topology_factory=False,
+                                   generate_rest_capable_hybrid_topology_factory=False,
                                    endstate=None,
                                    flatten_torsions=False,
                                    flatten_exceptions=False,
@@ -260,12 +261,15 @@ def generate_dipeptide_top_pos_sys(topology,
 
     if conduct_htf_prop:
         # Create a hybrid topology factory
-        if not repartitioned:
-            from perses.annihilation.relative import HybridTopologyFactory
-            factory = HybridTopologyFactory
-        else:
+        if generate_repartitioned_hybrid_topology_factory:
             from perses.annihilation.relative import RepartitionedHybridTopologyFactory
             factory = RepartitionedHybridTopologyFactory
+        elif generate_rest_capable_hybrid_topology_factory:
+            from perses.annihilation.relative import RESTCapableHybridTopologyFactory
+            factory = RESTCapableHybridTopologyFactory
+        else:
+            from perses.annihilation.relative import HybridTopologyFactory
+            factory = HybridTopologyFactory
 
         forward_htf = factory(topology_proposal=topology_proposal,
                      current_positions=positions,
