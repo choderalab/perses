@@ -19,7 +19,7 @@ forcefield_files:
 
 # Small molecule force field
 # We recommend one of ['gaff-1.81', 'gaff-2.11', 'smirnoff99Frosst-1.1.0', 'openff-1.0.0']
-small_molecule_forcefield: openff-1.0.0
+small_molecule_forcefield: openff-2.0.0
 
 #the temperature and pressure of the simulation, as well as how much solvent paddding to add
 #units:
