@@ -9,6 +9,8 @@ It requires internet connection to function properly, by connecting to the menti
 import argparse
 import logging
 import os
+import random
+import time
 import urllib.request
 import yaml
 
@@ -36,9 +38,11 @@ def retrieve_file_url(url, retries=5):
         try:
             file_path, _ = urllib.request.urlretrieve(url)
         except (urllib.error.URLError, urllib.error.HTTPError) as e:
-            _logger.warning(f"Error downloading {url}. Retrying...")
+            wait_time = random.uniform(1, 3)
+            _logger.warning(f"Error downloading {url}. Retrying in {wait_time} seconds...")
             remaining_tries = remaining_tries - 1
             last_error = e
+            time.sleep(wait_time)  # wait for a random time between 1-3 seconds
             continue
         else:
             break

@@ -660,6 +660,7 @@ def check_EquilibriumFEPTask(task):
 
 def minimize(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState,
              max_iterations: int=100) -> states.SamplerState:
+    # TODO: set max iterations to 1000 and check tyk2 benchmarks
     """
     Minimize the given system and state, up to a maximum number of steps.
     This does not return a copy of the samplerstate; it is an update-in-place.
@@ -686,6 +687,7 @@ def minimize(thermodynamic_state: states.ThermodynamicState, sampler_state: stat
         _logger.debug(f"using global context cache")
         context, integrator = cache.global_context_cache.get_context(thermodynamic_state)
     sampler_state.apply_to_context(context, ignore_velocities = True)
+    # TODO: Set logging for minimization
     openmm.LocalEnergyMinimizer.minimize(context, maxIterations = max_iterations)
     sampler_state.update_from_context(context)
 
