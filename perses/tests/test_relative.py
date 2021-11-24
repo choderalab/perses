@@ -975,14 +975,14 @@ def test_RESTCapableHybridTopologyFactory_energies():
         with open("atp_vacuum.pickle", "rb") as f:
             htf = pickle.load(f)
 
-        validate_endstate_energies_point(htf)
+        validate_endstate_energies_point(htf, minimize=True)
         validate_endstate_energies_md(htf, n_steps=750) # Run 3 ps of MD
 
         # Test at lambda = 1
         with open("atp_vacuum.pickle", "rb") as f:
             htf = pickle.load(f)
 
-        validate_endstate_energies_point(htf, endstate=1)
+        validate_endstate_energies_point(htf, endstate=1, minimize=True)
         validate_endstate_energies_md(htf, endstate=1, n_steps=750) # Run 3 ps of MD
 
     # Alanine dipeptide in solvent
@@ -1007,14 +1007,14 @@ def test_RESTCapableHybridTopologyFactory_energies():
         with open("atp_solvent.pickle", "rb") as f:
             htf = pickle.load(f)
 
-        validate_endstate_energies_point(htf)
+        validate_endstate_energies_point(htf, minimize=True)
         validate_endstate_energies_md(htf, n_steps=750) # Run 3 ps of MD
 
         # Test at lambda = 1
         with open("atp_solvent.pickle", "rb") as f:
             htf = pickle.load(f)
 
-        validate_endstate_energies_point(htf, endstate=1)
+        validate_endstate_energies_point(htf, endstate=1, minimize=True)
         validate_endstate_energies_md(htf, endstate=1, n_steps=750) # Run 3 ps of MD
 
     # Test 8-mer peptide in solvent
@@ -1043,14 +1043,14 @@ def test_RESTCapableHybridTopologyFactory_energies():
         with open("8mer_solvent.pickle", "rb") as f:
             htf = pickle.load(f)
 
-        validate_endstate_energies_point(htf)
+        validate_endstate_energies_point(htf, minimize=True)
         validate_endstate_energies_md(htf, n_steps=750)  # Run 3 ps of MD
 
         # Test at lambda = 1
         with open("8mer_solvent.pickle", "rb") as f:
             htf = pickle.load(f)
 
-        validate_endstate_energies_point(htf, endstate=1)
+        validate_endstate_energies_point(htf, endstate=1, minimize=True)
         validate_endstate_energies_md(htf, endstate=1, n_steps=750)  # Run 3 ps of MD
 
     # Test apo barstar
