@@ -273,29 +273,44 @@ target_dir = targets_dict[target]['dir']
 ligands_url = f"{base_repo_url}/raw/master/data/{target_dir}/00_data/ligands.yml"
 with urllib.request.urlopen(ligands_url) as response:
     ligands_dict = yaml.safe_load(response.read())
+ligands_names = []
 ligands_exp_values = []  # list where to store experimental values
-for _, ligand_data in ligands_dict.items():
-    # ligands_exp_values.append(ligand_data['measurement']['value']/1e6)
-    ligands_exp_values.append(ligand_data['measurement']['value'])
+for ligand_name, ligand_data in ligands_dict.items():
+    # check units (TODO: make it more intelligent. It only handles nM or uM)
+    unit_symbol = ligand_data['measurement']['unit']
+    raw_value = ligand_data['measurement']['value']
+    # add names
+    ligands_names.append(ligand_name)
+    # add values
+    if unit_symbol == 'nM':
+        ligands_exp_values.append(raw_value/1e9)
+    elif unit_symbol == 'uM':
+        ligands_exp_values.append(raw_value/1e6)
+    else:
+        raise ValueError("Unrecognized units in values.")
+
+# construct ligand id to name map
+lig_id_to_name = dict(enumerate(ligands_names))
+
 # converting to kcal/mol
 kBT = kB * 300 * unit.kelvin
 ligands_exp_values = kBT.in_units_of(unit.kilocalorie_per_mole) * np.log(ligands_exp_values)
 
 # Get paths for simulation output directories
-# out_dirs = get_simdir_list(reversed=args.reversed)
+out_dirs = get_simdir_list(reversed=args.reversed)
 
 # Generate list with simulation objects
-# simulations = get_simulations_data(out_dirs)
+simulations = get_simulations_data(out_dirs)
 
 # compare forward and backward simulations
-forward_graph, reversed_graph = get_forward_reverse_graphs()
+# forward_graph, reversed_graph = get_forward_reverse_graphs()
 # TODO: enable the comparison and data_key to be specified via cli
-compare_forward_reverse(forward_graph, reversed_graph, data_key='vac_DG', residuals=True)
-compare_forward_reverse(forward_graph, reversed_graph, data_key='sol_DG', residuals=True)
-compare_forward_reverse(forward_graph, reversed_graph, data_key='calc_DDG', residuals=True)
+# compare_forward_reverse(forward_graph, reversed_graph, data_key='vac_DG', residuals=True)
+# compare_forward_reverse(forward_graph, reversed_graph, data_key='sol_DG', residuals=True)
+# compare_forward_reverse(forward_graph, reversed_graph, data_key='calc_DDG', residuals=True)
 
 # create graph with results
-# results_graph = make_mm_graph(simulations, ligands_exp_values, [0]*len(ligands_exp_values))
+results_graph = make_mm_graph(simulations, ligands_exp_values, [0]*len(ligands_exp_values))
 
 # Print FE comparison
 # for edge in results_graph.edges(data=True):
