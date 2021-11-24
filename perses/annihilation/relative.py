@@ -28,6 +28,8 @@ class HybridTopologyFactory(object):
     environment_atom : these atoms are mapped, and are not part of a changing residue. Their interactions are always
         on and are alchemically unmodified.
 
+    This class can be tested using perses.tests.utils.validate_endstate_energies(), as is done by perses.tests.test_relative.compare_energies
+
     Properties
     ----------
     hybrid_system : openmm.System
@@ -2206,6 +2208,9 @@ class HybridTopologyFactory(object):
 class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
     """
     subclass of the HybridTopologyFactory to allow for more expansive alchemical regions and controllability
+
+    This class can be tested using perses.tests.utils.validate_endstate_energies(), as is done by perses.tests.test_relative.RepartitionedHybridTopologyFactory_energies
+
     """
     def __init__(self,
                  topology_proposal,
@@ -2691,6 +2696,9 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     For the standard NonbondedForce, global parameters (to be used with particle parameter offsets) are defined to allow
     for alchemical scaling, but not rest scaling. Computation of contributions from the direct space is disabled.
 
+    This class can be tested using perses.tests.utils.validate_endstate_energies_point() and
+    perses.tests.utils.validate_endstate_energies_md(), as is done by perses.tests.test_relative.test_RESTCapableHybridTopologyFactory_energies
+
     """
     
     # Constants copied from: https://github.com/openmm/openmm/blob/master/platforms/reference/include/SimTKOpenMMRealType.h#L89. These will be imported directly once we have addresssed https://github.com/choderalab/openmmtools/issues/522
@@ -2847,9 +2855,6 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                  # nonbonded parameters
                  w_scale=0.1,
 
-                 # generate htf for testing
-                 generate_htf_for_testing=False,
-
                  **kwargs):
 
         """
@@ -2865,8 +2870,6 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                 radius for rest region, in nanometers
             w_scale : float
                 maximum offset to add for the 4th dimension lifting
-            generate_htf_for_testing : bool
-                whether to generate the htf for testing
         """
 
         _logger.info("*** Generating RESTCapableHybridTopologyFactory ***")
@@ -2911,11 +2914,6 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         _logger.info(f"r_cutoff is {self._r_cutoff}")
         _logger.info(f"alpha_ewald is {self._alpha_ewald}")
         _logger.info(f"w_scale is {self._w_scale}")
-
-        # Modify properties for testing:
-        if generate_htf_for_testing:
-            self._w_scale = 0
-            _logger.info(f"Set w_scale to 0 for testing")
 
         # Start by creating an empty system. This will become the hybrid system.
         _logger.info(f"Creating hybrid system")

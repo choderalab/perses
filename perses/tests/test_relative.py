@@ -937,3 +937,155 @@ def test_flattenedHybridTopologyFactory_energies():
     # Test alanine dipeptide repartitioned htf with flattened torsions and exceptions in vacuum
     atp, system_generator = generate_atp()
     flattenedHybridTopologyFactory_energies(atp.topology, '1', atp.system, atp.positions, system_generator, repartitioned=True)
+
+
+def test_RESTCapableHybridTopologyFactory_energies():
+    """
+    Test whether the difference in the nonalchemical zero and alchemical zero states is the forward valence energy.  Also test for the one states.
+
+    By default, runs point energy (of the positions in the htf) test and skips the MD test.
+
+    """
+    import tempfile
+    import pickle
+
+    from perses.tests.test_topology_proposal import generate_atp, generate_dipeptide_top_pos_sys
+    from perses.app.relative_point_mutation_setup import PointMutationExecutor
+    from perses.tests.utils import validate_endstate_energies_point, validate_endstate_energies_md
+
+    # Alanine dipeptide in vacuum
+    print("Alanine dipeptide in vacuum")
+    atp, system_generator = generate_atp(phase='vacuum')
+    htf = generate_dipeptide_top_pos_sys(atp.topology,
+                                         'THR',
+                                         atp.system,
+                                         atp.positions,
+                                         system_generator,
+                                         conduct_htf_prop=True,
+                                         generate_rest_capable_hybrid_topology_factory=True,
+                                         validate_endstate_energy=False)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        os.chdir(temp_dir)
+
+        with open("atp_vacuum.pickle", "wb") as f:
+            pickle.dump(htf, f)
+
+        # Test at lambda = 0
+        with open("atp_vacuum.pickle", "rb") as f:
+            htf = pickle.load(f)
+
+        validate_endstate_energies_point(htf)
+        validate_endstate_energies_md(htf, n_steps=750) # Run 3 ps of MD
+
+        # Test at lambda = 1
+        with open("atp_vacuum.pickle", "rb") as f:
+            htf = pickle.load(f)
+
+        validate_endstate_energies_point(htf, endstate=1)
+        validate_endstate_energies_md(htf, endstate=1, n_steps=750) # Run 3 ps of MD
+
+    # Alanine dipeptide in solvent
+    print("Alanine dipeptide in solvent")
+    atp, system_generator = generate_atp(phase='solvent')
+    htf = generate_dipeptide_top_pos_sys(atp.topology,
+                                         'THR',
+                                         atp.system,
+                                         atp.positions,
+                                         system_generator,
+                                         conduct_htf_prop=True,
+                                         generate_rest_capable_hybrid_topology_factory=True,
+                                         validate_endstate_energy=False)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        os.chdir(temp_dir)
+
+        with open("atp_solvent.pickle", "wb") as f:
+            pickle.dump(htf, f)
+
+        # Test at lambda = 0
+        with open("atp_solvent.pickle", "rb") as f:
+            htf = pickle.load(f)
+
+        validate_endstate_energies_point(htf)
+        validate_endstate_energies_md(htf, n_steps=750) # Run 3 ps of MD
+
+        # Test at lambda = 1
+        with open("atp_solvent.pickle", "rb") as f:
+            htf = pickle.load(f)
+
+        validate_endstate_energies_point(htf, endstate=1)
+        validate_endstate_energies_md(htf, endstate=1, n_steps=750) # Run 3 ps of MD
+
+    # Test 8-mer peptide in solvent
+    print("8mer peptide in solvent")
+    peptide_filename = resource_filename('perses', 'data/8mer-example/4zuh_peptide_capped.pdb')
+    solvent_delivery = PointMutationExecutor(peptide_filename,
+                                             '1',
+                                             '2',
+                                             'THR',
+                                             forcefield_files=['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
+                                             ionic_strength=0.05 * unit.molar,
+                                             rest_radius=0.2,
+                                             generate_unmodified_hybrid_topology_factory=False,
+                                             generate_rest_capable_hybrid_topology_factory=True,
+                                             conduct_endstate_validation=False,
+                                             )
+    htf = solvent_delivery.get_apo_rest_htf()
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        os.chdir(temp_dir)
+
+        with open("8mer_solvent.pickle", "wb") as f:
+            pickle.dump(htf, f)
+
+        # Test at lambda = 0
+        with open("8mer_solvent.pickle", "rb") as f:
+            htf = pickle.load(f)
+
+        validate_endstate_energies_point(htf)
+        validate_endstate_energies_md(htf, n_steps=750)  # Run 3 ps of MD
+
+        # Test at lambda = 1
+        with open("8mer_solvent.pickle", "rb") as f:
+            htf = pickle.load(f)
+
+        validate_endstate_energies_point(htf, endstate=1)
+        validate_endstate_energies_md(htf, endstate=1, n_steps=750)  # Run 3 ps of MD
+
+    # Test apo barstar
+    print("barstar")
+    protein_filename = resource_filename('perses', 'data/barstar-mutation/1brs_barstar_renumbered.pdb')
+    solvent_delivery = PointMutationExecutor(protein_filename,
+                                             '1',
+                                             '42',
+                                             'ALA',
+                                             forcefield_files=['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
+                                             ionic_strength=0.05 * unit.molar,
+                                             rest_radius=0.2,
+                                             generate_unmodified_hybrid_topology_factory=False,
+                                             generate_rest_capable_hybrid_topology_factory=True,
+                                             conduct_endstate_validation=False,
+                                             )
+    htf = solvent_delivery.get_apo_rest_htf()
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        os.chdir(temp_dir)
+
+        with open("barstar.pickle", "wb") as f:
+            pickle.dump(htf, f)
+
+        # Test at lambda = 0
+        with open("barstar.pickle", "rb") as f:
+            htf = pickle.load(f)
+
+        validate_endstate_energies_point(htf, minimize=True)
+        validate_endstate_energies_md(htf, n_steps=750)  # Run 3 ps of MD
+
+        # Test at lambda = 1
+        with open("barstar.pickle", "rb") as f:
+            htf = pickle.load(f)
+
+        validate_endstate_energies_point(htf, endstate=1, minimize=True)
+        validate_endstate_energies_md(htf, endstate=1, n_steps=750)  # Run 3 ps of MD
+
