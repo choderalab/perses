@@ -274,7 +274,7 @@ def test_energy_scaling():
                                          positions=atp.positions,
                                          system_generator=system_generator,
                                          conduct_htf_prop=True,
-                                         repartitioned=True,
+                                         generate_repartitioned_hybrid_topology_factory=True,
                                          endstate=0,
                                          validate_endstate_energy=False)
     system = htf.hybrid_system
