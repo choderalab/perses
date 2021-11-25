@@ -973,15 +973,19 @@ def test_RESTCapableHybridTopologyFactory_energies():
         # Test at lambda = 0
         with open(os.path.join(temp_dir, "atp_vacuum.pickle"), "rb") as f:
             htf = pickle.load(f)
-
         validate_endstate_energies_point(htf, minimize=True)
+
+        with open(os.path.join(temp_dir, "atp_vacuum.pickle"), "rb") as f:
+            htf = pickle.load(f)
         validate_endstate_energies_md(htf, n_steps=750) # Run 3 ps of MD
 
         # Test at lambda = 1
         with open(os.path.join(temp_dir, "atp_vacuum.pickle"), "rb") as f:
             htf = pickle.load(f)
-
         validate_endstate_energies_point(htf, endstate=1, minimize=True)
+
+        with open(os.path.join(temp_dir, "atp_vacuum.pickle"), "rb") as f:
+            htf = pickle.load(f)
         validate_endstate_energies_md(htf, endstate=1, n_steps=750) # Run 3 ps of MD
 
     # Alanine dipeptide in solvent
@@ -1004,15 +1008,19 @@ def test_RESTCapableHybridTopologyFactory_energies():
         # Test at lambda = 0
         with open(os.path.join(temp_dir, "atp_solvent.pickle"), "rb") as f:
             htf = pickle.load(f)
-
         validate_endstate_energies_point(htf, minimize=True)
+
+        with open(os.path.join(temp_dir, "atp_solvent.pickle"), "rb") as f:
+            htf = pickle.load(f)
         validate_endstate_energies_md(htf, n_steps=750) # Run 3 ps of MD
 
         # Test at lambda = 1
         with open(os.path.join(temp_dir, "atp_solvent.pickle"), "rb") as f:
             htf = pickle.load(f)
-
         validate_endstate_energies_point(htf, endstate=1, minimize=True)
+
+        with open(os.path.join(temp_dir, "atp_solvent.pickle"), "rb") as f:
+            htf = pickle.load(f)
         validate_endstate_energies_md(htf, endstate=1, n_steps=750) # Run 3 ps of MD
 
     # Test 8-mer peptide in solvent
@@ -1039,15 +1047,19 @@ def test_RESTCapableHybridTopologyFactory_energies():
         # Test at lambda = 0
         with open(os.path.join(temp_dir, "8mer_solvent.pickle"), "rb") as f:
             htf = pickle.load(f)
-
         validate_endstate_energies_point(htf, minimize=True)
+
+        with open(os.path.join(temp_dir, "8mer_solvent.pickle"), "rb") as f:
+            htf = pickle.load(f)
         validate_endstate_energies_md(htf, n_steps=750)  # Run 3 ps of MD
 
         # Test at lambda = 1
         with open(os.path.join(temp_dir, "8mer_solvent.pickle"), "rb") as f:
             htf = pickle.load(f)
-
         validate_endstate_energies_point(htf, endstate=1, minimize=True)
+
+        with open(os.path.join(temp_dir, "8mer_solvent.pickle"), "rb") as f:
+            htf = pickle.load(f)
         validate_endstate_energies_md(htf, endstate=1, n_steps=750)  # Run 3 ps of MD
 
     # Test apo barstar
@@ -1074,14 +1086,18 @@ def test_RESTCapableHybridTopologyFactory_energies():
         # Test at lambda = 0
         with open(os.path.join(temp_dir, "barstar.pickle"), "rb") as f:
             htf = pickle.load(f)
-
         validate_endstate_energies_point(htf, minimize=True)
+
+        with open(os.path.join(temp_dir, "barstar.pickle"), "rb") as f:
+            htf = pickle.load(f)
         validate_endstate_energies_md(htf, n_steps=750)  # Run 3 ps of MD
 
         # Test at lambda = 1
         with open(os.path.join(temp_dir, "barstar.pickle"), "rb") as f:
             htf = pickle.load(f)
-
         validate_endstate_energies_point(htf, endstate=1, minimize=True)
+
+        with open(os.path.join(temp_dir, "barstar.pickle"), "rb") as f:
+            htf = pickle.load(f)
         validate_endstate_energies_md(htf, endstate=1, n_steps=750)  # Run 3 ps of MD
 

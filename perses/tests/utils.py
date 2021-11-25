@@ -1006,20 +1006,16 @@ def validate_endstate_energies_md(htf, T_max=300 * unit.kelvin, endstate=0, n_st
     lambda_protocol = RESTCapableLambdaProtocol()
     alchemical_state = RESTCapableRelativeAlchemicalState.from_system(hybrid_system)
     thermostate = states.ThermodynamicState(hybrid_system, temperature=T_min)
-    compound_thermodynamic_state = states.CompoundThermodynamicState(thermostate,
-                                                              composable_states=[alchemical_state])
+    compound_thermodynamic_state = states.CompoundThermodynamicState(thermostate, composable_states=[alchemical_state])
 
     # Set alchemical parameters
     beta_0 = 1 / (kB * T_min)
     beta_m = 1 / (kB * T_max)
     global_lambda = endstate
-    compound_thermodynamic_state.set_alchemical_parameters(global_lambda, beta_0, beta_m,
-                                                           lambda_protocol=lambda_protocol)
+    compound_thermodynamic_state.set_alchemical_parameters(global_lambda, beta_0, beta_m, lambda_protocol=lambda_protocol)
 
     # Create context
-    integrator = integrators.LangevinIntegrator(temperature=T_min,
-                                                            collision_rate=1 / unit.picoseconds,
-                                                            timestep=4 * unit.femtoseconds)
+    integrator = integrators.LangevinIntegrator(temperature=T_min, collision_rate=1 / unit.picoseconds, timestep=4 * unit.femtoseconds)
     context = compound_thermodynamic_state.create_context(integrator)
     context.setPositions(hybrid_positions)
     context.setPeriodicBoxVectors(*box_vectors)
@@ -1039,8 +1035,8 @@ def validate_endstate_energies_md(htf, T_max=300 * unit.kelvin, endstate=0, n_st
     og_system = htf._topology_proposal.old_system if endstate == 0 else htf._topology_proposal.new_system
     thermodynamic_state = states.ThermodynamicState(og_system, temperature=T_min)
     integrator_og = integrators.LangevinIntegrator(temperature=T_min,
-                                                               collision_rate=1 / unit.picoseconds,
-                                                               timestep=4 * unit.femtoseconds)
+                                                   collision_rate=1 / unit.picoseconds,
+                                                   timestep=4 * unit.femtoseconds)
     context_og = thermodynamic_state.create_context(integrator_og)
 
     # Zero the unique old/new valence in the hybrid system
@@ -1074,8 +1070,7 @@ def validate_endstate_energies_md(htf, T_max=300 * unit.kelvin, endstate=0, n_st
     lambda_protocol = RESTCapableLambdaProtocol()
     alchemical_state = RESTCapableRelativeAlchemicalState.from_system(hybrid_system)
     thermostate = states.ThermodynamicState(hybrid_system, temperature=T_min)
-    compound_thermodynamic_state = states.CompoundThermodynamicState(thermostate,
-                                                              composable_states=[alchemical_state])
+    compound_thermodynamic_state = states.CompoundThermodynamicState(thermostate, composable_states=[alchemical_state])
 
     beta_0 = 1 / (kB * T_min)
     beta_m = 1 / (kB * T_max)
@@ -1084,8 +1079,8 @@ def validate_endstate_energies_md(htf, T_max=300 * unit.kelvin, endstate=0, n_st
                                                            lambda_protocol=lambda_protocol)
 
     integrator_hybrid = integrators.LangevinIntegrator(temperature=T_min,
-                                                                   collision_rate=1 / unit.picoseconds,
-                                                                   timestep=4 * unit.femtoseconds)
+                                                       collision_rate=1 / unit.picoseconds,
+                                                       timestep=4 * unit.femtoseconds)
     context_hybrid = compound_thermodynamic_state.create_context(integrator_hybrid)
 
     # Get energies for each conformation
