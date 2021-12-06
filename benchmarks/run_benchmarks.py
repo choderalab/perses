@@ -14,6 +14,7 @@ import time
 import urllib.request
 import yaml
 
+from http.client import RemoteDisconnected
 from perses.app.setup_relative_calculation import run
 
 # Setting logging level config
@@ -37,7 +38,7 @@ def retrieve_file_url(url, retries=5):
     while remaining_tries > 0:
         try:
             file_path, _ = urllib.request.urlretrieve(url)
-        except (urllib.error.URLError, urllib.error.HTTPError) as e:
+        except (urllib.error.URLError, urllib.error.HTTPError, RemoteDisconnected) as e:
             wait_time = random.uniform(1, 3)
             _logger.warning(f"Error downloading {url}. Retrying in {wait_time} seconds...")
             remaining_tries = remaining_tries - 1
@@ -50,6 +51,27 @@ def retrieve_file_url(url, retries=5):
         _logger.error(f"Could not fetch data.")
         raise last_error
     return file_path
+
+def fetch_url_contents(url, retries=5):
+    """Fetch contents from url. Retries if it encounters an undesired exception. """
+    remaining_tries = retries
+
+    while remaining_tries > 0:
+        try:
+            file_contents = urllib.request.urlopen(url)
+        except (urllib.error.URLError, urllib.error.HTTPError, RemoteDisconnected) as e:
+            wait_time = random.uniform(1, 3)
+            _logger.warning(f"Error downloading {url}. Retrying in {wait_time} seconds...")
+            remaining_tries = remaining_tries - 1
+            last_error = e
+            time.sleep(wait_time)  # wait for a random time between 1-3 seconds
+            continue
+        else:
+            break
+    else:
+        _logger.error(f"Could not fetch data.")
+        raise last_error
+    return file_contents
 
 
 def concatenate_files(input_files, output_file):
@@ -123,7 +145,7 @@ def run_relative_perturbation(lig_a_idx, lig_b_idx, reverse=False, tidy=True):
 # fetching targets from github repo
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
 targets_url = f"{base_repo_url}/raw/master/data/targets.yml"
-with urllib.request.urlopen(targets_url) as response:
+with fetch_url_contents(targets_url) as response:
     targets_dict = yaml.safe_load(response.read())
 # get the possible choices from targets yaml file
 target_choices = targets_dict.keys()
@@ -168,7 +190,7 @@ concatenate_files((pdb_file, cofactors_file), 'target.pdb')
 # Fetch ligands sdf files and concatenate them in one
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
 ligands_url = f"{base_repo_url}/raw/master/data/{target_dir}/00_data/ligands.yml"
-with urllib.request.urlopen(ligands_url) as response:
+with fetch_url_contents(ligands_url) as response:
     ligands_dict = yaml.safe_load(response.read())
 ligand_files = []
 for ligand in ligands_dict.keys():
@@ -182,7 +204,7 @@ concatenate_files(ligand_files, 'ligands.sdf')
 # fetch edges information
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
 edges_url = f"{base_repo_url}/raw/master/data/{target_dir}/00_data/edges.yml"
-with urllib.request.urlopen(edges_url) as response:
+with fetch_url_contents(edges_url) as response:
     edges_dict = yaml.safe_load(response.read())
 edges_list = list(edges_dict.values())  # suscriptable edges object - note dicts are ordered for py>=3.7
 # edge list to access by index
