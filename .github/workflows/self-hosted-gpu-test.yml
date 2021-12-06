@@ -109,7 +109,7 @@ jobs:
         uses: codecov/codecov-action@v1
         with:
           file: ./perses/coverage.xml
-          fail_ci_if_error: true
+          fail_ci_if_error: false
 
   stop-runner:
     name: Stop self-hosted EC2 runner
