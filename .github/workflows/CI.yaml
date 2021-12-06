@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: [3.7, 3.8, 3.9]
-        openmm: ["nightly", "7.5.1.", "7.6.0"]
+        openmm: ["nightly", "7.6"]
 
     env:
       OPENMM: ${{ matrix.openmm }}
@@ -94,4 +94,4 @@ jobs:
         uses: codecov/codecov-action@v1
         with:
           file: ./coverage.xml
-          fail_ci_if_error: true
+          fail_ci_if_error: false
