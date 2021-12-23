@@ -531,7 +531,8 @@ class PolymerProposalEngine(ProposalEngine):
     def get_water_indices(charge_diff,
                                new_positions,
                                new_topology,
-                               radius=0.8):
+                               radius=0.8,
+                               ion_names=['NA', 'CL', 'ZN']):
         """
         Choose random water(s) (at least `radius` nm away from the protein) to turn into ion(s). Returns the atom indices of the water(s) (index w.r.t. new_topology)
 
@@ -545,6 +546,8 @@ class PolymerProposalEngine(ProposalEngine):
             topology of new system
         radius : float, default 0.8
             minimum distance (in nm) that all candidate waters must be from 'protein atoms'
+        ion_names : list of str, default ['NA', 'CL', 'ZN']
+            ion residue names to exclude when choosing waters far away from nonsolvent atoms
 
         Returns
         -------
@@ -555,8 +558,12 @@ class PolymerProposalEngine(ProposalEngine):
         import mdtraj as md
         # Create trajectory
         traj = md.Trajectory(new_positions[np.newaxis, ...], md.Topology.from_openmm(new_topology))
+
+        # Define water_atoms and query_atoms
         water_atoms = traj.topology.select(f"water")
-        query_atoms = traj.top.select('protein')
+        ion_selection = [f'not resn {ion}' for ion in ion_names]
+        ion_selection_final = ' and '.join(ion_selection)
+        query_atoms = traj.top.select('not water and ' + ion_selection_final) # it is insufficient to make this selection string 'protein' because there may be glycans
 
         # Get water atoms within radius of protein
         neighboring_atoms = md.compute_neighbors(traj, radius, query_atoms, haystack_indices=water_atoms)[0]
