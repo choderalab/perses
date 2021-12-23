@@ -559,7 +559,7 @@ class PolymerProposalEngine(ProposalEngine):
         # Create trajectory
         traj = md.Trajectory(new_positions[np.newaxis, ...], md.Topology.from_openmm(new_topology))
 
-        # Define water_atoms and query_atoms
+        # Define water atoms and query atoms (the latter should encompass all non water/ion atoms)
         water_atoms = traj.topology.select(f"water")
         ion_selection = [f'not resn {ion}' for ion in ion_names]
         ion_selection_final = ' and '.join(ion_selection)
