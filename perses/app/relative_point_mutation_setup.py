@@ -4,7 +4,6 @@ from perses.utils.openeye import createOEMolFromSDF, extractPositionsFromOEMol
 from perses.annihilation.relative import HybridTopologyFactory, RepartitionedHybridTopologyFactory, RESTCapableHybridTopologyFactory
 from perses.rjmc.topology_proposal import PointMutationEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
-from perses.tests.utils import validate_endstate_energies
 
 import simtk.openmm as openmm
 import simtk.openmm.app as app
@@ -366,6 +365,7 @@ class PointMutationExecutor(object):
                 assert not flatten_torsions and not flatten_exceptions, "Cannot conduct endstate validation if flatten_torsions or flatten_exceptions is True"
 
                 if generate_unmodified_hybrid_topology_factory:
+                    from perses.tests.utils import validate_endstate_energies
                     htf = self.get_complex_htf() if is_complex else self.get_apo_htf()
                     zero_state_error, one_state_error = validate_endstate_energies(htf._topology_proposal,
                                                                                    htf,
@@ -379,6 +379,7 @@ class PointMutationExecutor(object):
                         _logger.warning(f"Reduced potential difference of the nonalchemical and alchemical Lambda = 1 state is above the threshold ({ENERGY_THRESHOLD}): {one_state_error}")
 
                 if generate_repartitioned_hybrid_topology_factory:
+                    from perses.tests.utils import validate_endstate_energies
                     htf_0 = self.get_complex_rhtf_0() if is_complex else self.get_apo_rhtf_0()
                     htf_1 = self.get_complex_rhtf_1() if is_complex else self.get_apo_rhtf_1()
 
@@ -404,6 +405,7 @@ class PointMutationExecutor(object):
                         _logger.warning(f"Reduced potential difference of the nonalchemical and alchemical Lambda = 1 state is above the threshold ({ENERGY_THRESHOLD}): {one_state_error}")
 
                 if generate_rest_capable_hybrid_topology_factory:
+                    from perses.tests.utils import validate_endstate_energies_point
                     for endstate in [0, 1]:
                         htf = copy.deepcopy(self.get_complex_rest_htf()) if is_complex else copy.deepcopy(self.get_apo_rest_htf())
                         validate_endstate_energies_point(htf, endstate=endstate, minimize=True)

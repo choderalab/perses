@@ -33,4 +33,7 @@ def test_PointMutationExecutor_endstate_validation():
         flatten_torsions=False,
         flatten_exceptions=False,
         conduct_endstate_validation=True,
+        generate_unmodified_hybrid_topology_factory=True,
+        generate_repartitioned_hybrid_topology_factory=True,
+        generate_rest_capable_hybrid_topology_factory=True
     )
