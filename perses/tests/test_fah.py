@@ -28,6 +28,7 @@ forcefield_files = ['amber/ff14SB.xml','amber/tip3p_standard.xml','amber/tip3p_H
 
 @skipIf(running_on_github_actions, "Skip slow test on GH Actions")
 def test_pipeline_small_molecule():
+    """Test setup of small molecule transformation in complex and solvent (for BACE from JACS set) on Folding@home"""
     from pkg_resources import resource_filename
     from perses.app.fah_generator import run_neq_fah_setup
     ligand_file = resource_filename('perses', 'data/bace-example/Bace_ligands_shifted.sdf')
@@ -55,6 +56,7 @@ def test_pipeline_small_molecule():
 
 #@skipIf(running_on_github_actions, "Skipping for now as it's currently failing to generate state file -- needs debugging")
 def test_pipeline_small_molecule_solvent():
+    """Test setup of small molecule transformation in solvent and vacuum (for CDK2 from JACS set) on Folding@home"""
     from pkg_resources import resource_filename
     from perses.app.fah_generator import run_neq_fah_setup
     ligand_file = resource_filename('perses', 'data/cdk2-example/CDK2_ligands.sdf')
@@ -75,6 +77,7 @@ def test_pipeline_small_molecule_solvent():
 
 @skipIf(running_on_github_actions, "Skip slow test on GH Actions")
 def test_pipeline_protein():
+    """Test setup of protein mutation in complex and apo (for barnase-barstar) for Folding@home"""
     from pkg_resources import resource_filename
     from perses.app.fah_generator import run_neq_fah_setup
     yaml_filename = resource_filename('perses', 'data/barstar-mutation/mutant.yaml')

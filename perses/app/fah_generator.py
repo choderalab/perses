@@ -12,7 +12,11 @@ from simtk import openmm
 import logging
 import datetime
 
+# TODO: Move logging filters to utils module
 class TimeFilter(logging.Filter):
+    """
+    Logging filter that shows how much time (in seconds) have elapsed since the last logging statement.
+    """
     def filter(self, record):
         try:
           last = self.last
@@ -23,6 +27,7 @@ class TimeFilter(logging.Filter):
         self.last = record.relativeCreated
         return True
 
+# TODO: Move logging configuration helpers to utils module
 fmt = logging.Formatter(fmt="%(asctime)s:(%(relative)ss):%(name)s:%(message)s")
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(message)s',
@@ -33,7 +38,8 @@ _logger.setLevel(logging.INFO)
 [hndl.addFilter(TimeFilter()) for hndl in _logger.handlers]
 [hndl.setFormatter(fmt) for hndl in _logger.handlers]
 
-#let's make a default lambda protocol
+# Default alchemical protocols
+# TODO: Move these to alchemical module that encapsulates alchemical factory and best-practices protocols
 x = 'lambda'
 # TODO change this for perses.annihilation.LambdaProtocol.default_functions
 DEFAULT_ALCHEMICAL_FUNCTIONS = {
@@ -48,7 +54,20 @@ DEFAULT_ALCHEMICAL_FUNCTIONS = {
                              'lambda_torsions': x}
 
 
-def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R H O R V', timestep=4.0 * unit.femtosecond, alchemical_functions=DEFAULT_ALCHEMICAL_FUNCTIONS, **kwargs):
+# TODO: Reconsider this for integration into some kind of class hierarchy that represents free energy methods that can be run on Folding@home?
+# For example, we could have
+# FoldingAtHomeSimulation
+#  + FoldingAtHomeFreeEnergyCalculation
+#    + NonequilibriumCycling
+#    + NonequilibriumShooting
+#    + IndependentAlchemicalSimulations
+#    + SAMS
+#    + TimesSquareSampling
+#
+# These classes could all generate their own complete RUN{run_id}/... directory hierarchies for Folding@home, complete with all necessary
+# auxiliary files: {system, state, integrator, core}.xml, metadata, etc
+
+def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R H O R V', timestep=4.0 * unit.femtosecond, alchemical_functions=DEFAULT_ALCHEMICAL_FUNCTIONS):
     """
     Construct an openmmtools.integrators.PeriodicNonequilibriumIntegrator for collecting nonequilibrium work measurement data on Folding@home
 
@@ -65,8 +84,6 @@ def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R 
         Timestep to use for integrator.
     alchemical_functions : dict, optional, default=DEFAULT_ALCHEMICAL_FUNCTIONS
         Dictionary containing alchemical functions describing how `lambda` should modify all interactions. See DEFAULT_ALCHEMICAL_FUNCTIONS for example.
-    **kwargs :
-        Miscellaneous arguments for openmmtools.integrators.LangevinIntegrator
 
     Returns
     -------
@@ -77,6 +94,7 @@ def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R 
     integrator = PeriodicNonequilibriumIntegrator(alchemical_functions, nsteps_eq, nsteps_neq, neq_splitting, timestep=timestep)
     return integrator
 
+# TODO: Integrate this into class hierarchy that understands what kind of free energy calculations can be run on Folding@home?
 def make_core_file(numSteps,
                    xtcFreq,
                    globalVarFreq,
@@ -248,7 +266,7 @@ def run_neq_fah_setup(ligand_file,
                       protein_kwargs=None,
                       ionic_strength=0.15*unit.molar,
                       remove_constraints=False,
-                      rmsd_restraint=True,
+                      rmsd_restraint=False,
                       **kwargs):
     """
     Set up perses relative free energy calculations for Folding@home
@@ -374,7 +392,8 @@ def run_neq_fah_setup(ligand_file,
         This is useful if the alchemical system is to be treated without bond constraints 
     rmsd_restraint : bool, optional, default=False
         If True, will restraint the core atoms and protein CA atoms within 6.5A of the core atoms.
-
+    kwargs
+        Other arguments are passed on in setup_options
     """
     from perses.utils import data
     if isinstance(temperature,float) or isinstance(temperature,int):
@@ -388,10 +407,12 @@ def run_neq_fah_setup(ligand_file,
 
     # Turn all of the args into a dict for passing to run_setup
     # TODO: This is unsafe; replace this with the new class-based perses API.
+    # See API design notes at https://gist.github.com/jchodera/b8d2396a5953e391bb08335f1fc97f4e
     # HBM - this doesn't feel particularly safe
     # Also, this means that the function can't run without being called by run(), as we are requiring things that aren't arguments to this function, like 'solvent_projid'...etc
-    setup_options = locals()
+    setup_options = locals() # WARNING: This is incredibly dangerous! We are just feeding all variables in scope via setup_options to run_setup() or PointMutationExecutor()
     if 'kwargs' in setup_options.keys(): #update the setup options w.r.t. kwargs
+        # TODO: This is dangerous if there is no argument validation
         setup_options.update(setup_options['kwargs'])
     if protein_kwargs is not None: #update the setup options w.r.t. the protein kwargs
         setup_options.update(setup_options['protein_kwargs'])
@@ -420,7 +441,7 @@ def run_neq_fah_setup(ligand_file,
         _logger.info(f"Setting up a small molecule transformation")
         from perses.app.setup_relative_calculation import run_setup
         setup_dict = run_setup(setup_options, serialize_systems=False, build_samplers=False)
-        topology_proposals = setup_dict['topology_proposals']
+        topology_proposals = setup_dict['topology_proposals'] # WARNING: This is not just a collection of TopologyProposal objects accessed via topology_proposals[phase]
         htfs = setup_dict['hybrid_topology_factories']
     elif setup == 'protein':
         _logger.info(f"Setting up a protein point mutation")
@@ -448,6 +469,12 @@ def run_neq_fah_setup(ligand_file,
             metadata['old_ligand_index'] = old_ligand_index,
             metadata['new_ligand_index'] = new_ligand_index,
             metadata['ligand_file'] = ligand_file
+            # Get useful information about the molecular transformation
+            from openff.toolkit.topology import Molecule
+            for endpoint in ['old', 'new']:
+                molecule = Molecule.from_openeye(getattr(tp, f'ligand_oemol_{endpoint}'))
+                metadata[f'{endpoint}_smiles'] = molecule.to_smiles()
+                metadata[f'{endpoint}_name'] = molecule.name
         elif setup == 'protein':
             # TODO: Adapt this for protein mutations
             pass
@@ -459,18 +486,42 @@ def run_neq_fah_setup(ligand_file,
 
         # Render atom mapping
         tp = topology_proposals
-        from perses.utils.smallmolecules import render_atom_mapping
         atom_map_filename = f'{dir}/atom_map.png'
-        if setup=='protein':
-            from perses.utils.smallmolecules import  render_protein_residue_atom_mapping
-            render_protein_residue_atom_mapping(tp['apo'], atom_map_filename)
-        else:
+        if setup == 'small_molecule':
+            from perses.utils.smallmolecules import render_atom_mapping
             old_ligand_oemol, new_ligand_oemol = tp['ligand_oemol_old'], tp['ligand_oemol_new']
             _map = tp['non_offset_new_to_old_atom_map']
             render_atom_mapping(atom_map_filename, old_ligand_oemol, new_ligand_oemol, _map)
+        elif setup == 'protein':
+            from perses.utils.smallmolecules import render_protein_residue_atom_mapping # TODO: Why do we need a separate utility for this?
+            render_protein_residue_atom_mapping(topology_proposal, atom_map_filename)
 
         # TODO: Determine atom mappings and slices we need
         # careful to include only protein and small molecule atoms
+        hybrid_solute_to_real_solute_map = dict() # hybrid_solute_to_real_solute_map[endpoint][hybrid_atom_index] 
+        real_solute_to_hybrid_solute_map = dict() # real_solute_to_hybrid_solute_map[endpoint][real_atom_index] is the 
+        hybrid_to_real_map = dict()
+        real_to_hybrid_map = dict()
+        hybrid_to_hybrid_solute_map = dict()    
+        for endpoint in ['old', 'new']:
+            htf = htfs[phase]
+            openmm_topology = getattr(htf._topology_proposal, f'{endpoint}_topology')
+            mdtraj_topology = md.Topology.from_openmm(openmm_topology)
+            # Select non-solvent
+            # WARNING: This is fragile because it reproduces the behavior of mdtraj's remove_solvent()
+            # TODO: Implement 'solvent' into mdtraj DSL following same logic and replace this code with
+            # public API code only. Alternatively, use MDAnalysis.
+            # https://github.com/mdtraj/mdtraj/blob/master/mdtraj/core/residue_names.py#L1826
+            from mdtraj.core.residue_names import _SOLVENT_TYPES
+            solvent_types = list(_SOLVENT_TYPES)
+            solute_indices = [ atom.index for atom in mdtraj_topology.atoms if
+                               atom.residue.name not in solvent_types]
+            real_to_hybrid_map = getattr(htf,f'_{endpoint}_to_hybrid_map')
+            # real_solute_to_hybrid_solute_map 
+            hybrid_solute_to_real_solute_map[endpoint] = { [solute_indices[real_index]] : real_index for real_index in range(len(solute_indices)) }
+
+
+
         # * full hybrid system to full {old | new} system
         # * solute-only hybrid system to full hybrid system
         # * solute-only hybrid system to solute-only {old | new} system
@@ -478,12 +529,23 @@ def run_neq_fah_setup(ligand_file,
         # Serialize atom mappings
         # These can be accessed with:
         # np.load('/path/to/file.npz', allow_pickle=True)['hybrid_to_old_map'].flat[0]
+        # TODO: This is really clunky.
         # TODO: Improve the way we serialize these atom mappings
-        hybrid_to_old_map = htfs[phase]._hybrid_to_old_map
-        hybrid_to_new_map = htfs[phase]._hybrid_to_new_map
+        htf = htfs[phase]
         np.savez(f'{dir}/hybrid_atom_mappings.npz',
-                 hybrid_to_old_map=hybrid_to_old_map,
-                 hybrid_to_new_map=hybrid_to_new_map)
+                 # Full system maps
+                 hybrid_to_old_map=htf._hybrid_to_old_map,
+                 hybrid_to_new_map=htf._hybrid_to_new_map,
+                 old_to_hybrid_map=htf._old_to_hybrid_map,
+                 new_to_hybrid_map=htf._new_to_hybrid_map,
+                 # Solute only maps
+                 old_solute_to_hybrid_solute_map=real_solute_to_hybrid_solute_map['old'],
+                 new_solute_to_hybrid_solute_map=real_solute_to_hybrid_solute_map['new'],
+                 hybrid_solute_to_old_solute_map=hybrid_solute_to_real_solute_map['old'],                 
+                 hybrid_solute_to_new_solute_map=hybrid_solute_to_real_solute_map['new'],                 
+                 # Full to solute subsets
+                 hybrid_solute_atom_indices=hybrid_solute_atom_indices,
+        )
 
         # Create a core.xml for Folding@home OpenMM core22
         # TODO: Specify xtcAtoms as hybrid solute atom indices
@@ -522,24 +584,20 @@ def run_neq_fah_setup(ligand_file,
         
         _logger.info(f'Serializing equilibrated State...')
         data.serialize(state, f"{dir}/state.xml.bz2")
+
+        # TODO: Save complete hybrid topology
             
         # Write old and new equilibrated snapshots
-        pos = state.getPositions(asNumpy=True)
-        pos = np.asarray(pos)
-
         import mdtraj as md
-        # Store initial configuration/topology for old system sliced form hybrid system as PDB file
-        # TODO: Use solute-only hybrid system indices to slice out atoms
-        old_traj = md.Trajectory(htfs[phase].old_positions(pos),
-                                 md.Topology.from_openmm(htfs[phase]._topology_proposal.old_topology))
-        old_traj.remove_solvent(exclude=['CL', 'NA'], inplace=True)
-        old_traj.save(f'{dir}/old_{phase}.pdb')
-        # Store initial configuration/topology for new system sliced form hybrid system as PDB file
-        # TODO: Use solute-only hybrid system indices to slice out atoms
-        new_traj = md.Trajectory(htfs[phase].new_positions(pos),
-                                 md.Topology.from_openmm(htfs[phase]._topology_proposal.new_topology))
-        new_traj.remove_solvent(exclude=['CL', 'NA'], inplace=True)
-        new_traj.save(f'{dir}/new_{phase}.pdb')
+        pos = state.getPositions(asNumpy=True)
+        pos = np.asarray(pos) # QUESTION: Why is this here? Doesn't it strip units?
+        for endpoint in ['old', 'new']:
+            openmm_topology = getattr(htfs[phase]._topology_proposal, f'{endpoint}_topology')
+            mdtraj_topology = md.Topology.from_openmm(openmm_topology)
+            positions = getattr(htfs[phase], f'{endpoint}_positions')(pos)
+            traj = md.Trajectory(positions, mdtraj_topology)
+            traj.remove_solvent(exclude=['CL', 'NA'], inplace=True)
+            traj.save(f'{dir}/{endpoint}_{phase}.pdb')
 
 def run(yaml_filename=None):
     """
