@@ -92,7 +92,7 @@ def test_pipeline_protein():
     # need to replace ligand and protein location in file
 
     setup_options['phase_project_ids'] = {'complex':'temp-complex','apo':'temp-apo'}
-    setup_options['protein_kwargs']['ligand_file'] = ligand_file
+    setup_options['protein_kwargs']['ligand_input'] = ligand_file
     setup_options['protein_kwargs']['protein_filename'] = protein_file
     setup_options['phases'] = ['complex']
     #TODO: add platform name option to test
