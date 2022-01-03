@@ -1,13 +1,7 @@
 __author__ = 'dominic rufa'
 
 """
-Folding@Home perses executor
-
-# prereqs
-conda config --add channels omnia --add channels conda-forge
-conda create -n perses python3.7 perses tqdm dicttoxml
-pip uninstall --yes openmmtools
-pip install git+https://github.com/choderalab/openmmtools.git
+Application API for setting up perses relative free energy calculations on Folding@Home.
 
 argv[1]: setup.yaml (argument for perses.app.setup_relative_calculation.getSetupOptions)
 """
@@ -16,9 +10,7 @@ import os
 import simtk.unit as unit
 from simtk import openmm
 import logging
-
 import datetime
-
 
 class TimeFilter(logging.Filter):
     def filter(self, record):
@@ -58,31 +50,32 @@ DEFAULT_ALCHEMICAL_FUNCTIONS = {
 
 def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R H O R V', timestep=4.0 * unit.femtosecond, alchemical_functions=DEFAULT_ALCHEMICAL_FUNCTIONS, **kwargs):
     """
-    generate an openmmtools.integrators.PeriodicNonequilibriumIntegrator
+    Construct an openmmtools.integrators.PeriodicNonequilibriumIntegrator for collecting nonequilibrium work measurement data on Folding@home
 
-    arguments
-        nsteps_eq : int, default=250000
-            Number of equilibration steps to dwell within lambda = 0 or 1 when reached
-        nsteps_neq : int, default=250000
-            Number of nonequilibrium switching steps for 0->1 and 1->0 switches
-        neq_splitting : str, default='V R H O R V'
-            Sequence of "R", "V", "O" (and optionally "{", "}", "V0", "V1", ...) substeps to be executed each timestep.
-            "H" increments the global parameter `lambda` by 1/nsteps_neq for each step and accumulates protocol work.
-        timestep : int, default=4.0 * unit.femtosecond
-            integrator timestep
-        alchemical_functions=dict
-            dictionary containing alchemical functions of how to perturb each group. See DEFAULT_ALCHEMICAL_FUNCTIONS for example
-        **kwargs :
-            miscellaneous arguments for openmmtools.integrators.LangevinIntegrator
+    Parameters
+    ----------
+    nsteps_eq : int, default=250000
+        Number of equilibration steps to dwell within lambda = 0 or 1 when reached
+    nsteps_neq : int, default=250000
+        Number of nonequilibrium switching steps for 0->1 and 1->0 switches
+    neq_splitting : str, optional, default='V R H O R V' (BAOAB nonequilibrum integrator)
+        Sequence of "R", "V", "O" (and optionally "{", "}", "V0", "V1", ...) substeps to be executed each timestep.
+        "H" increments the global parameter `lambda` by 1/nsteps_neq for each step and accumulates protocol work.
+    timestep : int, default=4.0 * unit.femtosecond
+        Timestep to use for integrator.
+    alchemical_functions : dict, optional, default=DEFAULT_ALCHEMICAL_FUNCTIONS
+        Dictionary containing alchemical functions describing how `lambda` should modify all interactions. See DEFAULT_ALCHEMICAL_FUNCTIONS for example.
+    **kwargs :
+        Miscellaneous arguments for openmmtools.integrators.LangevinIntegrator
 
-    returns
-        integrator : openmmtools.integrators.PeriodicNonequilibriumIntegrator
+    Returns
+    -------
+    integrator : openmmtools.integrators.PeriodicNonequilibriumIntegrator
 
     """
     from openmmtools.integrators import PeriodicNonequilibriumIntegrator
     integrator = PeriodicNonequilibriumIntegrator(alchemical_functions, nsteps_eq, nsteps_neq, neq_splitting, timestep=timestep)
     return integrator
-
 
 def make_core_file(numSteps,
                    xtcFreq,
@@ -91,7 +84,19 @@ def make_core_file(numSteps,
                    precision='mixed',
                    globalVarFilename='globals.csv',
                    directory='.'):
-    """ Makes core.xml file for simulating on folding at home
+    """ 
+    Generate core.xml file for Folding@home OpenMM core22 
+
+    See all options for core.xml described in core22 README:
+    https://github.com/foldingathome/openmm-core
+
+    .. note :: 
+    
+    * OpenMM core22 can mis-order atoms if `xtcAtoms = solute`, so it is 
+      recommended that a comma-separated list of atoms to be written be specified 
+      until this is resolved.
+    
+      https://github.com/FoldingAtHome/openmm-core/issues/360
 
     Parameters
     ----------
@@ -101,16 +106,15 @@ def make_core_file(numSteps,
         Frequency to save configuration to disk
     globalVarFreq : int
         Frequency to save variables to globalVarFilename
-    xtcAtoms : str, default='solute'
+    xtcAtoms : str, optional, default='solute'
         Which atoms to save
-    precision : str, default='mixed'
+    precision : str, optional, default='mixed'
         Precision of simulation
-    globalVarFilename : str, default='globals.csv'
+    globalVarFilename : str, optional, default='globals.csv'
         Filename to store global simulation results
-    directory : str, default='.'
+    directory : str, optional, default='.'
         Location on disk to save core.xml file
 
-    # TODO - unhardcode 'core.xml' or would it always be this?
     """
     core_parameters = {
         'numSteps': numSteps,
@@ -129,45 +133,48 @@ def make_core_file(numSteps,
         dom = parseString(xml)
         outfile.write(dom.toprettyxml())
 
-
 def relax_structure(temperature,
                     system,
                     positions,
                     nequil=1000,
                     n_steps_per_iteration=250,
-                    platform_name='OpenCL',
+                    platform_name='CUDA',
                     timestep=4.*unit.femtosecond,
-                    collision_rate=90./unit.picosecond,
-                    **kwargs):
+                    collision_rate=90./unit.picosecond):
     """
-    arguments
-        temperature : simtk.unit.Quantity with units compatible with kelvin
-            temperature of simulation
-        system : openmm.System
-            system object for simulation
-        positions : simtk.unit.Quantity of shape (natoms,3) with units compatible with nanometers
-            Positions of the atoms in the system
-        nequil : int, default = 1000
-            number of equilibration applications
-        n_steps_per_iteration : int, default = 250
-            numper of steps per nequil
-        platform name : str default='OpenCL'
-            platform to run openmm on. OpenCL is best as this is what is used on FAH
-        timestep : simtk.unit.Quantity, default = 4*unit.femtosecond
-            timestep for equilibration NOT for production
-        collision_rate : simtk.unit.Quantity, default=90./unit.picosecond
+    Minimize and equilibrate the hybrid system to prepare for Folding@home simulation.
 
+    Parameters
+    ----------
+    temperature : simtk.unit.Quantity with units compatible with kelvin
+        temperature of simulation
+    system : openmm.System
+        system object for simulation
+    positions : simtk.unit.Quantity of shape (natoms,3) with units compatible with nanometers
+        Positions of the atoms in the system
+    nequil : int, optional, default = 1000
+        number of equilibration applications
+    n_steps_per_iteration : int, optional, default = 250
+        numper of steps per nequil
+    platform name : str, optional, default='CUDA'
+        platform to run openmm on. OpenCL is best as this is what is used on FAH
+    timestep : simtk.unit.Quantity, default = 4*unit.femtosecond
+       timestep for equilibration NOT for production
+    collision_rate : simtk.unit.Quantity, default=90./unit.picosecond
+        Collision rate for equilibration
+    
     return
         state : openmm.State
             state of simulation (getEnergy=True, getForces=True, getPositions=True, getVelocities=True, getParameters=True)
     """
-
-    from openmmtools.integrators import LangevinIntegrator
     _logger.info(f'Starting to relax')
-    integrator = LangevinIntegrator(temperature=temperature, timestep=timestep, collision_rate=collision_rate)
-    platform = openmm.Platform.getPlatformByName(platform_name)
 
-    # prepare the plaform
+    # Create integrator for equilibration
+    from openmmtools.integrators import LangevinIntegrator
+    integrator = LangevinIntegrator(temperature=temperature, timestep=timestep, collision_rate=collision_rate)
+
+    # Prepare the plaform
+    platform = openmm.Platform.getPlatformByName(platform_name)
     if platform_name in ['CUDA', 'OpenCL']:
         platform.setPropertyDefaultValue('Precision', 'mixed')
     if platform_name in ['CUDA']:
@@ -176,6 +183,7 @@ def relax_structure(temperature,
     context.setPeriodicBoxVectors(*system.getDefaultPeriodicBoxVectors())
     context.setPositions(positions)
 
+    # Minimize
     _logger.info(f'Starting to minimise')
     openmm.LocalEnergyMinimizer.minimize(context)
 
@@ -188,10 +196,13 @@ def relax_structure(temperature,
     state = context.getState(getEnergy=True, getForces=True, getPositions=True, getVelocities=True, getParameters=True)
     _logger.info(f'Relax done')
 
+    # Clean up
     del context, integrator
+
+    # Return final state for Folding@Home packaging
     return state
 
-
+# TODO: Replace this with a sensible class hierarchy based API once we refactor perses API
 def run_neq_fah_setup(ligand_file,
                       old_ligand_index,
                       new_ligand_index,
@@ -210,7 +221,7 @@ def run_neq_fah_setup(ligand_file,
                       phase_project_ids=None,
                       protein_pdb=None,
                       receptor_mol2=None,
-                      small_molecule_forcefield='openff-1.3.0',
+                      small_molecule_forcefield='openff-2.0.0',
                       small_molecule_parameters_cache=None,
                       atom_expression=['IntType'],
                       bond_expression=['DefaultBonds'],
@@ -240,6 +251,8 @@ def run_neq_fah_setup(ligand_file,
                       rmsd_restraint=True,
                       **kwargs):
     """
+    Set up perses relative free energy calculations for Folding@home
+
     main execution function that will:
         - create a directory for each phase according to the `trajectory_directory` argument
         - make a subdirectory named f"RUN_{old_ligand_index}_{new_ligand_index}" given the specified ligand indices of the `ligand_file`
@@ -250,96 +263,131 @@ def run_neq_fah_setup(ligand_file,
         - create/serialize a state associated with the relaxed structures
         - create/serialize a `core.xml` object for all phases
 
+    Examples
+    --------
 
     >>> run_neq_fah_setup('ligand.sdf', 0, 1,['amber/ff14SB.xml','amber/tip3p_standard.xml','amber/tip3p_HFE_multivalent.xml'],'RUN0',protein_pdb='protein.pdb', phases=['complex','solvent','vacuum'],phase_project_ids={'complex':14320,'solvent':14321,'vacuum':'vacuum'})
+    
+    TODO
+    ----
+    * Check whether temperature, pressure, and timestep are all with or without units specified
+    * Always place a virtual bond between protein subunits and ligand and closest protein subunit
+    * Refector this to use a class with configurable default parameters? Or just use new perses class hierarchy and provide a different executor?
 
-    arguments
-        ligand_file : str
-            .sdf (or any openeye-readable) file containing ligand labeled indices and structures
-        old_ligand_index : int
-            index of the old ligand
-        new_ligand_index : int
-            inded of the new ligand
-        forcefield_files : list of str
-            list of forcefields to use for complex/solvent parameterization
-        trajectory_directory : str
-            RUNXXX for FAH deployment
-        complex_box_dimensions : Vec3, default=(9.8, 9.8, 9.8)
-            define box dimensions of complex phase (in nm)
-        solvent_box_dimensions : Vec3, default=(3.5, 3.5, 3.5)
-            define box dimensions of solvent phase (in nm)
-        timestep : float, default=4.
-            step size of nonequilibrium integration
-        eq_splitting : str, default = 'V R O R V'
-            splitting string of relaxation dynamics
-        neq_splitting : str, default = 'V R H O R V'
-            splitting string of nonequilibrium dynamics
-        measure_shadow_work : bool, default=False
-            True/False to measure shadow work
-        pressure: float, default=1.
-            pressure in atms for simulation
-        temperature: simtk.unit.Quantity, default=300.*unit.kelvin,
-            temperature in K for simulation
-        phases: list, default = ['complex','solvent','vacuum','apo']
-            phases to run, where allowed phases are:
-            'complex','solvent','vacuum','apo'
-        protein_pdb : str, default=None
-            name of protein file
-        receptor_mol2 : str, default=None
-            name of receptor file if protein_pdb not provided
-        small_molecule_forcefield : str, default='openff-1.0.0'
-            small molecule forcefield filename
-        small_molecule_parameters_cache : str, default=None
-            cache file containing small molecule forcefield files
-        atom_expression : list default=['IntType']
-            list of string for atom mapping criteria. see oechem.OEExprOpts for options
-        bond_expression : list default=['DefaultBonds']
-            list of string for bond mapping criteria. see oechem.OEExprOpts for options
-        map_strength : 'str', default=None
-            atom and bond expressions will be ignored, and either a 'weak', 'default' or 'strong' map_strength will be used.
-        spectators : str, default=None
-            path to any non-alchemical atoms in simulation
-        neglect_angles : bool, default=False
-            wether to use angle terms in building of unique-new groups. False is strongly recommended
-        anneal_14s : bool, default False
-            Whether to anneal 1,4 interactions over the protocol;
-        nonbonded_method : str, default='PME'
-            nonbonded method to use
-        softcore_v2=bool, default=False
-            wether to use v2 softcore
-        alchemical_functions : dict, default=DEFAULT_ALCHEMICAL_FUNCTIONS
-            alchemical functions for transformation
-        num_equilibration_iterations: int, default=1000
-            number of equilibration steps to do during set up
-        num_equilibration_steps_per_iteration: int, default=250,
-            number of steps per iteration. default is 250 steps of 2fs, 1000 times which is 500ps of equilibration for SETUP
-        nsteps_eq : int, default=250000
-            number of normal MD steps to take for FAH integrator for PRODUCTION
-        nsteps_neq : int, default=250000
-            number of nonequilibrium steps to take for FAH integrator for PRODUCTION
-        fe_type : str, default='fah'
-            tells setup_relative_calculation() to use the fah pipeline
-        collision_rate : simtk.unit.Quantity, default=1./unit.picosecond
-            collision_rate for PRODUCTION
-        collision_rate_setup : simtk.unit.Quantity, default=90./unit.picosecond
-        constraint_tolerance : float, default=1e-6
-            tolerance to use for constraints
-        n_steps_per_move_application : int default=250
-            number of equilibrium steps to take per move
-        rmsd_restraint : bool, optional, default=False
-            If True, will restraint the core atoms and protein CA atoms within 6.5A of the core atoms
+    Parameters
+    ----------
+    ligand_file : str
+        .sdf (or any openeye-readable) file containing ligand labeled indices and structures
+    old_ligand_index : int
+        index of the old ligand within ligand_file (0-indexed)
+    new_ligand_index : int
+        index of the new ligand within ligand_file (0-indexed)
+    forcefield_files : list of str
+        list of OpenMM ffxml forcefields to use for complex/solvent parameterization
+    trajectory_directory : str
+        RUNXXX directory to generate for FAH deployment
+    complex_box_dimensions : Vec3, default=(9.8, 9.8, 9.8)
+        define box dimensions of complex phase (in nm) to ensure simulations run at near-uniform speed
+    solvent_box_dimensions : Vec3, default=(3.5, 3.5, 3.5)
+        define box dimensions of solvent phase (in nm) to ensure simulations run at near-uniform speed
+    timestep : simtk.unit.Quantity or float, optional, default=4.
+        timestep for production integration; float or int will be interpreted as femtoseconds
+    eq_splitting : str, optional, default = 'V R O R V'
+        splitting string of relaxation dynamics
+    neq_splitting : str, optional, default = 'V R H O R V'
+        splitting string of nonequilibrium dynamics
+    measure_shadow_work : bool, optional, default=False
+        True/False to measure shadow work in NonequilibriumLangevinIntegrator
+        Measuring shadow work will significantly slow integration
+        Shadow work is added to the integrator globals.csv file
+    pressure : float or simtk.unit.Quantity, optional, default=1.
+        pressure for simulation; float or int will be interepreted as atm
+    temperature : float or simtk.unit.Quantity, optional, default=300.*unit.kelvin,
+        temperature for simulation; float or int will be interpreted as kelvin
+    phases : list, optional, default = ['complex','solvent','vacuum','apo']
+        phases to run, where allowed phases are:
+        'complex','solvent','vacuum','apo'
+    phase_project_ids : dict, optional, default=None
+        Each phase in 'phases' must have a corresponding FAH project id specified
+        e.g. phase_project_ids = { 'complex' : 13458, 'solvent' : 13459 }
+    protein_pdb : str, optional, default=None
+        name of protein file
+        Protein file can include molecules (such as solvent) for which parameters exist in the specified OpenMM ffxml files
+    receptor_mol2 : str, optional, default=None
+        If the receptor is not a protein, a receptor mol2 file can be specified; this will be parameterized by the SystemGenerator
+        e.g. for macromolecular hosts
+    small_molecule_forcefield : str, optional, default='openff-2.0.0'
+        Small molecule forcefield filename for use with the openmmforcefields SystemGenerator
+        Available options are described at https://github.com/openmm/openmmforcefields
+        and include `gaff-*` and `openff-*` force field generations
+    small_molecule_parameters_cache : str, optional, default=None
+        cache file containing small molecule forcefield files (to avoid repeatedly reparameterizing)
+    atom_expression : list, optional, default=['IntType']
+        list of string for atom mapping criteria. see oechem.OEExprOpts for options
+    bond_expression : list, optional, default=['DefaultBonds']
+        list of string for bond mapping criteria. see oechem.OEExprOpts for options
+    map_strength : 'str', optional, default=None
+        atom and bond expressions will be ignored, and either a 'weak', 'default', or 'strong' map_strength will be used.
+    spectators : str, optional, default=None
+        file describing chemical species of any non-alchemical molecules (e.g. sdf, mol2) in simulation that must be parameterized separately by SystemGenerator
+        These molecular identities will be fed to SystemGenerator
+    neglect_angles : bool, optional, default=False
+        wether to use angle terms in building of unique-new groups. False is strongly recommended
+    anneal_14s : bool, optional, default False
+        Whether to anneal 1,4 interactions over the protocol;
+    nonbonded_method : str, optional, default='PME'
+        nonbonded method to use
+    softcore_v2 : bool, optional, default=False
+        If True, will use v2 softcore from de Groot and colleagues
+    alchemical_functions : dict, optional, default=DEFAULT_ALCHEMICAL_FUNCTIONS
+        alchemical functions for transformation
+    num_equilibration_iterations : int, optional, default=1000
+        number of equilibration steps to do during set up
+    num_equilibration_steps_per_iteration : int, optional, default=250,
+        number of steps per iteration during EQUILIBRATION. default is 250 steps of 2fs, 1000 times which is 500ps of equilibration for SETUP
+    nsteps_eq : int, optional, default=250000
+        number of normal MD steps to take for FAH integrator for PRODUCTION
+    nsteps_neq : int, optional, default=250000
+        number of nonequilibrium steps to take for FAH integrator for PRODUCTION
+    fe_type : str, optional, default='fah'
+        tells setup_relative_calculation() to use the fah pipeline
+    collision_rate : simtk.unit.Quantity, optional, default=1./unit.picosecond
+        collision_rate for PRODUCTION
+    collision_rate_setup : simtk.unit.Quantity, default=90./unit.picosecond
+        collision_rate for EQUILIBRATION
+    constraint_tolerance : float, optional, default=1e-6
+        tolerance to use for constraints
+    n_steps_per_move_application : int, optional, default=250
+        number of equilibrium steps to take per move
+        TODO: How is this different from num_equilibration_steps_per_iteration?
+    globalVarFreq : int, optional, default=250
+        Interval at which the globals.csv integrator output with nonequilibrium work measurements is to be written out
+    setup : str, optional, default='small_molecule'
+        Specify whether we are setting up a 'small_molecule' transformation or 'protein' mutation
+    protein_kwargs : dict, optional, default=None
+        ?????
+    ionic_strength : openmm.unit.Quantity, optional, default=0.15*unit.molar
+        Ionic strength to use in simulation setup
+    remove_constraints : str, optional, default=False
+        If True, constraints will be removed from the specific MDTraj DSL selection
+        e.g. "not water"
+        This is useful if the alchemical system is to be treated without bond constraints 
+    rmsd_restraint : bool, optional, default=False
+        If True, will restraint the core atoms and protein CA atoms within 6.5A of the core atoms.
+
     """
     from perses.utils import data
     if isinstance(temperature,float) or isinstance(temperature,int):
         temperature = temperature * unit.kelvin
 
     if isinstance(timestep,float) or isinstance(timestep,int):
-        timestep = timestep* unit.femtosecond
+        timestep = timestep * unit.femtosecond
 
     if isinstance(pressure, float) or isinstance(pressure, int):
-        pressure = pressure  * unit.atmosphere
+        pressure = pressure * unit.atmosphere
 
-    #turn all of the args into a dict for passing to run_setup
+    # Turn all of the args into a dict for passing to run_setup
+    # TODO: This is unsafe; replace this with the new class-based perses API.
     # HBM - this doesn't feel particularly safe
     # Also, this means that the function can't run without being called by run(), as we are requiring things that aren't arguments to this function, like 'solvent_projid'...etc
     setup_options = locals()
@@ -350,113 +398,66 @@ def run_neq_fah_setup(ligand_file,
         if 'apo_box_dimensions' not in list(setup_options.keys()):
             setup_options['apo_box_dimensions'] = setup_options['complex_box_dimensions']
 
-    #setups_allowed
+    # Sanity check for whether we are setting up a small molecule perturbation or protein mutation
     setups_allowed = ['small_molecule', 'protein']
     assert setup in setups_allowed, f"setup {setup} not in setups_allowed: {setups_allowed}"
 
-    # check there is a project_id for each phase
+    # Ensure each phase has a project id specified
     for phase in phases:
         assert (phase in phase_project_ids), f"Phase {phase} requested, but not in phase_project_ids {phase_project_ids.keys()}"
 
-    #some modification for fah-specific functionality:
+    # Modify some perses setup options for fah-specific functionality
+    # TODO: Replace this with new perses class-based API
     setup_options['trajectory_prefix'] = None
     setup_options['anneal_1,4s'] = False
     from perses.utils.openeye import generate_expression
     setup_options['atom_expr'] = generate_expression(setup_options['atom_expression'])
     setup_options['bond_expr'] = generate_expression(setup_options['bond_expression'])
 
-    #run the run_setup to generate topology proposals and htfs
+    # Generate topology proposals and hybrid topology factories via perses run_setup
     _logger.info(f"spectators: {setup_options['spectators']}")
     if setup == 'small_molecule':
+        _logger.info(f"Setting up a small molecule transformation")
         from perses.app.setup_relative_calculation import run_setup
         setup_dict = run_setup(setup_options, serialize_systems=False, build_samplers=False)
         topology_proposals = setup_dict['topology_proposals']
         htfs = setup_dict['hybrid_topology_factories']
     elif setup == 'protein':
+        _logger.info(f"Setting up a protein point mutation")
         from perses.app.relative_point_mutation_setup import PointMutationExecutor
         setup_engine = PointMutationExecutor(**setup_options)
         topology_proposals = {'complex': setup_engine.get_complex_htf()._topology_proposal, 'apo': setup_engine.get_apo_htf()._topology_proposal}
         htfs = {'complex': setup_engine.get_complex_htf(), 'apo': setup_engine.get_apo_htf()}
 
-    #create solvent and complex directories
+    # Create solvent and complex phase directories
     for phase in htfs.keys():
-        _logger.info(f'Setting up phase {phase}')
+        _logger.info(f'Setting up phase {phase} for project ID {phase_project_ids[phase]}')
         phase_dir = f"{phase_project_ids[phase]}/RUNS"
         dir = os.path.join(os.getcwd(), phase_dir, trajectory_directory)
         if not os.path.exists(dir):
             os.makedirs(dir)
 
-        # TODO - replace this with actually saving the importand part of the HTF
-        np.savez_compressed(f'{dir}/htf',htfs[phase])
+        # Store some useful information in human- and computer-readable format
+        # TODO: Once we switch to the new perses class API, all metadata will be serialized by appropriate objects
+        #       and we will not need this
+        metadata = {
+            'transformation' : setup,
+            'protein_pdb': protein_pdb,      
+        }      
+        if setup == 'small_molecule':
+            metadata['old_ligand_index'] = old_ligand_index,
+            metadata['new_ligand_index'] = new_ligand_index,
+            metadata['ligand_file'] = ligand_file
+        elif setup == 'protein':
+            # TODO: Adapt this for protein mutations
+            pass
 
-        #serialize the hybrid_system
-        data.serialize(htfs[phase].hybrid_system, f"{dir}/system.xml.bz2")
+        import yaml
+        metadata_filename = f'{dir}/metadata.yaml'
+        with open(metadata_filename, 'wt') as outfile:
+            outfile.write(yaml.dump(metadata))
 
-        #make and serialize an integrator
-        integrator = make_neq_integrator(**setup_options)
-        data.serialize(integrator, f"{dir}/integrator.xml.bz2")
-
-        #create and serialize a state
-        try:
-            state = relax_structure(temperature=temperature,
-                            system = htfs[phase].hybrid_system,
-                            positions = htfs[phase].hybrid_positions,
-                            nequil = num_equilibration_iterations,
-                            n_steps_per_iteration=num_equilibration_steps_per_iteration, collision_rate=collision_rate_setup, **kwargs)
-
-            data.serialize(state, f"{dir}/state.xml.bz2")
-        except Exception as e:
-            _logger.warning(e)
-            passed = False
-        else:
-            passed = True
-
-        # TODO: state variable can indeed be undefined
-        pos = state.getPositions(asNumpy=True)
-        pos = np.asarray(pos)
-
-        import mdtraj as md
-        # Store initial configuration/topology for old system sliced form hybrid system as PDB file
-        old_traj = md.Trajectory(htfs[phase].old_positions(pos),
-                                 md.Topology.from_openmm(htfs[phase]._topology_proposal.old_topology))
-        old_traj.remove_solvent(exclude=['CL', 'NA'], inplace=True)
-        old_traj.save(f'{dir}/old_{phase}.pdb')
-        # Store initial configuration/topology for new system sliced form hybrid system as PDB file
-        new_traj = md.Trajectory(htfs[phase].new_positions(pos),
-                                 md.Topology.from_openmm(htfs[phase]._topology_proposal.new_topology))
-        new_traj.remove_solvent(exclude=['CL', 'NA'], inplace=True)
-        new_traj.save(f'{dir}/new_{phase}.pdb')
-
-        # Save atom mappings in single file
-        # to be accessed using
-        # np.load('/path/to/file.npz', allow_pickle=True)['hybrid_to_old_map'].flat[0]
-        # TODO: Better way to serialize this information?
-        hybrid_to_old_map = htfs[phase]._hybrid_to_old_map
-        hybrid_to_new_map = htfs[phase]._hybrid_to_new_map
-        np.savez(f'{dir}/hybrid_atom_mappings.npz',
-                 hybrid_to_old_map=hybrid_to_old_map,
-                 hybrid_to_new_map=hybrid_to_new_map)
-
-        # lastly, make a core.xml
-###
-        nsteps_per_cycle = 2*nsteps_eq + 2*nsteps_neq
-        ncycles = 1
-        nsteps_per_ps = 250
-        nsteps = ncycles * nsteps_per_cycle
-        make_core_file(numSteps=nsteps,
-                       xtcFreq=1000*nsteps_per_ps,
-                       globalVarFreq=10*nsteps_per_ps,
-                       directory=dir)
-
-     #create a logger for reference
-        # TODO - add more details to this
-        references = {'start_ligand': old_ligand_index,
-                      'end_ligand': new_ligand_index,
-                      'protein_pdb': protein_pdb,
-                      'passed_strucutre_relax': passed}
-
-        np.save(f'{dir}/references',references)
-
+        # Render atom mapping
         tp = topology_proposals
         from perses.utils.smallmolecules import render_atom_mapping
         atom_map_filename = f'{dir}/atom_map.png'
@@ -468,8 +469,88 @@ def run_neq_fah_setup(ligand_file,
             _map = tp['non_offset_new_to_old_atom_map']
             render_atom_mapping(atom_map_filename, old_ligand_oemol, new_ligand_oemol, _map)
 
+        # TODO: Determine atom mappings and slices we need
+        # careful to include only protein and small molecule atoms
+        # * full hybrid system to full {old | new} system
+        # * solute-only hybrid system to full hybrid system
+        # * solute-only hybrid system to solute-only {old | new} system
+
+        # Serialize atom mappings
+        # These can be accessed with:
+        # np.load('/path/to/file.npz', allow_pickle=True)['hybrid_to_old_map'].flat[0]
+        # TODO: Improve the way we serialize these atom mappings
+        hybrid_to_old_map = htfs[phase]._hybrid_to_old_map
+        hybrid_to_new_map = htfs[phase]._hybrid_to_new_map
+        np.savez(f'{dir}/hybrid_atom_mappings.npz',
+                 hybrid_to_old_map=hybrid_to_old_map,
+                 hybrid_to_new_map=hybrid_to_new_map)
+
+        # Create a core.xml for Folding@home OpenMM core22
+        # TODO: Specify xtcAtoms as hybrid solute atom indices
+        nsteps_per_cycle = 2*nsteps_eq + 2*nsteps_neq
+        ncycles = 1
+        nsteps_per_ps = 250
+        nsteps = ncycles * nsteps_per_cycle
+        make_core_file(numSteps=nsteps,
+                       xtcFreq=1000*nsteps_per_ps,
+                       globalVarFreq=10*nsteps_per_ps,
+                       #xtcAtoms=hybrid_solute_atom_indices,
+                       directory=dir)
+
+        # Serialize the hybrid topology factory for this phase
+        # NOTE: This uses a fragile, slow, and inconvenient numpy savez + pickle scheme
+        # TODO: Replace this with a better serialization scheme to enable more rapid access to useful information
+        _logger.info(f'Serializing hybrid topology factory...')
+        np.savez_compressed(f'{dir}/htf',htfs[phase])
+
+        # Serialize the hybrid_system OpenMM System for execution on Folding@home
+        _logger.info(f'Serializing hybrid System...')
+        data.serialize(htfs[phase].hybrid_system, f"{dir}/system.xml.bz2")
+
+        # Create and serialize an OpenMM Integrator for execution on Folding@home
+        _logger.info(f'Serializing integrator...')
+        integrator = make_neq_integrator(**setup_options)
+        data.serialize(integrator, f"{dir}/integrator.xml.bz2")
+
+        # Minimize, and equilibrate, then serialize a State to initiate simulations from
+        _logger.info(f'Minimizing and equilibrating...')
+        state = relax_structure(temperature=temperature,
+                                system = htfs[phase].hybrid_system,
+                                positions = htfs[phase].hybrid_positions,
+                                nequil = num_equilibration_iterations,
+                                n_steps_per_iteration=num_equilibration_steps_per_iteration, collision_rate=collision_rate_setup, **kwargs)
+        
+        _logger.info(f'Serializing equilibrated State...')
+        data.serialize(state, f"{dir}/state.xml.bz2")
+            
+        # Write old and new equilibrated snapshots
+        pos = state.getPositions(asNumpy=True)
+        pos = np.asarray(pos)
+
+        import mdtraj as md
+        # Store initial configuration/topology for old system sliced form hybrid system as PDB file
+        # TODO: Use solute-only hybrid system indices to slice out atoms
+        old_traj = md.Trajectory(htfs[phase].old_positions(pos),
+                                 md.Topology.from_openmm(htfs[phase]._topology_proposal.old_topology))
+        old_traj.remove_solvent(exclude=['CL', 'NA'], inplace=True)
+        old_traj.save(f'{dir}/old_{phase}.pdb')
+        # Store initial configuration/topology for new system sliced form hybrid system as PDB file
+        # TODO: Use solute-only hybrid system indices to slice out atoms
+        new_traj = md.Trajectory(htfs[phase].new_positions(pos),
+                                 md.Topology.from_openmm(htfs[phase]._topology_proposal.new_topology))
+        new_traj.remove_solvent(exclude=['CL', 'NA'], inplace=True)
+        new_traj.save(f'{dir}/new_{phase}.pdb')
 
 def run(yaml_filename=None):
+    """
+    Main application entry point for perses-fah to set up a single perses free energy calculation on Folding@home
+    
+    Parameters
+    ----------
+    yaml_filename : str, optional, default=None
+        YAML file specifying which alchemical free energy calculation to set up and which options to use
+        If no filename is specified, will try sys.argv[1]
+    """
     import sys
     if yaml_filename is None:
         try:
@@ -478,8 +559,7 @@ def run(yaml_filename=None):
         except IndexError as e:
             _logger.critical(f"{e}: You must specify the setup yaml file as an  argument to the script.")
 
-    # this is imported, but not used --- why?
-    # from perses.app.setup_relative_calculation import getSetupOptions
+    # Read setup options from the YAML file
     import yaml
     yaml_file = open(yaml_filename, 'r')
     setup_options = yaml.load(yaml_file, Loader=yaml.FullLoader)
@@ -487,7 +567,7 @@ def run(yaml_filename=None):
 
     import os
     from shutil import copyfile
-    # make master and run directories
+    # Create all project directories and copy input YAML file to these directories
     if 'complex_projid' in setup_options:
         if not os.path.exists(f"{setup_options['complex_projid']}"):
             #os.makedirs(f"{setup_options['complex_projid']}/RUNS/")
@@ -513,4 +593,5 @@ def run(yaml_filename=None):
             os.makedirs(dst)
             copyfile(yaml_filename, dst)
 
+    # Set up alchemical free energy calculation for Folding@home
     run_neq_fah_setup(**setup_options)
