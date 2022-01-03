@@ -15,10 +15,12 @@ protein_kwargs:
   mutation_chain_id: '1'
   mutation_residue_id: '42'
   proposed_residue: ALA
+  ligand_input: mmc2_barnase.pdb
+  phase: 'complex' # This will be fed to PointMutationExecutor (which does not accept `phases` argument)
 
 # Specify the name of the ligand (will not be transformed) and the old and new ligand indexes (leave as None
 # since we are not running a ligand transformation)
-ligand_file: mmc2_barnase.pdb
+ligand_file: None
 old_ligand_index: None
 new_ligand_index: None
 
