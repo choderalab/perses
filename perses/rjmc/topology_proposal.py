@@ -2152,6 +2152,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             from .atom_mapping import AtomMapper
             if self.use_given_geometries:
                 # Explicitly generate atom mapping from only the positions
+                _logger.info(f"Using given geometries...")
                 atom_mapper = AtomMapper(
                     use_positions=True, coordinate_tolerance=self.given_geometries_tolerance, # use positions if available
                     allow_ring_breaking=self.allow_ring_breaking,
@@ -2159,6 +2160,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 atom_mapping = atom_mapper.generate_atom_mapping_from_positions(self.current_molecule, self.proposed_molecule)
             else:
                 # Use MCSS to derive mapping
+                _logger.info(f"Using MCSS to derive mapping...")
                 atom_mapper = AtomMapper(
                     atom_expr=self.atom_expr, bond_expr=self.bond_expr, map_strength=self.map_strength,
                     external_inttypes=self.external_inttypes,
