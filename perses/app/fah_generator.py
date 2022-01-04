@@ -481,15 +481,15 @@ def run_neq_fah_setup(ligand_file,
             'protein_pdb': protein_pdb,      
         }      
         if setup == 'small_molecule':
-            metadata['old_ligand_index'] = old_ligand_index,
-            metadata['new_ligand_index'] = new_ligand_index,
+            metadata['old_ligand_index'] = int(old_ligand_index),
+            metadata['new_ligand_index'] = int(new_ligand_index),
             metadata['ligand_file'] = ligand_file
             # Get useful information about the molecular transformation
             from openff.toolkit.topology import Molecule
             for endpoint in ['old', 'new']:
                 # Need allow_undefined_stereo=True to allow nitrogens with undefined stereochemistry
                 molecule = Molecule.from_openeye(topology_proposals[f'ligand_oemol_{endpoint}'], allow_undefined_stereo=True)
-                metadata[f'{endpoint}_smiles'] = molecule.to_smiles()
+                metadata[f'{endpoint}_smiles'] = molecule.to_smiles(mapped=True)
                 metadata[f'{endpoint}_name'] = molecule.name
         elif setup == 'protein':
             # TODO: Adapt this for protein mutations
