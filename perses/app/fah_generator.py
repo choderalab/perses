@@ -161,9 +161,14 @@ def relax_structure(temperature,
                     n_steps_per_iteration=250,
                     platform_name='CUDA',
                     timestep=4.*unit.femtosecond,
-                    collision_rate=90./unit.picosecond):
+                    collision_rate=90./unit.picosecond,
+                    **kwargs,
+):
     """
     Minimize and equilibrate the hybrid system to prepare for Folding@home simulation.
+
+    TODO: **kwargs are in this function's signature because it is just fed the whole setup_options dict when called, with the idea that this method will just ignore any argument
+    it does not want to handle. This is very dangerous, and we should eliminate this when we refactor to use the new perses class-based API.
 
     Parameters
     ----------
