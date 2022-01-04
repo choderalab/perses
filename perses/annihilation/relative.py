@@ -70,6 +70,7 @@ class HybridTopologyFactory(object):
                  omitted_terms=None,
                  flatten_torsions=False,
                  rmsd_restraint=False,
+                 impose_virtual_bonds=True,
                  endstate=None,
                  **kwargs):
         """
@@ -122,6 +123,8 @@ class HybridTopologyFactory(object):
             dictionary of terms (by new topology index) that must be annealed in over a lambda protocol
         rmsd_restraint : bool, optional, default=False
             If True, impose an RMSD restraint between core heavy atoms and protein CA atoms
+        impose_virtual_bonds : bool, optional, default=True
+            If True, impose virtual bonds to ensure components of the system are imaged together
         flatten_torsions : bool, default False
             if True, torsion terms involving `unique_new_atoms` will be scaled such that at lambda=0,1, the torsion term is turned off/on respectively
             the opposite is true for `unique_old_atoms`.
@@ -335,10 +338,15 @@ class HybridTopologyFactory(object):
         # Generate the topology representation
         self._hybrid_topology = self._create_topology()
 
-        #impose RMSD restraint, if requested
+        # Impose RMSD restraint, if requested
         if rmsd_restraint:
             _logger.info("Attempting to impose RMSD restraints.")
             self._impose_rmsd_restraint()
+
+        # Impose virtual bonds to ensure system is imaged together.
+        if impose_virtual_bonds:
+            _logger.info("Imposing virtual bonds to ensure system is imaged together.")
+            self._impose_virtual_bonds()
 
     def _validate_disjoint_sets(self):
         """
@@ -2005,6 +2013,67 @@ class HybridTopologyFactory(object):
 
         return hybrid_topology
 
+    def _impose_virtual_bonds(self):
+        """
+        Impose virtual bonds between protein subunits and ligand(s) to ensure they are imaged together.
+
+        """
+        from simtk import unit, openmm
+
+        # Determine core heavy atom indices
+        core_atoms = [ int(index) for index in self._atom_classes['core_atoms'] ]
+        heavy_atoms = [ int(index) for index in self._hybrid_topology.select('mass > 1.5') ]
+        core_heavy_atoms = [ int(index) for index in set(core_atoms).intersection(set(heavy_atoms)) ]
+
+        # Determine protein CA atoms
+        protein_atoms = [ int(index) for index in self._hybrid_topology.select('protein and name CA') ]
+
+        if len(core_heavy_atoms)==0 or len(protein_atoms)==0:
+            # No restraint to be added
+            _logger.info(f"\t\t_impose_virtual_bonds: No restraint added because one set is empty (core_atoms={core_heavy_atoms}, protein_atoms={protein_atoms})")
+            return
+
+        if len(set(core_atoms).intersection(set(protein_atoms))) != 0:
+            # Core atoms are part of protein
+            _logger.info(f"\t\t_impose_virtual_bonds: No restraint added because sets overlap (core_atoms={core_heavy_atoms}, protein_atoms={protein_atoms})")
+            return
+
+        # Filter protein CA atoms within cutoff of core heavy atoms
+        cutoff = 0.65 # 6.5 A
+        trajectory = md.Trajectory([self.hybrid_positions/unit.nanometers], topology=self._hybrid_topology)
+        matches = md.compute_neighbors(trajectory, cutoff, core_heavy_atoms, haystack_indices=protein_atoms, periodic=False)
+        protein_atoms = set()
+        for match in matches:
+            for index in match:
+                protein_atoms.add(int(index))
+        protein_atoms = [ int(index) for index in protein_atoms ]
+        _logger.info(f"\t\t_impose_rmsd_restraint: Restraint will be added (core_atoms={core_heavy_atoms}, protein_atoms={protein_atoms})")
+
+        # Add virtual bond between a core and protein atom to ensure they are periodically replicated together
+        bondforce = openmm.CustomBondForce('0')
+        bondforce.addBond(core_heavy_atoms[0], protein_atoms[0], [])
+        self._hybrid_system.addForce(bondforce)
+        _logger.info(f"\t\t_impose_rmsd_restraint: Added virtual bond between {core_heavy_atoms[0]} and {protein_atoms[0]} so they are imaged together")
+
+        # Extract protein and molecule chains and indices before adding solvent
+        mdtop = trajectory.top
+        protein_atom_indices = mdtop.select('protein and (mass > 1)')
+        molecule_atom_indices = mdtop.select('(not protein) and (not water) and (mass > 1)')
+        protein_chainids = list(set([atom.residue.chain.index for atom in mdtop.atoms if atom.index in protein_atom_indices]))
+        n_protein_chains = len(protein_chainids)
+        protein_chain_atom_indices = dict()
+        for chainid in protein_chainids:
+            protein_chain_atom_indices[chainid] = mdtop.select(f'protein and chainid {chainid}')
+
+        # Add a virtual bond between protein chains so they are imaged together
+        if (n_protein_chains > 1):
+            chainid = protein_chainids[0]
+            iatom = protein_chain_atom_indices[chainid][0]
+            for chainid in protein_chainids[1:]:
+                jatom = protein_chain_atom_indices[chainid][0]
+                _logger.info(f"\t\t_impose_virtual_bonds: Added virtual bond between protein chains atoms {iatom} and {jatom} so they are imaged together")
+                bondforce.addBond(int(iatom), int(jatom), [])
+
     def _impose_rmsd_restraint(self):
         """
         Impose an RMSD restraint between the core heavy atoms and protein CA atoms within 6A
@@ -2058,32 +2127,6 @@ class HybridTopologyFactory(object):
         custom_cv_force.addCollectiveVariable('RMSD', rmsd_force)
         self._hybrid_system.addForce(custom_cv_force)
         _logger.info(f"\t\t_impose_rmsd_restraint: RMSD restraint added with buffer {buffer/unit.angstrom} A and stddev {sigma/unit.angstrom} A")
-
-        # Add virtual bond between a core and protein atom to ensure they are periodically replicated together
-        bondforce = openmm.CustomBondForce('0')
-        bondforce.addBond(core_heavy_atoms[0], protein_atoms[0], [])
-        self._hybrid_system.addForce(bondforce)
-        _logger.info(f"\t\t_impose_rmsd_restraint: Added virtual bond between {core_heavy_atoms[0]} and {protein_atoms[0]} so they are imaged together")
-
-        # Extract protein and molecule chains and indices before adding solvent
-        mdtop = trajectory.top
-        protein_atom_indices = mdtop.select('protein and (mass > 1)')
-        molecule_atom_indices = mdtop.select('(not protein) and (not water) and (mass > 1)')
-        protein_chainids = list(set([atom.residue.chain.index for atom in mdtop.atoms if atom.index in protein_atom_indices]))
-        n_protein_chains = len(protein_chainids)
-        protein_chain_atom_indices = dict()
-        for chainid in protein_chainids:
-            protein_chain_atom_indices[chainid] = mdtop.select(f'protein and chainid {chainid}')
-
-        # Add a virtual bond between protein chains so they are imaged together
-        if (n_protein_chains > 1):
-            chainid = protein_chainids[0]
-            iatom = protein_chain_atom_indices[chainid][0]
-            for chainid in protein_chainids[1:]:
-                jatom = protein_chain_atom_indices[chainid][0]
-                _logger.info(f"\t\t_impose_rmsd_restraint: Added virtual bond between protein chains atoms {iatom} and {jatom} so they are imaged together")
-                bondforce.addBond(int(iatom), int(jatom), [])
-
 
     def old_positions(self, hybrid_positions):
         """

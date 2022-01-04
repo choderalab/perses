@@ -270,6 +270,7 @@ def run_neq_fah_setup(ligand_file,
                       ionic_strength=0.15*unit.molar,
                       remove_constraints=False,
                       rmsd_restraint=False,
+                      impose_virtual_bonds=True,
                       **kwargs):
     """
     Set up perses relative free energy calculations for Folding@home
@@ -395,6 +396,8 @@ def run_neq_fah_setup(ligand_file,
         This is useful if the alchemical system is to be treated without bond constraints 
     rmsd_restraint : bool, optional, default=False
         If True, will restraint the core atoms and protein CA atoms within 6.5A of the core atoms.
+    impose_virtual_bonds : bool, optional, default=True
+        If True, will impose virtual bonds to ensure the system is imaged together
     kwargs
         Other arguments are passed on in setup_options
     """
