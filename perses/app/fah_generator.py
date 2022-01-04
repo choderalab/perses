@@ -67,9 +67,12 @@ DEFAULT_ALCHEMICAL_FUNCTIONS = {
 # These classes could all generate their own complete RUN{run_id}/... directory hierarchies for Folding@home, complete with all necessary
 # auxiliary files: {system, state, integrator, core}.xml, metadata, etc
 
-def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R H O R V', timestep=4.0 * unit.femtosecond, alchemical_functions=DEFAULT_ALCHEMICAL_FUNCTIONS):
+def make_neq_integrator(nsteps_eq=250000, nsteps_neq=250000, neq_splitting='V R H O R V', timestep=4.0 * unit.femtosecond, alchemical_functions=DEFAULT_ALCHEMICAL_FUNCTIONS, **kwargs):
     """
     Construct an openmmtools.integrators.PeriodicNonequilibriumIntegrator for collecting nonequilibrium work measurement data on Folding@home
+
+    TODO: **kwargs are in this function's signature because it is just fed the whole setup_options dict when called, with the idea that this method will just ignore any argument
+    it does not want to handle. This is very dangerous, and we should eliminate this when we refactor to use the new perses class-based API.
 
     Parameters
     ----------
@@ -472,7 +475,7 @@ def run_neq_fah_setup(ligand_file,
             # Get useful information about the molecular transformation
             from openff.toolkit.topology import Molecule
             for endpoint in ['old', 'new']:
-                molecule = Molecule.from_openeye(getattr(tp, f'ligand_oemol_{endpoint}'))
+                molecule = Molecule.from_openeye(topology_proposals[f'ligand_oemol_{endpoint}'])
                 metadata[f'{endpoint}_smiles'] = molecule.to_smiles()
                 metadata[f'{endpoint}_name'] = molecule.name
         elif setup == 'protein':
@@ -485,24 +488,20 @@ def run_neq_fah_setup(ligand_file,
             outfile.write(yaml.dump(metadata))
 
         # Render atom mapping
-        tp = topology_proposals
         atom_map_filename = f'{dir}/atom_map.png'
         if setup == 'small_molecule':
             from perses.utils.smallmolecules import render_atom_mapping
-            old_ligand_oemol, new_ligand_oemol = tp['ligand_oemol_old'], tp['ligand_oemol_new']
-            _map = tp['non_offset_new_to_old_atom_map']
+            old_ligand_oemol, new_ligand_oemol = topology_proposals['ligand_oemol_old'], topology_proposals['ligand_oemol_new']
+            _map = topology_proposals['non_offset_new_to_old_atom_map']
             render_atom_mapping(atom_map_filename, old_ligand_oemol, new_ligand_oemol, _map)
         elif setup == 'protein':
             from perses.utils.smallmolecules import render_protein_residue_atom_mapping # TODO: Why do we need a separate utility for this?
+            topology_proposal = topology_proposals[phase]
             render_protein_residue_atom_mapping(topology_proposal, atom_map_filename)
 
-        # TODO: Determine atom mappings and slices we need
-        # careful to include only protein and small molecule atoms
-        hybrid_solute_to_real_solute_map = dict() # hybrid_solute_to_real_solute_map[endpoint][hybrid_atom_index] 
-        real_solute_to_hybrid_solute_map = dict() # real_solute_to_hybrid_solute_map[endpoint][real_atom_index] is the 
-        hybrid_to_real_map = dict()
-        real_to_hybrid_map = dict()
-        hybrid_to_hybrid_solute_map = dict()    
+        # Determine which real and hybrid atoms are solute atoms (no solvent or ions)
+        import mdtraj as md
+        real_solute_atom_indices = dict()
         for endpoint in ['old', 'new']:
             htf = htfs[phase]
             openmm_topology = getattr(htf._topology_proposal, f'{endpoint}_topology')
@@ -512,19 +511,18 @@ def run_neq_fah_setup(ligand_file,
             # TODO: Implement 'solvent' into mdtraj DSL following same logic and replace this code with
             # public API code only. Alternatively, use MDAnalysis.
             # https://github.com/mdtraj/mdtraj/blob/master/mdtraj/core/residue_names.py#L1826
+            # TODO: Or move to MDAnalysis
             from mdtraj.core.residue_names import _SOLVENT_TYPES
             solvent_types = list(_SOLVENT_TYPES)
-            solute_indices = [ atom.index for atom in mdtraj_topology.atoms if
-                               atom.residue.name not in solvent_types]
-            real_to_hybrid_map = getattr(htf,f'_{endpoint}_to_hybrid_map')
-            # real_solute_to_hybrid_solute_map 
-            hybrid_solute_to_real_solute_map[endpoint] = { [solute_indices[real_index]] : real_index for real_index in range(len(solute_indices)) }
-
-
-
-        # * full hybrid system to full {old | new} system
-        # * solute-only hybrid system to full hybrid system
-        # * solute-only hybrid system to solute-only {old | new} system
+            real_solute_atom_indices[endpoint] = [ atom.index for atom in mdtraj_topology.atoms if
+                                                   atom.residue.name not in solvent_types]
+        
+        # Hybrid solute atoms are any hybrid atom indices where the real indices correspond to a solute atom in either endstate
+        hybrid_solute_atom_indices = [ 
+            atom_index for atom_index in range(htf.hybrid_system.getNumParticles())
+            if ((atom_index in htf._hybrid_to_old_map) and (htf._hybrid_to_old_map[atom_index] in real_solute_atom_indices['old']))
+            or ((atom_index in htf._hybrid_to_new_map) and (htf._hybrid_to_new_map[atom_index] in real_solute_atom_indices['new']))
+        ]
 
         # Serialize atom mappings
         # These can be accessed with:
@@ -536,14 +534,7 @@ def run_neq_fah_setup(ligand_file,
                  # Full system maps
                  hybrid_to_old_map=htf._hybrid_to_old_map,
                  hybrid_to_new_map=htf._hybrid_to_new_map,
-                 old_to_hybrid_map=htf._old_to_hybrid_map,
-                 new_to_hybrid_map=htf._new_to_hybrid_map,
-                 # Solute only maps
-                 old_solute_to_hybrid_solute_map=real_solute_to_hybrid_solute_map['old'],
-                 new_solute_to_hybrid_solute_map=real_solute_to_hybrid_solute_map['new'],
-                 hybrid_solute_to_old_solute_map=hybrid_solute_to_real_solute_map['old'],                 
-                 hybrid_solute_to_new_solute_map=hybrid_solute_to_real_solute_map['new'],                 
-                 # Full to solute subsets
+                 # Solute atom subsets
                  hybrid_solute_atom_indices=hybrid_solute_atom_indices,
         )
 
@@ -556,7 +547,7 @@ def run_neq_fah_setup(ligand_file,
         make_core_file(numSteps=nsteps,
                        xtcFreq=1000*nsteps_per_ps,
                        globalVarFreq=10*nsteps_per_ps,
-                       #xtcAtoms=hybrid_solute_atom_indices,
+                       xtcAtoms=hybrid_solute_atom_indices,
                        directory=dir)
 
         # Serialize the hybrid topology factory for this phase
