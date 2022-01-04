@@ -137,6 +137,10 @@ def make_core_file(numSteps,
         Location on disk to save core.xml file
 
     """
+    if type(xtcAtoms) is list:
+        # render xtcAtoms to a string
+        xtcAtoms = ','.join([str(index) for index in xtcAtoms])
+
     core_parameters = {
         'numSteps': numSteps,
         'xtcFreq': xtcFreq, # once per ns
@@ -145,9 +149,6 @@ def make_core_file(numSteps,
         'globalVarFilename': globalVarFilename,
         'globalVarFreq': globalVarFreq,
     }
-    if type(xtcAtoms) is list:
-        # render xtcAtoms to a string
-        xtcAtoms = ','.join([str(index) for index in xtcAtoms])
 
     # Serialize core.xml
     import dicttoxml
@@ -537,7 +538,7 @@ def run_neq_fah_setup(ligand_file,
         
         # Hybrid solute atoms are any hybrid atom indices where the real indices correspond to a solute atom in either endstate
         hybrid_solute_atom_indices = [ 
-            atom_index for atom_index in range(htf.hybrid_system.getNumParticles())
+            int(atom_index) for atom_index in range(htf.hybrid_system.getNumParticles())
             if ((atom_index in htf._hybrid_to_old_map) and (htf._hybrid_to_old_map[atom_index] in real_solute_atom_indices['old']))
             or ((atom_index in htf._hybrid_to_new_map) and (htf._hybrid_to_new_map[atom_index] in real_solute_atom_indices['new']))
         ]
