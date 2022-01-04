@@ -145,6 +145,10 @@ def make_core_file(numSteps,
         'globalVarFilename': globalVarFilename,
         'globalVarFreq': globalVarFreq,
     }
+    if type(xtcAtoms) is list:
+        # render xtcAtoms to a string
+        xtcAtoms = ','.join([str(index) for index in xtcAtoms])
+
     # Serialize core.xml
     import dicttoxml
     with open(f'{directory}/core.xml', 'wt') as outfile:
@@ -410,6 +414,7 @@ def run_neq_fah_setup(ligand_file,
     kwargs
         Other arguments are passed on in setup_options
     """
+    
     from perses.utils import data
     if isinstance(temperature,float) or isinstance(temperature,int):
         temperature = temperature * unit.kelvin
@@ -481,8 +486,8 @@ def run_neq_fah_setup(ligand_file,
             'protein_pdb': protein_pdb,      
         }      
         if setup == 'small_molecule':
-            metadata['old_ligand_index'] = int(old_ligand_index),
-            metadata['new_ligand_index'] = int(new_ligand_index),
+            metadata['old_ligand_index'] = str(old_ligand_index),
+            metadata['new_ligand_index'] = str(new_ligand_index),
             metadata['ligand_file'] = ligand_file
             # Get useful information about the molecular transformation
             from openff.toolkit.topology import Molecule
