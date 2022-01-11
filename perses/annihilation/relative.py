@@ -2767,7 +2767,8 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         "sigma2 = is_unique_old2 * sigma_old2 + is_unique_new2 * sigma_new2 + is_core2 * (max(0.05, lambda_alchemical_sterics_old * sigma_old2 + lambda_alchemical_sterics_new * sigma_new2)) + is_environment2 * sigma_old2;",
 
         # Define epsilon (with rest scaling)
-        "epsilon = p1_sterics_rest_scale * p2_sterics_rest_scale * sqrt(epsilon1 * epsilon2);",
+        "epsilon = p1_sterics_rest_scale * p2_sterics_rest_scale * sqrt(epsilon_combined);",
+        "epsilon_combined = step(epsilon1 * epsilon2) * epsilon1 * epsilon2;",
 
         # Define epsilon1 and epsilon2 (with alchemical scaling)
         "epsilon1 = is_unique_old1 * old_epsilon_scaled1 + is_unique_new1 * new_epsilon_scaled1 + is_core1 * (old_epsilon_scaled1 + new_epsilon_scaled1) + is_environment1 * epsilon_old1;",
