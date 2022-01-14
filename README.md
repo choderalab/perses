@@ -19,6 +19,19 @@ without warning. If you do use this code, do so at your own risk. We appreciate 
 about potential problems with the code, but may not be able to address your issue until other development activities
 have concluded.
 
+## Install
+
+See our installation instructions [here](https://perses.readthedocs.io/en/latest/installation.html).
+
+### Quick Start
+
+In a fresh conda environment:
+
+```
+$ conda config --add channels conda-forge openeye
+$ conda install perses openeye-toolkits
+```
+
 ## Manifest
 
 * `perses/` - Package containing code for performing expanded ensemble simulations

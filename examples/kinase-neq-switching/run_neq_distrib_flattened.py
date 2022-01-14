@@ -1,6 +1,7 @@
 import logging
 import numpy as np
 from openmmtools.integrators import PeriodicNonequilibriumIntegrator
+from openmmtools.utils import get_fastest_platform
 from simtk import unit
 from simtk import openmm
 import os
@@ -18,7 +19,7 @@ nsteps_eq = 2
 nsteps_neq = 64
 neq_splitting = 'V R H O R V'
 timestep = 4.0 * unit.femtosecond
-platform_name = 'CPU'  # Change to 'CUDA' or 'OpenCL' in production
+platform_name = get_fastest_platform().getName()
 temperature = 300 * unit.kelvin
 save_freq_eq = 1
 save_freq_neq = 4

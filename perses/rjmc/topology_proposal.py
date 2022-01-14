@@ -577,7 +577,9 @@ class PolymerProposalEngine(ProposalEngine):
     def propose(self,
                 current_system,
                 current_topology,
-                current_metadata=None):
+                current_metadata=None,
+                extra_sidechain_map=None,
+                demap_CBs=False):
         """
         Generate a TopologyProposal
 
@@ -588,19 +590,16 @@ class PolymerProposalEngine(ProposalEngine):
         current_topology : simtk.openmm.app.Topology object
             The current topology
         current_metadata : dict -- OPTIONAL
-
+        extra_sidechain_map : dict, key: int, value: int, default None
+            map of new to old sidechain atom indices to add the default map (by default, we only map backbone atoms and CBs)
+        demap_CBs : bool, default False
+            whether to remove CBs from the mapping
         Returns
         -------
         topology_proposal : TopologyProposal
             NamedTuple of type TopologyProposal containing forward and reverse
             probabilities, as well as old and new topologies and atom
             mapping
-        local_atom_map_stereo_sidechain : dict
-            chirality-corrected map of new_oemol_res to old_oemol_res
-        old_oemol_res : openeye.oechem.oemol object
-            oemol of the old residue sidechain
-        new_oemol_res : openeye.oechem.oemol object
-            oemol of the new residue sidechain
 
         """
         _logger.info(f"\tConducting polymer point mutation proposal...")
@@ -678,7 +677,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         # index_to_new_residues : dict, key : int (index) , value : str (three letter name of proposed residue)
         _logger.debug(f"\tconstructing atom map for TopologyProposal...")
-        atom_map, old_res_to_oemol_map, new_res_to_oemol_map, local_atom_map_stereo_sidechain, current_oemol_sidechain, proposed_oemol_sidechain, old_oemol_res_copy, new_oemol_res_copy  = self._construct_atom_map(residue_map, old_topology, index_to_new_residues, new_topology, ignore_sidechain_atoms=True)
+        atom_map, old_res_to_oemol_map, new_res_to_oemol_map, old_oemol_res, new_oemol_res  = self._construct_atom_map(residue_map, old_topology, new_topology, extra_sidechain_map=extra_sidechain_map, demap_CBs=demap_CBs)
 
         _logger.debug(f"\tadding indices of the 'C' backbone atom in the next residue and the 'N' atom in the previous")
         _logger.debug(f"\t{list(index_to_new_residues.keys())[0]}")
@@ -724,8 +723,8 @@ class PolymerProposalEngine(ProposalEngine):
         # Create TopologyProposal.
         current_res = [res for res in current_topology.residues() if res.index == chosen_res_index][0]
         proposed_res = [res for res in new_topology.residues() if res.index == chosen_res_index][0]
-        augment_openmm_topology(topology = old_topology, residue_oemol = old_oemol_res_copy, residue_topology = current_res, residue_to_oemol_map = old_res_to_oemol_map)
-        augment_openmm_topology(topology = new_topology, residue_oemol = new_oemol_res_copy, residue_topology = proposed_res, residue_to_oemol_map = new_res_to_oemol_map)
+        augment_openmm_topology(topology = old_topology, residue_oemol = old_oemol_res, residue_topology = current_res, residue_to_oemol_map = old_res_to_oemol_map)
+        augment_openmm_topology(topology = new_topology, residue_oemol = new_oemol_res, residue_topology = proposed_res, residue_to_oemol_map = new_res_to_oemol_map)
 
         topology_proposal = TopologyProposal(logp_proposal = 0.,
                                              new_to_old_atom_map = atom_map,
@@ -1109,237 +1108,134 @@ class PolymerProposalEngine(ProposalEngine):
     def _construct_atom_map(self,
                             residue_map,
                             old_topology,
-                            index_to_new_residues,
                             new_topology,
-                            ignore_sidechain_atoms=False):
+                            extra_sidechain_map=None,
+                            demap_CBs=False):
         """
-        Construct atom map (key: index to new residue, value: index to old residue) to supply as an argument to the TopologyProposal.
-
+        Construct atom map (key: index to atom in new residue, value: index to atom in old residue) to supply as an argument to the TopologyProposal.
+        
+        By default, the atom map:
+        1) Maps all backbone atoms (exception: for GLY, do not map HA2 and HA3)
+        2) Map CBs only (no other sidechain atoms)
+        
+        If additional sidechains should be mapped, extra_sidechain_map can be supplied to supplement the default map.
+        If CBs should be demapped, set demap_CBs=True.
+        
         Parameters
         ----------
         residue_map : list(tuples)
             simtk.openmm.app.topology.Residue, str (three letter residue name of new residue)
         old_topology : simtk.openmm.app.Topology
             topology of old system
-        index_to_new_residues : dict
-            key : int (index) , value : str (three letter name of proposed residue)
         new_topology : simtk.openmm.app.Topology
             topology of new system
-        ignore_sidechain_atoms : bool, default False
-            whether to ignore sidechain atoms (CB atoms and beyond) in the atom map
+        extra_sidechain_map : dict, key: int, value: int, default None
+            map of new to old sidechain atom indices to add to the local_atom_map
+        demap_CBs : bool, default False
+            whether to remove CBs from the mapping
 
         Returns
         -------
-        adjusted_atom_map : dict, key: int (index
-            new residues have all correct atoms and bonds for desired mutation
-        old_res_to_oemol_map : dict
-            key: int (index);  value: int (index)
-        new_res_to_oemol_map : dict
-            key: int (index);  value: int (index)
-        local_atom_map_stereo_sidechain : dict
-            chirality-corrected map of new_oemol_res to old_oemol_res
-        current_oemol : openeye.oechem.oemol object
-            copy of modified old oemol sidechain
-        proposed_oemol : openeye.oechem.oemol object
-            copy of modified new oemol sidechain
-        old_oemol_res_copy : openeye.oechem.oemol object
-            copy of modified old oemol
-        new_oemol_res_copy : openeye.oechem.oemol object
-            copy of modified new oemol
-
+        local_atom_map : dict, key: int, value int
+            mapping of atom indices in new residue to indices in old residue
+        old_res_to_oemol_map : dict, key: int, value int
+            mapping of OpenMM topology to oemol indices for old residue
+        new_res_to_oemol_map : dict, key: int, value int
+            mapping of OpenMM topology to oemol indices for new residue
+        old_oemol : openeye.oechem.oemol object
+            old oemol
+        new_oemol : openeye.oechem.oemol object
+            new oemol
         .. todo ::
-
             * Move this into atom_mapping.py
             * Overhaul biopolymer mapping to use openff.topology.Topology features
             * Generalize to support arbitrary biopolymer residues and protonation/tautomeric states
-
         """
         from pkg_resources import resource_filename
-        import openeye.oechem as oechem #must this be explicit?
-
-        # atom_map : dict, key : int (index of atom in old topology) , value : int (index of same atom in new topology)
-        atom_map = dict()
-
-        # atoms with an old_index attribute should be mapped
-        # k : int
-        # atom : simtk.openmm.app.topology.Atom
-
-        # old_to_new_residues : dict, key : str old residue name, key : simtk.openmm.app.topology.Residue new residue
+        import openeye.oechem as oechem
+        
+        # Retrieve map of old to new residues
+        # old_to_new_residues : dict, key : simtk.openmm.app.topology.Residue old residue, value : simtk.openmm.app.topology.Residue new residue
         old_to_new_residues = {}
         new_residues = [residue for residue in new_topology.residues()] # Assumes all residue indices start from 0 and are contiguous
         for old_residue in old_topology.residues():
             old_to_new_residues[old_residue] = new_residues[old_residue.index]
-        #_logger.debug(f"\t\told_to_new_residues: {old_to_new_residues}")
 
-        # modified_residues : dict, key : index of old residue, value : proposed residue
-        modified_residues = dict()
-
-        for map_entry in residue_map:
-            old_residue = map_entry[0]
-            modified_residues[old_residue.index] = old_to_new_residues[old_residue]
-        _logger.debug(f"\t\tmodified residues: {modified_residues}")
-
-        # old_residues : dict, key : index of old residue, value : old residue
-        old_residues = dict()
-        for residue in old_topology.residues():
-            if residue.index in index_to_new_residues.keys():
-                old_residues[residue.index] = residue
-        _logger.debug(f"\t\t\told residues: {old_residues}")
-
-        # Update atom map with atom mappings for residues that have been modified
-        assert len(index_to_new_residues) == 1, f"index_to_new_residues is not of length 1"
-        index = list(index_to_new_residues.keys())[0]
-        #old_res = old_residues[index]
-        old_res = old_residues[index]
-        new_res = modified_residues[index]
-        _logger.debug(f"\t\t\told res: {old_res.name}; new res: {new_res.name}")
-
-        new_res_index_to_name = {atom.index: atom.name for atom in new_res.atoms()}
-        old_res_index_to_name = {atom.index: atom.name for atom in old_res.atoms()}
-
-        _logger.debug(f"\t\t\told topology res names: {old_res_index_to_name}")
-        _logger.debug(f"\t\t\tnew topology res names: {new_res_index_to_name}")
-
+        # Retrieve old and new residues
+        assert len(residue_map) == 1, "residue_map is not of length 1"
+        old_res = residue_map[0][0]
+        new_res = old_to_new_residues[old_res]
         old_res_name = old_res.name
         new_res_name = new_res.name
 
-        current_residue_pdb_filename = resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{old_res_name}.pdb"))
-        proposed_residue_pdb_filename = resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{new_res_name}.pdb"))
+        # Retrieve map of atom index to atom name for old and new residues
+        # old_res_index_to_name : dict, key : int old atom index, value : str old atom name
+        # new_res_index_to_name : dict, key : int new atom index, value : str new atom name
+        old_res_index_to_name = {atom.index: atom.name for atom in old_res.atoms()}
+        new_res_index_to_name = {atom.index: atom.name for atom in new_res.atoms()}
 
-        current_oemol = PolymerProposalEngine.generate_oemol_from_pdb_template(current_residue_pdb_filename)
-        proposed_oemol = PolymerProposalEngine.generate_oemol_from_pdb_template(proposed_residue_pdb_filename)
+        # Retrieve map of atom name to atom index for old and new residues
+        # old_res_name_to_index : dict, key : str old atom name, value : int old atom index
+        # new_res_name_to_index : dict, key : str new atom name, value : int new atom index
+        old_res_name_to_index = {atom.name: atom.index for atom in old_res.atoms()}
+        new_res_name_to_index = {atom.name: atom.index for atom in new_res.atoms()}
 
-        old_oemol_res_copy = copy.deepcopy(current_oemol)
-        new_oemol_res_copy = copy.deepcopy(proposed_oemol)
-
-
-        _logger.debug(f"\t\t\told_oemol_res names: {[(atom.GetIdx(), atom.GetName()) for atom in current_oemol.GetAtoms()]}")
-        _logger.debug(f"\t\t\tnew_oemol_res names: {[(atom.GetIdx(), atom.GetName()) for atom in proposed_oemol.GetAtoms()]}")
-
-        #create bookkeeping dictionaries
-        old_res_to_oemol_map = {atom.index: current_oemol.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx() for atom in old_res.atoms()}
-        new_res_to_oemol_map = {atom.index: proposed_oemol.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx() for atom in new_res.atoms()}
-
-        old_oemol_name_idx = {atom.GetName(): atom.GetIdx() for atom in current_oemol.GetAtoms()}
-        new_oemol_name_idx = {atom.GetName(): atom.GetIdx() for atom in proposed_oemol.GetAtoms()}
-
-        _logger.debug(f"\t\t\told_res_to_oemol_map: {old_res_to_oemol_map}")
-        _logger.debug(f"\t\t\tnew_res_to_oemol_map: {new_res_to_oemol_map}")
-
-        old_oemol_to_res_map = {val: key for key, val in old_res_to_oemol_map.items()}
-        new_oemol_to_res_map = {val: key for key, val in new_res_to_oemol_map.items()}
-
-        # HBM - these don't seem to be used anywhere
-        #old_res_to_oemol_molecule_map = {atom.index: current_oemol.GetAtom(oechem.OEHasAtomName(atom.name)) for atom in old_res.atoms()}
-        #new_res_to_oemol_molecule_map = {atom.index: proposed_oemol.GetAtom(oechem.OEHasAtomName(atom.name)) for atom in new_res.atoms()}
-
-        #initialize_the atom map
+        # Initialize_the atom map
         local_atom_map = {}
 
-        #now remove backbones in both molecules and map them separately
-        # TODO: Why don't we just include backbone atoms and just enforce their mapping via external indices?
-        backbone_atoms = ['C', 'CA', 'N', 'O', 'H', 'HA', "H'"]
-        # TODO dom make this a seperate function
-        old_atoms_to_delete, new_atoms_to_delete = [], []
-        for atom in proposed_oemol.GetAtoms():
-            if atom.GetName() in backbone_atoms:
-                try: #to get the backbone atom with the same naem in the old_oemol_res
-                    old_corresponding_backbones = [_atom for _atom in current_oemol.GetAtoms() if _atom.GetName() == atom.GetName()]
-                    if old_corresponding_backbones == []:
-                        #this is an exception when the old oemol res is a glycine.  if this is the case, then we do not map HA2 or HA3
-                        assert set(['HA2', 'HA3']).issubset([_atom.GetName() for _atom in current_oemol.GetAtoms()]), f"old oemol residue is not a GLY template"
-                        #we have to map HA3 to HA (old, new)
-                        old_corresponding_backbones = [_atom for _atom in current_oemol.GetAtoms() if _atom.GetName() == 'HA3' and atom.GetName() == 'HA']
-                    assert len(old_corresponding_backbones) == 1, f"there can only be one corresponding backbone in the old molecule; corresponding backbones: {[atom.GetName() for atom in old_corresponding_backbones]}"
-                    old_corresponding_backbone = old_corresponding_backbones[0]
-                    if not atom.GetName() == "H'": #throw out the extra H
-                        local_atom_map[atom.GetIdx()] = old_corresponding_backbone.GetIdx()
-                    old_atoms_to_delete.append(old_corresponding_backbone)
-                    new_atoms_to_delete.append(atom)
-                    assert proposed_oemol.DeleteAtom(atom), f"failed to delete new_oemol atom {atom}"
-                    assert current_oemol.DeleteAtom(old_corresponding_backbone), f"failed to delete old_oemol atom {old_corresponding_backbone}"
-                except Exception as e:
-                    raise Exception(f"failed to map the backbone separately: {e}")
+        # Iterate over the old res atoms to fill in the local atom map
+        backbone_atoms = ['C', 'CA', 'N', 'O', 'H', 'HA']
+        sidechain_atoms = [] if demap_CBs else ['CB']
+        for atom in old_res.atoms():
+            old_atom_index = atom.index
+            old_atom_name = atom.name
+            
+            if old_atom_name in backbone_atoms:
+                if old_res_name == 'GLY' and old_atom_name in ['HA2', 'HA3']: # Do not map HA if old residue GLY
+                    continue
+                elif new_res_name == 'GLY' and old_atom_name == 'HA': # Do not map HA if new residue is GLY
+                    continue
+                else:
+                    new_atom_index = new_res_name_to_index[old_atom_name]
+                    local_atom_map[new_atom_index] = old_atom_index
+            
+            elif old_atom_name in sidechain_atoms:
+                if new_res_name == 'GLY': # Do not map sidechain atoms if GLY
+                    continue
+                else:
+                    new_atom_index = new_res_name_to_index[old_atom_name]
+                    local_atom_map[new_atom_index] = old_atom_index
+        
+        # Validate extra_sidechain_map
+        if extra_sidechain_map:
+            assert type(extra_sidechain_map) is dict, "extra_sidechain_map must be a dict"
+            old_res_indices = [atom.index for atom in old_res.atoms()]
+            new_res_indices = [atom.index for atom in new_res.atoms()]
+            assert all([index in new_res_indices for index in extra_sidechain_map.keys()]), "at least one of the new indices in extra_sidechain_map is not present in the new_topology"
+            assert all([index in old_res_indices for index in extra_sidechain_map.values()]), "at least one of the new indices in extra_sidechain_map is not present in the old_topology"
+        
+            # Add extra_sidechain_map to local_atom_map
+            local_atom_map.update(extra_sidechain_map)
+        
+        _logger.info(f"local_atom_map: {local_atom_map}")
+        
+        mapped_atoms = [(new_res_index_to_name[new_idx], old_res_index_to_name[old_idx]) for new_idx, old_idx in local_atom_map.items()]
+        _logger.info(f"the mapped atom names are: {mapped_atoms}")            
+            
+        # Retrieve old and new oemols
+        old_residue_pdb_filename = resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{old_res_name}.pdb"))
+        new_residue_pdb_filename = resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{new_res_name}.pdb"))
+        old_oemol = PolymerProposalEngine.generate_oemol_from_pdb_template(old_residue_pdb_filename)
+        new_oemol = PolymerProposalEngine.generate_oemol_from_pdb_template(new_residue_pdb_filename)
 
-        _logger.debug(f"\t\t\told_oemol_res names: {[(atom.GetIdx(), atom.GetName()) for atom in current_oemol.GetAtoms()]}")
-        _logger.debug(f"\t\t\tnew_oemol_res names: {[(atom.GetIdx(), atom.GetName()) for atom in proposed_oemol.GetAtoms()]}")
-
-        old_sidechain_oemol_indices_to_name = {atom.GetIdx(): atom.GetName() for atom in current_oemol.GetAtoms()}
-        new_sidechain_oemol_indices_to_name = {atom.GetIdx(): atom.GetName() for atom in proposed_oemol.GetAtoms()}
-
-        #now we can get the mol atom map of the sidechain
-        #NOTE: since the sidechain oemols are NOT zero-indexed anymore, we need to match by name (since they are unique identifiers)
-        ring_aas = ['TRP', 'TYR', 'PHE', 'HIS', 'HID', 'HIE', 'HIP']
-        break_bool = False if old_res_name in ring_aas or new_res_name in ring_aas else True
-        _logger.debug(f"\t\t\t allow ring breaking: {break_bool}")
-        # TODO: Refactor to re-use atom_mapper for all ligands?
-        # TODO: Generate atom mapping using only geometries if requested
-        from .atom_mapping import AtomMapper, InvalidMappingException
-        atom_mapper = AtomMapper(map_strength='strong', matching_criterion='name', allow_ring_breaking=break_bool)
-        atom_mapping = atom_mapper.get_best_mapping(current_oemol, proposed_oemol)
-
-        #check the atom map thus far:
-        _logger.debug(f"\t\t\tlocal atom map nonstereo sidechain: {atom_mapping}")
-
-        #preserve chirality of the sidechain
-        # _logger.warning(f"\t\t\told oemols: {[atom.GetIdx() for atom in self.current_molecule.GetAtoms()]}")
-        # _logger.warning(f"\t\t\tnew oemols: {[atom.GetIdx() for atom in new_oemol_res.GetAtoms()]}")
-        # TODO: Should this be done here, or automatically in the mapping generation?
-        if atom_mapping is not None:
-            atom_mapping.preserve_chirality()
-        else:
-            atom_mapping = dict()
-
-        _logger.debug(f"\t\t\tlocal atom map stereo sidechain: {atom_mapping}")
-
-        # DEBUG
-        _logger.info(atom_mapping.old_mol.atoms)
-        _logger.info(atom_mapping.new_mol.atoms)
-
-        #fix the sidechain indices w.r.t. full oemol
-        # TODO: Glue AtomMapping in more broadly
-        sidechain_fixed_map = {}
-        mapped_names = []
-        backbone_atoms = ['N', 'H', 'C', 'O', 'CA', 'HA']
-        sidechain_atom_indices = []
-        for new_sidechain_idx, old_sidechain_idx in atom_mapping.new_to_old_atom_map.items():
-            try:
-                new_name, old_name = atom_mapping.new_mol.atoms[new_sidechain_idx].name, atom_mapping.old_mol.atoms[old_sidechain_idx].name
-                mapped_names.append((new_name, old_name))
-                new_full_oemol_idx, old_full_oemol_idx = new_oemol_name_idx[new_name], old_oemol_name_idx[old_name]
-                if new_name not in backbone_atoms:
-                    sidechain_atom_indices.append(new_full_oemol_idx)
-                sidechain_fixed_map[new_full_oemol_idx] = old_full_oemol_idx
-            except KeyError as e:
-                # Report more information on failure
-                atom_mapping.render_image('failure.png')
-                raise Exception(f'{atom_mapping}\n{e}')
-
-        _logger.debug(f"\t\t\toemol sidechain fixed map: {sidechain_fixed_map}")
-
-        if ignore_sidechain_atoms:
-            for index in sidechain_atom_indices:
-                del[sidechain_fixed_map[index]]
-
-        _logger.debug(f"\t\t\tthe local atom map (backbone) is {local_atom_map}")
-        #update the local map
-        local_atom_map.update(sidechain_fixed_map)
-        _logger.debug(f"\t\t\tthe local atom map (total) is {local_atom_map}")
-
-        #correct the map
-        #now we have to update the atom map indices
-        _logger.debug(f"\t\t\tadjusting the atom map with topology indices...")
-        topology_index_map = {}
-        for new_oemol_idx, old_oemol_idx in local_atom_map.items():
-            topology_index_map[new_oemol_to_res_map[new_oemol_idx]] = old_oemol_to_res_map[old_oemol_idx]
-
-        _logger.debug(f"\t\t\ttopology_atom_map: {topology_index_map}")
-
-        mapped_atoms = [(new_res_index_to_name[new_idx], old_res_index_to_name[old_idx]) for new_idx, old_idx in topology_index_map.items()]
-        _logger.debug(f"\t\t\tthe mapped atom names are: {mapped_atoms}")
-
-            #and all of the environment atoms should already be handled
-        return topology_index_map, old_res_to_oemol_map, new_res_to_oemol_map, local_atom_map, current_oemol, proposed_oemol, old_oemol_res_copy, new_oemol_res_copy
+        # Retrieve mapping of OpenMM topology to oemol indices for old and new residues
+        # old_res_to_oemol_map : dict, key : int old atom index (OpenMM topology), value : int old atom index (oemol)
+        # new_res_to_oemol_map : dict, key : int new atom index (OpenMM topology), value : int new atom index (oemol)
+        old_res_to_oemol_map = {atom.index: old_oemol.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx() for atom in old_res.atoms()}
+        new_res_to_oemol_map = {atom.index: new_oemol.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx() for atom in new_res.atoms()}
+            
+        return local_atom_map, old_res_to_oemol_map, new_res_to_oemol_map, old_oemol, new_oemol
+    
 
     def _get_mol_atom_matches(self, current_molecule, proposed_molecule, first_atom_index_old, first_atom_index_new):
         """
