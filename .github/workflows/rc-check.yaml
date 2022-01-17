@@ -20,5 +20,7 @@ jobs:
       - uses: benc-uk/workflow-dispatch@v1
         with:
           workflow: OpenMM RC Test
+          # mikemhenry PAT
+          # see https://github.com/benc-uk/workflow-dispatch#token
           token: ${{ secrets.DISPATCH_TOKEN }}
         if: ${{ steps.check.outputs.hasrc == 'True' }}
