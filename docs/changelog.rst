@@ -8,6 +8,12 @@ This section lists features and improvements of note in each release.
 
 The full release history can be viewed `at the GitHub perses releases page <https://github.com/choderalab/perses/releases>`_.
 
+0.10.0 - Release
+----------------
+
+
+
+
 0.9.2 - Bugfix release
 -----------------------
 Bugfixes
