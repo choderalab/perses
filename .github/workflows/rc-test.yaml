@@ -1,26 +1,16 @@
-name: CI
-
+name: OpenMM RC Test
 on:
-  pull_request:
-    branches:
-      - "master"
-  schedule:
-    # nightly tests
-    - cron: "0 0 * * *"
-  push:
-    branches:
-      - master
+  workflow_dispatch:
 
 jobs:
-  test:
-    name: Test on ubuntu-latest, Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm }}
+  rc-test:
     runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
       matrix:
         python-version: [3.8, 3.9]
-        openmm: ["nightly", "7.6", "7.7"]
+        openmm: ["release candidate"]
 
     env:
       OPENMM: ${{ matrix.openmm }}
@@ -52,16 +42,8 @@ jobs:
       - name: Refine test environment
         shell: bash -l {0}
         run: |
-          case ${{ matrix.openmm }} in
-            nightly)
-              echo "Using nightly dev build of OpenMM."
-              conda install -y -c omnia-dev openmm --override-channels --force-reinstall
-              echo "Using beta build of openeye toolkit"
-              conda install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
-            *)
-              echo "installing OpenMM version ${{ matrix.openmm }}"
-              mamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
-          esac
+          echo "installing OpenMM RC"
+          mamba install -y -c conda-forge/label/openmm_rc -c conda-forge openmm
 
       - name: Install package
         shell: bash -l {0}
@@ -89,9 +71,3 @@ jobs:
           pushd .
           pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto -m "not gpu_needed"
           popd
-
-      - name: Codecov
-        uses: codecov/codecov-action@v1
-        with:
-          file: ./coverage.xml
-          fail_ci_if_error: false
