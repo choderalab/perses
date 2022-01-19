@@ -215,8 +215,11 @@ def generate_dipeptide_top_pos_sys(topology,
                                    ):
     """generate point mutation engine, geometry_engine, and conduct topology proposal, geometry propsal, and hybrid factory generation"""
     from perses.tests.utils import validate_endstate_energies
+    import copy
+
     if conduct_htf_prop:
         assert conduct_geometry_prop, f"the htf prop can only be conducted if there is a geometry proposal"
+
     # Create the point mutation engine
     from perses.rjmc.topology_proposal import PointMutationEngine
     point_mutation_engine = PointMutationEngine(wildtype_topology=topology,
