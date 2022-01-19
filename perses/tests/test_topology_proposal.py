@@ -304,7 +304,7 @@ def generate_dipeptide_top_pos_sys(topology,
             if generate_rest_capable_hybrid_topology_factory:
                 from perses.tests.utils import validate_endstate_energies_point
                 for endstate in [0, 1]:
-                    htf = copy.deepcopy(forawrd_htf)
+                    htf = copy.deepcopy(forward_htf)
                     validate_endstate_energies_point(htf, endstate=endstate, minimize=True)
             else:
                 from perses.tests.utils import validate_endstate_energies
@@ -342,15 +342,13 @@ def generate_dipeptide_top_pos_sys(topology,
                                                                         beta=beta,
                                                                         repartitioned_endstate=endstate)
 
-            if generate_unmodified_hybrid_topology_factory:
-                from perses.tests.utils import validate_endstate_energies
-                htf = self.get_complex_htf() if is_complex else self.get_apo_htf()
-                zero_state_error, one_state_error = validate_endstate_energies(htf._topology_proposal,
-                                                                               htf,
-                                                                               added_valence_energy,
-                                                                               subtracted_valence_energy,
-                                                                               beta=beta,
-                                                                               ENERGY_THRESHOLD=ENERGY_THRESHOLD)
+                else:
+                    zero_state_error, one_state_error = validate_endstate_energies(forward_htf._topology_proposal,
+                                                                                   forward_htf,
+                                                                                   added_valence_energy,
+                                                                                   subtracted_valence_energy,
+                                                                                   beta=beta,
+                                                                                   ENERGY_THRESHOLD=ENERGY_THRESHOLD)
 
             return forward_htf
 
