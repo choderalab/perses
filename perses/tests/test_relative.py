@@ -1032,7 +1032,7 @@ def test_RESTCapableHybridTopologyFactory_energies():
     """
 
     test_cases = [('ala-dipeptide', 'vacuum')]
-    #test_cases = [('ala-dipeptide', 'solvent'), ('8mer', 'solvent'), ('barstar', 'solvent')] # TODO: Mike will help make these tests available on GPUs
+    # test_cases = [('ala-dipeptide', 'solvent'), ('8mer', 'solvent'), ('barstar', 'solvent')] # TODO: Mike will help make these tests available on GPUs
 
     for test_name, phase in test_cases:
         # Run point energy validation test

@@ -957,6 +957,7 @@ def validate_endstate_energies_point(htf, endstate=0, minimize=False):
     components_other = compute_potential_components(context_other, beta=beta)
 
     # Check that each of the valence force energies are concordant
+    # TODO: Instead of checking with np.isclose(), check whether the ratio of differences is less than a specified energy threshold (like in validate_endstate_energies())
     for i in range(3):
         print(f"{components_other[i][0]} -- og: {components_other[i][1]}, hybrid: {components_hybrid[i][1]}")
         assert np.isclose(components_other[i][1], components_hybrid[i][1])
@@ -1084,19 +1085,20 @@ def validate_endstate_energies_md(htf, T_max=300 * unit.kelvin, endstate=0, n_st
     context_hybrid = compound_thermodynamic_state.create_context(integrator_hybrid)
 
     # Get energies for each conformation
+    # TODO: Instead of checking with np.isclose(), check whether the ratio of differences is less than a specified energy threshold (like in validate_endstate_energies())
     energies_og = list()
     energies_hybrid = list()
     for pos in tqdm.tqdm(hybrid):
         og_positions = htf.old_positions(pos) if endstate == 0 else htf.new_positions(pos)
         context_og.setPositions(og_positions)
-        energy_og = context_og.getState(getEnergy=True).getPotentialEnergy()
-        energies_og.append(energy_og.value_in_unit_system(unit.md_unit_system))
+        energy_og = context_og.getState(getEnergy=True).getPotentialEnergy().value_in_unit_system(unit.md_unit_system)
+        energies_og.append(energy_og)
 
         context_hybrid.setPositions(pos)
-        energy_hybrid = context_hybrid.getState(getEnergy=True).getPotentialEnergy()
-        energies_hybrid.append(energy_hybrid.value_in_unit_system(unit.md_unit_system))
+        energy_hybrid = context_hybrid.getState(getEnergy=True).getPotentialEnergy().value_in_unit_system(unit.md_unit_system)
+        energies_hybrid.append(energy_hybrid)
 
-        print(energy_og, energy_hybrid)
+        assert np.isclose([energy_og], [energy_hybrid])
 
 def track_torsions(hybrid_factory):
     """

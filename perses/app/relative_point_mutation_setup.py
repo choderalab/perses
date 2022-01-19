@@ -373,10 +373,6 @@ class PointMutationExecutor(object):
                                                                                    subtracted_valence_energy,
                                                                                    beta=beta,
                                                                                    ENERGY_THRESHOLD=ENERGY_THRESHOLD)
-                    if zero_state_error > ENERGY_THRESHOLD:
-                        _logger.warning(f"Reduced potential difference of the nonalchemical and alchemical Lambda = 0 state is above the threshold ({ENERGY_THRESHOLD}): {zero_state_error}")
-                    if one_state_error > ENERGY_THRESHOLD:
-                        _logger.warning(f"Reduced potential difference of the nonalchemical and alchemical Lambda = 1 state is above the threshold ({ENERGY_THRESHOLD}): {one_state_error}")
 
                 if generate_repartitioned_hybrid_topology_factory:
                     from perses.tests.utils import validate_endstate_energies
@@ -398,11 +394,6 @@ class PointMutationExecutor(object):
                                                                     ENERGY_THRESHOLD=ENERGY_THRESHOLD,
                                                                     beta=beta,
                                                                     repartitioned_endstate=1)
-
-                    if zero_state_error > ENERGY_THRESHOLD:
-                        _logger.warning(f"Reduced potential difference of the nonalchemical and alchemical Lambda = 0 state is above the threshold ({ENERGY_THRESHOLD}): {zero_state_error}")
-                    if one_state_error > ENERGY_THRESHOLD:
-                        _logger.warning(f"Reduced potential difference of the nonalchemical and alchemical Lambda = 1 state is above the threshold ({ENERGY_THRESHOLD}): {one_state_error}")
 
                 if generate_rest_capable_hybrid_topology_factory:
                     from perses.tests.utils import validate_endstate_energies_point
