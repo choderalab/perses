@@ -2534,9 +2534,6 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
         hybrid_to_old_map = self._hybrid_to_old_map
         hybrid_to_new_map = self._hybrid_to_new_map
 
-        #create the forces...
-        self._hybrid_system_forces['NonbondedForce'] = openmm.NonbondedForce()
-
         for particle_index in range(self._hybrid_system.getNumParticles()):
             if particle_index in self._atom_classes['unique_old_atoms']:
                 scale = 0.0 if self._endstate == 1 else 1.0
