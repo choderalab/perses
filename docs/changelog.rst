@@ -11,13 +11,32 @@ The full release history can be viewed `at the GitHub perses releases page <http
 0.10.0 - Release
 ----------------
 
+Bugfixes
+^^^^^^^^
 
+- Various CI fixes
+  * PR `#787 <https://github.com/choderalab/perses/pull/787>`_
+  * PR `#850 <https://github.com/choderalab/perses/pull/850>`_
+  * PR `#858 <https://github.com/choderalab/perses/pull/858>`_
+  * PR `#868 <https://github.com/choderalab/perses/pull/868>`_
+  * PR `#871 <https://github.com/choderalab/perses/pull/871>`_
+  * PR `#880 <https://github.com/choderalab/perses/pull/880>`_
+  * PR `#887 <https://github.com/choderalab/perses/pull/887>`_
+  * PR `#898 <https://github.com/choderalab/perses/pull/898>`_
 
+New features
+^^^^^^^^^^^^
+
+- (PR `#896 <https://github.com/choderalab/perses/pull/896>`_)
+  Drop support for older OpenMM versions.
+  We now only support versions >= 7.6.0.
 
 0.9.2 - Bugfix release
 -----------------------
+
 Bugfixes
 ^^^^^^^^
+
 - (PR `#835 <https://github.com/choderalab/perses/pull/835>`_)
   Write out YAML file after all options are parsed and set. Saved as YAML original file name + date + time. Resolves
   `#817 <https://github.com/choderalab/perses/issues/817>`_.
@@ -33,7 +52,8 @@ Bugfixes
   More info at `#613 (comment) <https://github.com/choderalab/perses/issues/613#issuecomment-899746348>`_.
 
 New features
-^^^^^^^^
+^^^^^^^^^^^^
+
 - (PR `#708 <https://github.com/choderalab/perses/pull/708>`_)
   Create visualization module for generating PyMOL movies.
 - (PR `#834 <https://github.com/choderalab/perses/pull/834>`_)
