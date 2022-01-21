@@ -14,6 +14,9 @@ The full release history can be viewed `at the GitHub perses releases page <http
 Bugfixes
 ^^^^^^^^
 
+- (PR `#894 <https://github.com/choderalab/perses/pull/894>`_)
+  Remove unused argument 'implicitSolvent' from SystemGenerator in tests.
+
 - (PR `#893 <https://github.com/choderalab/perses/pull/893>`_)
   Add installation instructions to readme.
 
