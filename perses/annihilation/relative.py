@@ -2671,9 +2671,12 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
     The nonbonded interactions are handled with 4 forces:
     - CustomNonbondedForce - direct space PME electrostatics interactions (with long range correction off)
-    - CustomNonbondedForce - steric interactions (with long range correction on)
+    - CustomNonbondedForce - steric interactions for scaled interactions (with long range correction off)
     - CustomBondForce - electrostatics (uses Coulomb and not PME) and steric exceptions
     - NonbondedForce - reciprocal space PME electrostatics interactions/exceptions
+    - NonbondedForce - steric interactions for non-scaled interactions (with long range correction on)
+    * Note that 'scaled interaction` means at least one atom in the interaction is scaled via rest or alchemically.
+    Aka at least one atom in the interaction is part of at least one of the following atom classes: rest, inter, core, unique old, unique new.
 
     For the custom nonbonded/bond forces:
     The global parameters are defined similarly to how they are defined for the valence forces, except there are separate
@@ -2693,8 +2696,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     given by r_cutoff * w_scale. w_scale is a user-defined scalar between 0 (non-inclusive) and 1. Taking 'w_scale' to 1
     means that once the term is maximally 'lifted' into the 4th dimension, the 4th dimension is effectively of length 'r_cutoff'.
 
-    For the standard NonbondedForce, global parameters (to be used with particle parameter offsets) are defined to allow
+    For the first NonbondedForce, global parameters (to be used with particle parameter offsets) are defined to allow
     for alchemical scaling, but not rest scaling. Computation of contributions from the direct space is disabled.
+
+    For the second NonbondedForce, there is no alchemical or rest scaling. Long range correction is on.
 
     This class can be tested using perses.tests.utils.validate_endstate_energies_point() and
     perses.tests.utils.validate_endstate_energies_md(), as is done by perses.tests.test_relative.test_RESTCapableHybridTopologyFactory_energies
@@ -3007,9 +3012,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             # Create custom nonbonded and custom bond forces and add particles/bonds to them
             _logger.info("Handling nonbondeds (creating forces)...")
             self._create_electrostatics_force()
-            self._create_sterics_force()
+            self._create_scaled_sterics_force()
             self._create_exceptions_force()
             self._create_reciprocal_space_force()
+            self._create_nonscaled_sterics_force()
 
             _logger.info("Handling nonbondeds (copying nonbonded particles)...")
             self._copy_nonbondeds()
@@ -3744,9 +3750,9 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         else:
             raise Exception(f"nonbonded method is not recognized")
 
-    def _create_sterics_force(self):
+    def _create_scaled_sterics_force(self):
         """
-        Create `CustomNonbondedForce` for sterics.
+        Create `CustomNonbondedForce` for scaled steric interactions.
         """
 
         import itertools
@@ -3760,6 +3766,29 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         custom_force.setName(name)
         self._hybrid_system.addForce(custom_force)
         self._hybrid_system_forces[name] = custom_force
+
+        # Add interaction groups
+        alchemical_atoms = self._atom_classes['core_atoms'].union(self._atom_classes['unique_old_atoms'], self._atom_classes['unique_new_atoms'])
+        environment_atoms = self._atom_classes['environment_atoms']
+        rest_atoms = set(self._rest_region)
+        nonrest_atoms = set(range(self._hybrid_system.getNumParticles())) - rest_atoms
+
+        alchemical_rest_atoms = alchemical_atoms.intersection(rest_atoms)
+        alchemical_nonrest_atoms = alchemical_atoms.intersection(nonrest_atoms)
+        environment_rest_atoms = environment_atoms.intersection(rest_atoms)
+        environment_nonrest_atoms = environment_atoms.intersection(nonrest_atoms)
+
+        assert len(list(alchemical_rest_atoms) + list(alchemical_nonrest_atoms) + list(environment_rest_atoms) + list(environment_nonrest_atoms)) == self._hybrid_system.getNumParticles(), "Atom classes defined for interaction groups are not mutually exclusive"
+
+        custom_force.addInteractionGroup(alchemical_rest_atoms, alchemical_rest_atoms)
+        custom_force.addInteractionGroup(alchemical_rest_atoms, alchemical_nonrest_atoms)
+        custom_force.addInteractionGroup(alchemical_rest_atoms, environment_rest_atoms)
+        custom_force.addInteractionGroup(alchemical_rest_atoms, environment_nonrest_atoms)
+        custom_force.addInteractionGroup(alchemical_nonrest_atoms, alchemical_nonrest_atoms)
+        custom_force.addInteractionGroup(alchemical_nonrest_atoms, environment_rest_atoms)
+        custom_force.addInteractionGroup(alchemical_nonrest_atoms, environment_nonrest_atoms)
+        custom_force.addInteractionGroup(environment_rest_atoms, environment_rest_atoms)
+        custom_force.addInteractionGroup(environment_rest_atoms, environment_nonrest_atoms)
 
         # Add global parameters
         custom_force.addGlobalParameter(f"lambda_rest_sterics", 1.0)
@@ -3788,9 +3817,6 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         if self._nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME,
                                       openmm.NonbondedForce.Ewald]:
             custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(self._nonbonded_method))
-            if old_system_nbf.getUseSwitchingFunction():  # This should be copied for sterics force, but not for electrostatics force
-                custom_force.setUseSwitchingFunction(True)
-                custom_force.setSwitchingDistance(old_system_nbf.getSwitchingDistance())
             custom_force.setUseSwitchingFunction(False)
             custom_force.setCutoffDistance(self._r_cutoff)
             custom_force.setUseLongRangeCorrection(old_system_nbf.getUseDispersionCorrection()) # This should be copied from the og nbf for sterics, but off for electrostatics
@@ -3807,8 +3833,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
         # Create force
         standard_nonbonded_force = openmm.NonbondedForce()
+        name = standard_nonbonded_force.__class__.__name__ + '_reciprocal'
+        standard_nonbonded_force.setName(name)
         self._hybrid_system.addForce(standard_nonbonded_force)
-        self._hybrid_system_forces[standard_nonbonded_force.__class__.__name__] = standard_nonbonded_force
+        self._hybrid_system_forces[name] = standard_nonbonded_force
 
         # Add global parameters
         standard_nonbonded_force.addGlobalParameter("lambda_alchemical_electrostatics_reciprocal", 0.0)
@@ -3846,6 +3874,48 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         # Disable direct space interactions
         standard_nonbonded_force.setIncludeDirectSpace(False)
 
+    def _create_nonscaled_sterics_force(self):
+        """
+        Create standard NonbondedForce for non-scaled steric interactions.
+        """
+
+        # Create force
+        standard_nonbonded_force = openmm.NonbondedForce()
+        name = standard_nonbonded_force.__class__.__name__ + '_sterics'
+        standard_nonbonded_force.setName(name)
+        self._hybrid_system.addForce(standard_nonbonded_force)
+        self._hybrid_system_forces[name] = standard_nonbonded_force
+
+        # Set nonbonded method and related attributes
+        old_system_nbf = self._old_system_forces['NonbondedForce']
+        standard_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
+        if self._nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.CutoffNonPeriodic]:
+            standard_nonbonded_force.setReactionFieldDielectric(old_system_nbf.getReactionFieldDielectric())
+            standard_nonbonded_force.setCutoffDistance(self._r_cutoff)
+        elif self._nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
+            [alpha_ewald, nx, ny, nz] = old_system_nbf.getPMEParameters()
+            delta = old_system_nbf.getEwaldErrorTolerance()
+            standard_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
+            standard_nonbonded_force.setEwaldErrorTolerance(delta)
+            standard_nonbonded_force.setCutoffDistance(self._r_cutoff)
+        elif self._nonbonded_method in [openmm.NonbondedForce.NoCutoff]:
+            pass
+        else:
+            raise Exception("Nonbonded method %s not supported yet." % str(self._nonbonded_method))
+
+        # Set the use of dispersion correction
+        if old_system_nbf.getUseDispersionCorrection():
+           standard_nonbonded_force.setUseDispersionCorrection(True)
+        else:
+            standard_nonbonded_force.setUseDispersionCorrection(False)
+
+        # Set the use of switching function
+        if old_system_nbf.getUseSwitchingFunction():
+            standard_nonbonded_force.setUseSwitchingFunction(True)
+            standard_nonbonded_force.setSwitchingDistance(old_system_nbf.getSwitchingDistance())
+        else:
+            standard_nonbonded_force.setUseSwitchingFunction(False)
+
     def _copy_nonbondeds(self):
         """
         Add particles to each of the following nonbonded forces:
@@ -3864,7 +3934,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         custom_nb_force_sterics = self._hybrid_system_forces['CustomNonbondedForce_sterics']
 
         # Retrieve NonbondedForce for reciprocal space
-        standard_nonbonded_force = self._hybrid_system_forces["NonbondedForce"]
+        standard_nonbonded_reciprocal_force = self._hybrid_system_forces["NonbondedForce_reciprocal"]
+
+        # Retrieve NonbondedForce for reciprocal space
+        standard_nonbonded_sterics_force = self._hybrid_system_forces["NonbondedForce_sterics"]
 
         # Iterate over particles in the old system and add them to the custom nonbonded force
         done_indices = []
@@ -3885,11 +3958,16 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                 #assert epsilon_old.value_in_unit_system(unit.md_unit_system) * epsilon_new.value_in_unit_system(unit.md_unit_system) != 0, f"at least one of the epsilons is zero for atom index {hybrid_idx}: {epsilon_old} (old) and {epsilon_new} (new)"
 
                 # Add particle to the reciprocal space force
-                particle_idx = standard_nonbonded_force.addParticle(charge_old, sigma_old, epsilon_old * 0.0)
+                particle_idx = standard_nonbonded_reciprocal_force.addParticle(charge_old, sigma_old, epsilon_old * 0.0)
                 assert (particle_idx == hybrid_idx), "Attempting to add incorrect particle to hybrid system"
 
                 # Charge is charge_old at lambda_electrostatics = 0, charge_new at lambda_electrostatics = 1
-                standard_nonbonded_force.addParticleParameterOffset('lambda_alchemical_electrostatics_reciprocal', particle_idx, (charge_new - charge_old), 0.0, 0.0)
+                standard_nonbonded_reciprocal_force.addParticleParameterOffset('lambda_alchemical_electrostatics_reciprocal', particle_idx, (charge_new - charge_old), 0.0, 0.0)
+
+                # Add particle to the non-scaled sterics force
+                epsilon_old_sterics = epsilon_old if (atom_class == 'environment_atoms' and rest_id != [1, 0, 0]) else epsilon_old * 0.0 # Zero epsilon if the atom is scaled (for the NonbondedForce_sterics only)
+                particle_idx = standard_nonbonded_sterics_force.addParticle(charge_old * 0.0, sigma_old, epsilon_old_sterics)
+                assert (particle_idx == hybrid_idx), "Attempting to add incorrect particle to hybrid system"
 
                 if atom_class == 'environment_atoms':
                     assert charge_old == charge_new, f"charges do not match: {charge_old} (old) and {charge_new} (new)"
@@ -3900,11 +3978,16 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                 charge_new, sigma_new, epsilon_new = charge_old * 0, sigma_old, epsilon_old * 0
 
                 # Add particle to reciprocal space force
-                particle_idx = standard_nonbonded_force.addParticle(charge_old, sigma_old, epsilon_old * 0.0)
+                particle_idx = standard_nonbonded_reciprocal_force.addParticle(charge_old, sigma_old, epsilon_old * 0.0)
                 assert (particle_idx == hybrid_idx), "Attempting to add incorrect particle to hybrid system"
 
                 # Charge  will be turned on at lambda = 0 and turned off at lambda = 1
-                standard_nonbonded_force.addParticleParameterOffset('lambda_alchemical_electrostatics_reciprocal', particle_idx, -charge_old, 0.0, 0.0)
+                standard_nonbonded_reciprocal_force.addParticleParameterOffset('lambda_alchemical_electrostatics_reciprocal', particle_idx, -charge_old, 0.0, 0.0)
+
+                # Add particle to the non-scaled sterics force
+                particle_idx = standard_nonbonded_sterics_force.addParticle(charge_old * 0.0, sigma_old, epsilon_old * 0.0)
+                assert (particle_idx == hybrid_idx), "Attempting to add incorrect particle to hybrid system"
+
             else:
                 raise Exception(f"iterating over old terms yielded unique new atom.")
 
@@ -3931,11 +4014,15 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             custom_nb_force_sterics.addParticle(rest_id + alch_id + [sigma_old, sigma_new, epsilon_old, epsilon_new])
 
             # Add particle to reciprocal space force
-            particle_idx = standard_nonbonded_force.addParticle(charge_new * 0.0, sigma_new, epsilon_new * 0.0)  # charge and epsilon start at zero
+            particle_idx = standard_nonbonded_reciprocal_force.addParticle(charge_new * 0.0, sigma_new, epsilon_new * 0.0)  # charge and epsilon start at zero
             assert (particle_idx == hybrid_idx), "Attempting to add incorrect particle to hybrid system"
 
             # Charge will be turned off at lambda = 0 and turned on at lambda = 1
-            standard_nonbonded_force.addParticleParameterOffset('lambda_alchemical_electrostatics_reciprocal', particle_idx, charge_new, 0.0, 0.0)
+            standard_nonbonded_reciprocal_force.addParticleParameterOffset('lambda_alchemical_electrostatics_reciprocal', particle_idx, charge_new, 0.0, 0.0)
+
+            # Add particle to the non-scaled sterics force
+            particle_idx = standard_nonbonded_sterics_force.addParticle(charge_new * 0.0, sigma_new, epsilon_new * 0.0)
+            assert (particle_idx == hybrid_idx), "Attempting to add incorrect particle to hybrid system"
 
     def _create_exceptions_force(self):
         """
@@ -4014,7 +4101,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         custom_nb_force_sterics = self._hybrid_system_forces['CustomNonbondedForce_sterics']
 
         # Retrieve NonbondedForce for reciprocal space
-        standard_nonbonded_force = self._hybrid_system_forces["NonbondedForce"]
+        standard_nonbonded_reciprocal_force = self._hybrid_system_forces["NonbondedForce_reciprocal"]
+
+        # Retrieve NonbondedForce for non-scaled sterics
+        standard_nonbonded_sterics_force = self._hybrid_system_forces["NonbondedForce_sterics"]
 
         # Now remove interactions between unique old/new
         unique_news = self._atom_classes['unique_new_atoms']
@@ -4023,11 +4113,16 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             for old in unique_olds:
                 custom_nb_force_electrostatics.addExclusion(new, old)
                 custom_nb_force_sterics.addExclusion(new, old)
-                standard_nonbonded_force.addException(old,
-                                                      new,
-                                                      0.0 * unit.elementary_charge ** 2,
-                                                      1.0 * unit.nanometers,
-                                                      0.0 * unit.kilojoules_per_mole)
+                standard_nonbonded_reciprocal_force.addException(old,
+                                                                  new,
+                                                                  0.0 * unit.elementary_charge ** 2,
+                                                                  1.0 * unit.nanometers,
+                                                                  0.0 * unit.kilojoules_per_mole)
+                standard_nonbonded_sterics_force.addException(old,
+                                                             new,
+                                                             0.0 * unit.elementary_charge ** 2,
+                                                             1.0 * unit.nanometers,
+                                                             0.0 * unit.kilojoules_per_mole)
 
         # Now add add all nonzeroed exceptions to custom bond force
         old_term_collector = {}
@@ -4064,8 +4159,13 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             except Exception as e:  # This might be a unique old term
                 chargeProd_new, sigma_new, epsilon_new = chargeProd_old * 0, sigma_old, epsilon_old * 0
 
+            epsilon_old_bond = epsilon_old # Define epsilon_old_bond, which will be the epsilon_old used for CustomBondForce (but not the NonbondedForce_sterics)
+            epsilon_new_bond = epsilon_new
             if atom_class == 'environment_atoms':  # If it is env, the new/old terms must be identical?
                 assert new_term_collector[hybrid_index_pair][1:] == old_term_collector[hybrid_index_pair][1:], f"hybrid_index_pair {hybrid_index_pair} bond term was identified in old term collector as {old_term_collector[hybrid_index_pair][1:]}, but in new term collector as {new_term_collector[hybrid_index_pair][1:]}"
+                if rest_id == [0, 0, 1]:  # Zero sterics for non-scaled exceptions (for the CustomBondForce, but not the NonbondedForce_sterics)
+                    epsilon_old_bond = epsilon_old * 0.0
+                    epsilon_new_bond = epsilon_new * 0.0
 
             # Compute chargeProd_product_old/new from original particle parameters
             p1, p2 = idx_set
@@ -4077,15 +4177,20 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             # Add exclusions to the custon nb forces and bond to the custom bond force
             params = (hybrid_index_pair[0], hybrid_index_pair[1],
                                    rest_id + alch_id +
-                                   [chargeProd_old, chargeProd_new, chargeProd_product_old, chargeProd_product_new, sigma_old, sigma_new, epsilon_old, epsilon_new])
+                                   [chargeProd_old, chargeProd_new, chargeProd_product_old, chargeProd_product_new, sigma_old, sigma_new, epsilon_old_bond, epsilon_new_bond])
 
             custom_nb_force_electrostatics.addExclusion(*hybrid_index_pair)
             custom_nb_force_sterics.addExclusion(*hybrid_index_pair)
             custom_exception_force.addBond(*params)
 
-            ### Handle copying exceptions to reciprocal space force ###
+            ### Handle copying exceptions to reciprocal space force and non-scaled sterics force ###
             if atom_class in ['environment_atoms', 'unique_old_atoms']:
-                standard_nonbonded_force.addException(hybrid_index_pair[0], hybrid_index_pair[1], chargeProd_old, sigma_old, epsilon_old * 0.0)
+                standard_nonbonded_reciprocal_force.addException(hybrid_index_pair[0], hybrid_index_pair[1], chargeProd_old, sigma_old, epsilon_old * 0.0)
+
+                if atom_class == 'environment_atoms' and rest_id == [0, 0, 1]: # environment and nonrest
+                        standard_nonbonded_sterics_force.addException(hybrid_index_pair[0], hybrid_index_pair[1], chargeProd_old * 0.0, sigma_old, epsilon_old)
+                else: # unique old or rest or inter
+                    standard_nonbonded_sterics_force.addException(hybrid_index_pair[0], hybrid_index_pair[1], chargeProd_old * 0.0, sigma_old, epsilon_old * 0.0)
 
             # If the exception particles are neither solely old unique, solely environment, nor contain any unique old atoms, they are either core/environment or core/core
             # In this case, we need to get the parameters from the exception in the other (new) system, and interpolate between the two
@@ -4099,11 +4204,11 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                     chargeProd_new = charge1_new * charge2_new
 
                 # Interpolate between old and new
-                exception_index = standard_nonbonded_force.addException(hybrid_index_pair[0], hybrid_index_pair[1],
-                                                                        chargeProd_old, sigma_old, epsilon_old * 0.0)
-                standard_nonbonded_force.addExceptionParameterOffset('lambda_alchemical_electrostatics_reciprocal',
-                                                                     exception_index, (chargeProd_new - chargeProd_old),
-                                                                     0.0, 0.0)
+                exception_index = standard_nonbonded_reciprocal_force.addException(hybrid_index_pair[0], hybrid_index_pair[1], chargeProd_old, sigma_old, epsilon_old * 0.0)
+                standard_nonbonded_reciprocal_force.addExceptionParameterOffset('lambda_alchemical_electrostatics_reciprocal', exception_index, (chargeProd_new - chargeProd_old), 0.0, 0.0)
+
+                # Add to non-scaled sterics force
+                standard_nonbonded_sterics_force.addException(hybrid_index_pair[0], hybrid_index_pair[1], chargeProd_old * 0.0, sigma_old, epsilon_old * 0.0)
 
         # Now iterate over the modified new term collector and add appropriate bonds. these should only be unique new, right?
         for hybrid_index_pair in new_term_collector.keys():
@@ -4138,7 +4243,8 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
                 ### Handle copying exceptions to reciprocal space force ###
                 if atom_class == 'unique_new_atoms':
-                    standard_nonbonded_force.addException(hybrid_index_pair[0], hybrid_index_pair[1], chargeProd_new, sigma_new, epsilon_new * 0.0)
+                    standard_nonbonded_reciprocal_force.addException(hybrid_index_pair[0], hybrid_index_pair[1], chargeProd_new, sigma_new, epsilon_new * 0.0)
+                    standard_nonbonded_sterics_force.addException(hybrid_index_pair[0], hybrid_index_pair[1], chargeProd_new * 0.0, sigma_new, epsilon_new * 0.0)
 
                 # However, there may be a core exception that exists in one system but not the other (ring closure)
                 elif atom_class == 'core_atoms':
@@ -4151,9 +4257,8 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                     chargeProd_old = charge1_old * charge2_old
                     sigma_old = (sigma1_old + sigma2_old)/2
 
-                    exception_index = standard_nonbonded_force.addException(hybrid_index_pair[0], hybrid_index_pair[1],
-                                                                        chargeProd_old, sigma_old,
-                                                                        epsilon_old * 0.0)
-                    standard_nonbonded_force.addExceptionParameterOffset('lambda_alchemical_electrostatics_reciprocal',
-                                                                     exception_index,
-                                                                     (chargeProd_new - chargeProd_old), 0.0, 0.0)
+                    exception_index = standard_nonbonded_reciprocal_force.addException(hybrid_index_pair[0], hybrid_index_pair[1], chargeProd_old, sigma_old, epsilon_old * 0.0)
+                    standard_nonbonded_reciprocal_force.addExceptionParameterOffset('lambda_alchemical_electrostatics_reciprocal', exception_index, (chargeProd_new - chargeProd_old), 0.0, 0.0)
+
+                    # Add to non-scaled sterics force
+                    standard_nonbonded_sterics_force.addException(hybrid_index_pair[0], hybrid_index_pair[1], chargeProd_old * 0.0, sigma_old, epsilon_old * 0.0)

@@ -881,14 +881,15 @@ def validate_endstate_energies_point(htf, endstate=0, minimize=False):
     angle_force = force_dict['CustomAngleForce']
     torsion_force = force_dict['CustomTorsionForce']
     electrostatics_force = force_dict['CustomNonbondedForce_electrostatics']
-    sterics_force = force_dict['CustomNonbondedForce_sterics']
+    scaled_sterics_force = force_dict['CustomNonbondedForce_sterics']
     exceptions_force = force_dict['CustomBondForce_exceptions']
-    reciprocal_force = force_dict['NonbondedForce']
+    reciprocal_force = force_dict['NonbondedForce_reciprocal']
+    nonscaled_sterics_force = force_dict['NonbondedForce_sterics']
 
-    forces = [bond_force, angle_force, torsion_force, electrostatics_force, sterics_force]
+    forces = [bond_force, angle_force, torsion_force, electrostatics_force, scaled_sterics_force]
     force_names = ['bonds', 'angles', 'torsions', 'electrostatics', 'sterics']
 
-    # Set global parameters for valence + electrostatics/sterics forces
+    # Set global parameters for valence + electrostatics/scaled_sterics forces
     lambda_old = 1 if endstate == 0 else 0
     lambda_new = 0 if endstate == 0 else 1
     for force, name in zip(forces, force_names):
@@ -964,8 +965,8 @@ def validate_endstate_energies_point(htf, endstate=0, minimize=False):
 
     # Check that the nonbonded force energies are concordant
     print(
-        f"Nonbondeds -- og: {components_other[3][1]}, hybrid: {np.sum([components_hybrid[i][1] for i in range(3, 7)])}")
-    assert np.isclose([components_other[3][1]], np.sum([components_hybrid[i][1] for i in range(3, 7)]))
+        f"Nonbondeds -- og: {components_other[3][1]}, hybrid: {np.sum([components_hybrid[i][1] for i in range(3, 8)])}")
+    assert np.isclose([components_other[3][1]], np.sum([components_hybrid[i][1] for i in range(3, 8)]))
 
     print(f"Success! Energies are equal at lambda {endstate}!")
 
@@ -1088,7 +1089,7 @@ def validate_endstate_energies_md(htf, T_max=300 * unit.kelvin, endstate=0, n_st
     # TODO: Instead of checking with np.isclose(), check whether the ratio of differences is less than a specified energy threshold (like in validate_endstate_energies())
     energies_og = list()
     energies_hybrid = list()
-    for pos in tqdm.tqdm(hybrid):
+    for i, pos in enumerate(tqdm.tqdm(hybrid)):
         og_positions = htf.old_positions(pos) if endstate == 0 else htf.new_positions(pos)
         context_og.setPositions(og_positions)
         energy_og = context_og.getState(getEnergy=True).getPotentialEnergy().value_in_unit_system(unit.md_unit_system)
@@ -1098,7 +1099,8 @@ def validate_endstate_energies_md(htf, T_max=300 * unit.kelvin, endstate=0, n_st
         energy_hybrid = context_hybrid.getState(getEnergy=True).getPotentialEnergy().value_in_unit_system(unit.md_unit_system)
         energies_hybrid.append(energy_hybrid)
 
-        assert np.isclose([energy_og], [energy_hybrid])
+        assert np.isclose([energy_og], [energy_hybrid]), f"Energies are not equal at frame {i}"
+        print(f"Success! Energies are equal at frame {i}!")
 
 def track_torsions(hybrid_factory):
     """
