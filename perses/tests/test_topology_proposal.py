@@ -330,16 +330,18 @@ def generate_dipeptide_top_pos_sys(topology,
                                                                          forward_htf,
                                                                          added_valence_energy,
                                                                          subtracted_valence_energy,
-                                                                         ENERGY_THRESHOLD=ENERGY_THRESHOLD,
                                                                          beta=beta,
+                                                                         ENERGY_THRESHOLD=ENERGY_THRESHOLD,
+                                                                         platform=openmm.Platform.getPlatformByName('Reference'),
                                                                          repartitioned_endstate=endstate)
                     else:
                         _, one_state_error = validate_endstate_energies(forward_htf._topology_proposal,
                                                                         forward_htf,
                                                                         added_valence_energy,
                                                                         subtracted_valence_energy,
-                                                                        ENERGY_THRESHOLD=ENERGY_THRESHOLD,
                                                                         beta=beta,
+                                                                        ENERGY_THRESHOLD=ENERGY_THRESHOLD,
+                                                                        platform=openmm.Platform.getPlatformByName('Reference'),
                                                                         repartitioned_endstate=endstate)
 
                 else:
@@ -348,7 +350,8 @@ def generate_dipeptide_top_pos_sys(topology,
                                                                                    added_valence_energy,
                                                                                    subtracted_valence_energy,
                                                                                    beta=beta,
-                                                                                   ENERGY_THRESHOLD=ENERGY_THRESHOLD)
+                                                                                   ENERGY_THRESHOLD=ENERGY_THRESHOLD,
+                                                                                   platform=openmm.Platform.getPlatformByName('Reference'))
 
             return forward_htf
 
