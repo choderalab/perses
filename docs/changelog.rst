@@ -14,6 +14,27 @@ The full release history can be viewed `at the GitHub perses releases page <http
 Bugfixes
 ^^^^^^^^
 
+- (PR `#893 <https://github.com/choderalab/perses/pull/893>`_)
+  Add installation instructions to readme.
+
+- (PR `#892 <https://github.com/choderalab/perses/pull/892>`_)
+  Allow `generate_dipeptide_top_pos_sys` to accept `demap_CBs`.
+
+- (PR `#878 <https://github.com/choderalab/perses/pull/878>`_)
+  Fix stochastic failures in RepartitionedHybridTopologyFactory test.
+
+- (PR `#877 <https://github.com/choderalab/perses/pull/877>`_)
+  Fix naked charge padding (sigmas for hydroxyl hydrogens are changed from 1.0 nm to 0.06 nm).
+
+- (PR `#874 <https://github.com/choderalab/perses/pull/874>`_)
+  Added readme instructions on how to run perses examples using the docker container with GPUs/CUDA.
+
+- (PR `#866 <https://github.com/choderalab/perses/pull/866>`_)
+  Fix endstate validation handling in PointMutationExecutor.
+
+- (PR `#860 <https://github.com/choderalab/perses/pull/860>`_)
+  Simplify `_construct_atom_map` for protein mutations.
+
 - Various CI fixes
   * PR `#787 <https://github.com/choderalab/perses/pull/787>`_
   * PR `#850 <https://github.com/choderalab/perses/pull/850>`_
