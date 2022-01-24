@@ -237,13 +237,20 @@ class HybridTopologyFactory(object):
         # TODO: Refactor this into self._add_particles()
         _logger.info("Adding and mapping old atoms to hybrid system...")
         for particle_idx in range(self._topology_proposal.n_atoms_old):
-            particle_mass = self._old_system.getParticleMass(particle_idx)
+            particle_mass_old = self._old_system.getParticleMass(particle_idx)
+            
+            if particle_idx in self._topology_proposal.old_to_new_atom_map.keys():
+                particle_index_in_new_system = self._topology_proposal.old_to_new_atom_map[particle_idx]
+                particle_mass_new = self._new_system.getParticleMass(particle_index_in_new_system)
+                particle_mass = (particle_mass_old + particle_mass_new) / 2 # Take the average of the masses if the atom is mapped
+            else:
+                particle_mass = particle_mass_old
+            
             hybrid_idx = self._hybrid_system.addParticle(particle_mass)
             self._old_to_hybrid_map[particle_idx] = hybrid_idx
 
             # If the particle index in question is mapped, make sure to add it to the new to hybrid map as well.
             if particle_idx in self._topology_proposal.old_to_new_atom_map.keys():
-                particle_index_in_new_system = self._topology_proposal.old_to_new_atom_map[particle_idx]
                 self._new_to_hybrid_map[particle_index_in_new_system] = hybrid_idx
 
         # Next, add the remaining unique atoms from the new system to the hybrid system and map accordingly.
@@ -2526,9 +2533,6 @@ class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
         new_system_nonbonded_force = self._new_system_forces['NonbondedForce']
         hybrid_to_old_map = self._hybrid_to_old_map
         hybrid_to_new_map = self._hybrid_to_new_map
-
-        #create the forces...
-        self._hybrid_system_forces['NonbondedForce'] = openmm.NonbondedForce()
 
         for particle_index in range(self._hybrid_system.getNumParticles()):
             if particle_index in self._atom_classes['unique_old_atoms']:
