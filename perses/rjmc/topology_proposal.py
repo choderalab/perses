@@ -170,6 +170,7 @@ def append_topology(destination_topology, source_topology, exclude_residue_name=
         If specified, any residues matching this name are excluded.
 
     """
+    destination_topology.setPeriodicBoxVectors(source_topology.getPeriodicBoxVectors())
     if exclude_residue_name is None:
         exclude_residue_name = "   " #something with 3 characters that is never a residue name
     new_atoms = {}
@@ -696,9 +697,6 @@ class PolymerProposalEngine(ProposalEngine):
         # new_chemical_state_key : str
         new_chemical_state_key = self.compute_state_key(new_topology)
         # new_system : simtk.openmm.System
-
-        # Copy periodic box vectors from current topology
-        new_topology.setPeriodicBoxVectors(current_topology.getPeriodicBoxVectors())
 
         # Build system
         # TODO: Remove build_system() branch once we convert entirely to new openmm-forcefields SystemBuilder
