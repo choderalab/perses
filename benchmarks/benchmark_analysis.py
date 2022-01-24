@@ -19,20 +19,24 @@ from perses.analysis.load_simulations import Simulation
 
 from simtk import unit
 
+from openff.arsenic import plotting, wrangle
+
 # global variables
 base_repo_url = "https://github.com/openforcefield/protein-ligand-benchmark"
 
 
 # Helper functions
 
-def get_simdir_list(reversed=False):
+def get_simdir_list(base_dir='.', is_reversed=False):
     """
     Get list of directories to extract simulation data.
 
     Attributes
     ----------
-    reversed: bool, optional, default=False
-        Whether to consider the reversed simulations or not.
+    base_dir: str, optional, default='.'
+        Base directory where to search for simulations results. Defaults to current directory.
+    is_reversed: bool, optional, default=False
+        Whether to consider the reversed simulations or not. Meant for testing purposes.
 
     Returns
     -------
@@ -40,9 +44,9 @@ def get_simdir_list(reversed=False):
         List of directories paths for simulation results.
     """
     # Load all expected simulation from directories
-    out_dirs = [filepath.split('/')[0] for filepath in glob.glob(f'out*/*complex.nc')]
+    out_dirs = ['/'.join(filepath.split('/')[:-1]) for filepath in glob.glob(f'{base_dir}/out*/*complex.nc')]
     reg = re.compile(r'out_[0-9]+_[0-9]+_reversed')  # regular expression to deal with reversed directories
-    if reversed:
+    if is_reversed:
         # Choose only reversed directories
         out_dirs = list(filter(reg.search, out_dirs))
     else:
@@ -65,181 +69,84 @@ def get_simulations_data(simulation_dirs):
     return simulations
 
 
-# Copied straight from https://github.com/choderalab/qmlify
-# TODO: Do all of this with openff.arsenic - make respective PRs if needed 
-def absolute_from_relative(g, experimental, experimental_error):
+def to_arsenic_csv(experimental_data: dict, simulation_data: list, out_csv: str = 'out_benchmark.csv'):
     """
-    Use DiffNet to compute absolute free energies, from computed relative free energies and assign absolute
-    experimental values and uncertainties.
+    Generates a csv file to be used with openff-arsenic. Energy units in kcal/mol.
+
+    .. warning:: To be deprecated once arsenic object model is improved.
 
     Parameters
     ----------
-    g : nx.DiGraph()
-        A graph with relative results assigned to edges
-    experimental : list
-        list of experimental absolute affinities in kcal/mol
-    experimental_error : list
-        list of experimental absolute uncertainties in kcal/mol
+        experimental_data: dict
+            Python nested dictionary with experimental data in micromolar or nanomolar units.
+            Example of entry:
 
-    Returns
-    -------
+                {'lig_ejm_31': {'measurement': {'comment': 'Table 4, entry 31',
+                  'doi': '10.1016/j.ejmech.2013.03.070',
+                  'error': -1,
+                  'type': 'ki',
+                  'unit': 'uM',
+                  'value': 0.096},
+                  'name': 'lig_ejm_31',
+                  'smiles': '[H]c1c(c(c(c(c1[H])Cl)C(=O)N([H])c2c(c(nc(c2[H])N([H])C(=O)C([H])([H])[H])[H])[H])Cl)[H]'}
 
+        simulation_data: list or iterable
+            Python iterable object with perses Simulation objects as entries.
+        out_csv: str
+            Path to output csv file to be generated.
     """
-    from openff.arsenic import stats
-    # compute maximum likelihood estimates of free energies from calculated DDG attribute
-    f_i_calc, c_calc = stats.mle(g, factor='calc_DDG')
-    variance = np.diagonal(c_calc)  # variance of estimate is diagonal of the calculation matrix
-    for n, f_i, df_i in zip(g.nodes(data=True), f_i_calc, variance**0.5):
-        n[1]['calc_DG'] = f_i
-        n[1]['calc_dDG'] = df_i
-        n[1]['exp_DG'] = experimental[n[0]]
-        n[1]['exp_dDG'] = experimental_error[n[0]]
+    # Ligand information
+    ligands_names = list(ligands_dict.keys())
+    lig_id_to_name = dict(enumerate(ligands_names))
+    kBT = kB * 300 * unit.kelvin  # useful when converting to kcal/mol
+    # Write csv file
+    with open(out_csv, 'w') as csv_file:
+        # Experimental block
+        # print header for block
+        csv_file.write("# Experimental block\n")
+        csv_file.write("# Ligand, expt_DDG, expt_dDDG\n")
+        # Extract ligand name, expt_DDG and expt_dDDG from ligands dictionary
+        for ligand_name, ligand_data in experimental_data.items():
+            unit_symbol = ligand_data['measurement']['unit']
+            raw_value = ligand_data['measurement']['value']
+            error = ligand_data['measurement']['error']
+            # deal with error value
+            if error == -1:
+                error = 1  # make it 1 if not specified? (such that log(1)=0)
+            # TODO: Make it to automatically detect the units. Maybe with openff.units.
+            # deal with units
+            elif unit_symbol == 'nM':
+                raw_value /= 1e9
+                error /= 1e9
+            elif unit_symbol == 'uM':
+                raw_value /= 1e6
+                error /= 1e6
+            else:
+                raise ValueError("Unrecognized units in values.")
 
+            expt_DDG = kBT.value_in_unit(unit.kilocalorie_per_mole) * np.log(raw_value)
+            expt_dDDG = kBT.value_in_unit(unit.kilocalorie_per_mole) * np.log(error)
+            csv_file.write(f"{ligand_name}, {expt_DDG}, {expt_dDDG}\n")
 
-def make_mm_graph(mm_results, expt, d_expt):
-    """ Make a networkx graph from MM results
-
-    Parameters
-    ----------
-    mm_results : list(perses.analysis.load_simulations.Simulation)
-        List of perses simulation objects
-    expt : list
-        List of experimental values, in kcal/mol
-    d_expt : list
-        List of uncertainties in experimental values, in kcal/mol
-
-    Returns
-    -------
-    nx.DiGraph
-        Graph object with relative MM free energies
-
-    """
-    import networkx as nx
-    mm_g = nx.DiGraph()
-    for sim in mm_results:
-        ligA = int(sim.directory[3:].split('_')[1])  # define edges
-        ligB = int(sim.directory[3:].split('_')[2])
-        exp_dDDG = (d_expt[ligA]**2 + d_expt[ligB]**2)**0.5  # define exp error
-        mm_g.add_edge(ligA,
-                      ligB,
-                      calc_DDG=-sim.bindingdg/sim.bindingdg.unit,  # simulation reports A - B
-                      calc_DDG_dev=sim.bindingddg/sim.bindingddg.unit,
-                      exp_DDG=(expt[ligB] - expt[ligA]),
-                      exp_DDG_dev=exp_dDDG,
-                      vac_DG=sim._vacdg/sim._vacdg.unit,
-                      vac_DG_dev=sim._vacddg/sim._vacddg.unit,
-                      sol_DG=sim._soldg/sim._soldg.unit,
-                      sol_DG_dev=sim._solddg/sim._solddg.unit,
-                      com_DG=sim._comdg / sim._comdg.unit,
-                      com_DG_dev=sim._comddg / sim._comddg.unit
-                      )  # add edge to the digraph
-    # absolute_from_relative(mm_g, expt, d_expt)
-    return mm_g
-
-
-def map_from_edge_data(mm_graph, data_key='calc_DDG'):
-    """Creates a map/dictionary from edge data using the given key"""
-    data_map = {(edge[0], edge[1]): edge[2][data_key] for edge in mm_graph.edges(data=True)}
-    return data_map
-
-
-def get_forward_reverse_graphs():
-    # get forward sim directories path
-    forward_dirs = get_simdir_list(reversed=False)
-    # load forward simulations
-    forward_simulations = get_simulations_data(forward_dirs)
-    # Make graph with just he calculated quantities, don't care about experimental here
-    forward_graph = make_mm_graph(forward_simulations, [0]*len(forward_simulations), [0]*len(forward_simulations))
-
-    # Do the same for reversed simulations
-    reversed_dirs = get_simdir_list(reversed=True)
-    reversed_simulations = get_simulations_data(reversed_dirs)
-    reversed_graph = make_mm_graph(reversed_simulations, [0]*len(reversed_simulations), [0]*len(reversed_simulations))
-
-    return forward_graph, reversed_graph
-
-
-def make_comparison_plot(xdata, ydata, xerr, yerr, title=None, residues=False):
-    """Create visualization comparing reverse and forward simulations."""
-    import matplotlib.pyplot as plt
-    # make the plot
-    fig, ax = plt.subplots()
-    plt.title(f"{title}")
-    plt.xlabel(f"forward")
-    plt.ylabel(f"reversed")
-    ax.scatter(xdata, ydata)
-    ax.errorbar(xdata,
-                ydata,
-                xerr=xerr,
-                yerr=yerr,
-                linewidth=0.0,
-                elinewidth=2.0,
-                zorder=1
-                )
-    lims = [
-        np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
-        np.max([ax.get_xlim(), ax.get_ylim()]),  # max of both axes
-    ]
-    ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
-    plt.show()
-
-
-def make_residuals_plot(x_data, y_data, uncertainties=None, title=None):
-    """Create visualization for residuals"""
-    import matplotlib.pyplot as plt
-    # If uncertainties not given make them zero
-    if uncertainties is None:
-        uncertainties = [0]*len(y_data)
-    # make the plot
-    fig, ax = plt.subplots()
-    plt.title(f"{title}")
-    plt.xlabel(f"edge")
-    plt.ylabel(f"residual")
-    ax.scatter(x_data, y_data)
-    ax.errorbar(x_data,
-                y_data,
-                yerr=uncertainties,
-                linewidth=0.0,
-                elinewidth=2.0,
-                zorder=1
-                )
-    plt.show()
-
-
-def compare_forward_reverse(forward_graph, reversed_graph, data_key='calc_DDG', residuals=False):
-    """
-    Compare reversed and forward simulations given the forward and revers graphs and the data key to lookup.
-    """
-    # get maps/dictionaries with edge and data
-    forward_map = map_from_edge_data(forward_graph, data_key=data_key)
-    reversed_map = map_from_edge_data(reversed_graph, data_key=data_key)
-    # get maps/dictionaries with edge and data errors/deviations
-    forward_map_dev = map_from_edge_data(forward_graph, data_key=f"{data_key}_dev")
-    reversed_map_dev = map_from_edge_data(reversed_graph, data_key=f"{data_key}_dev")
-
-    # Get common edges/keys
-    common_edges = [key for key in forward_map.keys() if key in reversed_map.keys()]
-
-    # extract data and errors/deviations from objects
-    x_data = [forward_map[edge] for edge in common_edges]
-    y_data = [-reversed_map[edge] for edge in common_edges]  # flip the sign for reverse data
-    x_data_dev = [forward_map_dev[edge] for edge in common_edges]
-    y_data_dev = [reversed_map_dev[edge] for edge in common_edges]
-
-    # TODO: refactor this part so that it has a function for dealing with residuals
-    if residuals:
-        # compute residuals before changing anything else
-        y_data = np.array(x_data) - np.array(y_data)
-        # x data would just be the edge
-        x_data = [str(x) for x in common_edges]
-        # calculate uncertainty propagation before changing anything on x_data_dev
-        y_data_dev = np.sqrt(np.array(x_data_dev)**2 + np.array(y_data_dev)**2)
-        x_data_dev = [0] * len(x_data)
-        # make residuals visualization
-        make_residuals_plot(x_data, y_data, uncertainties=y_data_dev, title=data_key)
-    else:
-        # Make correlation comparison visualization
-        make_comparison_plot(x_data, y_data, x_data_dev, y_data_dev, title=data_key)
+        # Calculated block
+        # print header for block
+        csv_file.write("# Calculated block\n")
+        csv_file.write("# Ligand1,Ligand2, calc_DDG, calc_dDDG(MBAR), calc_dDDG(additional)\n")
+        # Loop through simulation, extract ligand1 and ligand2 indices, convert to names, create string with
+        # ligand1, ligand2, calc_DDG, calc_dDDG(MBAR), calc_dDDG(additional)
+        # write string in csv file
+        for simulation in simulation_data:
+            out_dir = simulation.directory.split('/')[-1]
+            # getting integer indices
+            ligand1_id, ligand2_id = int(out_dir.split('_')[-1]), int(out_dir.split('_')[-2])  # CHECK ORDER!
+            # getting names of ligands
+            ligand1, ligand2 = lig_id_to_name[ligand1_id], lig_id_to_name[ligand2_id]
+            # getting calc_DDG in kcal/mol
+            calc_DDG = simulation.bindingdg.value_in_unit(unit.kilocalorie_per_mole)
+            # getting calc_dDDG in kcal/mol
+            calc_dDDG = simulation.bindingddg.value_in_unit(unit.kilocalorie_per_mole)
+            csv_file.write(
+                f"{ligand1}, {ligand2}, {calc_DDG}, {calc_dDDG}, 0.0\n")  # hardcoding additional error as 0.0
 
 
 # Defining command line arguments
@@ -262,7 +169,7 @@ arg_parser.add_argument(
 arg_parser.add_argument(
     "--reversed",
     action='store_true',
-    help="Analyze reversed edge simulations. Helpful for consistency checks."
+    help="Analyze reversed edge simulations. Helpful for testing/consistency checks."
 )
 args = arg_parser.parse_args()
 target = args.target
@@ -273,46 +180,32 @@ target_dir = targets_dict[target]['dir']
 ligands_url = f"{base_repo_url}/raw/master/data/{target_dir}/00_data/ligands.yml"
 with urllib.request.urlopen(ligands_url) as response:
     ligands_dict = yaml.safe_load(response.read())
-ligands_names = []
-ligands_exp_values = []  # list where to store experimental values
-for ligand_name, ligand_data in ligands_dict.items():
-    # check units (TODO: make it more intelligent. It only handles nM or uM)
-    unit_symbol = ligand_data['measurement']['unit']
-    raw_value = ligand_data['measurement']['value']
-    # add names
-    ligands_names.append(ligand_name)
-    # add values
-    if unit_symbol == 'nM':
-        ligands_exp_values.append(raw_value/1e9)
-    elif unit_symbol == 'uM':
-        ligands_exp_values.append(raw_value/1e6)
-    else:
-        raise ValueError("Unrecognized units in values.")
-
-# construct ligand id to name map
-lig_id_to_name = dict(enumerate(ligands_names))
-
-# converting to kcal/mol
-kBT = kB * 300 * unit.kelvin
-ligands_exp_values = kBT.in_units_of(unit.kilocalorie_per_mole) * np.log(ligands_exp_values)
 
 # Get paths for simulation output directories
-out_dirs = get_simdir_list(reversed=args.reversed)
+out_dirs = get_simdir_list(is_reversed=args.reversed)
 
 # Generate list with simulation objects
 simulations = get_simulations_data(out_dirs)
 
-# compare forward and backward simulations
-# forward_graph, reversed_graph = get_forward_reverse_graphs()
-# TODO: enable the comparison and data_key to be specified via cli
-# compare_forward_reverse(forward_graph, reversed_graph, data_key='vac_DG', residuals=True)
-# compare_forward_reverse(forward_graph, reversed_graph, data_key='sol_DG', residuals=True)
-# compare_forward_reverse(forward_graph, reversed_graph, data_key='calc_DDG', residuals=True)
+# Generate csv file
+csv_path = f'./{target}_arsenic.csv'
+to_arsenic_csv(ligands_dict, simulations, out_csv=csv_path)
 
-# create graph with results
-results_graph = make_mm_graph(simulations, ligands_exp_values, [0]*len(ligands_exp_values))
+# Make plots and store
+fe = wrangle.FEMap(csv_path)
+# Relative plot
+plotting.plot_DDGs(fe.graph,
+                   target_name=f'{target}',
+                   title=f'Relative binding energies - {target}',
+                   figsize=5,
+                   filename='./plot_relative.png'
+                   )
+# Absolute plot
+plotting.plot_DGs(fe.graph,
+                  target_name=f'{target}',
+                  title=f'Absolute binding energies - {target}',
+                  figsize=5,
+                  filename='./plot_absolute.png'
+                  )
 
-# Print FE comparison
-# for edge in results_graph.edges(data=True):
-#     print(edge[0], edge[1], edge[2]['calc_DDG'], edge[2]['exp_DDG'])
 
