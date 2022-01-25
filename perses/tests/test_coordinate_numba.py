@@ -102,7 +102,10 @@ def test_openmm_dihedral():
         msg += '_internal_to_cartesian generated positions for: {}\n'.format(phi)
         msg += 'OpenMM: {}\n'.format(openmm_phi)
         msg += 'positions: {}'.format(positions)
-        assert np.linalg.norm(openmm_phi - phi) < TORSION_TOLERANCE, msg
+
+        delta = abs(openmm_phi - phi)
+        error = min(delta, 2*np.pi - delta)
+        assert error < TORSION_TOLERANCE, msg
 
         # Check that _cartesian_to_internal agrees
         rtp, detJ = geometry_engine._cartesian_to_internal(xyz_atom1, bond_position, angle_position, torsion_position)
