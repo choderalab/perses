@@ -191,6 +191,8 @@ simulations = get_simulations_data(out_dirs)
 csv_path = f'./{target}_arsenic.csv'
 to_arsenic_csv(ligands_dict, simulations, out_csv=csv_path)
 
+
+# TODO: Separate plotting in a different file
 # Make plots and store
 fe = wrangle.FEMap(csv_path)
 # Relative plot
