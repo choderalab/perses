@@ -1,7 +1,7 @@
 # Perses benchmarks
 
 This subdirectory exposes a CLI tool for running automated benchmarks from
-[OpenFF's protein ligand benchmark dataset](OpenFF's protein ligand benchmark dataset) using perses.
+[OpenFF's protein ligand benchmark dataset](https://github.com/openforcefield/protein-ligand-benchmark) using perses.
 
 ## Running benchmarks
 
