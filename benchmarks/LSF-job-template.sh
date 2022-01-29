@@ -7,9 +7,8 @@
 #BSUB -q gpuqueue
 #BSUB -sp 1 # low priority. default is 12, max is 25
 #BSUB -gpu num=1:j_exclusive=yes:mode=shared
-#BSUB -W  12:00
-## Excluding ls-gpu lu-gpu and lg-gpu nodes
-#BSUB -m "lt-gpu lp-gpu ld-gpu lx-gpu ly-gpu lw-gpu"
+#BSUB -W  24:00
+#BSUB -m "lu-gpu lg-gpu lv-gpu ld-gpu lt-gpu lp-gpu ls-gpu lx-gpu ly-gpu ll-gpu boson"
 #BSUB -o out_%J_%I.stdout
 #BSUB -eo out_%J_%I.stderr
 #BSUB -L /bin/bash
@@ -21,10 +20,11 @@ echo "changing directory to ${LS_SUBCWD}"
 cd $LS_SUBCWD
 conda activate perses-dev
 
-# Open eye license activation/env
-export OE_LICENSE=~/.OpenEye/oe_license.txt
+# Report node in use
+hostname
 
-# Launch my program.
+# Report CUDA info
 env | sort | grep 'CUDA'
+
 # launching a benchmark pair (target, edge) per job (0-based thus substract 1)
 python run_benchmarks.py --target tyk2 --edge $(( $LSB_JOBINDEX - 1 ))
