@@ -55,7 +55,7 @@ n_equilibration_iterations: 0
 n_cycles: 5000
 
 # Number of alchemical intermediate states to use
-n_states: 20
+n_states: 12
 
 pressure: 1.0 # atmsopheres
 temperature: 300.0 # kelvin
@@ -77,7 +77,7 @@ atom_selection: not water
 # Calculation phases to run
 # Permitted phases: ['complex', 'solvent', 'vacuum']
 phases:
-    - solvent
     - complex
+    - solvent
 
 

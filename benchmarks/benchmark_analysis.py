@@ -104,29 +104,30 @@ def to_arsenic_csv(experimental_data: dict, simulation_data: list, out_csv: str 
         # Experimental block
         # print header for block
         csv_file.write("# Experimental block\n")
-        csv_file.write("# Ligand, expt_DDG, expt_dDDG\n")
-        # Extract ligand name, expt_DDG and expt_dDDG from ligands dictionary
+        csv_file.write("# Ligand, expt_DG, expt_dDG\n")
+        # Extract ligand name, expt_DG and expt_dDG from ligands dictionary
         for ligand_name, ligand_data in experimental_data.items():
+            # TODO: Handle multiple measurement types
             unit_symbol = ligand_data['measurement']['unit']
-            raw_value = ligand_data['measurement']['value']
-            error = ligand_data['measurement']['error']
-            # deal with error value
-            if error == -1:
-                error = 1  # make it 1 if not specified? (such that log(1)=0)
-            # TODO: Make it to automatically detect the units. Maybe with openff.units.
-            # deal with units
-            elif unit_symbol == 'nM':
-                raw_value /= 1e9
-                error /= 1e9
-            elif unit_symbol == 'uM':
-                raw_value /= 1e6
-                error /= 1e6
+            measurement_value = ligand_data['measurement']['value']
+            measurement_error = ligand_data['measurement']['error']
+            # Unit conversion
+            # TODO: Let's persuade PLBenchmarks to use pint units
+            unit_conversions = { 'M' : 1.0, 'mM' : 1e-3, 'uM' : 1e-6, 'nM' : 1e-9, 'pM' : 1e-12, 'fM' : 1e-15 }
+            if unit_symbol not in unit_conversions:
+                raise ValueError(f'Unknown units "{unit_symbol}"')
+            value_to_molar= unit_conversions[unit_symbol]
+            # Handle unknown errors
+            # TODO: We should be able to ensure that all entries have more reasonable errors.
+            if measurement_error == -1:
+                # TODO: For now, we use a relative_error from the Tyk2 system 10.1016/j.ejmech.2013.03.070
+                relative_error = 0.3
             else:
-                raise ValueError("Unrecognized units in values.")
-
-            expt_DDG = kBT.value_in_unit(unit.kilocalorie_per_mole) * np.log(raw_value)
-            expt_dDDG = kBT.value_in_unit(unit.kilocalorie_per_mole) * np.log(error)
-            csv_file.write(f"{ligand_name}, {expt_DDG}, {expt_dDDG}\n")
+                relative_error = measurement_error / measurement_value
+            # Convert to free eneriges
+            expt_DG = kBT.value_in_unit(unit.kilocalorie_per_mole) * np.log(measurement_value * value_to_molar)
+            expt_dDG = kBT.value_in_unit(unit.kilocalorie_per_mole) * relative_error
+            csv_file.write(f"{ligand_name}, {expt_DG}, {expt_dDG}\n")
 
         # Calculated block
         # print header for block
@@ -176,10 +177,18 @@ target = args.target
 
 # Download experimental data
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
+# TODO: Let's cache this data when we set up the initial simulations in case it changes in between setting up and running the calculations and analysis.
+# TODO: Let's also be sure to use a specific release tag rather than 'master'
 target_dir = targets_dict[target]['dir']
 ligands_url = f"{base_repo_url}/raw/master/data/{target_dir}/00_data/ligands.yml"
 with urllib.request.urlopen(ligands_url) as response:
-    ligands_dict = yaml.safe_load(response.read())
+    yaml_contents = response.read()
+    print(yaml_contents)
+    ligands_dict = yaml.safe_load(yaml_contents)
+
+# DEBUG
+print('')
+print(yaml.dump(ligands_dict))
 
 # Get paths for simulation output directories
 out_dirs = get_simdir_list(is_reversed=args.reversed)
