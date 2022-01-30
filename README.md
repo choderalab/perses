@@ -40,13 +40,17 @@ $ conda install perses openeye-toolkits
 * `devtools/` - Continuous integration and packaging utilities
 * `notes/` - LaTeX notes deriving acceptance criteria and stochastic approximation methods
 
-## Authors
+## Contributors
 
-* Patrick B. Grinaway
+A complete list of contributors can be found at [GitHub Insights](https://github.com/choderalab/perses/graphs/contributors).
+
+Major contributors include:
 * Julie M. Behr
 * Hannah E. Bruce Macdonald
-* dominic a. rufa
-* Jaime Rodríguez-Guerra
-* Ivy Zhang
-* Mike M. Henry
 * John D. Chodera
+* Patrick B. Grinaway
+* Mike M. Henry
+* Iván J. Pulidos
+* Jaime Rodríguez-Guerra
+* Dominic A. Rufa
+* Ivy Zhang
