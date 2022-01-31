@@ -46,3 +46,4 @@ dependencies:
   - tinydb
   - pytest-attrib
   - pytest-xdist
+  - arsenic
