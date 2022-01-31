@@ -50,7 +50,7 @@ Major contributors include:
 * John D. Chodera
 * Patrick B. Grinaway
 * Mike M. Henry
-* Iván J. Pulidos
+* Iván J. Pulido
 * Jaime Rodríguez-Guerra
 * Dominic A. Rufa
 * Ivy Zhang
