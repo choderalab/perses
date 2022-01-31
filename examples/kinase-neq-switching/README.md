@@ -7,6 +7,6 @@ Simulation parameters are hardcoded in the script file, modify as needed.
 
 Run the example by using:
 ```bash
-python run_neq_distrib_flattened.py
+python run_example.py
 ```
 By default, running the script stores the output in numpy format in the `output/` directory.

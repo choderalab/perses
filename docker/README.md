@@ -56,6 +56,6 @@ We have our examples with minimalistic setups to satisfy our current continuous 
 3) Run our latest docker container and execute an example.
     For example for the kinase-neq-switching example, you would do something like:
 ```bash
-docker run -it --rm --gpus device=0 --mount type=bind,source=$HOME/.OpenEye/,target=/openeye/,readonly --mount type=bind,source=$HOME/repos/perses/examples/,target=/mnt/ -w /mnt/kinase-neq-switching choderalab/perses:0.9.2  python run_neq_distrib_flattened.py
+docker run -it --rm --gpus device=0 --mount type=bind,source=$HOME/.OpenEye/,target=/openeye/,readonly --mount type=bind,source=$HOME/repos/perses/examples/,target=/mnt/ -w /mnt/kinase-neq-switching choderalab/perses:0.9.2  python run_example.py
  ```
 Of importance there are the paths to the OpenEye license file (in this example is `$HOME/.OpenEye/`), path to the examples directory in perses (`$HOME/repos/perses/examples/`) and the actual example subdirectory example you want to run (`/mnt/kinase-neq-switching`)
