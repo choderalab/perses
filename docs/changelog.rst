@@ -55,6 +55,9 @@ New features
   Drop support for older OpenMM versions.
   We now only support versions >= 7.6.0.
 
+- (PR `#924 <https://github.com/choderalab/perses/pull/924>`_)
+  Command line utility to automatically run and analyze benchmarks using the data set found in https://github.com/openforcefield/protein-ligand-benchmark/
+
 0.9.2 - Bugfix release
 -----------------------
 
