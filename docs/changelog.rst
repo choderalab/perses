@@ -8,10 +8,62 @@ This section lists features and improvements of note in each release.
 
 The full release history can be viewed `at the GitHub perses releases page <https://github.com/choderalab/perses/releases>`_.
 
-0.9.2 - Bugfix release
------------------------
+0.9.3 - Release
+---------------
+
 Bugfixes
 ^^^^^^^^
+
+- (PR `#894 <https://github.com/choderalab/perses/pull/894>`_)
+  Remove unused argument 'implicitSolvent' from SystemGenerator in tests.
+
+- (PR `#893 <https://github.com/choderalab/perses/pull/893>`_)
+  Add installation instructions to readme.
+
+- (PR `#892 <https://github.com/choderalab/perses/pull/892>`_)
+  Allow `generate_dipeptide_top_pos_sys` to accept `demap_CBs`.
+
+- (PR `#878 <https://github.com/choderalab/perses/pull/878>`_)
+  Fix stochastic failures in RepartitionedHybridTopologyFactory test.
+
+- (PR `#877 <https://github.com/choderalab/perses/pull/877>`_)
+  Fix naked charge padding (sigmas for hydroxyl hydrogens are changed from 1.0 nm to 0.06 nm).
+
+- (PR `#874 <https://github.com/choderalab/perses/pull/874>`_)
+  Added readme instructions on how to run perses examples using the docker container with GPUs/CUDA.
+
+- (PR `#866 <https://github.com/choderalab/perses/pull/866>`_)
+  Fix endstate validation handling in PointMutationExecutor.
+
+- (PR `#860 <https://github.com/choderalab/perses/pull/860>`_)
+  Simplify `_construct_atom_map` for protein mutations.
+
+- Various CI fixes
+  * PR `#787 <https://github.com/choderalab/perses/pull/787>`_
+  * PR `#850 <https://github.com/choderalab/perses/pull/850>`_
+  * PR `#858 <https://github.com/choderalab/perses/pull/858>`_
+  * PR `#868 <https://github.com/choderalab/perses/pull/868>`_
+  * PR `#871 <https://github.com/choderalab/perses/pull/871>`_
+  * PR `#880 <https://github.com/choderalab/perses/pull/880>`_
+  * PR `#887 <https://github.com/choderalab/perses/pull/887>`_
+  * PR `#898 <https://github.com/choderalab/perses/pull/898>`_
+
+New features
+^^^^^^^^^^^^
+
+- (PR `#896 <https://github.com/choderalab/perses/pull/896>`_)
+  Drop support for older OpenMM versions.
+  We now only support versions >= 7.6.0.
+
+- (PR `#924 <https://github.com/choderalab/perses/pull/924>`_)
+  Command line utility to automatically run and analyze benchmarks using the data set found in https://github.com/openforcefield/protein-ligand-benchmark/
+
+0.9.2 - Bugfix release
+-----------------------
+
+Bugfixes
+^^^^^^^^
+
 - (PR `#835 <https://github.com/choderalab/perses/pull/835>`_)
   Write out YAML file after all options are parsed and set. Saved as YAML original file name + date + time. Resolves
   `#817 <https://github.com/choderalab/perses/issues/817>`_.
@@ -27,7 +79,8 @@ Bugfixes
   More info at `#613 (comment) <https://github.com/choderalab/perses/issues/613#issuecomment-899746348>`_.
 
 New features
-^^^^^^^^
+^^^^^^^^^^^^
+
 - (PR `#708 <https://github.com/choderalab/perses/pull/708>`_)
   Create visualization module for generating PyMOL movies.
 - (PR `#834 <https://github.com/choderalab/perses/pull/834>`_)
