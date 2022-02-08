@@ -106,10 +106,12 @@ jobs:
           pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto -m "gpu_ci or gpu_needed"
 
       - name: Codecov
+        if: ${{ github.repository == 'choderalab/perses'
+                && github.event != 'schedule' }}
         uses: codecov/codecov-action@v1
         with:
           file: ./perses/coverage.xml
-          fail_ci_if_error: false
+          fail_ci_if_error: true
 
   stop-runner:
     name: Stop self-hosted EC2 runner
