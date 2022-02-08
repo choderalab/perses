@@ -4,7 +4,7 @@ from pathlib import Path
 
 import click
 import openmm
-from openmm import unit
+from openmm import OpenMMException, unit
 from openmmtools import integrators
 from openmmtools.testsystems import HarmonicOscillator
 from perses.app.setup_relative_calculation import getSetupOptions
@@ -50,7 +50,12 @@ def _test_gpu():
     platform = openmm.Platform.getPlatformByName("CUDA")
     platform.setPropertyDefaultValue("Precision", "mixed")
     platform.setPropertyDefaultValue("DeterministicForces", "true")
-    openmm.Context(test_system.system, integrator, platform)
+    try:
+        openmm.Context(test_system.system, integrator, platform)
+    except OpenMMException:
+        click.echo("🚨 " * 10)
+        click.echo("\t Unable to get GPU, see above output for a hint☝️ ")
+        click.echo("🚨 " * 10)
 
 
 def _write_out_files(path, options):
