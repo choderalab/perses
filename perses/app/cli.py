@@ -37,6 +37,10 @@ def _check_openeye_license():
 
 
 def _test_gpu():
+    from openmm.testInstallation import main
+
+    main()
+
     test_system = HarmonicOscillator()
     integrator = integrators.LangevinIntegrator(
         temperature=298.0 * unit.kelvin,
