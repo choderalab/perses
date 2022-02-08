@@ -3,13 +3,13 @@ name: CI
 on:
   pull_request:
     branches:
-      - "master"
+      - "main"
   schedule:
     # nightly tests
     - cron: "0 0 * * *"
   push:
     branches:
-      - master
+      - main
 
 jobs:
   test:
