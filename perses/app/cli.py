@@ -148,3 +148,7 @@ def cli(yaml_path):
     trajectory_directory = options["trajectory_directory"]
     _write_out_files(trajectory_directory, options)
     click.echo("🧪\t Simulation over")
+
+
+if __name__ == "__main__":
+    cli()
