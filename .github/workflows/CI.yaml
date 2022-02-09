@@ -91,7 +91,9 @@ jobs:
           popd
 
       - name: Codecov
+        if: ${{ github.repository == 'choderalab/perses'
+                && github.event != 'schedule' }}
         uses: codecov/codecov-action@v1
         with:
           file: ./coverage.xml
-          fail_ci_if_error: false
+          fail_ci_if_error: true
