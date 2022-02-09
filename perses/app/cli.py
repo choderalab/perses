@@ -143,7 +143,7 @@ def cli(yaml_path):
     click.echo("✅\t OpenEye license good")
     click.echo("🖥️⚡\t Making a test system to check if we can get a GPU")
     _test_gpu()
-    click.echo("🎉\t GPU test sucsessful!")
+    click.echo("🎉\t GPU test successful!")
     click.echo("🖨️\t Writing out files")
     trajectory_directory = options["trajectory_directory"]
     _write_out_files(trajectory_directory, options)
