@@ -312,9 +312,21 @@ def getSetupOptions(filename):
 
     return setup_options
 
-def get_openmm_platform(platform_name):
-    """Return OpenMM's platform object based on given name. If None, it returns fastest platform supporting mixed
-    precision."""
+
+def get_openmm_platform(platform_name=None):
+    """
+    Return OpenMM's platform object based on given name. Setting to mixed precision if using CUDA or OpenCL.
+
+    Parameters
+    ----------
+    platform_name : str, optional, default=None
+        String with the platform name. If None, it will use the fastest platform supporting mixed precision.
+
+    Returns
+    -------
+    platform : openmm.Platform
+        OpenMM platform object.
+    """
     if platform_name is None:
         # No platform is specified, so retrieve fastest platform that supports 'mixed' precision
         from openmmtools.utils import get_fastest_platform
@@ -618,9 +630,6 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
             #TODO expose more of these options in input
             if build_samplers:
 
-                # import module for dealing with ContextCache
-                from openmmtools.cache import ContextCache
-
                 n_states = setup_options['n_states']
                 _logger.info(f"\tn_states: {n_states}")
                 if 'n_replicas' not in setup_options:
@@ -659,8 +668,8 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                 # get platform
                 platform = get_openmm_platform(platform_name=None)
                 # Setup context caches for multistate samplers
-                energy_context_cache = ContextCache(capacity=None, time_to_live=None, platform=platform)
-                sampler_context_cache = ContextCache(capacity=None, time_to_live=None, platform=platform)
+                energy_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
+                propagation_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
 
                 if setup_options['fe_type'] == 'sams':
                     hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
@@ -672,9 +681,10 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                                    hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                    online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
                                                    gamma0=setup_options['gamma0'])
-                    hss[phase].energy_context_cache = energy_context_cache
-                    hss[phase].sampler_context_cache = sampler_context_cache
                     hss[phase].setup(n_states=n_states, n_replicas=n_replicas, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
+                    # We need to specify contexts AFTER setup
+                    hss[phase].energy_context_cache = energy_context_cache
+                    hss[phase].sampler_context_cache = propagation_context_cache
                 elif setup_options['fe_type'] == 'repex':
                     hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
                                                                                          collision_rate=1.0 / unit.picosecond,
@@ -683,9 +693,10 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                                                                          n_restart_attempts=20,constraint_tolerance=1e-06,
                                                                                          context_cache=cache.ContextCache(capacity=None, time_to_live=None)),
                                                                                          hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'],)
-                    hss[phase].energy_context_cache = energy_context_cache
-                    hss[phase].sampler_context_cache = sampler_context_cache
                     hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
+                    # We need to specify contexts AFTER setup
+                    hss[phase].energy_context_cache = energy_context_cache
+                    hss[phase].sampler_context_cache = propagation_context_cache
             else:
                 _logger.info(f"omitting sampler construction")
 
@@ -937,13 +948,14 @@ def run(yaml_filename=None):
 
                 _logger.info(f"\t\tFinished phase {phase}")
 
+
 def _resume_run(setup_options):
     from openmmtools.cache import ContextCache
     # get platform
     platform = get_openmm_platform(platform_name=None)
     # Setup context caches for multistate samplers
     energy_context_cache = ContextCache(capacity=None, time_to_live=None, platform=platform)
-    sampler_context_cache = ContextCache(capacity=None, time_to_live=None, platform=platform)
+    propagation_context_cache = ContextCache(capacity=None, time_to_live=None, platform=platform)
 
     if setup_options['fe_type'] == 'sams':
         logZ = dict()
@@ -961,7 +973,7 @@ def _resume_run(setup_options):
             run_so_far = simulation.iteration
             left_to_do = total_steps - run_so_far
             # set context caches
-            simulation.sampler_context_cache = sampler_context_cache
+            simulation.sampler_context_cache = propagation_context_cache
             simulation.energy_context_cache = energy_context_cache
             _logger.info(f"\t\textending simulation...\n\n")
             simulation.extend(n_iterations=left_to_do)
@@ -985,7 +997,7 @@ def _resume_run(setup_options):
             run_so_far = simulation.iteration
             left_to_do = total_steps - run_so_far
             # set context caches
-            simulation.sampler_context_cache = sampler_context_cache
+            simulation.sampler_context_cache = propagation_context_cache
             simulation.energy_context_cache = energy_context_cache
             _logger.info(f"\t\textending simulation...\n\n")
             simulation.extend(n_iterations=left_to_do)
