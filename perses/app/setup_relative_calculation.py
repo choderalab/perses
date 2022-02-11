@@ -672,28 +672,34 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                 propagation_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
 
                 if setup_options['fe_type'] == 'sams':
-                    hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
-                                                                                        collision_rate=1.0 / unit.picosecond,
-                                                                                        n_steps=n_steps_per_move_application,
-                                                                                        reassign_velocities=False,
-                                                                                        n_restart_attempts=20,constraint_tolerance=1e-06,
-                                                                                        context_cache=cache.ContextCache(capacity=None, time_to_live=None)),
-                                                   hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
-                                                   online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
-                                                   gamma0=setup_options['gamma0'])
-                    hss[phase].setup(n_states=n_states, n_replicas=n_replicas, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
+                    hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
+                        timestep=timestep,
+                        collision_rate=1.0 / unit.picosecond,
+                        n_steps=n_steps_per_move_application,
+                        reassign_velocities=False,
+                        n_restart_attempts=20, constraint_tolerance=1e-06,
+                        context_cache=cache.ContextCache(capacity=None, time_to_live=None)),
+                        hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
+                        online_analysis_minimum_iterations=10, flatness_criteria=setup_options['flatness-criteria'],
+                        gamma0=setup_options['gamma0']
+                    )
+                    hss[phase].setup(n_states=n_states, n_replicas=n_replicas, temperature=temperature,
+                                     storage_file=reporter, lambda_protocol=lambda_protocol, endstates=endstates)
                     # We need to specify contexts AFTER setup
                     hss[phase].energy_context_cache = energy_context_cache
                     hss[phase].sampler_context_cache = propagation_context_cache
                 elif setup_options['fe_type'] == 'repex':
-                    hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
-                                                                                         collision_rate=1.0 / unit.picosecond,
-                                                                                         n_steps=n_steps_per_move_application,
-                                                                                         reassign_velocities=False,
-                                                                                         n_restart_attempts=20,constraint_tolerance=1e-06,
-                                                                                         context_cache=cache.ContextCache(capacity=None, time_to_live=None)),
-                                                                                         hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'],)
-                    hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
+                    hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
+                        timestep=timestep,
+                        collision_rate=1.0 / unit.picosecond,
+                        n_steps=n_steps_per_move_application,
+                        reassign_velocities=False,
+                        n_restart_attempts=20, constraint_tolerance=1e-06,
+                        context_cache=cache.ContextCache(capacity=None, time_to_live=None)),
+                        hybrid_factory=htf[phase] ,online_analysis_interval=setup_options['offline-freq'],
+                    )
+                    hss[phase].setup(n_states=n_states, temperature=temperature, storage_file=reporter,
+                                     lambda_protocol=lambda_protocol, endstates=endstates)
                     # We need to specify contexts AFTER setup
                     hss[phase].energy_context_cache = energy_context_cache
                     hss[phase].sampler_context_cache = propagation_context_cache
@@ -910,6 +916,10 @@ def run(yaml_filename=None):
                 _logger.info(f'\tRunning {phase} phase...')
                 hss_run = hss[phase]
 
+                _logger.info(f"\t\tminimizing...\n\n")
+                hss_run.minimize()
+                _logger.info(f"\n\n")
+
                 _logger.info(f"\t\tequilibrating...\n\n")
                 hss_run.equilibrate(n_equilibration_iterations)
                 _logger.info(f"\n\n")
@@ -937,6 +947,10 @@ def run(yaml_filename=None):
             for phase in setup_options['phases']:
                 print(f'Running {phase} phase')
                 hss_run = hss[phase]
+
+                _logger.info(f"\t\tminimizing...\n\n")
+                hss_run.minimize()
+                _logger.info(f"\n\n")
 
                 _logger.info(f"\t\tequilibrating...\n\n")
                 hss_run.equilibrate(n_equilibration_iterations)
