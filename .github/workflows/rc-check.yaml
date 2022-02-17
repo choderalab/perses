@@ -1,0 +1,26 @@
+on:
+  schedule:
+  # nightly tests, 2 am
+  - cron: "0 2 * * *"
+
+jobs:
+  check-rc:
+    runs-on: ubuntu-latest
+    name: "Check for an OpenMM RC"
+    steps:
+      - uses: actions/checkout@v2
+      - uses: dwhswenson/conda-rc-check@main
+        id: check
+        with:
+          channel: conda-forge
+          package: openmm
+          ndays: 30
+          labels: 'main openmm_rc'
+      - run: echo ${{ steps.check.outputs.hasrc }}
+      - uses: benc-uk/workflow-dispatch@v1
+        with:
+          workflow: OpenMM RC Test
+          # mikemhenry PAT
+          # see https://github.com/benc-uk/workflow-dispatch#token
+          token: ${{ secrets.DISPATCH_TOKEN }}
+        if: ${{ steps.check.outputs.hasrc == 'True' }}
