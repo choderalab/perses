@@ -20,3 +20,8 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "slow" in item.keywords:
                 item.add_marker(skip_slow)
+
+@pytest.fixture
+def in_tmpdir(tmpdir):
+    with tmpdir.as_cwd():
+        yield

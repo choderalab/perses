@@ -37,7 +37,7 @@ h_constraints: true
 """
 
 
-def test_dummy_cli():
+def test_dummy_cli(in_tmpdir):
     runner = CliRunner()
     with runner.isolated_filesystem():
         with open("test.yaml", "w") as f:
