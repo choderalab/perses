@@ -8,6 +8,17 @@ This section lists features and improvements of note in each release.
 
 The full release history can be viewed `at the GitHub perses releases page <https://github.com/choderalab/perses/releases>`_.
 
+0.9.4 - Release
+---------------
+
+Bugfixes
+^^^^^^^^
+
+- (PR `#938 <https://github.com/choderalab/perses/pull/938>`_)
+  Using new streamlined way of dealing with context caches from openmmtools.
+  Avoid cool down of simulation on resume.
+
+
 0.9.3 - Release
 ---------------
 
