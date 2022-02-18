@@ -90,7 +90,7 @@ jobs:
         shell: bash -l {0}
         run: |
           export TRAVIS=true
-          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto -m "not gpu_needed" perses/tests/
+          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto -m "not gpu_needed" -k test_dummy_cli perses/tests/
 
       - name: Codecov
         if: ${{ github.repository == 'choderalab/perses'
