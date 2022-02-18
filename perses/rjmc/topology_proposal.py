@@ -170,6 +170,7 @@ def append_topology(destination_topology, source_topology, exclude_residue_name=
         If specified, any residues matching this name are excluded.
 
     """
+    destination_topology.setPeriodicBoxVectors(source_topology.getPeriodicBoxVectors())
     if exclude_residue_name is None:
         exclude_residue_name = "   " #something with 3 characters that is never a residue name
     new_atoms = {}
@@ -553,13 +554,21 @@ class PolymerProposalEngine(ProposalEngine):
         """
 
         import mdtraj as md
+        from mdtraj.core.residue_names import _SOLVENT_TYPES
+
         # Create trajectory
         traj = md.Trajectory(new_positions[np.newaxis, ...], md.Topology.from_openmm(new_topology))
-        water_atoms = traj.topology.select(f"water")
-        query_atoms = traj.top.select('protein')
+
+        # Define water atoms
+        water_atoms = traj.topology.select("water")
+
+        # Define solute atoms
+        # TODO: Update this once we either (1) get solvent as a keyword into the MDTraj DSL, or (2) transition to MDAnalysis
+        solvent_types = list(_SOLVENT_TYPES)
+        solute_atoms = [atom.index for atom in traj.topology.atoms if atom.residue.name not in solvent_types]
 
         # Get water atoms within radius of protein
-        neighboring_atoms = md.compute_neighbors(traj, radius, query_atoms, haystack_indices=water_atoms)[0]
+        neighboring_atoms = md.compute_neighbors(traj, radius, solute_atoms, haystack_indices=water_atoms)[0]
 
         # Get water atoms outside of radius of protein
         nonneighboring_residues = set([atom.residue.index for atom in traj.topology.atoms if (atom.index in water_atoms) and (atom.index not in neighboring_atoms)])
@@ -696,9 +705,6 @@ class PolymerProposalEngine(ProposalEngine):
         # new_chemical_state_key : str
         new_chemical_state_key = self.compute_state_key(new_topology)
         # new_system : simtk.openmm.System
-
-        # Copy periodic box vectors from current topology
-        new_topology.setPeriodicBoxVectors(current_topology.getPeriodicBoxVectors())
 
         # Build system
         # TODO: Remove build_system() branch once we convert entirely to new openmm-forcefields SystemBuilder
