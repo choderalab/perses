@@ -36,25 +36,29 @@ def _check_openeye_license():
     assert openeye.oechem.OEChemIsLicensed(), "OpenEye license checks failed!"
 
 
-def _test_gpu(raise_platform_error, platform):
+def _test_gpu(platform_name):
     from openmm.testInstallation import main
 
     main()
 
-    test_system = HarmonicOscillator()
-    integrator = integrators.LangevinIntegrator(
-        temperature=298.0 * unit.kelvin,
-        collision_rate=1.0 / unit.picoseconds,
-        timestep=1.0 * unit.femtoseconds,
-    )
-    try:
-        platform = openmm.Platform.getPlatformByName("CUDA")
-        openmm.Context(test_system.system, integrator, platform)
-    except OpenMMException as e:
-        click.echo("🚨 " * 10)
-        click.echo("\t Unable to get GPU, see above output for a hint☝️ ")
-        click.echo("🚨 " * 10)
-        if raise_platform_error:
+    # If a user asks for a platform, try and see if we can use it
+    if platform_name:
+
+        test_system = HarmonicOscillator()
+        integrator = integrators.LangevinIntegrator(
+            temperature=298.0 * unit.kelvin,
+            collision_rate=1.0 / unit.picoseconds,
+            timestep=1.0 * unit.femtoseconds,
+        )
+        try:
+            platform = openmm.Platform.getPlatformByName(platform_name)
+            openmm.Context(test_system.system, integrator, platform)
+        except OpenMMException as e:
+            click.echo("🚨 " * 10)
+            click.echo(
+                "\t Unable to get requested platform, see above output for a hint☝️ "
+            )
+            click.echo("🚨 " * 10)
             raise e
 
 
@@ -130,21 +134,20 @@ def _write_out_files(path, options):
 
 
 @click.command()
-@click.option("--yaml-path", type=click.Path(exists=True, dir_okay=False), required=True)
-@click.option("-rpe", "--raise-platform-error", is_flag=True, type=str)
-@click.option("--platform", type=str, default="CUDA")
-def cli(yaml_path, raise_platform_error, platform):
+@click.option("--yaml", type=click.Path(exists=True, dir_okay=False), required=True)
+@click.option("--platform-name", type=str, default=None)
+def cli(yaml, platform_name):
     """test"""
     click.echo(click.style(percy, fg="bright_magenta"))
     click.echo("📖\t Fetching simulation options ")
-    options = getSetupOptions(yaml_path)
+    options = getSetupOptions(yaml)
     click.echo("🖨️\t Printing options")
     click.echo(options)
     click.echo("🕵️\t Checking OpenEye license")
     _check_openeye_license()
     click.echo("✅\t OpenEye license good")
     click.echo("🖥️⚡\t Making a test system to check if we can get a GPU")
-    _test_gpu(raise_platform_error, platform)
+    _test_gpu(platform_name)
     click.echo("🎉\t GPU test successful!")
     click.echo("🖨️\t Writing out files")
     trajectory_directory = options["trajectory_directory"]
