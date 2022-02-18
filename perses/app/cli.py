@@ -47,10 +47,8 @@ def _test_gpu():
         collision_rate=1.0 / unit.picoseconds,
         timestep=1.0 * unit.femtoseconds,
     )
-    platform = openmm.Platform.getPlatformByName("CUDA")
-    platform.setPropertyDefaultValue("Precision", "mixed")
-    platform.setPropertyDefaultValue("DeterministicForces", "true")
     try:
+        platform = openmm.Platform.getPlatformByName("CUDA")
         openmm.Context(test_system.system, integrator, platform)
     except OpenMMException:
         click.echo("🚨 " * 10)
