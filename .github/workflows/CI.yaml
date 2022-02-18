@@ -11,6 +11,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Test on ubuntu-latest, Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm }}
