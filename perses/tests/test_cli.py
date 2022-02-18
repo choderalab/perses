@@ -45,4 +45,5 @@ def test_dummy_cli(in_tmpdir):
 
         result = runner.invoke(cli, ["--yaml-path", "test.yaml"])
         print(result)
+        print(result.output)
         assert result.exit_code == 0
