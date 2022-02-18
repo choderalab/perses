@@ -36,7 +36,7 @@ def _check_openeye_license():
     assert openeye.oechem.OEChemIsLicensed(), "OpenEye license checks failed!"
 
 
-def _test_gpu():
+def _test_gpu(raise_platform_error, platform):
     from openmm.testInstallation import main
 
     main()
@@ -50,10 +50,12 @@ def _test_gpu():
     try:
         platform = openmm.Platform.getPlatformByName("CUDA")
         openmm.Context(test_system.system, integrator, platform)
-    except OpenMMException:
+    except OpenMMException as e:
         click.echo("🚨 " * 10)
         click.echo("\t Unable to get GPU, see above output for a hint☝️ ")
         click.echo("🚨 " * 10)
+        if raise_platform_error:
+            raise e
 
 
 def _write_out_files(path, options):
@@ -128,8 +130,10 @@ def _write_out_files(path, options):
 
 
 @click.command()
-@click.option("--yaml-path", type=click.Path(exists=True, dir_okay=False))
-def cli(yaml_path):
+@click.option("--yaml-path", type=click.Path(exists=True, dir_okay=False), required=True)
+@click.option("-rpe", "--raise-platform-error", is_flag=True, type=str)
+@click.option("--platform", type=str, default="CUDA")
+def cli(yaml_path, raise_platform_error, platform):
     """test"""
     click.echo(click.style(percy, fg="bright_magenta"))
     click.echo("📖\t Fetching simulation options ")
@@ -140,7 +144,7 @@ def cli(yaml_path):
     _check_openeye_license()
     click.echo("✅\t OpenEye license good")
     click.echo("🖥️⚡\t Making a test system to check if we can get a GPU")
-    _test_gpu()
+    _test_gpu(raise_platform_error, platform)
     click.echo("🎉\t GPU test successful!")
     click.echo("🖨️\t Writing out files")
     trajectory_directory = options["trajectory_directory"]
