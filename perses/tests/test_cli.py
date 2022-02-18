@@ -43,7 +43,7 @@ def test_dummy_cli(in_tmpdir):
         with open("test.yaml", "w") as f:
             f.write(test_yaml)
 
-        result = runner.invoke(cli, ["--yaml-path", "test.yaml"])
+        result = runner.invoke(cli, ["--yaml", "test.yaml"])
         print(result)
         print(result.output)
         assert result.exit_code == 0
