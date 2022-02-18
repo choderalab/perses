@@ -70,7 +70,8 @@ def test_pipeline_small_molecule_solvent():
                       phase_project_ids=projs,
                       platform_name = DEFAULT_PLATFORM_NAME,
                       num_equilibration_iterations = DEFAULT_EQ_ITERATIONS,
-                      num_equilibration_steps_per_iteration = DEFAULT_EQ_STEPS_PER_ITERATION)
+                      num_equilibration_steps_per_iteration = DEFAULT_EQ_STEPS_PER_ITERATION,
+                      use_given_geometries=False)
     #remove the folders
     for val in projs.values():
         os.system(f"rm -r {val}")
