@@ -19,7 +19,7 @@ dependencies:
   - pymbar
   - openmm >=7.6
   - openmoltools # may need to sort out ambermini/ambertools/parmed dependencies (we don't want ambertools)
-  - openmmtools # may need to sort out ambermini/ambertools/parmed dependencies
+  - openmmtools >=0.21.2 # may need to sort out ambermini/ambertools/parmed dependencies
   - numba
   - netcdf4
   - matplotlib
