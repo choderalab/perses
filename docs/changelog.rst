@@ -19,6 +19,7 @@ Bugfixes
 ^^^^^^^^
 - (PR `#938 <https://github.com/choderalab/perses/pull/938>`_) Mixed precision and deterministic forces are used by default.
 - (PR `#938 <https://github.com/choderalab/perses/pull/938>`_) Velocities are refreshed from the Maxwell-Boltzmann distribution each iteration to avoid sudden cooling when simulations are resumed.
+- (PR `#944 <https://github.com/choderalab/perses/pull/944>`_) Fixes to visualization module.
 
 Enhancements
 ---------------
