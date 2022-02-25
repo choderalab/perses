@@ -11,6 +11,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Test on ubuntu-latest, Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm }}
@@ -86,9 +90,7 @@ jobs:
         shell: bash -l {0}
         run: |
           export TRAVIS=true
-          pushd .
-          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto -m "not gpu_needed"
-          popd
+          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto -m "not gpu_needed" 
 
       - name: Codecov
         if: ${{ github.repository == 'choderalab/perses'
