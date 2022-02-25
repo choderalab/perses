@@ -70,7 +70,7 @@ class Visualization(object):
     v.load()
     v.format(zoom_distance=3, rotate_x_angle=270, rotate_y_angle=180, rotate_z_angle=270)
     v.save_frames(outfile_prefix="output/frame")
-    frames = ["output/frame-%05d.png" % (i) for i in range(200)] # Create list of file paths for the pngs
+    frames = ["output/frame-%05d.png" % (i) for i in range(1, 201)] # Create list of file paths for the pngs
     v.save_mp4(frames)
 
     # Small molecule transformation example:
@@ -78,7 +78,7 @@ class Visualization(object):
     v.load()
     v.format(zoom_distance=3, rotate_x_angle=90)
     v.save_frames(outfile_prefix="output/frame")
-    frames = ["output/frame-%05d.png" % (i) for i in range(200)] # Create list of file paths for the pngs
+    frames = ["output/frame-%05d.png" % (i) for i in range(1, 201)] # Create list of file paths for the pngs
     v.save_mp4(frames)
 
     """
@@ -153,9 +153,9 @@ class Visualization(object):
             self._new_selection = f"(new and chain {self._mutated_chain} and resi {self._mutated_residue})"
             self._both_selection = f"(chain {self._mutated_chain} and resi {self._mutated_residue})"
             if not self._unique_old_selection:
-                self._unique_old = f"(old and chain {self._mutated_chain} and resi {self._mutated_residue} and not backbone)"
+                self._unique_old_selection = f"(old and chain {self._mutated_chain} and resi {self._mutated_residue} and not backbone)"
             if not self._unique_new_selection: 
-                self._unique_new = f"(new and chain {self._mutated_chain} and resi {self._mutated_residue} and not backbone)"
+                self._unique_new_selection = f"(new and chain {self._mutated_chain} and resi {self._mutated_residue} and not backbone)"
         else:
             self._old_selection = f"(old and chain {self._mutated_chain})"
             self._new_selection = f"(new and chain {self._mutated_chain})"
@@ -179,27 +179,21 @@ class Visualization(object):
         # Load trajectories
         cmd.set("defer_builds_mode", 3)  # Improve performance for handling long trajectories
         if os.path.exists(self._old_pdb):
-            cmd.load(self._old_pdb)
+            cmd.load(self._old_pdb, "old")
         else:
             raise FileNotFoundError(f"{self._old_pdb} not found")
         if os.path.exists(self._old_traj):
-            cmd.load_traj(self._old_traj, state=1)
+            cmd.load_traj(self._old_traj, "old", state=1)
         else:
             raise FileNotFoundError(f"{self._old_traj} not found")
         if os.path.exists(self._new_pdb):
-            cmd.load(self._new_pdb)
+            cmd.load(self._new_pdb, "new")
         else:
             raise FileNotFoundError(f"{self._new_pdb} not found")
         if os.path.exists(self._new_traj):
-            cmd.load_traj(self._new_traj, state=1)
+            cmd.load_traj(self._new_traj, "new", state=1)
         else:
             raise FileNotFoundError(f"{self._new_traj} not found")
-
-        # Rename objects
-        old_name = os.path.splitext(os.path.basename(self._old_pdb))[0]
-        new_name = os.path.splitext(os.path.basename(self._new_pdb))[0]
-        cmd.set_name(old_name, "old")
-        cmd.set_name(new_name, "new")
 
         # Check that the trajectories are the same length
         old_states = cmd.count_states("old")
@@ -221,7 +215,8 @@ class Visualization(object):
     def format(self,
                color_complex="green",
                background_color="white",
-               color_residue="yellow",
+               color_old="yellow",
+               color_new="yellow",
                color_ligand="green",
                sphere_radius=1,
                zoom_distance=None,
@@ -241,10 +236,12 @@ class Visualization(object):
             Color to set for the whole complex structure.
         background_color : str, default "white"
             Color to set the background.
-        color_residue : str, default "yellow"
-            Color to set the mutated amino acid.
+        color_old : str, default "yellow"
+            Color to set the old residue/ligand.
+        color_new : str, default "yellow"
+            Color to set the new residue/ligand
         color_ligand : str, default "green"
-            Color to set the ligand.
+            Color to set the ligand (when it is not part of the transformation).
         sphere_radius : int, default 0.5
             Radius of the spheres shown for the mutated residue (if trajectory contains protein mutation)
             and small molecule.
@@ -281,15 +278,16 @@ class Visualization(object):
         cmd.color(f"{color_complex}")
         cmd.bg_color(background_color)
 
-        # Align mutated residues/ligand
+        # Align mutated residue/ligand
         _logger.info("Aligning the mutated residue/ligand...")
         cmd.align(self._old_selection, self._new_selection)
 
-        # Format color and shape of mutated residue
+        # Format color and shape of mutated residue/ligand
         _logger.info("Coloring the mutated residue/ligand...")
-        color_dict[color_residue](self._both_selection)
+        color_dict[color_old](self._old_selection)
+        color_dict[color_new](self._new_selection)
 
-        # Format spheres or sticks of mutated residue
+        # Format spheres or sticks of mutated residue/ligand
         if self._as_spheres:
             _logger.info("Showing spheres...")
             cmd.show("spheres", self._both_selection)
@@ -299,13 +297,12 @@ class Visualization(object):
         else:
             _logger.info("Showing sticks...")
             cmd.show("sticks", self._both_selection)
-            cmd.hide("spheres", self._both_selection)
             cmd.set("stick_transparency", 1, self._new_selection)
 
         # Fade out the protein
         _logger.info("Fading out the protein...")
         cmd.select("not " + self._both_selection)
-        cmd.set("cartoon_transparency", 0.8, "sele")
+        cmd.set("cartoon_transparency", 0.85, "sele")
 
         # Format small molecule (when it is not part of the transformation)
         if self._ligand_chain:
@@ -335,7 +332,7 @@ class Visualization(object):
 
     def _set_transparency(self, old_transparency, new_transparency, old_selection, new_selection):
         """
-        Set sphere transparencies.
+        Set sphere/stick transparencies.
 
         Parameters
         ----------
@@ -350,11 +347,10 @@ class Visualization(object):
             cmd.set("sphere_transparency", old_transparency, old_selection)
             cmd.set("sphere_transparency", new_transparency, new_selection)
         else:
-            cmd.hide("spheres", self._both_selection)
             cmd.show("sticks", self._both_selection)
             cmd.set("stick_transparency", old_transparency, old_selection)
             cmd.set("stick_transparency", new_transparency, new_selection)
-
+		
     def save_frames(self,
                     equilibration_frames=25,
                     outfile_prefix="frame",
@@ -370,7 +366,7 @@ class Visualization(object):
             Number of frames to use as "equilibration," aka the frames in the beginning and end where there are no changes
             in transparency and we are just showing the old or new atoms.
         outfile_prefix : str, default "frame"
-            Prefiix for the output files at which to save the frames.
+            Prefix for the output files at which to save the frames.
         background_color : str, default "white"
             Color to set the background
         width : int, default 10
@@ -381,16 +377,18 @@ class Visualization(object):
         """
 
         states = int(cmd.count_states("old"))
+        
+        for step in range(1, states + 1): # Note this is 1-indexed
 
-        for step in range(states):
             cmd.frame(step)
+
             if step <= equilibration_frames:
                 self._set_transparency(0, 1, self._old_selection, self._new_selection)
             elif step >= (states - equilibration_frames):
                 self._set_transparency(1, 0, self._old_selection, self._new_selection)
             else:
                 lam = (step - equilibration_frames) / (states - 2*(equilibration_frames))
-                self._set_transparency(lam, 1-lam, self._unique_old_selection, self._unique_new_selection)
+                self._set_transparency(0.7*lam, 0.7-0.7*lam, self._unique_old_selection, self._unique_new_selection) # Do not set transparency to 1 (completely transparent) because this makes the stick white
 
             cmd.set("ray_opaque_background", 1)
             cmd.refresh()

@@ -28,6 +28,7 @@ forcefield_files = ['amber/ff14SB.xml','amber/tip3p_standard.xml','amber/tip3p_H
 
 @skipIf(running_on_github_actions, "Skip slow test on GH Actions")
 def test_pipeline_small_molecule():
+    """Test setup of small molecule transformation in complex and solvent (for BACE from JACS set) on Folding@home"""
     from pkg_resources import resource_filename
     from perses.app.fah_generator import run_neq_fah_setup
     ligand_file = resource_filename('perses', 'data/bace-example/Bace_ligands_shifted.sdf')
@@ -55,6 +56,7 @@ def test_pipeline_small_molecule():
 
 #@skipIf(running_on_github_actions, "Skipping for now as it's currently failing to generate state file -- needs debugging")
 def test_pipeline_small_molecule_solvent():
+    """Test setup of small molecule transformation in solvent and vacuum (for CDK2 from JACS set) on Folding@home"""
     from pkg_resources import resource_filename
     from perses.app.fah_generator import run_neq_fah_setup
     ligand_file = resource_filename('perses', 'data/cdk2-example/CDK2_ligands.sdf')
@@ -68,13 +70,15 @@ def test_pipeline_small_molecule_solvent():
                       phase_project_ids=projs,
                       platform_name = DEFAULT_PLATFORM_NAME,
                       num_equilibration_iterations = DEFAULT_EQ_ITERATIONS,
-                      num_equilibration_steps_per_iteration = DEFAULT_EQ_STEPS_PER_ITERATION)
+                      num_equilibration_steps_per_iteration = DEFAULT_EQ_STEPS_PER_ITERATION,
+                      use_given_geometries=False)
     #remove the folders
     for val in projs.values():
         os.system(f"rm -r {val}")
 
 @skipIf(running_on_github_actions, "Skip slow test on GH Actions")
 def test_pipeline_protein():
+    """Test setup of protein mutation in complex and apo (for barnase-barstar) for Folding@home"""
     from pkg_resources import resource_filename
     from perses.app.fah_generator import run_neq_fah_setup
     yaml_filename = resource_filename('perses', 'data/barstar-mutation/mutant.yaml')
@@ -89,7 +93,7 @@ def test_pipeline_protein():
     # need to replace ligand and protein location in file
 
     setup_options['phase_project_ids'] = {'complex':'temp-complex','apo':'temp-apo'}
-    setup_options['protein_kwargs']['ligand_file'] = ligand_file
+    setup_options['protein_kwargs']['ligand_input'] = ligand_file
     setup_options['protein_kwargs']['protein_filename'] = protein_file
     setup_options['phases'] = ['complex']
     #TODO: add platform name option to test
