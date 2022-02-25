@@ -90,6 +90,7 @@ setup(
         "console_scripts": [
             "perses-relative = perses.app.setup_relative_calculation:run",
             "perses-fah = perses.app.fah_generator:run",
+            "perses-cli = perses.app.cli:cli",
         ],
     },
     ext_modules=extensions,
