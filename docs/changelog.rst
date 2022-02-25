@@ -25,6 +25,7 @@ Enhancements
 ---------------
 - (PR `#909 <https://github.com/choderalab/perses/pull/909>`_) Overhaul of Folding@home setup pipeline
 - (PR `#909 <https://github.com/choderalab/perses/pull/909>`_) `use_given_geometries` is now `True` by default
+- (PR `#934 <https://github.com/choderalab/perses/pull/934>`_) Preview of new CLI tool perses-cli that takes in a yaml file and creates dummy output. Work in progress. CLI/API still subject to changes.
 
 0.9.3 - Release
 ---------------
