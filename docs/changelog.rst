@@ -8,6 +8,25 @@ This section lists features and improvements of note in each release.
 
 The full release history can be viewed `at the GitHub perses releases page <https://github.com/choderalab/perses/releases>`_.
 
+0.9.4 - Release
+---------------
+
+Performance optimizations:
+^^^^^^^^^^^^^^^^^^^^^^^^^
+- (PR `#938 <https://github.com/choderalab/perses/pull/938>`_) Separate ContextCache objects are now created for propagation and energy computation in replica exchange calculations to avoid periodic cycling behavior.
+
+Bugfixes
+^^^^^^^^
+- (PR `#938 <https://github.com/choderalab/perses/pull/938>`_) Mixed precision and deterministic forces are used by default.
+- (PR `#938 <https://github.com/choderalab/perses/pull/938>`_) Velocities are refreshed from the Maxwell-Boltzmann distribution each iteration to avoid sudden cooling when simulations are resumed.
+- (PR `#944 <https://github.com/choderalab/perses/pull/944>`_) Fixes to visualization module.
+
+Enhancements
+---------------
+- (PR `#909 <https://github.com/choderalab/perses/pull/909>`_) Overhaul of Folding@home setup pipeline
+- (PR `#909 <https://github.com/choderalab/perses/pull/909>`_) `use_given_geometries` is now `True` by default
+- (PR `#934 <https://github.com/choderalab/perses/pull/934>`_) Preview of new CLI tool perses-cli that takes in a yaml file and creates dummy output. Work in progress. CLI/API still subject to changes.
+
 0.9.3 - Release
 ---------------
 
