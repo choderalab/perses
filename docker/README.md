@@ -11,7 +11,7 @@ To do that use the `--mount` option.
 For example, if you have an `oe_license.txt` file in `$HOME/.openeye/`.
 
 ```
-$ docker run --rm --mount type=bind,source=$HOME/.openeye/,target=/perses/,readonly choderalab/perses:0.9.2 python -c "import openeye; assert openeye.oechem.OEChemIsLicensed(), 'OpenEye license checks failed!'"
+$ docker run --rm --mount type=bind,source=$HOME/.openeye/,target=/openeye/,readonly choderalab/perses:0.9.2 python -c "import openeye; assert openeye.oechem.OEChemIsLicensed(), 'OpenEye license checks failed!'"
 ```
 
 ## GPU Support
