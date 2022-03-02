@@ -1,0 +1,49 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: Perses
+message: Please cite this software using these metadata.
+type: software
+authors:
+  - given-names: Dominic
+    family-names: Rufa
+    orcid: 'https://orcid.org/0000-0003-0930-9445'
+  - given-names: Ivy
+    family-names: Zhang
+    orcid: 'https://orcid.org/0000-0003-0628-6276'
+  - given-names: Hannah
+    family-names: Bruce Macdonald
+    orcid: 'https://orcid.org/0000-0002-5562-6866'
+  - given-names: Patrick
+    family-names: Grinaway
+    orcid: 'https://orcid.org/0000-0002-9762-4201'
+  - given-names: Iván
+    family-names: Pulido
+    orcid: 'https://orcid.org/0000-0002-7178-8136'
+  - given-names: Mike
+    family-names: Henry
+    orcid: 'https://orcid.org/0000-0002-3870-9993'
+  - given-names: Jaime
+    family-names: Rodríguez-Guerra
+    orcid: 'https://orcid.org/0000-0001-8974-1566'
+  - given-names: Matt
+    family-names: Wittmann
+  - given-names: Steven
+    family-names: Albanese
+    orcid: 'https://orcid.org/0000-0003-0973-5030'
+  - given-names: William
+    family-names: Glass
+    orcid: 'https://orcid.org/0000-0002-4099-9280'
+  - given-names: Ana
+    family-names: Silveira
+    orcid: 'https://orcid.org/0000-0002-9419-3397'
+  - given-names: David
+    family-names: Schaller
+    orcid: 'https://orcid.org/0000-0002-1881-4518'
+  - given-names: Levi
+    family-names: Naden
+    orcid: 'https://orcid.org/0000-0002-3692-5027'
+  - given-names: John
+    family-names: Chodera
+    orcid: 'https://orcid.org/0000-0003-0542-119X'
