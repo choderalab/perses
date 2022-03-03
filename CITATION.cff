@@ -6,22 +6,22 @@ title: Perses
 message: Please cite this software using these metadata.
 type: software
 authors:
-  - given-names: Dominic
+  - given-names: Dominic A.
     family-names: Rufa
     orcid: 'https://orcid.org/0000-0003-0930-9445'
   - given-names: Ivy
     family-names: Zhang
     orcid: 'https://orcid.org/0000-0003-0628-6276'
-  - given-names: Hannah
+  - given-names: Hannah E.
     family-names: Bruce Macdonald
     orcid: 'https://orcid.org/0000-0002-5562-6866'
-  - given-names: Patrick
+  - given-names: Patrick B.
     family-names: Grinaway
     orcid: 'https://orcid.org/0000-0002-9762-4201'
   - given-names: Iván
     family-names: Pulido
     orcid: 'https://orcid.org/0000-0002-7178-8136'
-  - given-names: Mike
+  - given-names: Mike M.
     family-names: Henry
     orcid: 'https://orcid.org/0000-0002-3870-9993'
   - given-names: Jaime
@@ -29,10 +29,10 @@ authors:
     orcid: 'https://orcid.org/0000-0001-8974-1566'
   - given-names: Matt
     family-names: Wittmann
-  - given-names: Steven
+  - given-names: Steven K.
     family-names: Albanese
     orcid: 'https://orcid.org/0000-0003-0973-5030'
-  - given-names: William
+  - given-names: William G.
     family-names: Glass
     orcid: 'https://orcid.org/0000-0002-4099-9280'
   - given-names: Ana
@@ -41,9 +41,9 @@ authors:
   - given-names: David
     family-names: Schaller
     orcid: 'https://orcid.org/0000-0002-1881-4518'
-  - given-names: Levi
+  - given-names: Levi N.
     family-names: Naden
     orcid: 'https://orcid.org/0000-0002-3692-5027'
-  - given-names: John
+  - given-names: John D.
     family-names: Chodera
     orcid: 'https://orcid.org/0000-0003-0542-119X'
