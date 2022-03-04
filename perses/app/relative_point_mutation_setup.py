@@ -116,7 +116,7 @@ class PointMutationExecutor(object):
         arguments
             protein_filename : str
                 path to protein (to mutate); .pdb
-                Note: if there are nonstandard residues, the PDB should contain the standard residue name but the atoms/positions should correspond to the nonstandard residue. E.g. if I want to include HID, the PDB should contain HIS for the residue name, but the atoms should correspond to the atoms present in HID. You can use openmm.app.Modeller.addHydrogens() to generate a PDB like this. The same is true for the ligand_input, if its a PDB. 
+                Note: if there are nonstandard residues, the PDB should contain the standard residue name but the atoms/positions should correspond to the nonstandard residue. E.g. if I want to include HID, the PDB should contain HIS for the residue name, but the atoms should correspond to the atoms present in HID. You can use openmm.app.Modeller.addHydrogens() to generate a PDB like this. The same is true for the ligand_input, if its a PDB.
             mutation_chain_id : str
                 name of the chain to be mutated
             mutation_residue_id : str
@@ -569,7 +569,8 @@ class PointMutationExecutor(object):
         if phase != 'vacuum':
             _logger.info(f"solvating at {ionic_strength} using {water_model}")
             if not box_dimensions:
-                modeller.addSolvent(self.system_generator.forcefield, model=water_model, padding=0.9 * unit.nanometers, ionicStrength=ionic_strength)
+                modeller.addSolvent(self.system_generator.forcefield, model=water_model,
+                        padding=1.1 * unit.nanometers, ionicStrength=ionic_strength)
             else:
                 modeller.addSolvent(self.system_generator.forcefield, model=water_model, boxSize=box_dimensions, ionicStrength=ionic_strength)
         else:
