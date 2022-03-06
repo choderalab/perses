@@ -3011,7 +3011,13 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         solute_atoms = list(traj.topology.select("is_protein"))
         rest_atoms = list(md.compute_neighbors(traj, self._rest_radius, query_indices, haystack_indices=solute_atoms)[0])
 
-        return rest_atoms
+        # Retrieve full residues for all atoms in rest region
+        residues = [atom.residue.index for atom in traj.topology.atoms if atom.index in rest_atoms]
+        residues_str = [str(res) for res in set(residues)]
+        selection = 'resid ' + ' or resid '.join(residues_str)
+        rest_atoms_all = list(traj.topology.select(selection))
+
+        return rest_atoms_all
 
     def _build_hybrid_particles(self):
         """
