@@ -1160,6 +1160,17 @@ class PolymerProposalEngine(ProposalEngine):
         from pkg_resources import resource_filename
         import openeye.oechem as oechem
         
+        # Generate map of old to new residue objects
+        old_to_new_residues = {}
+        new_residues = [residue for residue in new_topology.residues()] # Assumes all residue indices start from 0 and are contiguous
+        for old_residue in old_topology.residues():
+            old_to_new_residues[old_residue] = new_residues[old_residue.index]
+	
+        # Retrieve old and new residues
+        assert len(residue_map) == 1, "residue_map is not of length 1"
+        old_res = residue_map[0][0]
+        new_res = old_to_new_residues[old_res]
+ 
         # Generate oemols
         current_residue_pdb_filename = resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{old_res.name}.pdb"))
         proposed_residue_pdb_filename = resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{new_res.name}.pdb"))
