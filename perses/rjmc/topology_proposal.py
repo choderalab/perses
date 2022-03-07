@@ -1141,15 +1141,15 @@ class PolymerProposalEngine(ProposalEngine):
 
         Returns
         -------
-        local_atom_map : dict, key: int, value int
-            mapping of atom indices in new residue to indices in old residue
-        old_res_to_oemol_map : dict, key: int, value int
-            mapping of OpenMM topology to oemol indices for old residue
-        new_res_to_oemol_map : dict, key: int, value int
-            mapping of OpenMM topology to oemol indices for new residue
-        old_oemol : openeye.oechem.oemol object
+        atom_mapping_openmm : dict, key: int, value int
+            mapping of OpenMM topology atom indices in new residue to indices in old residue
+        old_openmm_to_oemol_map : dict, key: int, value int
+            mapping of OpenMM topology to oemol atom indices for old residue
+        new_openmm_to_oemol_map : dict, key: int, value int
+            mapping of OpenMM topology to oemol atom indices for new residue
+        current_oemol : openeye.oechem.oemol object
             old oemol
-        new_oemol : openeye.oechem.oemol object
+        proposed_oemol : openeye.oechem.oemol object
             new oemol
         .. todo ::
             * Move this into atom_mapping.py
@@ -1216,14 +1216,15 @@ class PolymerProposalEngine(ProposalEngine):
         new_index_to_remove = [atom.GetIdx() for atom in proposed_oemol.GetAtoms() if atom.GetName() == "H'"][0]
         del atom_mapping_oemol[new_index_to_remove]
 
-        # Reverse the mapping so that the keys are old indices and values are new indices
-        atom_mapping_oemol_reversed = {v, k for k, v in atom_mapping_oemol.items()}
-
         # Convert mapping to use openmm indices instead of oemol indices
         old_oemol_to_openmm_map = {current_oemol.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx(): atom.index  for atom in old_res.atoms()}
         new_oemol_to_openmm_map = {proposed_oemol.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx(): atom.index for atom in new_res.atoms()}
         atom_mapping_openmm = [(new_oemol_to_openmm_map[new_idx], old_oemol_to_openmm_map[old_idx]) for new_idx, old_idx in atom_mapping_oemol.items()]
         _logger.info(atom_mapping_openmm)
+
+        # Reverse old/new_oemol_to_openmm_map so that we can return them
+        old_openmm_to_oemol_map = {v: k for k, v in old_oemol_to_openmm_map.items()} 
+        new_openmm_to_oemol_map = {v: k for k, v in new_oemol_to_openmm_map.items()}
 
         # Convert mapping to use atom names
         new_index_to_name = {atom.index: atom.name for atom in new_res.atoms()}
@@ -1231,7 +1232,7 @@ class PolymerProposalEngine(ProposalEngine):
         name_map = [(new_index_to_name[new_idx], old_index_to_name[old_idx]) for new_idx, old_idx in atom_mapping_openmm]
         _logger.info(name_map)
 
-        return atom_mapping_openmm, atom_mapping_oemol_reversed, atom_mapping_oemol, current_oemol, proposed_oemol
+        return atom_mapping_openmm, old_openmm_to_oemol_map, new_openmm_to_oemol_map, current_oemol, proposed_oemol
     
 
     def _get_mol_atom_matches(self, current_molecule, proposed_molecule, first_atom_index_old, first_atom_index_new):
