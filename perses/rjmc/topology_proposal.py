@@ -587,8 +587,8 @@ class PolymerProposalEngine(ProposalEngine):
                 current_system,
                 current_topology,
                 current_metadata=None,
-                extra_sidechain_map=None,
-                demap_CBs=False):
+                map_strength=0,
+                extra_sidechain_map=None):
         """
         Generate a TopologyProposal
 
@@ -599,7 +599,7 @@ class PolymerProposalEngine(ProposalEngine):
         current_topology : simtk.openmm.app.Topology object
             The current topology
         current_metadata : dict -- OPTIONAL
-        mapping strength : int, default 0
+        map_strength : int, default 0
             the strength of the criteria to use for determining the atom mapping: 0, 1, 2, 3. 0 corresponds to the weakest criteria, 3 corresponds to the strongest. 
         extra_sidechain_map : dict, key: int, value: int, default None
             map of new to old sidechain atom indices to add the default map (by default, we only map backbone atoms and CBs)
@@ -686,7 +686,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         # index_to_new_residues : dict, key : int (index) , value : str (three letter name of proposed residue)
         _logger.debug(f"\tconstructing atom map for TopologyProposal...")
-        atom_map, old_res_to_oemol_map, new_res_to_oemol_map, old_oemol_res, new_oemol_res  = self._construct_atom_map(residue_map, old_topology, new_topology, mapping_strength=mapping_strength, extra_sidechain_map=extra_sidechain_map)
+        atom_map, old_res_to_oemol_map, new_res_to_oemol_map, old_oemol_res, new_oemol_res  = self._construct_atom_map(residue_map, old_topology, new_topology, map_strength=map_strength, extra_sidechain_map=extra_sidechain_map)
 
         _logger.debug(f"\tadding indices of the 'C' backbone atom in the next residue and the 'N' atom in the previous")
         _logger.debug(f"\t{list(index_to_new_residues.keys())[0]}")
@@ -1115,6 +1115,7 @@ class PolymerProposalEngine(ProposalEngine):
                             residue_map,
                             old_topology,
                             new_topology,
+                            map_strength=0,
                             extra_sidechain_map=None):
         """
         Construct atom map (key: index to atom in new residue, value: index to atom in old residue) to supply as an argument to the TopologyProposal.
@@ -1134,7 +1135,7 @@ class PolymerProposalEngine(ProposalEngine):
             topology of old system
         new_topology : simtk.openmm.app.Topology
             topology of new system
-        mapping_strength : int, default 0
+        map_strength : int, default 0
             the strength of the criteria to use for determining the atom mapping: 0, 1, 2, 3. 0 corresponds to the weakest criteria, 3 corresponds to the strongest. 
         extra_sidechain_map : dict, key: int, value: int, default None
             map of new to old sidechain atom indices to add to the local_atom_map

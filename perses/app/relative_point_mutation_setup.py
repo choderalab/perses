@@ -95,7 +95,7 @@ class PointMutationExecutor(object):
                  ligand_input=None,
                  ligand_index=0,
                  allow_undefined_stereo_sdf=False,
-                 mapping_strength=0,
+                 map_strength=0,
                  extra_sidechain_map=None,
                  water_model='tip3p',
                  ionic_strength=0.15 * unit.molar,
@@ -137,7 +137,7 @@ class PointMutationExecutor(object):
                 which ligand to use
             allow_undefined_stereo_sdf : bool, default False
                 whether to allow an SDF file to contain undefined stereocenters
-            mapping_strength : int, default 0
+            map_strength : int, default 0
                 the strength of the criteria to use for determining the atom mapping: 0, 1, 2, 3. 0 corresponds to the weakest criteria, 3 corresponds to the strongest.
             extra_sidechain_map : dict, key: int, value: int, default None
                 map of new to old sidechain atom indices to add to the default map (by default, we only map backbone atoms and CBs)
@@ -276,7 +276,7 @@ class PointMutationExecutor(object):
                                                                  allowed_mutations=[(mutation_residue_id, proposed_residue)], # The residue ids allowed to mutate with the three-letter code allowed to change
                                                                  aggregate=True) # Always allow aggregation
 
-            topology_proposal = point_mutation_engine.propose(sys, top, mapping_strength=mapping_strength, extra_sidechain_map=extra_sidechain_map)
+            topology_proposal = point_mutation_engine.propose(sys, top, map_strength=map_strength, extra_sidechain_map=extra_sidechain_map)
 
             # Fix naked charges in old and new systems
             old_topology_atom_map = {atom.index: atom.residue.name for atom in topology_proposal.old_topology.atoms()}
