@@ -1241,7 +1241,7 @@ class PolymerProposalEngine(ProposalEngine):
         # Convert mapping to use atom names
         new_index_to_name = {atom.index: atom.name for atom in new_res.atoms()}
         old_index_to_name = {atom.index: atom.name for atom in old_res.atoms()}
-        name_map = {new_index_to_name[new_idx]: old_index_to_name[old_idx] for new_idx, old_idx in atom_mapping_openmm}
+        name_map = {new_index_to_name[new_idx]: old_index_to_name[old_idx] for new_idx, old_idx in atom_mapping_openmm.items()}
         _logger.info(name_map)
 
         return atom_mapping_openmm, old_openmm_to_oemol_map, new_openmm_to_oemol_map, current_oemol, proposed_oemol
