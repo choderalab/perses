@@ -211,6 +211,9 @@ class LambdaProtocol(object):
         plt.show()
 
 class RESTProtocol(object):
+    """
+    Lambda protocol to be used with perses.annihilation.rest.RESTTopologyFactory (which enables rest at the endstates only, not over the alchemical protocol)
+    """
     default_functions = {'solute_scale': lambda beta0, beta : beta / beta0,
                          'inter_scale' : lambda beta0, beta : np.sqrt(beta / beta0),
                          'steric_scale' : lambda beta0, beta : beta / beta0 - 1,
@@ -220,6 +223,14 @@ class RESTProtocol(object):
         self.functions = RESTProtocol.default_functions
 
 class RESTCapableLambdaProtocol(object):
+    """
+    Lambda protocols to be used with perses.annihilation.relative.RESTCapableHybridTopologyFactory (which enables rest during the alchemical protocol). 
+
+    `default_functions` - default protocol to be used for running with alchemical and rest scaling at the same time. Scales the old energies linearly from 1 to 0, the new energies linearly from 0 to 1, and the rest region linearly such that sqrt(beta / beta0) is reached half way through the protocol.
+
+    `no_alchemy_functions` - default protocol to be used for running with rest scaling at one of the endstates (no alchemy). Scales the rest region linearly such that sqrt(beta / beta0) is reached half way through the protocol. lambda_alchemical_* should be set to either 0 or 1 (see RESTCapableRelativeAlchemicalState.set_alchemical_parameters()).   
+
+    """
     default_functions = {'lambda_rest_bonds': lambda x, beta0, beta : -2 * (1 - np.sqrt(beta / beta0)) * x + 1 if x < 0.5 else 2 * (1 - np.sqrt(beta / beta0)) * x - 1 + 2 * np.sqrt(beta / beta0),
                          'lambda_rest_angles': lambda x, beta0, beta : -2 * (1 - np.sqrt(beta / beta0)) * x + 1 if x < 0.5 else 2 * (1 - np.sqrt(beta / beta0)) * x - 1 + 2 * np.sqrt(beta / beta0),
                          'lambda_rest_torsions':lambda x, beta0, beta : -2 * (1 - np.sqrt(beta / beta0)) * x + 1 if x < 0.5 else 2 * (1 - np.sqrt(beta / beta0)) * x - 1 + 2 * np.sqrt(beta / beta0),
@@ -326,12 +337,15 @@ class RelativeAlchemicalState(AlchemicalState):
 
 class RESTState(AlchemicalState):
     """
-    REST State to handle all lambda parameters required for REST2 implementation.
+    AlchemicalState to handle all lambda parameters required for running REST at the endstates with
+    perses.annihilation.rest.RESTTopologyFactory.
 
     Attributes
     ----------
     solute_scale : solute scaling parameter
     inter_scale : inter-region scaling parameter
+    electrostatic_scale : electrostatics scaling parameter
+    steric_scale : steric scaling parameter
     """
 
     class _LambdaParameter(AlchemicalState._LambdaParameter):
@@ -364,6 +378,57 @@ class RESTState(AlchemicalState):
            setattr(self, parameter_name, lambda_value)
 
 class RESTCapableRelativeAlchemicalState(AlchemicalState):
+    """
+    AlchemicalState to handle all lambda parameters required for running REST during the alchemical transformation with
+    perses.annihilation.relative.RESTCapableHybridTopologyFactory.
+
+    Attributes
+    ----------
+    lambda_rest_bonds
+        controls scaling of the rest region's bond energy
+    lambda_rest_angles
+        controls scaling of the rest region's angle energy
+    lambda_rest_torsions
+        controls scaling of the rest region's torsion energy
+    lambda_rest_electrostatics
+        controls scaling of the rest region's electrostatics energy
+    lambda_rest_electrostatics_exceptions
+        controls scaling of the rest region's electrostatics exceptions energy
+    lambda_rest_sterics
+        controls scaling of the rest region's sterics energy
+    lambda_rest_sterics_exceptions
+        controls scaling of the rest region's sterics exceptions energy
+    lambda_alchemical_bonds_old
+        controls alchemical scaling of the old bond energy
+    lambda_alchemical_bonds_new
+        controls alchemical scaling of the the new bond energy
+    lambda_alchemical_angles_old
+        controls alchemical scaling of the old angle energy
+    lambda_alchemical_angles_new
+        controls alchemical scaling of the new angle energy
+    lambda_alchemical_torsions_old
+        controls alchemical scaling of the old torsion energy
+    lambda_alchemical_torsions_new
+        controls alchemical scaling of the new torsion energy
+    lambda_alchemical_electrostatics_old
+        controls alchemical scaling of the old electrostatics energy
+    lambda_alchemical_electrostatics_new
+        controls alchemical scaling of the new electrostatics energy
+    lambda_alchemical_electrostatics_exceptions_old
+        controls alchemical scaling of the old electrostatics exceptions energy
+    lambda_alchemical_electrostatics_exceptions_new
+        controls alchemical scaling of the new electrostatics exceptions energy
+    lambda_alchemical_electrostatics_reciprocal
+        controls alchemical scaling of the reciprocal space energy
+    lambda_alchemical_sterics_old
+        controls alchemical scaling of the old sterics energy
+    lambda_alchemical_sterics_new
+        controls alchemical scaling of the new sterics energy
+    lambda_alchemical_sterics_exceptions_old
+        controls alchemical scaling of the old sterics exceptions energy
+    lambda_alchemical_sterics_exceptions_new
+        controls alchemical scaling of the new sterics exceptions energy
+    """
 
     class _LambdaParameter(AlchemicalState._LambdaParameter):
         @staticmethod
@@ -399,6 +464,7 @@ class RESTCapableRelativeAlchemicalState(AlchemicalState):
         """Set each lambda value according to the lambda_functions protocol.
         The undefined parameters (i.e. those being set to None) remain
         undefined.
+
         Parameters
         ----------
         lambda_value : float
