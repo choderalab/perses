@@ -2704,6 +2704,73 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     This class can be tested using perses.tests.utils.validate_endstate_energies_point() and
     perses.tests.utils.validate_endstate_energies_md(), as is done by perses.tests.test_relative.test_RESTCapableHybridTopologyFactory_energies
 
+    Attributes
+    ----------
+    _default_electrostatics_expression_list : list of str
+        strings that will form the custom expression that will be used to create the CustomNonbondedForce for electrostatics
+    _default_sterics_expression_list : list of str
+        strings that will form the custom expression that will be used to create the CustomNonbondedForce for sterics
+    _default_exceptions_expression_list : list of str
+        strings that will form the custom expression that will be used to create the CustomBondForce for exceptions
+    _default_electrostatics_expression : str
+        the custom expression that will be used to create the CustomNonbondedForce for electrostatics (created from joining the corresponding list of strings) 
+    _default_sterics_expression : str
+        the custom expression that will be used to create the CustomNonbondedForce for sterics (created from joining the corresponding list of strings)
+    _default_exceptions_expression : str
+        the custom expression that will be used to create the CustomBondForce for exceptions (created from joining the corresponding list of strings)   
+    _topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
+        topology proposal of the old-to-new transformation
+    _old_system : openmm.System
+        the old system
+    _new_system : openmm.System
+        the new system
+    _old_to_hybrid_map : dict of ints
+        key: index of atom in old system, value: index of corresponding atom in the hybrid system
+    _new_to_hybrid_map : dict of ints
+        key: index of atom in new system, value: index of corresponding atom in the hybrid system
+    _hybrid_system_forces : dict of key: str, value: openmm custom force objects
+        key : name of the custom force (e.g. CustomBondForce, CustomNonbondedForce_sterics), value : custom force object
+    _old_positions : [n,3] np.ndarray of float
+        positions of coordinates of old system, where n is the number of atoms in the old system
+    _new_positions : [m,3] np.ndarray of float
+        positions of coordinates of new system, where m is the number of atoms in the new system
+    _old_system_forces : dict of key: str, value: openmm force object
+        key: name of the force (e.g. HarmonicBondForce), value: force object in the old system
+    _new_system_forces : dict of key: str, value: openmm force object
+        key: name of the force (e.g. HarmonicBondForce), value: force object in the new system
+    _nonbonded_method : openmm.NonbondedForce.NonbondedMethod
+        nonbonded method to use for the hybrid system, determined from the old system's nonbonded method
+    _r_cutoff : openmm.unit.nanometer
+        cutoff to be used in for the forces that encompass the nonbonded interactions in the hybrid system 
+    _alpha_ewald : float
+        alpha to be used for PME electrostatics in the CustomNonbondedForce_electrostatics and CustomBondForce_exceptions forces
+    _w_scale : float
+        a user-defined scalar between 0 (non-inclusive) and 1. Taking 'w_scale' to 1 means that once the lifting term is maximally 'lifted' into the 4th dimension, the 4th dimension is effectively of length '_r_cutoff'.
+    _hybrid_system : openmm.System
+        the hybrid system that allows both alchemical and rest scaling
+    _hybrid_to_old_map : dict of ints
+        key: index of atom in hybrid system, value: index of corresponding atom in old system
+        aka _old_to_hybrid_map with keys and values flipped
+    _hybrid_to_new_map : dict of ints
+        key: index of atom in hybrid system, value: index of corresponding atom in new system
+        aka _new_to_hybrid_map with keys and values flipped
+    _atom_classes : dict of key: string, value: set
+        key: name of the atom class (unique_old_atoms, unique_new_atoms, core_atoms, environment_atoms)
+        value: set of (hybrid-indexed) atoms in the atom class
+    _hybrid_positions : [l,3] np.ndarray of float
+        positions of coordinates of hybrid system, where l is the number of atoms in the hybrid system 
+    _hybrid_topology : mdtraj.Topology
+        topology for the hybrid system
+    _rest_radius : float
+        radius for the rest region, in nanometers
+    _rest_region : list of int
+        list of (hybrid-indexed) atoms that should be considered as part of the rest region
+    _atom_idx_to_object : dict of key: int, value: openmm or mtraj atom object
+        key: hybrid system index for the atom, value: openmm.app.topology.Atom or mdtraj.topology.Atom object (depending on what class type self._hybrid_topology is)
+    _old_system_exceptions : dict of key: tuple of ints, value: list of floats 
+        key: old system indices of the atoms in the exception, value: chargeProd (units of the proton charge squared), sigma (nm), and epsilon (kJ/mol) for the exception
+    _new_system_exceptions : dict of key: tuple of ints, value: list of floats
+        key: new system indices of the atoms in the exception, value: chargeProd (units of the proton charge squared), sigma (nm), and epsilon (kJ/mol) for the exception
     """
     
     # Constants copied from: https://github.com/openmm/openmm/blob/master/platforms/reference/include/SimTKOpenMMRealType.h#L89. These will be imported directly once we have addresssed https://github.com/choderalab/openmmtools/issues/522
