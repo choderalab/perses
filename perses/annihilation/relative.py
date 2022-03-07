@@ -2675,7 +2675,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     - CustomBondForce - electrostatics (uses Coulomb and not PME) and steric exceptions
     - NonbondedForce - reciprocal space PME electrostatics interactions/exceptions
     - NonbondedForce - steric interactions for non-scaled interactions (with long range correction on)
-    * Note that 'scaled interaction` means at least one atom in the interaction is scaled via rest or alchemically.
+    * Note that 'scaled interaction' means at least one atom in the interaction is scaled via rest or alchemically.
     Aka at least one atom in the interaction is part of at least one of the following atom classes: rest, inter, core, unique old, unique new.
 
     For the custom nonbonded/bond forces:
@@ -2700,6 +2700,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     for alchemical scaling, but not rest scaling. Computation of contributions from the direct space is disabled.
 
     For the second NonbondedForce, there is no alchemical or rest scaling. Long range correction is on.
+
+    Note: The `HybridTopologyFactory` has flags that allow the user to flatten torsions and/or exceptions for the off atoms at each endstate. This was initially introduced because we thought it might allow better sampling of the off atoms during vanilla neq switching, but was not thoroughly explored.
+    By default, this factory does not flatten torsions, but does flatten exceptions, i.e. the torsions for off atoms are always on and the exceptions for off atoms are always off.
+    TODO: Add flags to this factory that allows the user to flatten torsions and/or exceptions.
 
     This class can be tested using perses.tests.utils.validate_endstate_energies_point() and
     perses.tests.utils.validate_endstate_energies_md(), as is done by perses.tests.test_relative.test_RESTCapableHybridTopologyFactory_energies
@@ -2825,6 +2829,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         "r_eff_sterics = sqrt(r^2 + w_sterics^2);",
 
         # Define 4th dimension terms
+        # Note that w_scale here should be the same as it is for w_electrostatics, otherwise may get nans
         "w_sterics = w_scale * r_cutoff * (is_unique_old * (1 - lambda_alchemical_sterics_old) + is_unique_new * (1 - lambda_alchemical_sterics_new));", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
         "is_unique_old = step(is_unique_old1 + is_unique_old2 - 0.1);", # if at least one of the particles in the interaction is unique old
         "is_unique_new = step(is_unique_new1 + is_unique_new2 - 0.1);", # if at least one of the particles in the interaction is unique new
@@ -3557,7 +3562,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         see the docstring for _create_bond_force for an explanation of how the expression was written.
 
         The only difference is that instead of interpolating each of the per torsion parameters (K, periodicity, and phase),
-        we interpolate the old and new torsion energies.
+        we interpolate the old and new torsion energies because the functional form for torsion energies is not harmonic.
 
         """
 
