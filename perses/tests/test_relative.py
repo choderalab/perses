@@ -1032,7 +1032,6 @@ def test_RESTCapableHybridTopologyFactory_energies():
     """
 
     test_cases = [('ala-dipeptide', 'vacuum')]
-    # test_cases = [('ala-dipeptide', 'solvent'), ('8mer', 'solvent'), ('barstar', 'solvent')] # TODO: Mike will help make these tests available on GPUs
 
     for test_name, phase in test_cases:
         # Run point energy validation test
@@ -1041,4 +1040,21 @@ def test_RESTCapableHybridTopologyFactory_energies():
         # Run MD validation test
         run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_energies=False)
 
+@pytest.mark.gpu_needed
+def test_RESTCapableHybridTopologyFactory_energies_GPU():
+    """
+    Uses run_RESTCapableHybridTopologyFactory_energies() to run energy validation for RESTCapableHybridTopologyFactory
+    on alanine dipeptide, 8mer, and barstar in solvent. Only run this on a GPU as the
+    CPU is too slow.
+
+    """
+
+    test_cases = [('ala-dipeptide', 'solvent'), ('8mer', 'solvent'), ('barstar', 'solvent')]
+
+    for test_name, phase in test_cases:
+        # Run point energy validation test
+        run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_energies=True)
+
+        # Run MD validation test
+        run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_energies=False)
 
