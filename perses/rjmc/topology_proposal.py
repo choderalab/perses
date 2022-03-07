@@ -1231,7 +1231,7 @@ class PolymerProposalEngine(ProposalEngine):
         # Convert mapping to use openmm indices instead of oemol indices
         old_oemol_to_openmm_map = {current_oemol.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx(): atom.index  for atom in old_res.atoms()}
         new_oemol_to_openmm_map = {proposed_oemol.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx(): atom.index for atom in new_res.atoms()}
-        atom_mapping_openmm = [(new_oemol_to_openmm_map[new_idx], old_oemol_to_openmm_map[old_idx]) for new_idx, old_idx in atom_mapping_oemol.items()]
+        atom_mapping_openmm = {(new_oemol_to_openmm_map[new_idx]: old_oemol_to_openmm_map[old_idx]) for new_idx, old_idx in atom_mapping_oemol.items()}
         _logger.info(atom_mapping_openmm)
 
         # Reverse old/new_oemol_to_openmm_map so that we can return them

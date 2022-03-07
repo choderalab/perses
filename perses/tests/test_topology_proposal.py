@@ -201,8 +201,8 @@ def generate_dipeptide_top_pos_sys(topology,
                                    system,
                                    positions,
                                    system_generator,
+                                   map_strength=0,
                                    extra_sidechain_map=None,
-                                   demap_CBs=False,
                                    conduct_geometry_prop=True,
                                    conduct_htf_prop = False,
                                    validate_energy_bookkeeping=True,
@@ -228,7 +228,7 @@ def generate_dipeptide_top_pos_sys(topology,
 
     # Create a top proposal
     print(f"making topology proposal")
-    topology_proposal = point_mutation_engine.propose(current_system=system, current_topology=topology, extra_sidechain_map=extra_sidechain_map, demap_CBs=demap_CBs)
+    topology_proposal = point_mutation_engine.propose(current_system=system, current_topology=topology, map_strength=map_strength, extra_sidechain_map=extra_sidechain_map)
 
     if not conduct_geometry_prop:
         return topology_proposal
