@@ -2798,7 +2798,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         "r_eff_electrostatics = sqrt(r^2 + w_electrostatics^2);",
 
         # Define 4th dimension terms
-        "w_electrostatics = w_scale * r_cutoff * (is_unique_old * lambda_alchemical_electrostatics_new + is_unique_new * lambda_alchemical_electrostatics_old);", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
+        "w_electrostatics = w_scale * r_cutoff * (is_unique_old * (1 - lambda_alchemical_electrostatics_old) + is_unique_new * (1 - lambda_alchemical_electrostatics_new));", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
         "is_unique_old = step(is_unique_old1 + is_unique_old2 - 0.1);", # if at least one of the particles in the interaction is unique old
         "is_unique_new = step(is_unique_new1 + is_unique_new2 - 0.1);", # if at least one of the particles in the interaction is unique new
         "w_scale = {w_scale};",
@@ -2825,7 +2825,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         "r_eff_sterics = sqrt(r^2 + w_sterics^2);",
 
         # Define 4th dimension terms
-        "w_sterics = w_scale * r_cutoff * (is_unique_old * lambda_alchemical_sterics_new + is_unique_new * lambda_alchemical_sterics_old);", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
+        "w_sterics = w_scale * r_cutoff * (is_unique_old * (1 - lambda_alchemical_sterics_old) + is_unique_new * (1 - lambda_alchemical_sterics_new));", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
         "is_unique_old = step(is_unique_old1 + is_unique_old2 - 0.1);", # if at least one of the particles in the interaction is unique old
         "is_unique_new = step(is_unique_new1 + is_unique_new2 - 0.1);", # if at least one of the particles in the interaction is unique new
         "w_scale = {w_scale};",
