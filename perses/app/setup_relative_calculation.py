@@ -878,7 +878,26 @@ def run(yaml_filename=None):
                     else:
                         endstates = [0] if setup_options['direction'] == 'forward' else [1]
                     #ne_fep_run.activate_client(LSF = LSF, processes = 2, adapt = adapt) #we only need 2 processes for equilibration
-                    ne_fep_run.minimize_sampler_states()
+                    retry_attempt = 0
+                    MAX_ATTEMPTS = 5
+                    while retry_attempt < MAX_ATTEMPTS:
+                        try:
+                            ne_fep_run.minimize_sampler_states()
+                        except OpenMMException as err:
+                            _logger.error(f"OpenMMException! {err}")
+                            retry_attempt += 1
+                            _logger.error(
+                                f"retry attempt {retry_attempt}/{MAX_ATTEMPTS}"
+                            )
+                    else:
+                        _logger.error(
+                            f"Failed to retry simulation in {MAX_ATTEMPTS} attempts"
+                        )
+                        _logger.error(
+                            f"Will try one last time and not catch the exception"
+                        )
+                        ne_fep_run.minimize_sampler_states()
+                    # MMH here
                     ne_fep_run.equilibrate(n_equilibration_iterations = setup_options['n_equilibration_iterations'],
                                            n_steps_per_equilibration = setup_options['n_equilibrium_steps_per_iteration'],
                                            endstates = [0,1],
