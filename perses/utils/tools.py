@@ -7,14 +7,12 @@ from time import sleep
 class ErrorNeverThrown(Exception):
     """This should never be thrown"""
 
-    pass
-
 
 def retry(max_retry, exceptions=None, delay=0):
     """
-    Decorator to retry function max_retry times if a specifed exception is raised.
-    Without passing in a an excpetion or a tuple of excpetions, this decorator will
-    effectivly do nothing beyond call the decorated function.
+    Decorator to retry function max_retry times if a specified exception is raised.
+    Without passing in an exception or a tuple of exceptions, this decorator will
+    effectively do nothing beyond call the decorated function.
 
     Parameters
     ----------
@@ -23,9 +21,9 @@ def retry(max_retry, exceptions=None, delay=0):
         Number of times to retry function if exception is thrown
 
     exceptions : Exception or tuple of Exceptions, optional
-        exception(s) to catch and keep retrying. If no excpetion is passed in, then the
-        function decorated will not retry. This prevents users from accidently retrying
-        excpeetions that have no hope of passing eventually. Default None.
+        exception(s) to catch and keep retrying. If no exception is passed in, then the
+        function decorated will not retry. This prevents users from accidentally retrying
+        exceptions that have no hope of passing eventually. Default None.
 
     delay : float, optional
         delay in seconds to wait before retrying function after caught exception.
@@ -54,7 +52,7 @@ def retry(max_retry, exceptions=None, delay=0):
     Traceback (most recent call last):
       File "<stdin>", line 1, in <module>
       File "perses/utils/tools.py", line 60, in wrapper_repeat
-        raise e
+        raise err
       File "perses/utils/tools.py", line 56, in wrapper_repeat
         return func(*args, **kwargs)
       File "<stdin>", line 4, in say_name
@@ -63,7 +61,8 @@ def retry(max_retry, exceptions=None, delay=0):
 
     """
 
-    # User wants all exceptions caught so we will set the exception to an error they will never throw
+    # User wants all exceptions caught so we will set the exception to an error they
+    # will never throw
     if not exceptions:
         exceptions = ErrorNeverThrown
 
@@ -74,10 +73,10 @@ def retry(max_retry, exceptions=None, delay=0):
             while attempt < max_retry:
                 try:
                     return func(*args, **kwargs)
-                except exceptions as e:
+                except exceptions as err:
                     # raise on last attempt
                     if attempt == max_retry - 1:
-                        raise e
+                        raise err
                 attempt += 1
                 sleep(delay)
 
