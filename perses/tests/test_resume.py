@@ -3,9 +3,12 @@ import os
 import shutil
 import subprocess
 import tempfile
+from unittest.mock import patch
 
 import pytest
 import simtk.openmm.app as app
+from openmm import OpenMMException
+
 import yaml
 from openmmtools import mcmc
 from openmmtools.multistate import MultiStateReporter
@@ -15,6 +18,7 @@ from simtk import unit
 from perses.annihilation.lambda_protocol import LambdaProtocol
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_point_mutation_setup import PointMutationExecutor
+from perses.app.setup_relative_calculation import run
 from perses.app.relative_setup import RelativeFEPSetup
 from perses.samplers.multistate import HybridRepexSampler
 
@@ -283,3 +287,56 @@ def test_resume_protein_mutation_no_checkpoint(tmp_path):
     hss.extend(5)
 
     assert hss.iteration == 15
+
+@pytest.mark.gpu_ci
+@patch("perses.app.setup_relative_calculation._resume_run", side_effect=OpenMMException)
+def test_cli_retry(mocked):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        os.chdir(temp_dir)
+        # Need to get path to examples dir
+        protein_pdb = resource_filename(
+            "perses", os.path.join("data", "cdk2-example", "CDK2_protein.pdb")
+        )
+        ligand_file = resource_filename(
+            "perses",
+            os.path.join("data", "cdk2-example", "CDK2_ligands_shifted.sdf"),
+        )
+
+        document = """
+        atom_selection: not water
+        checkpoint_interval: 5
+        fe_type: repex
+        forcefield_files:
+        - amber/ff14SB.xml
+        - amber/tip3p_standard.xml
+        - amber/tip3p_HFE_multivalent.xml
+        - amber/phosaa10.xml
+        n_cycles: 10
+        n_equilibration_iterations: 10
+        n_states: 3
+        n_steps_per_move_application: 50
+        new_ligand_index: 15
+        old_ligand_index: 14
+        phases:
+        - vacuum
+        pressure: 1.0
+        save_setup_pickle_as: fesetup_hbonds.pkl
+        small_molecule_forcefield: openff-1.0.0
+        solvent_padding: 9.0
+        temperature: 300.0
+        timestep: 4.0
+        trajectory_directory: cdk2_repex_hbonds
+        trajectory_prefix: cdk2
+        """
+
+        y_doc = yaml.load(document, Loader=yaml.UnsafeLoader)
+        y_doc["protein_pdb"] = protein_pdb
+        y_doc["ligand_file"] = ligand_file
+
+        with open("test.yml", "w") as outfile:
+            yaml.dump(y_doc, outfile)
+        # Run once to generate files we use to detect if we are resuming
+        run("test.yml")
+        # Run again to test if we can handle an OpenMMException in the resume logic
+        run("test.yml")
+        assert mocked.call_count == 5
