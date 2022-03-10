@@ -1025,7 +1025,6 @@ def run(yaml_filename=None):
             logZ = dict()
             free_energies = dict()
             _logger.info(f"Iterating through phases for sams...")
-            # MMH here is a retry bit
             for phase in setup_options['phases']:
                 _logger.info(f'\tRunning {phase} phase...')
                 hss_run = hss[phase]
@@ -1105,15 +1104,57 @@ def run(yaml_filename=None):
                 hss_run = hss[phase]
 
                 _logger.info(f"\t\tminimizing...\n\n")
-                hss_run.minimize()
+                retry_attempt = 0
+                MAX_ATTEMPTS = 5
+                while retry_attempt < MAX_ATTEMPTS:
+                    try:
+                        hss_run.minimize()
+                    except OpenMMException as err:
+                        _logger.error(f"OpenMMException! {err}")
+                        retry_attempt += 1
+                        _logger.error(f"retry attempt {retry_attempt}/{MAX_ATTEMPTS}")
+                else:
+                    _logger.error(
+                        f"Failed to retry simulation in {MAX_ATTEMPTS} attempts"
+                    )
+                    _logger.error(f"Will try one last time and not catch the exception")
+                    hss_run.minimize()
                 _logger.info(f"\n\n")
 
                 _logger.info(f"\t\tequilibrating...\n\n")
-                hss_run.equilibrate(n_equilibration_iterations)
+                retry_attempt = 0
+                MAX_ATTEMPTS = 5
+                while retry_attempt < MAX_ATTEMPTS:
+                    try:
+                        hss_run.equilibrate(n_equilibration_iterations)
+                    except OpenMMException as err:
+                        _logger.error(f"OpenMMException! {err}")
+                        retry_attempt += 1
+                        _logger.error(f"retry attempt {retry_attempt}/{MAX_ATTEMPTS}")
+                else:
+                    _logger.error(
+                        f"Failed to retry simulation in {MAX_ATTEMPTS} attempts"
+                    )
+                    _logger.error(f"Will try one last time and not catch the exception")
+                    hss_run.equilibrate(n_equilibration_iterations)
                 _logger.info(f"\n\n")
 
                 _logger.info(f"\t\textending simulation...\n\n")
-                hss_run.extend(setup_options['n_cycles'])
+                retry_attempt = 0
+                MAX_ATTEMPTS = 5
+                while retry_attempt < MAX_ATTEMPTS:
+                    try:
+                        hss_run.extend(setup_options["n_cycles"])
+                    except OpenMMException as err:
+                        _logger.error(f"OpenMMException! {err}")
+                        retry_attempt += 1
+                        _logger.error(f"retry attempt {retry_attempt}/{MAX_ATTEMPTS}")
+                else:
+                    _logger.error(
+                        f"Failed to retry simulation in {MAX_ATTEMPTS} attempts"
+                    )
+                    _logger.error(f"Will try one last time and not catch the exception")
+                    hss_run.extend(setup_options["n_cycles"])
                 _logger.info(f"\n\n")
 
                 _logger.info(f"\t\tFinished phase {phase}")
