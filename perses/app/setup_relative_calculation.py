@@ -789,11 +789,33 @@ def run(yaml_filename=None):
             ne_fep_run.implement_parallelism(external_parallelism = None, internal_parallelism = _internal_parallelism)
             ne_fep_run.neq_integrator = setup_options['neq_integrator']
             ne_fep_run.LSF = setup_options['LSF']
-            ne_fep_run.AIS(num_particles = setup_options['n_particles'],
-                           protocols = lambdas,
-                           num_integration_steps = setup_options['ncmc_num_integration_steps'],
-                           return_timer = False,
-                           rethermalize = setup_options['ncmc_rethermalize'])
+            retry_attempt = 0
+            MAX_ATTEMPTS = 5
+            while retry_attempt < MAX_ATTEMPTS:
+                try:
+                    ne_fep_run.AIS(
+                        num_particles=setup_options["n_particles"],
+                        protocols=lambdas,
+                        num_integration_steps=setup_options[
+                            "ncmc_num_integration_steps"
+                        ],
+                        return_timer=False,
+                        rethermalize=setup_options["ncmc_rethermalize"],
+                    )
+                except OpenMMException as err:
+                    _logger.error(f"OpenMMException! {err}")
+                    retry_attempt += 1
+                    _logger.error(f"retry attempt {retry_attempt}/{MAX_ATTEMPTS}")
+            if retry_attempt == MAX_ATTEMPTS:
+                _logger.error(f"Failed to retry simulation in {MAX_ATTEMPTS} attempts")
+                _logger.error(f"Will try one last time and not catch the exception")
+                ne_fep_run.AIS(
+                    num_particles=setup_options["n_particles"],
+                    protocols=lambdas,
+                    num_integration_steps=setup_options["ncmc_num_integration_steps"],
+                    return_timer=False,
+                    rethermalize=setup_options["ncmc_rethermalize"],
+                )
 
             # try to write out the ne_fep object as a pickle
             try:
