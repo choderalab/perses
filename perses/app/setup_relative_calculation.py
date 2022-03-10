@@ -806,7 +806,7 @@ def run(yaml_filename=None):
                     _logger.error(f"OpenMMException! {err}")
                     retry_attempt += 1
                     _logger.error(f"retry attempt {retry_attempt}/{MAX_ATTEMPTS}")
-            if retry_attempt == MAX_ATTEMPTS:
+            else:
                 _logger.error(f"Failed to retry simulation in {MAX_ATTEMPTS} attempts")
                 _logger.error(f"Will try one last time and not catch the exception")
                 ne_fep_run.AIS(
