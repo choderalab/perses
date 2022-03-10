@@ -15,8 +15,10 @@ from perses.annihilation.lambda_protocol import LambdaProtocol
 from openmmtools import mcmc, cache
 from openmmtools.multistate import MultiStateReporter
 from perses.utils.smallmolecules import render_atom_mapping
+from perses.utils.tools import retry
 from perses.tests.utils import validate_endstate_energies
 from perses.dispersed.smc import SequentialMonteCarlo
+from openmm import OpenMMException
 
 import datetime
 class TimeFilter(logging.Filter):
@@ -750,15 +752,28 @@ def run(yaml_filename=None):
     # The name of the reporter file includes the phase name, so we need to check each
     # one
     for phase in setup_options['phases']:
+
         trajectory_directory = setup_options['trajectory_directory']
         trajectory_prefix = setup_options['trajectory_prefix']
         reporter_file = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
         # Once we find one, we are good to resume the simulation
         if os.path.isfile(reporter_file):
-            _resume_run(setup_options)
+            retry_attempt = 0
+            MAX_ATTEMPTS = 5
+            while retry_attempt < MAX_ATTEMPTS:
+                try:
+                    _resume_run(setup_options)
+                    # It worked! So we can exit now
+                    return
+                except OpenMMException as err:
+                    _logger.error(f"OpenMMException! {err}")
+                    retry_attempt += 1
+                    _logger.error(f"retry attempt {retry_attempt}/{MAX_ATTEMPTS}")
             # There is a loop in _resume_run for each phase so once we extend each phase
             # we are done
-            exit()
+            if retry_attempt == MAX_ATTEMPTS:
+                _logger.error(f"Failed to retry simulation in {MAX_ATTEMPTS} attempts")
+            return
 
     if 'lambdas' in setup_options:
         if type(setup_options['lambdas']) == int:
