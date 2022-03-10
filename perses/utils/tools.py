@@ -8,6 +8,8 @@ class ErrorNeverThrown(Exception):
     """This should never be thrown"""
 
 
+# TODO Addd a logger argument as an option so we can log what is going on
+# or if one isn't passed in, we just create one and log
 def retry(max_retry, exceptions=None, delay=0):
     """
     Decorator to retry function max_retry times if a specified exception is raised.
