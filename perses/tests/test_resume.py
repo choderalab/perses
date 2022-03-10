@@ -15,12 +15,14 @@ from openmmtools.multistate import MultiStateReporter
 from pkg_resources import resource_filename
 from simtk import unit
 
+import perses
 from perses.annihilation.lambda_protocol import LambdaProtocol
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_point_mutation_setup import PointMutationExecutor
 from perses.app.setup_relative_calculation import run
 from perses.app.relative_setup import RelativeFEPSetup
 from perses.samplers.multistate import HybridRepexSampler
+from perses.utils.tools import retry
 
 
 @pytest.mark.gpu_ci
@@ -288,9 +290,15 @@ def test_resume_protein_mutation_no_checkpoint(tmp_path):
 
     assert hss.iteration == 15
 
+
 @pytest.mark.gpu_ci
 @patch("perses.app.setup_relative_calculation._resume_run", side_effect=OpenMMException)
 def test_cli_retry(mocked):
+    # Need to redecorate mocked function
+    perses.app.setup_relative_calculation._resume_run = (
+        retry(5, exceptions=OpenMMException)
+    )(mocked)
+
     with tempfile.TemporaryDirectory() as temp_dir:
         os.chdir(temp_dir)
         # Need to get path to examples dir
@@ -338,5 +346,9 @@ def test_cli_retry(mocked):
         # Run once to generate files we use to detect if we are resuming
         run("test.yml")
         # Run again to test if we can handle an OpenMMException in the resume logic
-        run("test.yml")
+        # We still eventually raise the exception to the user, so we need to catch it
+        # here
+        with pytest.raises(OpenMMException):
+            run("test.yml")
+        # Check to see if we tired running the function 5 times
         assert mocked.call_count == 5

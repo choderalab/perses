@@ -758,21 +758,9 @@ def run(yaml_filename=None):
         reporter_file = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
         # Once we find one, we are good to resume the simulation
         if os.path.isfile(reporter_file):
-            retry_attempt = 0
-            MAX_ATTEMPTS = 5
-            while retry_attempt < MAX_ATTEMPTS:
-                try:
-                    _resume_run(setup_options)
-                    # It worked! So we can exit now
-                    return
-                except OpenMMException as err:
-                    _logger.error(f"OpenMMException! {err}")
-                    retry_attempt += 1
-                    _logger.error(f"retry attempt {retry_attempt}/{MAX_ATTEMPTS}")
+            _resume_run(setup_options)
             # There is a loop in _resume_run for each phase so once we extend each phase
             # we are done
-            if retry_attempt == MAX_ATTEMPTS:
-                _logger.error(f"Failed to retry simulation in {MAX_ATTEMPTS} attempts")
             return
 
     if 'lambdas' in setup_options:
@@ -977,6 +965,7 @@ def run(yaml_filename=None):
                 _logger.info(f"\t\tFinished phase {phase}")
 
 
+@retry(5, exceptions=OpenMMException)
 def _resume_run(setup_options):
     from openmmtools.cache import ContextCache
     # get platform
