@@ -536,6 +536,85 @@ class AtomMapping(object):
         # Update atom map
         self.new_to_old_atom_map = copied_new_to_old_atom_map
 
+class AminoAcidAtomMapping(AtomMapping):
+    """
+    This AtomMappingClass is a container representing an atom mapping between two amino acids.
+
+    Attributes
+    ----------
+    old_mol : openff.toolkit.topology.Molecule
+        Copy of the first molecule to be mapped
+    new_mol : openff.toolkit.topology.Molecule
+        Copy of the second molecule to be mapped
+    n_mapped_atoms : int
+        The number of mapped atoms.
+        Read-only property.
+    new_to_old_atom_map : dict of int : int
+        new_to_old_atom_map[new_atom_index] is the atom index in old_oemol corresponding to new_atom_index in new_oemol
+        A copy is returned, but this attribute can be set.
+        Zero-based indexing within the atoms in old_mol and new_mol is used.
+    old_to_new_atom_map : dict of int : int
+        old_to_new_atom_map[old_atom_index] is the atom index in new_oemol corresponding to old_atom_index in old_oemol
+        A copy is returned, but this attribute can be set.
+        Zero-based indexing within the atoms in old_mol and new_mol is used.
+
+    Examples
+    --------
+    Create an atom mapping for ALA->THR
+    >>> from pkg_resources import resource_filename
+    >>> from perses.rjmc.topology_proposal import PointMutationEngine
+    >>> old_pdb = resource_filename('perses', os.path.join('data', 'amino_acid_templates', "ALA.pdb"))
+    >>> new_pdb = resource_filename('perses', os.path.join('data', 'amino_acid_templates', "THR.pdb"))
+    >>> old_oemol = PointMutationEngine.generate_oemol_from_pdb_template(old_pdb)
+    >>> new_oemol = PointMutationEngine.generate_oemol_from_pdb_template(new_pdb)
+    >>> atom_mapping = AtomMapping(old_oemol, new_oemol, old_to_new_atom_map={0: 0, 7: 5, 1: 1, 8: 6, 4: 4, 2: 2, 3: 3})
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(AminoAcidAtomMapping, self).__init__(*args, **kwargs)
+
+    def preserve_chirality(self):
+        """
+        Update the atom mapping to preserve chirality.
+
+        """
+
+        # Get residue names
+        old_res_name = self.old_mol.name
+        new_res_name = self.new_mol.name
+
+        # Create copy of the new_to_old_atom_mapping for editing
+        new_to_old_atom_map_copy = copy.deepcopy(self.new_to_old_atom_map)
+
+        # Case 1: new atom is chiral and old atom is not (at CA atom)
+        if old_res_name == 'GLY':
+            # Demap HA if it is mapped
+            ha_indices = [atom.molecule_atom_index for atom in self.new_mol.atoms if atom.name == 'HA']
+            assert len(ha_indices) == 1, "Was not able to retrieve the index for HA"
+            if ha_indices[0] in new_to_old_atom_map_copy:
+                del new_to_old_atom_map_copy[ha_indices[0]]
+
+        # Case 1: new atom is chiral and old atom is not (at CB atom)
+        elif (old_res_name != 'THR' and new_res_name == 'ILE') or (old_res_name != 'ILE' and new_res_name == 'THR'):
+            # Demap all atoms beyond CB
+            atoms_to_map = ['C', 'CA', 'N', 'O', 'H', 'HA', 'CB']
+            atoms_to_demap = [atom.molecule_atom_index for atom in self.new_mol.atoms if atom.name not in atoms_to_map]
+            for idx in atoms_to_demap:
+                if idx in new_to_old_atom_map_copy:
+                    del new_to_old_atom_map_copy[idx]
+
+        # Case 4: both atoms are chiral but not the same chirality (at CB atom)
+        elif (old_res_name == 'ILE' and new_res_name == 'THR') or (old_res_name == 'THR' and new_res_name == 'ILE'):
+            # Demap all atoms beyond CB
+            atoms_to_map = ['C', 'CA', 'N', 'O', 'H', 'HA', 'CB']
+            atoms_to_demap = [atom.molecule_atom_index for atom in self.new_mol.atoms if
+                              atom.name not in atoms_to_map]
+            for idx in atoms_to_demap:
+                if idx in new_to_old_atom_map_copy:
+                    del new_to_old_atom_map_copy[idx]
+
+        self.new_to_old_atom_map = new_to_old_atom_map_copy
+
 ################################################################################
 # ATOM MAPPERS
 ################################################################################
@@ -1485,3 +1564,161 @@ class AtomMapper(object):
         if assign_bonds:
             for oebond in oemol.GetBonds():
                 oebond.SetIntType(_assign_ring_id(oebond, max_ring_size=max_ring_size))
+
+class AminoAcidAtomMapper():
+    """
+    Generate atom mappings between two (natural) amino acids for relative free energy transformations.
+    Uses a rules-based approach that checks for atom name matches (instead of 2D properties or geometries).
+    Atom names must come from AMBER ff14SB.
+
+    Examples
+    --------
+    Create an AminoAcidAtomMapper factory:
+    >>> atom_mapper = AminoAcidAtomMapper()
+    The AminoAcidAtomMapper utilizes oemols to generate the best atom mapping.
+    >>> from pkg_resources import resource_filename
+    >>> from perses.rjmc.topology_proposal import PointMutationEngine
+    >>> old_pdb = resource_filename('perses', os.path.join('data', 'amino_acid_templates', "ALA.pdb"))
+    >>> new_pdb = resource_filename('perses', os.path.join('data', 'amino_acid_templates', "THR.pdb"))
+    >>> old_oemol = PointMutationEngine.generate_oemol_from_pdb_template(old_pdb)
+    >>> new_oemol = PointMutationEngine.generate_oemol_from_pdb_template(new_pdb)
+    >>> atom_mapping = atom_mapper.get_best_mapping(old_oemol, new_oemol)
+    We can access (or modify) either the old-to-new atom mapping or new-to-old atom mapping,
+    and both will be kept in a self-consistent state:
+    >>> atom_mapping.old_to_new_atom_map
+    >>> atom_mapping.new_to_old_atom_map
+    Copies of the initial and final molecules are also available as OpenFF Molecule objects:
+    >>> atom_mapping.old_mol
+    >>> atom_mapping.new_mol
+    """
+
+    def __init__(self):
+        """
+        Create an AminoAcidAtomMapper factory.
+
+        """
+
+    def get_best_mapping(self, old_res, new_res):
+        """Retrieve the best mapping between old and new residues.
+
+        The approach here is to first try to find exact matches based on atom name for backbone, CB, HB (and variants), CG (and variants), HG2, HG3, and CD atoms
+        If an exact match cannot be found for HB or CG atoms, it will search for a non-exact match (e.g. CG == CG1, HB2 == HB)
+        We will not search for exact matches (or non-exact matches) for CD1, CD2, HG, HG1, HG11, HG12, HG13, HG21, HG22, HG23 because we do not want to match dissimilar geometries
+
+        Parameters
+        ----------
+        old_res : openeye.oechem.OEMol
+            The initial residue for the transformation.
+        new_res : openeye.oechem.OEMol
+            The final residue for the transformation.
+
+        Returns
+        -------
+        atom_mapping : AminoAcidAtomMapping
+            Atom mapping
+
+        """
+        # Retrieve residue names
+        old_res_name = old_res.GetTitle()
+        new_res_name = new_res.GetTitle()
+        assert old_res_name != '' and new_res_name != '', "Residue names are not set in the input oemols"
+
+        # Create OpenFF Molecule objects from oemols
+        from openff.toolkit.topology import Molecule
+        old_offmol = Molecule(old_res)
+        new_offmol = Molecule(new_res)
+
+        # Helper maps
+        new_res_name_to_index = {atom.GetName(): atom.GetIdx() for atom in new_res.GetAtoms()}
+        new_res_index_to_name = {atom.GetIdx(): atom.GetName() for atom in new_res.GetAtoms()}
+
+        # Initialize_the atom map
+        new_to_old_atom_map = {}
+
+        # Create lists of atom names to be used in searching for matches
+        backbone_atoms = ['C', 'CA', 'N', 'O', 'H', 'HA']
+        no_direct_matches = []
+        cb_atoms = ['CB']
+        hb_atoms = ['HB', 'HB1', 'HB2', 'HB3']
+        cg_atoms = ['CG', 'CG1', 'CG2']
+        hg_atoms = ['HG2', 'HG3']
+        cd_atoms = ['CD']
+
+        # Iterate over the old mol atoms to fill in the new_to_old_atom_map
+        # First, search for exact matches based on atom name
+        for atom in old_res.GetAtoms():
+            old_atom_index = atom.GetIdx()
+            old_atom_name = atom.GetName()
+
+            # Handle backbone atoms
+            if old_atom_name in backbone_atoms:
+                if old_res_name == 'GLY' and old_atom_name in ['HA2', 'HA3']:  # Do not map HAs if old residue GLY
+                    continue
+
+                elif new_res_name == 'GLY' and old_atom_name == 'HA':  # Do not map HA if new residue is GLY
+                    continue
+
+                else:
+                    new_atom_index = new_res_name_to_index[old_atom_name]
+                    new_to_old_atom_map[new_atom_index] = old_atom_index
+
+            # Handle sidechain atoms
+            elif old_atom_name in cb_atoms + hb_atoms + cg_atoms + hg_atoms + cd_atoms:
+                if new_res_name == 'GLY':  # Do not map CB if GLY
+                    continue
+
+                else:
+
+                    try:
+                        new_atom_index = new_res_name_to_index[old_atom_name]
+                        new_to_old_atom_map[new_atom_index] = old_atom_index
+
+                        # An exact match was found, so remove this atom name from the lookup list for non-exact matches
+                        if old_atom_name in hb_atoms:
+                            hb_atoms.remove(old_atom_name)
+
+                        elif old_atom_name in cg_atoms:
+                            cg_atoms.remove(old_atom_name)
+
+                    except:
+                        no_direct_matches.append(atom)
+
+        # If an exact match doesn't exist for HB and CG atoms, try to find a non-exact match (i.e. disregarding the number in the atom name, e.g. CG = CG1)
+        for atom in no_direct_matches:
+            old_atom_index = atom.GetIdx()
+            old_atom_name = atom.GetName()
+
+            if old_atom_name in hb_atoms + cg_atoms:  # Do not try to find indirect matches for hg_atoms and cd_atoms
+                lookup_names = cg_atoms if old_atom_name[:2] == 'CG' else hb_atoms
+
+                if old_atom_name in lookup_names:
+                    lookup_names.remove(old_atom_name)  # Do not use this name to search for non-exact matches
+
+                for lookup_name in lookup_names:
+
+                    try:
+                        new_atom_index = new_res_name_to_index[lookup_name]
+                        new_to_old_atom_map[new_atom_index] = old_atom_index
+                        lookup_names.remove(lookup_name)  # Since we found a match, we don't want to use this name to search for more non-exact matches
+                        break
+
+                    except:
+                        continue
+
+        # For TYR->PHE and PHE->TYR, always map the rings (by finding exact matches)
+        if (old_res_name == 'TYR' and new_res_name == 'PHE') or (old_res_name == 'PHE' and new_res_name == 'TYR'):
+
+            for atom in old_res.GetAtoms():
+                old_atom_index = atom.GetIdx()
+                old_atom_name = atom.GetName()
+
+                if atom.name not in backbone_atoms + cb_atoms + hb_atoms + cg_atoms + hg_atoms + cd_atoms:
+
+                    try:
+                        new_atom_index = new_res_name_to_index[old_atom_name]
+                        new_to_old_atom_map[new_atom_index] = old_atom_index
+
+                    except:
+                        pass
+
+        return AminoAcidAtomMapping(old_offmol, new_offmol, new_to_old_atom_map=new_to_old_atom_map)
