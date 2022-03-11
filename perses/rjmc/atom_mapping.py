@@ -1712,7 +1712,7 @@ class AminoAcidAtomMapper():
                 old_atom_index = atom.GetIdx()
                 old_atom_name = atom.GetName()
 
-                if atom.name not in backbone_atoms + cb_atoms + hb_atoms + cg_atoms + hg_atoms + cd_atoms:
+                if old_atom_name not in backbone_atoms + cb_atoms + hb_atoms + cg_atoms + hg_atoms + cd_atoms:
 
                     try:
                         new_atom_index = new_res_name_to_index[old_atom_name]
