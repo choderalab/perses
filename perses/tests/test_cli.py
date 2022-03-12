@@ -1,5 +1,5 @@
-#from click.testing import CliRunner
-#from perses.app.cli import cli
+from click.testing import CliRunner
+from perses.app.cli import cli
 
 test_yaml = """
 protein_pdb: Tyk2_protein.pdb
@@ -37,13 +37,13 @@ h_constraints: true
 """
 
 
-#def test_dummy_cli(in_tmpdir):
-#    runner = CliRunner()
-#    with runner.isolated_filesystem():
-#        with open("test.yaml", "w") as f:
-#            f.write(test_yaml)
-#
-#        result = runner.invoke(cli, ["--yaml", "test.yaml"])
-#        print(result)
-#        print(result.output)
-#        assert result.exit_code == 0
+def test_dummy_cli(in_tmpdir):
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        with open("test.yaml", "w") as f:
+            f.write(test_yaml)
+
+        result = runner.invoke(cli, ["--yaml", "test.yaml"])
+        print(result)
+        print(result.output)
+        assert result.exit_code == 0
