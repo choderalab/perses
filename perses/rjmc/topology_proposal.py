@@ -587,8 +587,7 @@ class PolymerProposalEngine(ProposalEngine):
                 current_system,
                 current_topology,
                 current_metadata=None,
-                extra_sidechain_map=None,
-                demap_CBs=False):
+                extra_sidechain_map=None):
         """
         Generate a TopologyProposal
 
