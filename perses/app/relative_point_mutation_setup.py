@@ -97,7 +97,6 @@ class PointMutationExecutor(object):
                  allow_undefined_stereo_sdf=False,
                  extra_sidechain_map=None,
                  demap_CBs=False,
-                 solvate=True,
                  water_model='tip3p',
                  ionic_strength=0.15 * unit.molar,
                  forcefield_files=['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
@@ -118,7 +117,6 @@ class PointMutationExecutor(object):
             protein_filename : str
                 path to protein (to mutate); .pdb
                 Note: if there are nonstandard residues, the PDB should contain the standard residue name but the atoms/positions should correspond to the nonstandard residue. E.g. if I want to include HID, the PDB should contain HIS for the residue name, but the atoms should correspond to the atoms present in HID. You can use openmm.app.Modeller.addHydrogens() to generate a PDB like this. The same is true for the ligand_input, if its a PDB. 
-                Note: this can be the protein solute only or the solvated protein.
             mutation_chain_id : str
                 name of the chain to be mutated
             mutation_residue_id : str
@@ -134,8 +132,7 @@ class PointMutationExecutor(object):
                 whether to conduct an endstate validation of the HybridTopologyFactory. If using the RepartitionedHybridTopologyFactory,
                 endstate validation cannot and will not be conducted.
             ligand_input : str, default None
-                path to ligand of interest (i.e. small molecule or protein)
-                Note: if this is not solvated, it should be the ligand alone (.sdf or .pdb). if solvated, this should be the protein + ligand (.pdb).
+                path to ligand of interest (i.e. small molecule or protein); .sdf or .pdb
             ligand_index : int, default 0
                 which ligand to use
             allow_undefined_stereo_sdf : bool, default False
@@ -144,8 +141,6 @@ class PointMutationExecutor(object):
                 map of new to old sidechain atom indices to add to the default map (by default, we only map backbone atoms and CBs)
             demap_CBs : bool, default False
                 whether to remove CBs from the mapping
-            solvate : bool, default True
-                whether to solvate the protein/complex
             water_model : str, default 'tip3p'
                 solvent model to use for solvation
             ionic_strength : float * unit.molar, default 0.15 * unit.molar
@@ -220,22 +215,18 @@ class PointMutationExecutor(object):
                 _logger.warning(f'ligand filetype not recognised. Please provide a path to a .pdb or .sdf file')
                 return
 
-            if solvate:
-                # Now create a complex
-                complex_md_topology = protein_md_topology.join(ligand_md_topology)
-                complex_topology = complex_md_topology.to_openmm()
-                complex_positions = unit.Quantity(np.zeros([protein_n_atoms + ligand_n_atoms, 3]), unit=unit.nanometers)
-                complex_positions[:protein_n_atoms, :] = protein_positions
-                complex_positions[protein_n_atoms:, :] = ligand_positions
+            # Now create a complex
+            complex_md_topology = protein_md_topology.join(ligand_md_topology)
+            complex_topology = complex_md_topology.to_openmm()
+            complex_positions = unit.Quantity(np.zeros([protein_n_atoms + ligand_n_atoms, 3]), unit=unit.nanometers)
+            complex_positions[:protein_n_atoms, :] = protein_positions
+            complex_positions[protein_n_atoms:, :] = ligand_positions
 
-                # Convert positions back to openmm vec3 objects
-                complex_positions_vec3 = []
-                for position in complex_positions:
-                    complex_positions_vec3.append(openmm.Vec3(*position.value_in_unit_system(unit.md_unit_system)))
-                complex_positions = unit.Quantity(value=complex_positions_vec3, unit=unit.nanometer)
-            else:
-                complex_topology = ligand_topology
-                complex_positions = ligand_positions
+            # Convert positions back to openmm vec3 objects
+            complex_positions_vec3 = []
+            for position in complex_positions:
+                complex_positions_vec3.append(openmm.Vec3(*position.value_in_unit_system(unit.md_unit_system)))
+            complex_positions = unit.Quantity(value=complex_positions_vec3, unit=unit.nanometer)
 
         # Now for a system_generator
         self.system_generator = SystemGenerator(forcefields=forcefield_files,
@@ -247,24 +238,11 @@ class PointMutationExecutor(object):
                                                 molecules=molecules,
                                                 cache=None)
 
-        # Solvate apo and complex (if necessary) and generate systems...
-        inputs = []
-        topology_list = [protein_topology]
-        positions_list = [protein_positions]
-        box_dimensions_list = [apo_box_dimensions]
+        # Solvate apo and complex...
+        apo_input = list(self._solvate(protein_topology, protein_positions, water_model, phase, ionic_strength, apo_box_dimensions))
+        inputs = [apo_input]
         if ligand_input:
-            topology_list.append(complex_topology)
-            positions_list.append(complex_positions)
-            box_dimensions_list.append(complex_box_dimensions)
-
-        for topology, positions, box_dimensions in zip(topology_list, positions_list, box_dimensions_list):
-            if solvate:
-                solvated_topology, solvated_positions = self._solvate(topology, positions, water_model, phase, ionic_strength, box_dimensions)
-            else:
-                solvated_topology = topology
-                solvated_positions = unit.quantity.Quantity(value=np.array([list(atom_pos) for atom_pos in positions.value_in_unit_system(unit.md_unit_system)]), unit=unit.nanometers)
-            solvated_system = self.system_generator.create_system(solvated_topology)
-            inputs.append([solvated_topology, solvated_positions, solvated_system])
+            inputs.append(self._solvate(complex_topology, complex_positions, water_model, phase, ionic_strength, complex_box_dimensions))
 
         geometry_engine = FFAllAngleGeometryEngine(metadata=None,
                                                 use_sterics=False,
@@ -604,5 +582,6 @@ class PointMutationExecutor(object):
 
         # Canonicalize the solvated positions: turn tuples into np.array
         solvated_positions = unit.quantity.Quantity(value=np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit=unit.nanometers)
+        solvated_system = self.system_generator.create_system(solvated_topology)
 
-        return solvated_topology, solvated_positions
+        return solvated_topology, solvated_positions, solvated_system
