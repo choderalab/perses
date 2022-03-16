@@ -116,7 +116,7 @@ class PointMutationExecutor(object):
         """
         arguments
             protein_filename : str
-                path to protein (to mutate); .pdb
+                path to protein (to mutate); .pdb, .cif
                 Note: if there are nonstandard residues, the PDB should contain the standard residue name but the atoms/positions should correspond to the nonstandard residue. E.g. if I want to include HID, the PDB should contain HIS for the residue name, but the atoms should correspond to the atoms present in HID. You can use openmm.app.Modeller.addHydrogens() to generate a PDB like this. The same is true for the ligand_input, if its a PDB. 
                 Note: this can be the protein solute only or the solvated protein. if its the former, solvate should be set to True.
                 if its the latter, solvate should be set to False.
@@ -136,8 +136,8 @@ class PointMutationExecutor(object):
                 endstate validation cannot and will not be conducted.
             ligand_input : str, default None
                 path to ligand of interest (i.e. small molecule or protein)
-                Note: if this is not solvated, it should be the ligand alone (.sdf or .pdb) and solvate should be set to True.
-                if this is solvated, this should be the protein-ligand complex (.pdb) and solvate should be set to False.
+                Note: if this is not solvated, it should be the ligand alone (.sdf or .pdb or .cif) and solvate should be set to True.
+                if this is solvated, this should be the protein-ligand complex (.pdb or .cif) and solvate should be set to False.
             ligand_index : int, default 0
                 which ligand to use
             allow_undefined_stereo_sdf : bool, default False
@@ -187,9 +187,12 @@ class PointMutationExecutor(object):
         from openeye import oechem
 
         # First thing to do is load the apo protein to mutate...
-        protein_pdbfile = open(protein_filename, 'r')
-        protein_pdb = app.PDBFile(protein_pdbfile)
-        protein_pdbfile.close()
+        if protein_filename.endswith('pdb'):
+            protein_pdb = app.PDBFile(protein_filename)
+        elif protein_filename.endswith('cif'):
+            protein_pdb = app.PDBxFile(protein_filename)
+        else:
+            raise Exception("protein_filename file format is not supported. supported formats: .pdb, .cif")
         protein_positions, protein_topology, protein_md_topology = protein_pdb.positions, protein_pdb.topology, md.Topology.from_openmm(protein_pdb.topology)
         protein_n_atoms = protein_md_topology.n_atoms
 
@@ -198,19 +201,26 @@ class PointMutationExecutor(object):
         if ligand_input:
             if isinstance(ligand_input, str):
                 if ligand_input.endswith('.sdf'): # small molecule
-                        ligand_mol = createOEMolFromSDF(ligand_input, index=ligand_index, allow_undefined_stereo=allow_undefined_stereo_sdf)
-                        molecules.append(Molecule.from_openeye(ligand_mol, allow_undefined_stereo=False))
-                        ligand_positions, ligand_topology = extractPositionsFromOEMol(ligand_mol),  forcefield_generators.generateTopologyFromOEMol(ligand_mol)
-                        ligand_md_topology = md.Topology.from_openmm(ligand_topology)
-                        ligand_n_atoms = ligand_md_topology.n_atoms
-
-                if ligand_input.endswith('pdb'): # protein
-                    ligand_pdbfile = open(ligand_input, 'r')
-                    ligand_pdb = app.PDBFile(ligand_pdbfile)
-                    ligand_pdbfile.close()
-                    ligand_positions, ligand_topology, ligand_md_topology = ligand_pdb.positions, ligand_pdb.topology, md.Topology.from_openmm(
-                        ligand_pdb.topology)
+                    ligand_mol = createOEMolFromSDF(ligand_input, index=ligand_index, allow_undefined_stereo=allow_undefined_stereo_sdf)
+                    molecules.append(Molecule.from_openeye(ligand_mol, allow_undefined_stereo=False))
+                    ligand_positions, ligand_topology = extractPositionsFromOEMol(ligand_mol),  forcefield_generators.generateTopologyFromOEMol(ligand_mol)
+                    ligand_md_topology = md.Topology.from_openmm(ligand_topology)
                     ligand_n_atoms = ligand_md_topology.n_atoms
+
+                elif ligand_input.endswith('pdb'): # protein
+                    ligand_pdb = app.PDBFile(ligand_input)
+                    ligand_pdbfile.close()
+                    ligand_positions, ligand_topology, ligand_md_topology = ligand_pdb.positions, ligand_pdb.topology, md.Topology.from_openmm(ligand_pdb.topology)
+                    ligand_n_atoms = ligand_md_topology.n_atoms
+
+                elif ligand_input.endswith('cif'): # protein
+                    ligand_pdb = app.PDBxFile(ligand_input)
+                    ligand_pdbfile.close()
+                    ligand_positions, ligand_topology, ligand_md_topology = ligand_pdb.positions, ligand_pdb.topology, md.Topology.from_openmm(ligand_pdb.topology)
+                    ligand_n_atoms = ligand_md_topology.n_atoms
+
+                else:
+                    raise Exception("ligand_input file format is not supported. supported formats: .sdf, .pdb, .cif")
 
             elif isinstance(ligand_input, oechem.OEMol): # oemol object
                 molecules.append(Molecule.from_openeye(ligand_input, allow_undefined_stereo=False))
