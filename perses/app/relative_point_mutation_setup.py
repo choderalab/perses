@@ -191,7 +191,6 @@ class PointMutationExecutor(object):
         protein_pdb = app.PDBFile(protein_pdbfile)
         protein_pdbfile.close()
         protein_positions, protein_topology, protein_md_topology = protein_pdb.positions, protein_pdb.topology, md.Topology.from_openmm(protein_pdb.topology)
-        protein_topology = protein_md_topology.to_openmm()
         protein_n_atoms = protein_md_topology.n_atoms
 
         # Load the ligand, if present
