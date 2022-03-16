@@ -984,13 +984,11 @@ def run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_en
             chain_id = '1'
             residue_id = '2'
             proposed_residue = 'THR'
-            phase = 'solvent'
         elif test_name == 'barstar':
             input_filename = resource_filename('perses', 'data/barstar-mutation/1brs_barstar_renumbered.pdb')
             chain_id = '1'
             residue_id = '42'
             proposed_residue = 'ALA'
-            solvent = 'solvent'
         else:
             raise Exception('Test name not found!')
 
