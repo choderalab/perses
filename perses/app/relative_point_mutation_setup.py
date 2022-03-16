@@ -209,13 +209,11 @@ class PointMutationExecutor(object):
 
                 elif ligand_input.endswith('pdb'): # protein
                     ligand_pdb = app.PDBFile(ligand_input)
-                    ligand_pdbfile.close()
                     ligand_positions, ligand_topology, ligand_md_topology = ligand_pdb.positions, ligand_pdb.topology, md.Topology.from_openmm(ligand_pdb.topology)
                     ligand_n_atoms = ligand_md_topology.n_atoms
 
                 elif ligand_input.endswith('cif'): # protein
                     ligand_pdb = app.PDBxFile(ligand_input)
-                    ligand_pdbfile.close()
                     ligand_positions, ligand_topology, ligand_md_topology = ligand_pdb.positions, ligand_pdb.topology, md.Topology.from_openmm(ligand_pdb.topology)
                     ligand_n_atoms = ligand_md_topology.n_atoms
 
