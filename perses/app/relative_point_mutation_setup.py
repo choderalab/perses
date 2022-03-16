@@ -118,7 +118,8 @@ class PointMutationExecutor(object):
             protein_filename : str
                 path to protein (to mutate); .pdb
                 Note: if there are nonstandard residues, the PDB should contain the standard residue name but the atoms/positions should correspond to the nonstandard residue. E.g. if I want to include HID, the PDB should contain HIS for the residue name, but the atoms should correspond to the atoms present in HID. You can use openmm.app.Modeller.addHydrogens() to generate a PDB like this. The same is true for the ligand_input, if its a PDB. 
-                Note: this can be the protein solute only or the solvated protein.
+                Note: this can be the protein solute only or the solvated protein. if its the former, solvate should be set to True.
+                if its the latter, solvate should be set to False.
             mutation_chain_id : str
                 name of the chain to be mutated
             mutation_residue_id : str
@@ -135,7 +136,8 @@ class PointMutationExecutor(object):
                 endstate validation cannot and will not be conducted.
             ligand_input : str, default None
                 path to ligand of interest (i.e. small molecule or protein)
-                Note: if this is not solvated, it should be the ligand alone (.sdf or .pdb). if solvated, this should be the protein + ligand (.pdb).
+                Note: if this is not solvated, it should be the ligand alone (.sdf or .pdb) and solvate should be set to True.
+                if this is solvated, this should be the protein-ligand complex (.pdb) and solvate should be set to False.
             ligand_index : int, default 0
                 which ligand to use
             allow_undefined_stereo_sdf : bool, default False
@@ -145,7 +147,8 @@ class PointMutationExecutor(object):
             demap_CBs : bool, default False
                 whether to remove CBs from the mapping
             solvate : bool, default True
-                whether to solvate the protein/complex
+                whether to solvate the protein/complex. If this is False, protein_filename and ligand_input should correspond
+                to the solvated protein PDB and solvated complex PDB, respectively.
             water_model : str, default 'tip3p'
                 solvent model to use for solvation
             ionic_strength : float * unit.molar, default 0.15 * unit.molar
