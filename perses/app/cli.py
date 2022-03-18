@@ -57,6 +57,19 @@ MMMMMMMMMMMMMMMMMMMMKlo0OkkO0OloNMMMMMMMMMMMMWxck0OOOO0dc0MMMMMMMMMMMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMXocdoollxxcdNMMMMMMMMMMMMMkcxOdlloxlc0MMMMMMMMMMMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMKolxXXxc:oKMMMMMMMMMMMMMMKl:::x0dcckNMMMMMMMMMMMMMMMMMMMMMM
 """
+realtime_output = """progress:
+    iteration: 5
+    max_iteration: 5
+    percent_progress: 100
+estimates:
+    DDG: 0.2
+    dDDG: 0.01
+    num_uncorrelated_samples: 8
+performance:
+    nano_second_per_day: 5
+    wallclock_time_per_iteration: 00:05:23
+    ETA_for_completion: 00:00:00
+"""
 
 
 def _check_openeye_license():
@@ -72,7 +85,7 @@ def _test_platform(platform_name):
 
     # If a user asks for a platform, try and see if we can use it
     if platform_name:
-        assert openmmtools.utils.platform_supports_precision(platform_name, 'mixed')
+        assert openmmtools.utils.platform_supports_precision(platform_name, "mixed")
         click.echo("🎉\t Platform test successful!")
 
 
@@ -96,6 +109,11 @@ def _write_out_files(path, options):
     for _file in files_next_to_yaml:
         with open(_file, "w") as fp:
             pass
+
+    # Now we write out a mock realtime output file
+
+    with open("realtime.yaml", "w") as realtime_file:
+        realtime_file.write(realtime_output)
 
     # Now we make the directory structure
     trajectory_directory = Path(options["trajectory_directory"])
