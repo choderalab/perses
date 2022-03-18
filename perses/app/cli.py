@@ -164,17 +164,32 @@ def _write_out_files(path, options):
         with open(_file, "w") as fp:
             pass
 
+def _process_overrides(overrides, yaml_options):
+    overrides_dict = {}
+    for opt in overrides:
+        key, val = opt.split(":")
+        overrides_dict[key] = val
+
+    return {**yaml_options, **overrides_dict}
+
 
 @click.command()
 @click.option("--yaml", type=click.Path(exists=True, dir_okay=False), required=True)
 @click.option("--platform-name", type=str, default=None)
-def cli(yaml, platform_name):
+@click.option("--override", multiple=True, required=False)
+def cli(yaml, platform_name, override):
     """test"""
     click.echo(click.style(percy, fg="bright_magenta"))
     click.echo("📖\t Fetching simulation options ")
     options = getSetupOptions(yaml)
     click.echo("🖨️\t Printing options")
     click.echo(options)
+    if override:
+        click.echo("overrides")
+        click.echo(override)
+        click.echo("new options")
+        options = _process_overrides(override, options)
+        click.echo(options)
     click.echo("🕵️\t Checking OpenEye license")
     _check_openeye_license()
     click.echo("✅\t OpenEye license good")
