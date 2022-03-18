@@ -2940,7 +2940,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
                  # rest scaling arguments
                  rest_radius=0.2,
-                 additiona_rest_region=[],
+                 additional_rest_region=[],
 
                  # nonbonded parameters
                  w_scale=0.1,
