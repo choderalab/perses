@@ -2840,16 +2840,17 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         f"U_electrostatics = {ONE_4PI_EPS0} * chargeProd  * erfc(alpha * r_eff_electrostatics)/ r_eff_electrostatics;",
 
         # Define chargeProd (with REST scaling)
-        "chargeProd = charge1 * electrostatics_rest_scale1 * charge2 * electrostatics_rest_scale2;",
+        "chargeProd = charge1 * charge2;",
 
         # Define alpha
         "alpha = {alpha_ewald};"
 
         # Define r_eff
-        "r_eff_electrostatics = sqrt(r^2 + w_electrostatics^2);",
+        "r_eff_electrostatics = sqrt(r^2 + w_electrostatics^2 + w_electrostatics_rest^2);",
 
         # Define 4th dimension terms
         "w_electrostatics = w_scale * r_cutoff * (is_unique_old * (1 - lambda_alchemical_electrostatics_old) + is_unique_new * (1 - lambda_alchemical_electrostatics_new));", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
+        "w_electrostatics_rest = w_scale * r_cutoff * (1 - electrostatics_rest_scale1 * electrostatics_rest_scale2) *  (1 - is_unique_old) * (1 - is_unique_new);",
         "is_unique_old = step(is_unique_old1 + is_unique_old2 - 0.1);", # if at least one of the particles in the interaction is unique old
         "is_unique_new = step(is_unique_new1 + is_unique_new2 - 0.1);", # if at least one of the particles in the interaction is unique new
         "w_scale = {w_scale};",
@@ -2869,15 +2870,16 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         "sigma = (sigma1 + sigma2) / 2;",
 
         # Define epsilon (with rest scaling)
-        "epsilon = sterics_rest_scale1 * sterics_rest_scale2 * sqrt(epsilon_combined);",
+        "epsilon = sqrt(epsilon_combined);",
         "epsilon_combined = step(epsilon1 * epsilon2) * epsilon1 * epsilon2;", # if epsilon1 * epsilon2 < 0, sets epsilon_combined to 0
 
         # Define r_eff
-        "r_eff_sterics = sqrt(r^2 + w_sterics^2);",
+        "r_eff_sterics = sqrt(r^2 + w_sterics^2 + w_sterics_rest^2);",
 
         # Define 4th dimension terms
         # Note that w_scale here should be the same as it is for w_electrostatics, otherwise may get nans
         "w_sterics = w_scale * r_cutoff * (is_unique_old * (1 - lambda_alchemical_sterics_old) + is_unique_new * (1 - lambda_alchemical_sterics_new));", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
+        "w_sterics_rest = w_scale * r_cutoff * (1 - sterics_rest_scale1 * sterics_rest_scale2) *  (1 - is_unique_old) * (1 - is_unique_new);",
         "is_unique_old = step(is_unique_old1 + is_unique_old2 - 0.1);", # if at least one of the particles in the interaction is unique old
         "is_unique_new = step(is_unique_new1 + is_unique_new2 - 0.1);", # if at least one of the particles in the interaction is unique new
         "w_scale = {w_scale};",
@@ -2887,12 +2889,12 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
     _default_exceptions_expression_list = [
 
-        "U_electrostatics + U_sterics * sterics_rest_scale;", # electrostatics_rest_scale will be applied in the next line
+        "U_electrostatics + U_sterics;", # electrostatics_rest_scale will be applied in the next line
 
         # Define electrostatics functional form
         # Note that we need to subtract off the reciprocal space for exceptions
         # See explanation for why here: https://github.com/openmm/openmm/issues/3269#issuecomment-934686324
-        f"U_electrostatics = U_electrostatics_coulomb * electrostatics_rest_scale - U_electrostatics_reciprocal;",
+        f"U_electrostatics = U_electrostatics_coulomb - U_electrostatics_reciprocal;",
         f"U_electrostatics_coulomb = {ONE_4PI_EPS0} * chargeProd_exceptions / r;",
         f"U_electrostatics_reciprocal = {ONE_4PI_EPS0} * chargeProd_product * erf(alpha * r) / r;",
 
