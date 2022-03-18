@@ -2840,7 +2840,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         f"U_electrostatics = {ONE_4PI_EPS0} * chargeProd  * erfc(alpha * r_eff_electrostatics)/ r_eff_electrostatics;",
 
         # Define chargeProd (with REST scaling)
-        "chargeProd = charge1 * charge2;",
+        "chargeProd = charge1 * electrostatics_rest_scale1 * charge2 * electrostatics_rest_scale2;",
 
         # Define alpha
         "alpha = {alpha_ewald};"
@@ -2870,7 +2870,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         "sigma = (sigma1 + sigma2) / 2;",
 
         # Define epsilon (with rest scaling)
-        "epsilon = sqrt(epsilon_combined);",
+        "epsilon = sterics_rest_scale1 * sterics_rest_scale2 * sqrt(epsilon_combined);",
         "epsilon_combined = step(epsilon1 * epsilon2) * epsilon1 * epsilon2;", # if epsilon1 * epsilon2 < 0, sets epsilon_combined to 0
 
         # Define r_eff
@@ -2889,12 +2889,12 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
     _default_exceptions_expression_list = [
 
-        "U_electrostatics + U_sterics;", # electrostatics_rest_scale will be applied in the next line
+        "U_electrostatics + U_sterics * sterics_rest_scale;", # electrostatics_rest_scale will be applied in the next line
 
         # Define electrostatics functional form
         # Note that we need to subtract off the reciprocal space for exceptions
         # See explanation for why here: https://github.com/openmm/openmm/issues/3269#issuecomment-934686324
-        f"U_electrostatics = U_electrostatics_coulomb - U_electrostatics_reciprocal;",
+        f"U_electrostatics = U_electrostatics_coulomb * electrostatics_rest_scale - U_electrostatics_reciprocal;",
         f"U_electrostatics_coulomb = {ONE_4PI_EPS0} * chargeProd_exceptions / r;",
         f"U_electrostatics_reciprocal = {ONE_4PI_EPS0} * chargeProd_product * erf(alpha * r) / r;",
 
@@ -2919,7 +2919,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         "sigma = is_unique_old * sigma_old + is_unique_new * sigma_new + is_core * max(0.05, (lambda_alchemical_sterics_exceptions_old * sigma_old + lambda_alchemical_sterics_exceptions_new * sigma_new)) + is_environment * sigma_old;",
 
         # Define epsilon (with alchemical scaling)
-        "epsilon = is_unique_old * old_epsilon_scaled + is_unique_new * new_epsilon_scaled + is_core * (old_epsilon_scaled + new_epsilon_scaled) + is_environment * epsilon_old;",
+        "epsilon = is_u nique_old * old_epsilon_scaled + is_unique_new * new_epsilon_scaled + is_core * (old_epsilon_scaled + new_epsilon_scaled) + is_environment * epsilon_old;",
         "old_epsilon_scaled = lambda_alchemical_sterics_exceptions_old * epsilon_old;",
         "new_epsilon_scaled = lambda_alchemical_sterics_exceptions_new * epsilon_new;",
 
