@@ -2940,6 +2940,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
                  # rest scaling arguments
                  rest_radius=0.2,
+                 additiona_rest_region=[],
 
                  # nonbonded parameters
                  w_scale=0.1,
@@ -3046,6 +3047,9 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         self._rest_region = self._generate_rest_region()
         _logger.info(f"Rest radius: {self._rest_radius} nm")
         _logger.info(f"Rest region: {self._rest_region}")
+
+        # Augment rest region
+        self._rest_region = self._rest_region + additional_rest_region
 
         # Prep look up dict for determining if atom is solvent
         if 'openmm' in self._hybrid_topology.__module__:
