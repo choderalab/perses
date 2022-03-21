@@ -137,7 +137,8 @@ class PointMutationExecutor(object):
             ligand_input : str, default None
                 path to ligand of interest (i.e. small molecule or protein)
                 Note: if this is not solvated, it should be the ligand alone (.sdf or .pdb or .cif) and solvate should be set to True.
-                if this is solvated, this should be the protein-ligand complex (.pdb or .cif) and solvate should be set to False.
+                if this is solvated, this should be the protein-ligand complex (.pdb or .cif) -- with the protein to be mutated first and
+                the ligand second in the file -- and solvate should be set to False.
             ligand_index : int, default 0
                 which ligand to use
             allow_undefined_stereo_sdf : bool, default False
@@ -339,6 +340,8 @@ class PointMutationExecutor(object):
                                 _logger.info(f"Changed particle {idx}'s sigma from {sigma} to {new_sigma}")
 
             # Only validate energy bookkeeping if the WT and proposed residues do not involve rings
+            # Note: We don't validate energies for geometry proposals involving ring amino acids because we insert biasing torsions
+            # for ring transformations (to ensure the amino acids are somewhat in the right geometry), which will corrupt the energy addition during energy validation.
             old_res = [res for res in top.residues() if res.id == mutation_residue_id][0]
             validate_bool = False if old_res.name in ring_amino_acids or proposed_residue in ring_amino_acids else True
             new_positions, logp_proposal = geometry_engine.propose(topology_proposal, pos, beta,
