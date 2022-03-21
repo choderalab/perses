@@ -2926,9 +2926,96 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
     ]
 
+    # Define electrostatics expression to be used if openmm.CustomNonbondedForce.addComputedValue() does not exist (OpenMM <=7.7.0)
+    _alternate_electrostatics_expression_list = [
+
+        "U_electrostatics;",
+
+        # Define electrostatics functional form
+        f"U_electrostatics = {ONE_4PI_EPS0} * chargeProd  * erfc(alpha * r_eff_electrostatics)/ r_eff_electrostatics;",
+
+        # Define chargeProd (with REST scaling)
+        "chargeProd = charge1 * p1_electrostatics_rest_scale * charge2 * p2_electrostatics_rest_scale;",
+
+        # Define charge1 and charge2 (with alchemical scaling)
+        "charge1 = is_unique_old1 * old_charge_scaled1 + is_unique_new1 * new_charge_scaled1 + is_core1 * (old_charge_scaled1 + new_charge_scaled1) + is_environment1 * charge_old1;",
+        "old_charge_scaled1 = lambda_alchemical_electrostatics_old * charge_old1;",
+        "new_charge_scaled1 = lambda_alchemical_electrostatics_new * charge_new1;",
+
+        "charge2 = is_unique_old2 * old_charge_scaled2 + is_unique_new2 * new_charge_scaled2 + is_core2 * (old_charge_scaled2 + new_charge_scaled2) + is_environment2 * charge_old2;",
+        "old_charge_scaled2 = lambda_alchemical_electrostatics_old * charge_old2;",
+        "new_charge_scaled2 = lambda_alchemical_electrostatics_new * charge_new2;",
+
+        # Define rest scale factors (normal rest)
+        "p1_electrostatics_rest_scale = is_rest1 * lambda_rest_electrostatics + is_nonrest_solute1 + is_nonrest_solvent1;",
+        "p2_electrostatics_rest_scale = is_rest2 * lambda_rest_electrostatics + is_nonrest_solute2 + is_nonrest_solvent2;",
+
+        # Define alpha
+        "alpha = {alpha_ewald};"
+
+        # Define r_eff
+        "r_eff_electrostatics = sqrt(r^2 + w_electrostatics^2);",
+
+        # Define 4th dimension terms
+        "w_electrostatics = w_scale * r_cutoff * (is_unique_old * (1 - lambda_alchemical_electrostatics_old) + is_unique_new * (1 - lambda_alchemical_electrostatics_new));", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
+        "is_unique_old = step(is_unique_old1 + is_unique_old2 - 0.1);", # if at least one of the particles in the interaction is unique old
+        "is_unique_new = step(is_unique_new1 + is_unique_new2 - 0.1);", # if at least one of the particles in the interaction is unique new
+        "w_scale = {w_scale};",
+        "r_cutoff = {r_cutoff};"
+
+    ]
+
+    # Define sterics expression to be used if openmm.CustomNonbondedForce.addComputedValue() does not exist (OpenMM <=7.7.0)
+    _alternate_sterics_expression_list = [
+
+        "U_sterics;",
+
+        # Define sterics functional form
+        "U_sterics = 4 * epsilon * x * (x - 1.0);"
+        "x = (sigma / r_eff_sterics)^6;"
+
+        # Define sigma
+        "sigma = (sigma1 + sigma2) / 2;",
+
+        # Define sigma1 and sigma2 (with alchemical scaling)
+        "sigma1 = is_unique_old1 * sigma_old1 + is_unique_new1 * sigma_new1 + is_core1 * (max(0.05, lambda_alchemical_sterics_old * sigma_old1 + lambda_alchemical_sterics_new * sigma_new1)) + is_environment1 * sigma_old1;",
+        "sigma2 = is_unique_old2 * sigma_old2 + is_unique_new2 * sigma_new2 + is_core2 * (max(0.05, lambda_alchemical_sterics_old * sigma_old2 + lambda_alchemical_sterics_new * sigma_new2)) + is_environment2 * sigma_old2;",
+
+        # Define epsilon (with rest scaling)
+        "epsilon = p1_sterics_rest_scale * p2_sterics_rest_scale * sqrt(epsilon_combined);",
+        "epsilon_combined = step(epsilon1 * epsilon2) * epsilon1 * epsilon2;", # if epsilon1 * epsilon2 < 0, sets epsilon_combined to 0
+
+        # Define epsilon1 and epsilon2 (with alchemical scaling)
+        "epsilon1 = is_unique_old1 * old_epsilon_scaled1 + is_unique_new1 * new_epsilon_scaled1 + is_core1 * (old_epsilon_scaled1 + new_epsilon_scaled1) + is_environment1 * epsilon_old1;",
+        "old_epsilon_scaled1 = lambda_alchemical_sterics_old * epsilon_old1;",
+        "new_epsilon_scaled1 = lambda_alchemical_sterics_new * epsilon_new1;",
+
+        "epsilon2 = is_unique_old2 * old_epsilon_scaled2 + is_unique_new2 * new_epsilon_scaled2 + is_core2 * (old_epsilon_scaled2 + new_epsilon_scaled2) + is_environment2 * epsilon_old2;",
+        "old_epsilon_scaled2 = lambda_alchemical_sterics_old * epsilon_old2;",
+        "new_epsilon_scaled2 = lambda_alchemical_sterics_new * epsilon_new2;",
+
+        # Define rest scale factors (normal rest)
+        "p1_sterics_rest_scale = is_rest1 * lambda_rest_sterics + is_nonrest_solute1 + is_nonrest_solvent1;",
+        "p2_sterics_rest_scale = is_rest2 * lambda_rest_sterics + is_nonrest_solute2 + is_nonrest_solvent2;",
+
+        # Define r_eff
+        "r_eff_sterics = sqrt(r^2 + w_sterics^2);",
+
+        # Define 4th dimension terms
+        # Note that w_scale here should be the same as it is for w_electrostatics, otherwise may get nans
+        "w_sterics = w_scale * r_cutoff * (is_unique_old * (1 - lambda_alchemical_sterics_old) + is_unique_new * (1 - lambda_alchemical_sterics_new));", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
+        "is_unique_old = step(is_unique_old1 + is_unique_old2 - 0.1);", # if at least one of the particles in the interaction is unique old
+        "is_unique_new = step(is_unique_new1 + is_unique_new2 - 0.1);", # if at least one of the particles in the interaction is unique new
+        "w_scale = {w_scale};",
+        "r_cutoff = {r_cutoff};"
+
+    ]
+
     _default_electrostatics_expression = ' '.join(_default_electrostatics_expression_list)
     _default_sterics_expression = ' '.join(_default_sterics_expression_list)
     _default_exceptions_expression = ' '.join(_default_exceptions_expression_list)
+    _alternate_electrostatics_expression = ' '.join(_alternate_electrostatics_expression_list)
+    _alternate_sterics_expression = ' '.join(_alternate_sterics_expression_list)
 
 
     def __init__(self,
@@ -3793,7 +3880,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         import itertools
 
         # Create the force
-        expression = self._default_electrostatics_expression
+        if hasattr(openmm.CustomNonbondedForce, "addComputedValue"):
+            expression = self._default_electrostatics_expression
+        else:
+            expression = self._alternate_electrostatics_expression
         formatted_expression = expression.format(alpha_ewald=self._alpha_ewald,
                                                  w_scale=self._w_scale,
                                                  r_cutoff=self._r_cutoff.value_in_unit_system(unit.md_unit_system))
@@ -3824,10 +3914,11 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         custom_force.addPerParticleParameter('charge_new')
 
         # Add computed parameters
-        custom_force.addComputedValue('charge', ('is_unique_old * old_charge_scaled + is_unique_new * new_charge_scaled + is_core * (old_charge_scaled + new_charge_scaled) + is_environment * charge_old; '
-                                                         'old_charge_scaled = lambda_alchemical_electrostatics_old * charge_old; '
-                                                         'new_charge_scaled = lambda_alchemical_electrostatics_new * charge_new;'))
-        custom_force.addComputedValue('electrostatics_rest_scale', 'is_rest * lambda_rest_electrostatics + is_nonrest_solute + is_nonrest_solvent;')
+        if hasattr(openmm.CustomNonbondedForce, "addComputedValue"):
+            custom_force.addComputedValue('charge', ('is_unique_old * old_charge_scaled + is_unique_new * new_charge_scaled + is_core * (old_charge_scaled + new_charge_scaled) + is_environment * charge_old; '
+                                                             'old_charge_scaled = lambda_alchemical_electrostatics_old * charge_old; '
+                                                             'new_charge_scaled = lambda_alchemical_electrostatics_new * charge_new;'))
+            custom_force.addComputedValue('electrostatics_rest_scale', 'is_rest * lambda_rest_electrostatics + is_nonrest_solute + is_nonrest_solvent;')
 
         # Note: for scaled water rest, here's the bit for the rest scale. this cannot be implemented as a computed parameter, since it depends on particle pairs, not a single particle
         # # Define rest scale factors (scaled water rest)
@@ -3856,7 +3947,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         import itertools
 
         # Create the force
-        expression = self._default_sterics_expression
+        if hasattr(openmm.CustomNonbondedForce, "addComputedValue"):
+            expression = self._default_sterics_expression
+        else:
+            expression = self._alternate_sterics_expression
         formatted_expression = expression.format(w_scale=self._w_scale,
                                                  r_cutoff=self._r_cutoff.value_in_unit_system(unit.md_unit_system))
         custom_force = openmm.CustomNonbondedForce(formatted_expression)
@@ -3911,17 +4005,18 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         custom_force.addPerParticleParameter('epsilon_new')
 
         # Add computed parameters
-        custom_force.addComputedValue('sigma', ('is_unique_old * sigma_old'
-                                                    '+ is_unique_new * sigma_new'
-                                                    '+ is_core * (max(0.05, lambda_alchemical_sterics_old * sigma_old + lambda_alchemical_sterics_new * sigma_new))'
-                                                    ' + is_environment * sigma_old; '))
-        custom_force.addComputedValue('epsilon', 'is_unique_old * old_epsilon_scaled'
-                                                    '+ is_unique_new * new_epsilon_scaled'
-                                                    '+ is_core * (old_epsilon_scaled + new_epsilon_scaled)'
-                                                    '+ is_environment * epsilon_old; '
-                                                    'old_epsilon_scaled = lambda_alchemical_sterics_old * epsilon_old; '
-                                                    'new_epsilon_scaled = lambda_alchemical_sterics_new * epsilon_new;')
-        custom_force.addComputedValue('sterics_rest_scale', 'is_rest * lambda_rest_sterics + is_nonrest_solute + is_nonrest_solvent;')
+        if hasattr(openmm.CustomNonbondedForce, "addComputedValue"):
+            custom_force.addComputedValue('sigma', ('is_unique_old * sigma_old'
+                                                        '+ is_unique_new * sigma_new'
+                                                        '+ is_core * (max(0.05, lambda_alchemical_sterics_old * sigma_old + lambda_alchemical_sterics_new * sigma_new))'
+                                                        ' + is_environment * sigma_old; '))
+            custom_force.addComputedValue('epsilon', 'is_unique_old * old_epsilon_scaled'
+                                                        '+ is_unique_new * new_epsilon_scaled'
+                                                        '+ is_core * (old_epsilon_scaled + new_epsilon_scaled)'
+                                                        '+ is_environment * epsilon_old; '
+                                                        'old_epsilon_scaled = lambda_alchemical_sterics_old * epsilon_old; '
+                                                        'new_epsilon_scaled = lambda_alchemical_sterics_new * epsilon_new;')
+            custom_force.addComputedValue('sterics_rest_scale', 'is_rest * lambda_rest_sterics + is_nonrest_solute + is_nonrest_solvent;')
 
         # Handle some nonbonded attributes
         old_system_nbf = self._old_system_forces['NonbondedForce']
