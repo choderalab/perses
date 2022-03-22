@@ -20,7 +20,7 @@ from openmmtools.integrators import LangevinIntegrator
 from unittest import skipIf
 
 import pymbar.timeseries as timeseries
-
+import pytest
 import pymbar
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
