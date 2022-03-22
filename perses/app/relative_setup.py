@@ -106,7 +106,7 @@ class RelativeFEPSetup(object):
         small_molecule_forcefield : str, optional, default='gaff-2.11'
             Small molecule force field name.
             Anything supported by SystemGenerator is supported, but we recommend one of
-            ['gaff-1.81', 'gaff-2.11', 'smirnoff99Frosst-1.1.0', 'openff-1.0.0']
+            ['gaff-1.81', 'gaff-2.11', 'smirnoff99Frosst-1.1.0', 'openff-2.0.0']
         small_molecule_parameters_cache : str, optional, default=None
             If specified, this filename will be used for a small molecule parameter cache by the SystemGenerator.
         trajectory_directory : str, default None
