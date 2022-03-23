@@ -19,6 +19,19 @@ without warning. If you do use this code, do so at your own risk. We appreciate 
 about potential problems with the code, but may not be able to address your issue until other development activities
 have concluded.
 
+## Install
+
+See our installation instructions [here](https://perses.readthedocs.io/en/latest/installation.html).
+
+### Quick Start
+
+In a fresh conda environment:
+
+```
+$ conda config --add channels conda-forge openeye
+$ conda install perses openeye-toolkits
+```
+
 ## Manifest
 
 * `perses/` - Package containing code for performing expanded ensemble simulations
@@ -27,13 +40,17 @@ have concluded.
 * `devtools/` - Continuous integration and packaging utilities
 * `notes/` - LaTeX notes deriving acceptance criteria and stochastic approximation methods
 
-## Authors
+## Contributors
 
-* Patrick B. Grinaway
+A complete list of contributors can be found at [GitHub Insights](https://github.com/choderalab/perses/graphs/contributors).
+
+Major contributors include:
 * Julie M. Behr
 * Hannah E. Bruce Macdonald
-* dominic a. rufa
-* Jaime Rodríguez-Guerra
-* Ivy Zhang
-* Mike M. Henry
 * John D. Chodera
+* Patrick B. Grinaway
+* Mike M. Henry
+* Iván J. Pulido
+* Jaime Rodríguez-Guerra
+* Dominic A. Rufa
+* Ivy Zhang

@@ -18,9 +18,9 @@ def test_protein_mutation():
     v.load()
     v.format(zoom_distance=3, rotate_x_angle=270, rotate_y_angle=180, rotate_z_angle=270)
     v.save_frames(outfile_prefix=os.path.join(input_directory, "frame"), dpi=300, equilibration_frames=2)
-    frames = [os.path.join(input_directory, "frame-%05d.png" % (i)) for i in range(10)]
+    frames = [os.path.join(input_directory, "frame-%05d.png" % (i)) for i in range(1, 11)]
     v.save_mp4(frames, outfile=os.path.join(input_directory, "movie.mp4"), fps=5)
-    for i in range(10):
+    for i in range(1, 11):
         os.remove(os.path.join(input_directory, "frame-%05d.png" % (i)))
     os.remove(os.path.join(input_directory, "movie.mp4"))
 
@@ -38,8 +38,8 @@ def test_small_molecule():
     v.load()
     v.format(zoom_distance=3, rotate_x_angle=180, rotate_y_angle=180, rotate_z_angle=270)
     v.save_frames(outfile_prefix=os.path.join(input_directory, "frame"), dpi=300, equilibration_frames=2)
-    frames = [os.path.join(input_directory, "frame-%05d.png" % (i)) for i in range(10)]
+    frames = [os.path.join(input_directory, "frame-%05d.png" % (i)) for i in range(1, 11)]
     v.save_mp4(frames, outfile=os.path.join(input_directory, "movie.mp4"), fps=5)
-    for i in range(10):
+    for i in range(1, 11):
         os.remove(os.path.join(input_directory, "frame-%05d.png" % (i)))
     os.remove(os.path.join(input_directory, "movie.mp4"))

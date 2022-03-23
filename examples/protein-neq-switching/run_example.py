@@ -1,6 +1,7 @@
 import logging
 import numpy as np
 from openmmtools.integrators import PeriodicNonequilibriumIntegrator
+from openmmtools.utils import get_fastest_platform
 from pkg_resources import resource_filename
 from simtk import unit
 from simtk import openmm
@@ -18,22 +19,18 @@ nsteps_eq = 2
 nsteps_neq = 32
 neq_splitting = 'V R H O R V'
 timestep = 4.0 * unit.femtosecond
-platform_name = 'CPU'  # Change to 'CUDA' or 'OpenCL' in production
+platform_name = get_fastest_platform().getName()
 temperature = 300 * unit.kelvin
 save_freq_eq = 1
 save_freq_neq = 2
 outdir_path = 'output/'
 
 # Build HybridTopologyFactory
-solvent_delivery = PointMutationExecutor(resource_filename('perses', os.path.join('data', 'barstar-mutation',
-                                                                                  '1brs_barstar_renumbered.pdb')),
+solvent_delivery = PointMutationExecutor(resource_filename('perses', os.path.join('data', 'ala_vacuum.pdb')),
                                          '1',
                                          '2',
-                                         'ALA',
-                                         ligand_input=resource_filename('perses',
-                                                                        os.path.join('data', 'barstar-mutation',
-                                                                                     '1brs_barnase_renumbered.pdb')),
-                                         ionic_strength=0.05*unit.molar,
+                                         'ASP',
+                                         ionic_strength=0.15 * unit.molar,
                                          flatten_torsions=True,
                                          flatten_exceptions=True,
                                          conduct_endstate_validation=False
@@ -53,7 +50,6 @@ DEFAULT_ALCHEMICAL_FUNCTIONS = {
     'lambda_angles': x,
     'lambda_torsions': x
 }
-
 
 system = htf.hybrid_system
 positions = htf.hybrid_positions
@@ -84,6 +80,7 @@ openmm.LocalEnergyMinimizer.minimize(context)
 forward_works_master, reverse_works_master = list(), list()
 forward_eq_old, forward_eq_new, forward_neq_old, forward_neq_new = list(), list(), list(), list()
 reverse_eq_new, reverse_eq_old, reverse_neq_old, reverse_neq_new = list(), list(), list(), list()
+
 # Equilibrium (lambda = 0)
 for step in range(nsteps_eq):
     initial_time = time.time()

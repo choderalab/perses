@@ -1,6 +1,7 @@
 import logging
 import numpy as np
 from openmmtools.integrators import PeriodicNonequilibriumIntegrator
+from openmmtools.utils import get_fastest_platform
 from simtk import unit
 from simtk import openmm
 import os
@@ -18,7 +19,7 @@ nsteps_eq = 2
 nsteps_neq = 64
 neq_splitting = 'V R H O R V'
 timestep = 4.0 * unit.femtosecond
-platform_name = 'CPU'  # Change to 'CUDA' or 'OpenCL' in production
+platform_name = get_fastest_platform().getName()
 temperature = 300 * unit.kelvin
 save_freq_eq = 1
 save_freq_neq = 4
@@ -34,7 +35,7 @@ solvent_delivery = PointMutationExecutor(resource_filename('perses', os.path.joi
                                                                         os.path.join('data', 'kinase-mutation',
                                                                                      'entrectinib.sdf')),
                                          ionic_strength=0.15*unit.molar,
-                                         small_molecule_forcefields='openff-1.3.0',
+                                         small_molecule_forcefields='openff-2.0.0',
                                          flatten_torsions=True,
                                          flatten_exceptions=True,
                                          conduct_endstate_validation=False

@@ -7,7 +7,6 @@ import simtk.unit as unit
 import logging
 from pathlib import Path
 
-from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_setup import RelativeFEPSetup
 from perses.annihilation.lambda_protocol import LambdaProtocol
@@ -312,6 +311,38 @@ def getSetupOptions(filename):
 
     return setup_options
 
+
+def get_openmm_platform(platform_name=None):
+    """
+    Return OpenMM's platform object based on given name. Setting to mixed precision if using CUDA or OpenCL.
+
+    Parameters
+    ----------
+    platform_name : str, optional, default=None
+        String with the platform name. If None, it will use the fastest platform supporting mixed precision.
+
+    Returns
+    -------
+    platform : openmm.Platform
+        OpenMM platform object.
+    """
+    if platform_name is None:
+        # No platform is specified, so retrieve fastest platform that supports 'mixed' precision
+        from openmmtools.utils import get_fastest_platform
+        platform = get_fastest_platform(minimum_precision='mixed')
+    else:
+        from openmm import Platform
+        platform = Platform.getPlatformByName(platform_name)
+    # Set precision and properties
+    name = platform.getName()  # get platform name to set properties
+    if name in ['CUDA', 'OpenCL']:
+        platform.setPropertyDefaultValue('Precision', 'mixed')
+    if name in ['CUDA']:
+        platform.setPropertyDefaultValue('DeterministicForces', 'true')
+
+    return platform
+
+
 def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     """
     Run the setup pipeline and return the relevant setup objects based on a yaml input file.
@@ -325,6 +356,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
         - 'topology_proposals':
     """
+    from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
     phases = setup_options['phases']
     known_phases = ['complex', 'solvent', 'vacuum']
     for phase in phases:
@@ -462,7 +494,6 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                           neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
                                           trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'],
-
                                           complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'], ionic_strength=ionic_strength, remove_constraints=setup_options['remove_constraints'],
                                           use_given_geometries=use_given_geometries, given_geometries_tolerance=given_geometries_tolerance)
 
@@ -635,26 +666,42 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                     _logger.info('SETUP FOR FAH DONE')
                     return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf}
 
+                # get platform
+                platform = get_openmm_platform(platform_name=None)
+                # Setup context caches for multistate samplers
+                energy_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
+                sampler_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
+
                 if setup_options['fe_type'] == 'sams':
-                    hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
-                                                                                        collision_rate=1.0 / unit.picosecond,
-                                                                                        n_steps=n_steps_per_move_application,
-                                                                                        reassign_velocities=False,
-                                                                                        n_restart_attempts=20,constraint_tolerance=1e-06,
-                                                                                        context_cache=cache.ContextCache(capacity=None, time_to_live=None)),
-                                                   hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
-                                                   online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
-                                                   gamma0=setup_options['gamma0'])
-                    hss[phase].setup(n_states=n_states, n_replicas=n_replicas, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
+                    hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
+                        timestep=timestep,
+                        collision_rate=1.0 / unit.picosecond,
+                        n_steps=n_steps_per_move_application,
+                        reassign_velocities=True,
+                        n_restart_attempts=20, constraint_tolerance=1e-06),
+                        hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
+                        online_analysis_minimum_iterations=10, flatness_criteria=setup_options['flatness-criteria'],
+                        gamma0=setup_options['gamma0']
+                    )
+                    hss[phase].setup(n_states=n_states, n_replicas=n_replicas, temperature=temperature,
+                                     storage_file=reporter, lambda_protocol=lambda_protocol, endstates=endstates)
+                    # We need to specify contexts AFTER setup
+                    hss[phase].energy_context_cache = energy_context_cache
+                    hss[phase].sampler_context_cache = sampler_context_cache
                 elif setup_options['fe_type'] == 'repex':
-                    hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
-                                                                                         collision_rate=1.0 / unit.picosecond,
-                                                                                         n_steps=n_steps_per_move_application,
-                                                                                         reassign_velocities=False,
-                                                                                         n_restart_attempts=20,constraint_tolerance=1e-06,
-                                                                                         context_cache=cache.ContextCache(capacity=None, time_to_live=None)),
-                                                                                         hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'],)
-                    hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
+                    hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
+                        timestep=timestep,
+                        collision_rate=1.0 / unit.picosecond,
+                        n_steps=n_steps_per_move_application,
+                        reassign_velocities=True,
+                        n_restart_attempts=20, constraint_tolerance=1e-06),
+                        hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
+                    )
+                    hss[phase].setup(n_states=n_states, temperature=temperature, storage_file=reporter,
+                                     lambda_protocol=lambda_protocol, endstates=endstates)
+                    # We need to specify contexts AFTER setup
+                    hss[phase].energy_context_cache = energy_context_cache
+                    hss[phase].sampler_context_cache = sampler_context_cache
             else:
                 _logger.info(f"omitting sampler construction")
 
@@ -868,6 +915,10 @@ def run(yaml_filename=None):
                 _logger.info(f'\tRunning {phase} phase...')
                 hss_run = hss[phase]
 
+                _logger.info(f"\t\tminimizing...\n\n")
+                hss_run.minimize()
+                _logger.info(f"\n\n")
+
                 _logger.info(f"\t\tequilibrating...\n\n")
                 hss_run.equilibrate(n_equilibration_iterations)
                 _logger.info(f"\n\n")
@@ -896,6 +947,10 @@ def run(yaml_filename=None):
                 print(f'Running {phase} phase')
                 hss_run = hss[phase]
 
+                _logger.info(f"\t\tminimizing...\n\n")
+                hss_run.minimize()
+                _logger.info(f"\n\n")
+
                 _logger.info(f"\t\tequilibrating...\n\n")
                 hss_run.equilibrate(n_equilibration_iterations)
                 _logger.info(f"\n\n")
@@ -906,7 +961,16 @@ def run(yaml_filename=None):
 
                 _logger.info(f"\t\tFinished phase {phase}")
 
+
 def _resume_run(setup_options):
+    from openmmtools.cache import ContextCache
+    from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
+    # get platform
+    platform = get_openmm_platform(platform_name=None)
+    # Setup context caches for multistate samplers
+    energy_context_cache = ContextCache(capacity=None, time_to_live=None, platform=platform)
+    sampler_context_cache = ContextCache(capacity=None, time_to_live=None, platform=platform)
+
     if setup_options['fe_type'] == 'sams':
         logZ = dict()
         free_energies = dict()
@@ -922,6 +986,9 @@ def _resume_run(setup_options):
             total_steps = setup_options['n_cycles']
             run_so_far = simulation.iteration
             left_to_do = total_steps - run_so_far
+            # set context caches
+            simulation.sampler_context_cache = sampler_context_cache
+            simulation.energy_context_cache = energy_context_cache
             _logger.info(f"\t\textending simulation...\n\n")
             simulation.extend(n_iterations=left_to_do)
             logZ[phase] = simulation._logZ[-1] - simulation._logZ[0]
@@ -943,12 +1010,16 @@ def _resume_run(setup_options):
             total_steps = setup_options['n_cycles']
             run_so_far = simulation.iteration
             left_to_do = total_steps - run_so_far
+            # set context caches
+            simulation.sampler_context_cache = sampler_context_cache
+            simulation.energy_context_cache = energy_context_cache
             _logger.info(f"\t\textending simulation...\n\n")
             simulation.extend(n_iterations=left_to_do)
             _logger.info(f"\n\n")
             _logger.info(f"\t\tFinished phase {phase}")
     else:
         raise("Can't resume")
+
 
 if __name__ == "__main__":
     run()
