@@ -13,7 +13,7 @@ def test_PointMutationExecutor():
         ionic_strength=0.15 * unit.molar,
         flatten_torsions=True,
         flatten_exceptions=True,
-        conduct_endstate_validation=False
+        conduct_endstate_validation=False,
     )
 
 
@@ -32,7 +32,7 @@ def test_PointMutationExecutor_endstate_validation():
         ionic_strength=0.15 * unit.molar,
         flatten_torsions=False,
         flatten_exceptions=False,
-        conduct_endstate_validation=True
+        conduct_endstate_validation=True,
     )
 
 def test_PointMutationExecutor_solvated():
