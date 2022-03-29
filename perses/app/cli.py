@@ -4,7 +4,7 @@ from pathlib import Path
 
 import click
 import openmmtools.utils
-from perses.app.setup_relative_calculation import getSetupOptions
+from perses.app.setup_relative_calculation import getSetupOptions, run
 
 percy = """
 MMMMMMMMMMMMXo:ccldOKNNWMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
@@ -185,9 +185,9 @@ def cli(yaml, platform_name, override):
     click.echo("🖨️\t Printing options")
     click.echo(options)
     if override:
-        click.echo("overrides")
+        click.echo("✍️ \t Overrides used")
         click.echo(override)
-        click.echo("new options")
+        click.echo("🖨️\t Printing new options")
         options = _process_overrides(override, options)
         click.echo(options)
     click.echo("🕵️\t Checking OpenEye license")
@@ -195,9 +195,11 @@ def cli(yaml, platform_name, override):
     click.echo("✅\t OpenEye license good")
     click.echo("🖥️⚡\t Checking whether requested compute platform is available")
     _test_platform(platform_name)
-    click.echo("🖨️\t Writing out files")
-    trajectory_directory = options["trajectory_directory"]
-    _write_out_files(trajectory_directory, options)
+    #click.echo("🖨️\t Writing out files")
+    #trajectory_directory = options["trajectory_directory"]
+    #_write_out_files(trajectory_directory, options)
+    click.echo("🏃\t Running simulation")
+    run(yaml_filename=yaml, setup_options=options)
     click.echo("🧪\t Simulation over")
 
 

@@ -725,7 +725,10 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 
 
-def run(yaml_filename=None):
+def run(yaml_filename=None, setup_options=None):
+    """
+    If a user passes in setup_options, use their dictionary instead running getSetupOptions
+    """
     _logger.info("Beginning Setup...")
     if yaml_filename is None:
        try:
@@ -736,7 +739,9 @@ def run(yaml_filename=None):
 
     _logger.info(f"Getting setup options from {yaml_filename}")
 
-    setup_options = getSetupOptions(yaml_filename)
+    # If a user doesn't pass in setup_options, generate them
+    if not setup_options:
+        setup_options = getSetupOptions(yaml_filename)
 
     # We want to make sure that if the file is in a directory, we put the parsed file in
     # the same directory
