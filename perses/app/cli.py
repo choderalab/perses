@@ -172,6 +172,21 @@ def _process_overrides(overrides, yaml_options):
         # Check for duplicates
         if key in overrides_dict:
             raise ValueError(f"There were duplicate override options, result will be ambiguous! Key {key} repeated!")
+
+        # I don't like this part, but I rather do this then to try and add type checking
+        # and casting in setup_relative.py
+
+        # First lets see if we can make it a int:
+        try:
+            val = int(val)
+        except ValueError:
+            # Now try float
+            try:
+                val = float(val)
+            except ValueError:
+                # Just keep it a str
+                pass
+
         overrides_dict[key] = val
 
     return {**yaml_options, **overrides_dict}
@@ -203,7 +218,7 @@ def cli(yaml, platform_name, override):
     #trajectory_directory = options["trajectory_directory"]
     #_write_out_files(trajectory_directory, options)
     click.echo("🏃\t Running simulation")
-    #run(yaml_filename=yaml, setup_options=options)
+    run(yaml_filename=yaml, setup_options=options)
     click.echo("🧪\t Simulation over")
 
 
