@@ -855,6 +855,9 @@ def flattenedHybridTopologyFactory_energies(topology, chain, system, positions, 
 
         # Create geometry proposals
         for _ in range(5):
+            # We do not allow the geometry engine to conduct energy validation for ring amino acids because we insert
+            # biasing torsions for ring transformations (to ensure the amino acids are somewhat in the right geometry),
+            # which will corrupt the energy addition during energy validation.
             validate_energy_bookkeeping = False if mutant in ring_amino_acids else True
             new_positions, logp_proposal = geometry_engine.propose(topology_proposal, positions, beta,
                                                                        validate_energy_bookkeeping=validate_energy_bookkeeping)
