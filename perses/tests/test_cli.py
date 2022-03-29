@@ -1,4 +1,6 @@
+from pkg_resources import resource_filename
 from click.testing import CliRunner
+import os
 from perses.app.cli import cli
 
 test_yaml = """
@@ -43,7 +45,15 @@ def test_dummy_cli(in_tmpdir):
         with open("test.yaml", "w") as f:
             f.write(test_yaml)
 
-        result = runner.invoke(cli, ["--yaml", "test.yaml"])
+        protein_pdb = resource_filename(
+            "perses", os.path.join("data", "Tyk2_ligands_example", "Tyk2_protein.pdb")
+        )
+        ligand_file = resource_filename(
+            "perses",
+            os.path.join("data", "Tyk2_ligands_example", "Tyk2_ligands_shifted.sdf"),
+        )
+        result = runner.invoke(cli, ["--yaml", "test.yaml", "--override", f"protein_pdb:{protein_pdb}",
+            "--override", f"ligand_file:{ligand_file}"])
         print(result)
         print(result.output)
         assert result.exit_code == 0
