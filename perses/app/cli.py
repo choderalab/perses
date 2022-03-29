@@ -168,6 +168,10 @@ def _process_overrides(overrides, yaml_options):
     overrides_dict = {}
     for opt in overrides:
         key, val = opt.split(":")
+
+        # Check for duplicates
+        if key in overrides_dict:
+            raise ValueError(f"There were duplicate override options, result will be ambiguous! Key {key} repeated!")
         overrides_dict[key] = val
 
     return {**yaml_options, **overrides_dict}
@@ -199,7 +203,7 @@ def cli(yaml, platform_name, override):
     #trajectory_directory = options["trajectory_directory"]
     #_write_out_files(trajectory_directory, options)
     click.echo("🏃\t Running simulation")
-    run(yaml_filename=yaml, setup_options=options)
+    #run(yaml_filename=yaml, setup_options=options)
     click.echo("🧪\t Simulation over")
 
 
