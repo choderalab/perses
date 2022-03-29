@@ -39,7 +39,7 @@ h_constraints: true
 """
 
 
-def test_dummy_cli(in_tmpdir):
+def test_dummy_cli_with_override(in_tmpdir):
     runner = CliRunner()
     with runner.isolated_filesystem():
         with open("test.yaml", "w") as f:
@@ -54,6 +54,4 @@ def test_dummy_cli(in_tmpdir):
         )
         result = runner.invoke(cli, ["--yaml", "test.yaml", "--override", f"protein_pdb:{protein_pdb}",
             "--override", f"ligand_file:{ligand_file}"])
-        print(result)
-        print(result.output)
         assert result.exit_code == 0
