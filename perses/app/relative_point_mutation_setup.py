@@ -97,6 +97,7 @@ class PointMutationExecutor(object):
                  allow_undefined_stereo_sdf=False,
                  extra_sidechain_map=None,
                  demap_CBs=False,
+                 solvate=True,
                  water_model='tip3p',
                  ionic_strength=0.15 * unit.molar,
                  forcefield_files=['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
@@ -115,8 +116,10 @@ class PointMutationExecutor(object):
         """
         arguments
             protein_filename : str
-                path to protein (to mutate); .pdb
+                path to protein (to mutate); .pdb, .cif
                 Note: if there are nonstandard residues, the PDB should contain the standard residue name but the atoms/positions should correspond to the nonstandard residue. E.g. if I want to include HID, the PDB should contain HIS for the residue name, but the atoms should correspond to the atoms present in HID. You can use openmm.app.Modeller.addHydrogens() to generate a PDB like this. The same is true for the ligand_input, if its a PDB. 
+                Note: this can be the protein solute only or the solvated protein. if its the former, solvate should be set to True.
+                if its the latter, solvate should be set to False.
             mutation_chain_id : str
                 name of the chain to be mutated
             mutation_residue_id : str
@@ -132,7 +135,10 @@ class PointMutationExecutor(object):
                 whether to conduct an endstate validation of the HybridTopologyFactory. If using the RepartitionedHybridTopologyFactory,
                 endstate validation cannot and will not be conducted.
             ligand_input : str, default None
-                path to ligand of interest (i.e. small molecule or protein); .sdf or .pdb
+                path to ligand of interest (i.e. small molecule or protein)
+                Note: if this is not solvated, it should be the ligand alone (.sdf or .pdb or .cif) and solvate should be set to True.
+                if this is solvated, this should be the protein-ligand complex (.pdb or .cif) -- with the protein to be mutated first and
+                the ligand second in the file -- and solvate should be set to False.
             ligand_index : int, default 0
                 which ligand to use
             allow_undefined_stereo_sdf : bool, default False
@@ -141,6 +147,9 @@ class PointMutationExecutor(object):
                 map of new to old sidechain atom indices to add to the default map (by default, we only map backbone atoms and CBs)
             demap_CBs : bool, default False
                 whether to remove CBs from the mapping
+            solvate : bool, default True
+                whether to solvate the protein/complex. If this is False, protein_filename and ligand_input should correspond
+                to the solvated protein PDB and solvated complex PDB, respectively.
             water_model : str, default 'tip3p'
                 solvent model to use for solvation
             ionic_strength : float * unit.molar, default 0.15 * unit.molar
@@ -179,11 +188,13 @@ class PointMutationExecutor(object):
         from openeye import oechem
 
         # First thing to do is load the apo protein to mutate...
-        protein_pdbfile = open(protein_filename, 'r')
-        protein_pdb = app.PDBFile(protein_pdbfile)
-        protein_pdbfile.close()
+        if protein_filename.endswith('pdb'):
+            protein_pdb = app.PDBFile(protein_filename)
+        elif protein_filename.endswith('cif'):
+            protein_pdb = app.PDBxFile(protein_filename)
+        else:
+            raise Exception("protein_filename file format is not supported. supported formats: .pdb, .cif")
         protein_positions, protein_topology, protein_md_topology = protein_pdb.positions, protein_pdb.topology, md.Topology.from_openmm(protein_pdb.topology)
-        protein_topology = protein_md_topology.to_openmm()
         protein_n_atoms = protein_md_topology.n_atoms
 
         # Load the ligand, if present
@@ -191,19 +202,24 @@ class PointMutationExecutor(object):
         if ligand_input:
             if isinstance(ligand_input, str):
                 if ligand_input.endswith('.sdf'): # small molecule
-                        ligand_mol = createOEMolFromSDF(ligand_input, index=ligand_index, allow_undefined_stereo=allow_undefined_stereo_sdf)
-                        molecules.append(Molecule.from_openeye(ligand_mol, allow_undefined_stereo=False))
-                        ligand_positions, ligand_topology = extractPositionsFromOEMol(ligand_mol),  forcefield_generators.generateTopologyFromOEMol(ligand_mol)
-                        ligand_md_topology = md.Topology.from_openmm(ligand_topology)
-                        ligand_n_atoms = ligand_md_topology.n_atoms
-
-                if ligand_input.endswith('pdb'): # protein
-                    ligand_pdbfile = open(ligand_input, 'r')
-                    ligand_pdb = app.PDBFile(ligand_pdbfile)
-                    ligand_pdbfile.close()
-                    ligand_positions, ligand_topology, ligand_md_topology = ligand_pdb.positions, ligand_pdb.topology, md.Topology.from_openmm(
-                        ligand_pdb.topology)
+                    ligand_mol = createOEMolFromSDF(ligand_input, index=ligand_index, allow_undefined_stereo=allow_undefined_stereo_sdf)
+                    molecules.append(Molecule.from_openeye(ligand_mol, allow_undefined_stereo=False))
+                    ligand_positions, ligand_topology = extractPositionsFromOEMol(ligand_mol),  forcefield_generators.generateTopologyFromOEMol(ligand_mol)
+                    ligand_md_topology = md.Topology.from_openmm(ligand_topology)
                     ligand_n_atoms = ligand_md_topology.n_atoms
+
+                elif ligand_input.endswith('pdb'): # protein
+                    ligand_pdb = app.PDBFile(ligand_input)
+                    ligand_positions, ligand_topology, ligand_md_topology = ligand_pdb.positions, ligand_pdb.topology, md.Topology.from_openmm(ligand_pdb.topology)
+                    ligand_n_atoms = ligand_md_topology.n_atoms
+
+                elif ligand_input.endswith('cif'): # protein
+                    ligand_pdb = app.PDBxFile(ligand_input)
+                    ligand_positions, ligand_topology, ligand_md_topology = ligand_pdb.positions, ligand_pdb.topology, md.Topology.from_openmm(ligand_pdb.topology)
+                    ligand_n_atoms = ligand_md_topology.n_atoms
+
+                else:
+                    raise Exception("ligand_input file format is not supported. supported formats: .sdf, .pdb, .cif")
 
             elif isinstance(ligand_input, oechem.OEMol): # oemol object
                 molecules.append(Molecule.from_openeye(ligand_input, allow_undefined_stereo=False))
@@ -215,18 +231,22 @@ class PointMutationExecutor(object):
                 _logger.warning(f'ligand filetype not recognised. Please provide a path to a .pdb or .sdf file')
                 return
 
-            # Now create a complex
-            complex_md_topology = protein_md_topology.join(ligand_md_topology)
-            complex_topology = complex_md_topology.to_openmm()
-            complex_positions = unit.Quantity(np.zeros([protein_n_atoms + ligand_n_atoms, 3]), unit=unit.nanometers)
-            complex_positions[:protein_n_atoms, :] = protein_positions
-            complex_positions[protein_n_atoms:, :] = ligand_positions
+            if solvate:
+                # Now create a complex
+                complex_md_topology = protein_md_topology.join(ligand_md_topology)
+                complex_topology = complex_md_topology.to_openmm()
+                complex_positions = unit.Quantity(np.zeros([protein_n_atoms + ligand_n_atoms, 3]), unit=unit.nanometers)
+                complex_positions[:protein_n_atoms, :] = protein_positions
+                complex_positions[protein_n_atoms:, :] = ligand_positions
 
-            # Convert positions back to openmm vec3 objects
-            complex_positions_vec3 = []
-            for position in complex_positions:
-                complex_positions_vec3.append(openmm.Vec3(*position.value_in_unit_system(unit.md_unit_system)))
-            complex_positions = unit.Quantity(value=complex_positions_vec3, unit=unit.nanometer)
+                # Convert positions back to openmm vec3 objects
+                complex_positions_vec3 = []
+                for position in complex_positions:
+                    complex_positions_vec3.append(openmm.Vec3(*position.value_in_unit_system(unit.md_unit_system)))
+                complex_positions = unit.Quantity(value=complex_positions_vec3, unit=unit.nanometer)
+            else:
+                complex_topology = ligand_topology
+                complex_positions = ligand_positions
 
         # Now for a system_generator
         self.system_generator = SystemGenerator(forcefields=forcefield_files,
@@ -238,11 +258,27 @@ class PointMutationExecutor(object):
                                                 molecules=molecules,
                                                 cache=None)
 
-        # Solvate apo and complex...
-        apo_input = list(self._solvate(protein_topology, protein_positions, water_model, phase, ionic_strength, apo_box_dimensions))
-        inputs = [apo_input]
+        # Solvate apo and complex (if necessary) and generate systems...
+        inputs = []
+        topology_list = [protein_topology]
+        positions_list = [protein_positions]
+        box_dimensions_list = [apo_box_dimensions]
         if ligand_input:
-            inputs.append(self._solvate(complex_topology, complex_positions, water_model, phase, ionic_strength, complex_box_dimensions))
+            topology_list.append(complex_topology)
+            positions_list.append(complex_positions)
+            box_dimensions_list.append(complex_box_dimensions)
+
+        for topology, positions, box_dimensions in zip(topology_list, positions_list, box_dimensions_list):
+            if solvate:
+                solvated_topology, solvated_positions = self._solvate(topology, positions, water_model, phase,
+                                                                      ionic_strength, box_dimensions)
+            else:
+                solvated_topology = topology
+                solvated_positions = unit.quantity.Quantity(value=np.array(
+                    [list(atom_pos) for atom_pos in positions.value_in_unit_system(unit.md_unit_system)]),
+                                                            unit=unit.nanometers)
+            solvated_system = self.system_generator.create_system(solvated_topology)
+            inputs.append([solvated_topology, solvated_positions, solvated_system])
 
         geometry_engine = FFAllAngleGeometryEngine(metadata=None,
                                                 use_sterics=False,
@@ -304,6 +340,8 @@ class PointMutationExecutor(object):
                                 _logger.info(f"Changed particle {idx}'s sigma from {sigma} to {new_sigma}")
 
             # Only validate energy bookkeeping if the WT and proposed residues do not involve rings
+            # Note: We don't validate energies for geometry proposals involving ring amino acids because we insert biasing torsions
+            # for ring transformations (to ensure the amino acids are somewhat in the right geometry), which will corrupt the energy addition during energy validation.
             old_res = [res for res in top.residues() if res.id == mutation_residue_id][0]
             validate_bool = False if old_res.name in ring_amino_acids or proposed_residue in ring_amino_acids else True
             new_positions, logp_proposal = geometry_engine.propose(topology_proposal, pos, beta,
@@ -582,6 +620,5 @@ class PointMutationExecutor(object):
 
         # Canonicalize the solvated positions: turn tuples into np.array
         solvated_positions = unit.quantity.Quantity(value=np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit=unit.nanometers)
-        solvated_system = self.system_generator.create_system(solvated_topology)
 
-        return solvated_topology, solvated_positions, solvated_system
+        return solvated_topology, solvated_positions

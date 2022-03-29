@@ -11,7 +11,7 @@ forcefield_files:
   - amber/tip3p_standard.xml
   - amber/tip3p_HFE_multivalent.xml
   - amber/phosaa10.xml
-small_molecule_forcefield: openff-1.0.0
+small_molecule_forcefield: openff-2.0.0
 pressure: 1
 temperature: 300
 solvent_padding: 9

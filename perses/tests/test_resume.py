@@ -58,7 +58,7 @@ def test_cli_resume_repex():
         - vacuum
         pressure: 1.0
         save_setup_pickle_as: fesetup_hbonds.pkl
-        small_molecule_forcefield: openff-1.0.0
+        small_molecule_forcefield: openff-2.0.0
         solvent_padding: 9.0
         temperature: 300.0
         timestep: 4.0

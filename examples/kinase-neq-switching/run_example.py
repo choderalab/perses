@@ -35,7 +35,7 @@ solvent_delivery = PointMutationExecutor(resource_filename('perses', os.path.joi
                                                                         os.path.join('data', 'kinase-mutation',
                                                                                      'entrectinib.sdf')),
                                          ionic_strength=0.15*unit.molar,
-                                         small_molecule_forcefields='openff-1.3.0',
+                                         small_molecule_forcefields='openff-2.0.0',
                                          flatten_torsions=True,
                                          flatten_exceptions=True,
                                          conduct_endstate_validation=False
