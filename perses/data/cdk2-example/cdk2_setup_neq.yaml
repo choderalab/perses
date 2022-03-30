@@ -22,7 +22,7 @@ forcefield_files:
     - amber/tip3p_HFE_multivalent.xml # for divalent ions
 
 # Small molecule force field
-# We recommnd one of ['gaff-1.81', 'gaff-2.11', 'smirnoff99Frosst-1.1.0', 'openff-1.0.0']
+# We recommnd one of ['gaff-1.81', 'gaff-2.11', 'smirnoff99Frosst-1.1.0', 'openff-2.0.0']
 small_molecule_forcefield: gaff-2.11
 
 # Thermodynamic state and system setup information
