@@ -32,7 +32,6 @@ trajectory_directory: temp/offlig10to24
 trajectory_prefix: out
 atom_selection: not water
 phases:
-  - complex
   - solvent
   - vacuum
 timestep: 4
