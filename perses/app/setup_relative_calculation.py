@@ -10,6 +10,7 @@ from pathlib import Path
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_setup import RelativeFEPSetup
 from perses.annihilation.lambda_protocol import LambdaProtocol
+from peres.app import cli
 
 from openmmtools import mcmc, cache
 from openmmtools.multistate import MultiStateReporter
@@ -44,7 +45,7 @@ _logger.setLevel(LOGLEVEL)
 ENERGY_THRESHOLD = 1e-4
 from openmmtools.constants import kB
 
-def getSetupOptions(filename):
+def getSetupOptions(filename, override_dict=None):
     """
     Reads input yaml file, makes output directory and returns setup options
 
@@ -52,6 +53,11 @@ def getSetupOptions(filename):
     ----------
     filename : str
         .yaml file containing simulation parameters
+
+    override_string : List[str]
+        List of strings in the form of key:value to override simulation
+        parameters set in yaml file.
+        Default: None
 
     Returns
     -------
@@ -63,7 +69,8 @@ def getSetupOptions(filename):
     yaml_file = open(filename, 'r')
     setup_options = yaml.load(yaml_file, Loader=yaml.FullLoader)
     yaml_file.close()
-
+    if override_dict:
+        setup_options = cli._process_overrides(override, options)
     _logger.info("\tDetecting phases...")
     if 'phases' not in setup_options:
         setup_options['phases'] = ['complex','solvent']
