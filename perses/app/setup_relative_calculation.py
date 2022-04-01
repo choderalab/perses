@@ -817,8 +817,8 @@ def run(yaml_filename=None, setup_options=None):
 
         #write out topology proposals
         try:
-            _logger.info(f"Writing topology proposal {trajectory_prefix}_topology_proposals.pkl to {trajectory_directory}...")
-            with open(os.path.join(trajectory_directory, "%s_topology_proposals.pkl" % (trajectory_prefix)), 'wb') as f:
+            _logger.info(f"Writing topology proposal {trajectory_prefix}-topology_proposals.pkl to {trajectory_directory}...")
+            with open(os.path.join(trajectory_directory, "%s-topology_proposals.pkl" % (trajectory_prefix)), 'wb') as f:
                 pickle.dump(setup_dict['topology_proposals'], f)
         except Exception as e:
             print(e)
