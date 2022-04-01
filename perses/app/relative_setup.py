@@ -811,14 +811,14 @@ class RelativeFEPSetup(object):
         #modeller.delete(hs)
         #modeller.addHydrogens(forcefield=self._system_generator.forcefield)
         _logger.info(f'box_dimensions: {box_dimensions}')
-        _logger.info(f'solvent padding: {self._padding._value}')
+        _logger.info(f'solvent padding: {self._padding}')
         run_solvate = True
         if phase == 'solvent':
             self._padding = 9. * unit.angstrom
         if phase == 'vacuum':
             run_solvate = False
             _logger.info(f"\tSkipping solvation of vacuum perturbation")
-        if self._padding._value == 0.:
+        if self._padding == 0.:
             run_solvate = False
             _logger.info(f"\tSkipping solvation as solvent padding set to zero")
         if run_solvate:
@@ -828,7 +828,7 @@ class RelativeFEPSetup(object):
             else:
                 modeller.addSolvent(self._system_generator.forcefield, model=model, ionicStrength=ionic_strength, boxSize=box_dimensions)
         solvated_topology = modeller.getTopology()
-        if phase == 'complex' and self._padding._value == 0. and box_dimensions is not None:
+        if phase == 'complex' and self._padding == 0. and box_dimensions is not None:
             _logger.info(f'Complex phase, where padding is set to 0. and box dimensions are provided so setting unit cell dimensions')
             solvated_topology.setUnitCellDimensions(box_dimensions)
         solvated_positions = modeller.getPositions()
