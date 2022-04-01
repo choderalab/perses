@@ -1,0 +1,33 @@
+protein_pdb: 2ZFF.pdb
+ligand_file: ligands.sdf
+old_ligand_index: 0
+new_ligand_index: 1
+forcefield_files:
+  - amber/ff14SB.xml
+  - amber/tip3p_standard.xml
+  - amber/tip3p_HFE_multivalent.xml
+  - amber/phosaa10.xml
+small_molecule_forcefield: openff-2.0.0
+pressure: 1
+temperature: 300
+solvent_padding: 9
+atom_expression:
+  - IntType
+bond_expession:
+  - DefaultBonds
+n_steps_per_move_application: 1
+fe_type: repex
+checkpoint_interval: 50
+n_cycles: 1
+n_states: 2
+n_equilibration_iterations: 0
+trajectory_directory: lig0to1
+trajectory_prefix: out
+atom_selection: not water
+phases:
+  - solvent
+  - vacuum
+  - complex
+timestep: 4
+h_constraints: true
+use_given_geometries: true
