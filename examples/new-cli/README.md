@@ -69,5 +69,7 @@ $ perses-cli --yaml my.yaml --override old_ligand_index:0 --override new_ligand_
 
 ## Analysis 
 TODO
+- notebook or script
+- sdf file has tags that contain exp data
 
 ## Docker Example
