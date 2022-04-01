@@ -857,17 +857,21 @@ class RelativeFEPSetup(object):
         modifies the atom mapping in the topology proposal and the new system parameters to handle the transformation of
         waters into appropriate counterions upon a charge-changing ligand transformation
         """
-        from perses.utils.smallmolecules import get_ion_and_water_parameters, transform_waters_into_ions
-        from perses.rjmc.topology_proposal import modify_atom_classes
-        charge_diff = SmallMoleculeSetProposalEngine._get_charge_difference(self._ligand_oemol_old, self._ligand_oemol_new)
+        from perses.utils.charge_changing import (get_ion_and_water_parameters,
+                                                  transform_waters_into_ions,
+                                                  get_charge_difference,
+                                                  get_water_indices,
+                                                  modify_atom_classes)
+
+        charge_diff = get_charge_difference(self._ligand_oemol_old, self._ligand_oemol_new)
         if charge_diff != 0: # then handle this.
-            new_water_indices_to_ionize = SmallMoleculeSetProposalEngine.get_water_indices(charge_diff = charge_diff,
+            new_water_indices_to_ionize = get_water_indices(charge_diff = charge_diff,
                                                                                            new_positions = new_positions,
                                                                                            new_topology = topology_proposal.new_topology,
                                                                                            radius=0.8)
             _logger.info(f"new water indices to ionize {new_water_indices_to_ionize}")
             particle_parameters = get_ion_and_water_parameters(system=topology_proposal.old_system,
-                                                               topology = topology_proposal.old_system,
+                                                               topology = topology_proposal.old_topology,
                                                                positive_ion_name="NA",
                                                                negative_ion_name="CL",
                                                                water_name="HOH")
