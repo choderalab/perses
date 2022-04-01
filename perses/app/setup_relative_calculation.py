@@ -455,7 +455,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
     else:
         solvent_padding_angstroms = setup_options['solvent_padding']
-    if isinstance(setup_options['ionic_strength'], ((float, int)):
+    if isinstance(setup_options['ionic_strength'], (float, int)):
         ionic_strength = setup_options['ionic_strength'] * unit.molar
     else:
         ionic_strength = setup_options['ionic_strength']
