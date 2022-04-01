@@ -4,6 +4,7 @@ from pathlib import Path
 
 import click
 import openmmtools.utils
+
 from perses.app.setup_relative_calculation import getSetupOptions, run
 
 percy = """
@@ -58,6 +59,7 @@ MMMMMMMMMMMMMMMMMMMMXocdoollxxcdNMMMMMMMMMMMMMkcxOdlloxlc0MMMMMMMMMMMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMKolxXXxc:oKMMMMMMMMMMMMMMKl:::x0dcckNMMMMMMMMMMMMMMMMMMMMMM
 """
 
+
 def _check_openeye_license():
     import openeye
 
@@ -82,7 +84,9 @@ def _process_overrides(overrides, yaml_options):
 
         # Check for duplicates
         if key in overrides_dict:
-            raise ValueError(f"There were duplicate override options, result will be ambiguous! Key {key} repeated!")
+            raise ValueError(
+                f"There were duplicate override options, result will be ambiguous! Key {key} repeated!"
+            )
 
         # I don't like this part, but I rather do this then to try and add type checking
         # and casting in setup_relative.py
