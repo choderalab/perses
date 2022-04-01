@@ -412,7 +412,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     forcefield_files = setup_options['forcefield_files']
 
     if "timestep" in setup_options:
-        if isinstance(setup_options['timestep'], float):
+        if isinstance(setup_options['timestep'], (float, int)):
             timestep = setup_options['timestep'] * unit.femtoseconds
         else:
             timestep = setup_options['timestep']
@@ -443,19 +443,19 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     else:
         measure_shadow_work = False
         _logger.info(f"\tno measure_shadow_work specified: defaulting to False.")
-    if isinstance(setup_options['pressure'],float):
+    if isinstance(setup_options['pressure'], (float, int)):
         pressure = setup_options['pressure'] * unit.atmosphere
     else:
         pressure = setup_options['pressure']
-    if isinstance(setup_options['temperature'], float):
+    if isinstance(setup_options['temperature'], (float, int)):
         temperature = setup_options['temperature'] * unit.kelvin
     else:
         temperature = setup_options['temperature']
-    if isinstance(setup_options['solvent_padding'], float):
+    if isinstance(setup_options['solvent_padding'], (float, int)):
         solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
     else:
         solvent_padding_angstroms = setup_options['solvent_padding']
-    if isinstance(setup_options['ionic_strength'], float):
+    if isinstance(setup_options['ionic_strength'], ((float, int)):
         ionic_strength = setup_options['ionic_strength'] * unit.molar
     else:
         ionic_strength = setup_options['ionic_strength']
