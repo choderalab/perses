@@ -1032,6 +1032,42 @@ def _resume_run(setup_options):
     else:
         raise("Can't resume")
 
+def _process_overrides(overrides, yaml_options):
+    """
+    Takes in a string of overrides, converts them into a dict, then merges them with the
+    yaml_options dict to override options set in the file
+    """
+
+    overrides_dict = {}
+    for opt in overrides:
+        key, val = opt.split(":")
+
+        # Check for duplicates
+        if key in overrides_dict:
+            raise ValueError(
+                f"There were duplicate override options, result will be ambiguous! Key {key} repeated!"
+            )
+
+        # I don't like this part, but I rather do this then to try and add type checking
+        # and casting in setup_relative.py
+        # We do int then float since slices might need a int, but if we can't make it an
+        # int then it is probably a float, and if we can 't do that, then it is a str.
+
+        # First lets see if we can make it a int:
+        try:
+            val = int(val)
+        except ValueError:
+            # Now try float
+            try:
+                val = float(val)
+            except ValueError:
+                # Just keep it a str
+                pass
+
+        overrides_dict[key] = val
+
+    return {**yaml_options, **overrides_dict}
+
 
 if __name__ == "__main__":
     run()

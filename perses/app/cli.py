@@ -77,38 +77,6 @@ def _test_platform(platform_name):
         click.echo("🎉\t Platform test successful!")
 
 
-def _process_overrides(overrides, yaml_options):
-    overrides_dict = {}
-    for opt in overrides:
-        key, val = opt.split(":")
-
-        # Check for duplicates
-        if key in overrides_dict:
-            raise ValueError(
-                f"There were duplicate override options, result will be ambiguous! Key {key} repeated!"
-            )
-
-        # I don't like this part, but I rather do this then to try and add type checking
-        # and casting in setup_relative.py
-        # We do int then float since slices might need a int, but if we can't make it an
-        # int then it is probably a float, and if we can 't do that, then it is a str.
-
-        # First lets see if we can make it a int:
-        try:
-            val = int(val)
-        except ValueError:
-            # Now try float
-            try:
-                val = float(val)
-            except ValueError:
-                # Just keep it a str
-                pass
-
-        overrides_dict[key] = val
-
-    return {**yaml_options, **overrides_dict}
-
-
 @click.command()
 @click.option("--yaml", type=click.Path(exists=True, dir_okay=False), required=True)
 @click.option("--platform-name", type=str, default=None)
@@ -122,7 +90,6 @@ def cli(yaml, platform_name, override):
     click.echo(options)
     if override:
         click.echo("✍️ \t Overrides used")
-        options = _process_overrides(override, options)
     click.echo("🕵️\t Checking OpenEye license")
     _check_openeye_license()
     click.echo("✅\t OpenEye license good")
