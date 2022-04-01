@@ -57,20 +57,6 @@ MMMMMMMMMMMMMMMMMMMMKlo0OkkO0OloNMMMMMMMMMMMMWxck0OOOO0dc0MMMMMMMMMMMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMXocdoollxxcdNMMMMMMMMMMMMMkcxOdlloxlc0MMMMMMMMMMMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMKolxXXxc:oKMMMMMMMMMMMMMMKl:::x0dcckNMMMMMMMMMMMMMMMMMMMMMM
 """
-realtime_output = """progress:
-    iteration: 5
-    max_iteration: 5
-    percent_progress: 100
-estimates:
-    DDG: 0.2
-    dDDG: 0.01
-    num_uncorrelated_samples: 8
-performance:
-    nano_second_per_day: 5
-    wallclock_time_per_iteration: 00:05:23
-    ETA_for_completion: 00:00:00
-"""
-
 
 def _check_openeye_license():
     import openeye
@@ -89,81 +75,6 @@ def _test_platform(platform_name):
         click.echo("🎉\t Platform test successful!")
 
 
-def _write_out_files(path, options):
-
-    # Convert path to a pathlib object
-    yaml_path = Path(path)
-
-    # Generate parsed yaml name
-    yaml_name = yaml_path.name
-    time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-    yaml_parse_name = f"parsed-{time}-{yaml_name}"
-
-    # First make files in same dir as yaml
-    files_next_to_yaml = [
-        "debug.png",
-        "system.xml",
-        yaml_parse_name,
-    ]
-
-    for _file in files_next_to_yaml:
-        with open(_file, "w") as fp:
-            pass
-
-    # Now we write out a mock realtime output file
-
-    with open("realtime.yaml", "w") as realtime_file:
-        realtime_file.write(realtime_output)
-
-    # Now we make the directory structure
-    trajectory_directory = Path(options["trajectory_directory"])
-    dirs_to_make = trajectory_directory.joinpath("xml")
-    Path(dirs_to_make).mkdir(parents=True, exist_ok=True)
-
-    # Now files that belong in the lower directories
-    files_in_lower_dir = [
-        "atom_mapping.png",
-        "out-complex_checkpoint.nc",
-        "out-complex.nc",
-        "out-complex.pdb",
-        "outhybrid_factory.npy.npz",
-        "out-solvent_checkpoint.nc",
-        "out-solvent.nc",
-        "out-solvent.pdb",
-        "out_topology_proposals.pkl",
-        "out-vacuum_checkpoint.nc",
-        "out-vacuum.nc",
-    ]
-
-    # add the dir prefix
-    files_in_lower_dir = [
-        Path(trajectory_directory).joinpath(_) for _ in files_in_lower_dir
-    ]
-
-    for _file in files_in_lower_dir:
-        with open(_file, "w") as fp:
-            pass
-
-    # Now the files in the 'xml' dir
-    files_in_xml_dir = [
-        "complex-hybrid-system.gz",
-        "complex-new-system.gz",
-        "complex-old-system.gz",
-        "solvent-hybrid-system.gz",
-        "solvent-new-system.gz",
-        "solvent-old-system.gz",
-        "vacuum-hybrid-system.gz",
-        "vacuum-new-system.gz",
-        "vacuum-old-system.gz",
-    ]
-
-    # add the dir prefix
-    files_in_xml_dir = [dirs_to_make.joinpath(_) for _ in files_in_xml_dir]
-
-    for _file in files_in_lower_dir:
-        with open(_file, "w") as fp:
-            pass
-
 def _process_overrides(overrides, yaml_options):
     overrides_dict = {}
     for opt in overrides:
@@ -175,6 +86,8 @@ def _process_overrides(overrides, yaml_options):
 
         # I don't like this part, but I rather do this then to try and add type checking
         # and casting in setup_relative.py
+        # We do int then float since slices might need a int, but if we can't make it an
+        # int then it is probably a float, and if we can 't do that, then it is a str.
 
         # First lets see if we can make it a int:
         try:
@@ -214,9 +127,6 @@ def cli(yaml, platform_name, override):
     click.echo("✅\t OpenEye license good")
     click.echo("🖥️⚡\t Checking whether requested compute platform is available")
     _test_platform(platform_name)
-    #click.echo("🖨️\t Writing out files")
-    #trajectory_directory = options["trajectory_directory"]
-    #_write_out_files(trajectory_directory, options)
     click.echo("🏃\t Running simulation")
     run(yaml_filename=yaml, setup_options=options)
     click.echo("🧪\t Simulation over")
