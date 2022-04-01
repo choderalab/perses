@@ -10,7 +10,6 @@ from pathlib import Path
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_setup import RelativeFEPSetup
 from perses.annihilation.lambda_protocol import LambdaProtocol
-from perses.app import cli
 
 from openmmtools import mcmc, cache
 from openmmtools.multistate import MultiStateReporter
@@ -70,7 +69,7 @@ def getSetupOptions(filename, override_string=None):
     setup_options = yaml.load(yaml_file, Loader=yaml.FullLoader)
     yaml_file.close()
     if override_string:
-        setup_options = cli._process_overrides(override_string, setup_options)
+        setup_options = _process_overrides(override_string, setup_options)
     _logger.info("\tDetecting phases...")
     if 'phases' not in setup_options:
         setup_options['phases'] = ['complex','solvent']
