@@ -45,6 +45,7 @@ Currently only `key:value` parts of the yaml can be overridden i.e. not sequence
 ## Example Use Case
 
 In this example folder we have a protein: [2ZFF](https://www.rcsb.org/structure/2zff) and some ligands which we will use for a series of free energy calculations.
+We will use a geometric based atom mapping.
 Our yaml file `my.yaml` is setup to do an alchemical transformation from ligand 0 to ligand 1 for the solvent, vacuum, and complex phase.
 We will use a bash loop to do a star map with 6 different ligands.
 We will put the ligand at index 0 at the center of star map with the following bash script:
