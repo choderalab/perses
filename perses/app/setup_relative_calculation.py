@@ -908,8 +908,8 @@ def run(yaml_filename=None, setup_options=None):
 
         elif setup_options['fe_type'] == 'sams':
             _logger.info(f"Detecting sams as fe_type...")
-            _logger.info(f"Writing hybrid factory {trajectory_prefix}hybrid_factory.npy to {trajectory_directory}...")
-            np.savez(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
+            _logger.info(f"Writing hybrid factory {trajectory_prefix}-hybrid_factory.npy to {trajectory_directory}...")
+            np.savez(os.path.join(trajectory_directory, trajectory_prefix + "-hybrid_factory.npy"),
                     setup_dict['hybrid_topology_factories'])
 
             hss = setup_dict['hybrid_samplers']
@@ -942,8 +942,8 @@ def run(yaml_filename=None, setup_options=None):
 
         elif setup_options['fe_type'] == 'repex':
             _logger.info(f"Detecting repex as fe_type...")
-            _logger.info(f"Writing hybrid factory {trajectory_prefix}hybrid_factory.npy to {trajectory_directory}...")
-            np.savez(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
+            _logger.info(f"Writing hybrid factory {trajectory_prefix}-hybrid_factory.npy to {trajectory_directory}...")
+            np.savez(os.path.join(trajectory_directory, trajectory_prefix + "-hybrid_factory.npy"),
                     setup_dict['hybrid_topology_factories'])
 
             hss = setup_dict['hybrid_samplers']
