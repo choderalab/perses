@@ -112,20 +112,17 @@ def _process_overrides(overrides, yaml_options):
 @click.command()
 @click.option("--yaml", type=click.Path(exists=True, dir_okay=False), required=True)
 @click.option("--platform-name", type=str, default=None)
-@click.option("--override", multiple=True, required=False)
+@click.option("--override", multiple=True, required=False, default=None)
 def cli(yaml, platform_name, override):
     """test"""
     click.echo(click.style(percy, fg="bright_magenta"))
     click.echo("📖\t Fetching simulation options ")
-    options = getSetupOptions(yaml)
+    options = getSetupOptions(yaml, override_string=override)
     click.echo("🖨️\t Printing options")
     click.echo(options)
     if override:
         click.echo("✍️ \t Overrides used")
-        click.echo(override)
-        click.echo("🖨️\t Printing new options")
         options = _process_overrides(override, options)
-        click.echo(options)
     click.echo("🕵️\t Checking OpenEye license")
     _check_openeye_license()
     click.echo("✅\t OpenEye license good")
