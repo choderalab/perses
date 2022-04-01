@@ -1,6 +1,7 @@
 from pkg_resources import resource_filename
 from click.testing import CliRunner
 import os
+import subprocess
 from perses.app.cli import cli
 
 test_yaml = """
@@ -52,6 +53,7 @@ def test_dummy_cli_with_override(in_tmpdir):
             "perses",
             os.path.join("data", "Tyk2_ligands_example", "Tyk2_ligands_shifted.sdf"),
         )
+        env = os.environ.copy()
         result = runner.invoke(cli, ["--yaml", "test.yaml", "--override", f"protein_pdb:{protein_pdb}",
             "--override", f"ligand_file:{ligand_file}"])
         assert result.exit_code == 0
