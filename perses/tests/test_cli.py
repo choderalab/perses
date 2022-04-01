@@ -54,7 +54,6 @@ def test_dummy_cli_with_override(in_tmpdir):
             "perses",
             os.path.join("data", "Tyk2_ligands_example", "Tyk2_ligands_shifted.sdf"),
         )
-        env = os.environ.copy()
         result = runner.invoke(
             cli,
             [
