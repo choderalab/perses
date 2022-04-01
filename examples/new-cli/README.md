@@ -83,3 +83,4 @@ docker run -it --rm --gpus device=0 --mount type=bind,source=$HOME/.OpenEye/,tar
                                     -w /mnt/new-cli choderalab/perses:dev sh ./run_star_map.sh
 ```
 
+Of importance there are the paths to the OpenEye license file (in this example is `$HOME/.openeye/`), path to the examples directory in perses (`$HOME/Projects/perses/examples/`)
