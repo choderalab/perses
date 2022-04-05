@@ -86,11 +86,8 @@ def configure_platform(platform_name='Reference', fallback_platform_name='CPU', 
     print(f"conducting subsequent work with the following platform: {platform.getName()}")
     return platform
 
-#########
-cache.global_context_cache.platform = configure_platform(utils.get_fastest_platform().getName())
-#########
 
-#smc functions
+# smc functions
 def compute_survival_rate(sMC_particle_ancestries):
     """
     compute the time-series survival rate as a function of resamples
