@@ -825,7 +825,7 @@ def flattenedHybridTopologyFactory_energies(topology, chain, system, positions, 
         system = topology_proposal.old_system if endstate == 0 else topology_proposal.new_system
         # TODO will openmm ever allow duplicate names here?
         force_names = {force.__class__.__name__ : index for index, force in enumerate(system.getForces())}
-
+        print(force_names)
         # Flatten torsions involving off atoms
         periodic_torsion = system.getForce(force_names["PeriodicTorsionForce"])
         for i in range(periodic_torsion.getNumTorsions()):
