@@ -2,7 +2,6 @@ import simtk.openmm as openmm
 import os
 import copy
 
-from openmmtools import cache
 import openmmtools.mcmc as mcmc
 import openmmtools.integrators as integrators
 import openmmtools.states as states
@@ -20,7 +19,6 @@ from perses.annihilation.lambda_protocol import LambdaProtocol
 import dask.distributed as distributed
 from scipy.special import logsumexp
 import openmmtools.cache as cache
-from openmmtools import utils
 
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
