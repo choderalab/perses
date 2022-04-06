@@ -768,7 +768,7 @@ class LocallyOptimalAnnealing():
                 if rethermalize:
                     self.context.setVelocitiesToTemperature(self.thermodynamic_state.temperature) #rethermalize
                 if noneq_trajectory_filename is not None:
-                    self.save_configuration(idx, sampler_state, context)
+                    self.save_configuration(idx, sampler_state)
                 if return_timer:
                     timer[idx] = time.time() - start_timer
             except Exception as e:
@@ -884,7 +884,7 @@ class LocallyOptimalAnnealing():
         self.thermodynamic_state.apply_to_context(self.context)
 
 
-    def save_configuration(self, iteration, sampler_state, context):
+    def save_configuration(self, iteration, sampler_state):
         """
         pass a conditional save function
 
