@@ -25,11 +25,6 @@ import pymbar
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
-try:
-    cache.global_context_cache.platform = openmm.Platform.getPlatformByName("Reference")
-except Exception:
-    cache.global_context_cache.platform = openmm.Platform.getPlatformByName("Reference")
-
 #############################################
 # CONSTANTS
 #############################################

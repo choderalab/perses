@@ -2,7 +2,6 @@ import simtk.openmm as openmm
 import os
 import copy
 
-from openmmtools import cache
 import openmmtools.mcmc as mcmc
 import openmmtools.integrators as integrators
 import openmmtools.states as states
@@ -20,7 +19,6 @@ from perses.annihilation.lambda_protocol import LambdaProtocol
 import dask.distributed as distributed
 from scipy.special import logsumexp
 import openmmtools.cache as cache
-from openmmtools import utils
 
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
@@ -86,11 +84,8 @@ def configure_platform(platform_name='Reference', fallback_platform_name='CPU', 
     print(f"conducting subsequent work with the following platform: {platform.getName()}")
     return platform
 
-#########
-cache.global_context_cache.platform = configure_platform(utils.get_fastest_platform().getName())
-#########
 
-#smc functions
+# smc functions
 def compute_survival_rate(sMC_particle_ancestries):
     """
     compute the time-series survival rate as a function of resamples
@@ -773,7 +768,7 @@ class LocallyOptimalAnnealing():
                 if rethermalize:
                     self.context.setVelocitiesToTemperature(self.thermodynamic_state.temperature) #rethermalize
                 if noneq_trajectory_filename is not None:
-                    self.save_configuration(idx, sampler_state, context)
+                    self.save_configuration(idx, sampler_state)
                 if return_timer:
                     timer[idx] = time.time() - start_timer
             except Exception as e:
@@ -889,7 +884,7 @@ class LocallyOptimalAnnealing():
         self.thermodynamic_state.apply_to_context(self.context)
 
 
-    def save_configuration(self, iteration, sampler_state, context):
+    def save_configuration(self, iteration, sampler_state):
         """
         pass a conditional save function
 
