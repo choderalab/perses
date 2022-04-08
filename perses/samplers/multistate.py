@@ -27,12 +27,10 @@ class HybridCompatibilityMixin(object):
         self._hybrid_factory = hybrid_factory
         super(HybridCompatibilityMixin, self).__init__(*args, **kwargs)
 
-    def setup(self, n_states, temperature, storage_file, minimisation_steps=100,
+    # TODO: Should this overload the create() method from parent instead of breing setup()?
+    def setup(self, n_states, temperature, storage_file,
               n_replicas=None, lambda_schedule=None,
               lambda_protocol=LambdaProtocol(), endstates=True):
-
-
-        from perses.dispersed import feptasks
 
         hybrid_system = self._factory.hybrid_system
 
