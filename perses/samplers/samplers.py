@@ -19,9 +19,6 @@ import mdtraj as md
 import numpy as np
 import time
 from openmmtools.states import SamplerState, ThermodynamicState
-from openmmtools import cache, utils
-from perses.dispersed.utils import configure_platform
-cache.global_context_cache.platform = configure_platform(utils.get_fastest_platform().getName())
 
 from perses.annihilation.ncmc_switching import NCMCEngine
 from perses.dispersed import feptasks

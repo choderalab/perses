@@ -7,7 +7,6 @@ import simtk.unit as unit
 import logging
 from pathlib import Path
 
-from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_setup import RelativeFEPSetup
 from perses.annihilation.lambda_protocol import LambdaProtocol
@@ -357,6 +356,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
         - 'topology_proposals':
     """
+    from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
     phases = setup_options['phases']
     known_phases = ['complex', 'solvent', 'vacuum']
     for phase in phases:
@@ -964,6 +964,7 @@ def run(yaml_filename=None):
 
 def _resume_run(setup_options):
     from openmmtools.cache import ContextCache
+    from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
     # get platform
     platform = get_openmm_platform(platform_name=None)
     # Setup context caches for multistate samplers
