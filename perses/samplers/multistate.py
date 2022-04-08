@@ -5,8 +5,6 @@
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
 
 from openmmtools.multistate import sams, replicaexchange
-from openmmtools import cache, utils
-from perses.dispersed.utils import configure_platform
 from openmmtools.states import CompoundThermodynamicState, SamplerState, ThermodynamicState
 from perses.dispersed.utils import create_endstates
 
@@ -47,8 +45,6 @@ class HybridCompatibilityMixin(object):
         thermodynamic_state_list = []
         sampler_state_list = []
 
-        context_cache = cache.ContextCache()
-
         if n_replicas is None:
             _logger.info(f'n_replicas not defined, setting to match n_states, {n_states}')
             n_replicas = n_states
@@ -66,16 +62,13 @@ class HybridCompatibilityMixin(object):
             difference = np.diff(lambda_schedule)
             assert ( all(i >= 0. for i in difference ) ), 'lambda_schedule must be monotonicly increasing'
 
-        #starting with the initial positions generated py geometry.py
-        sampler_state =  SamplerState(positions, box_vectors=hybrid_system.getDefaultPeriodicBoxVectors())
+        # starting with the initial positions generated py geometry.py
+        sampler_state = SamplerState(positions, box_vectors=hybrid_system.getDefaultPeriodicBoxVectors())
         for lambda_val in lambda_schedule:
             compound_thermodynamic_state_copy = copy.deepcopy(compound_thermodynamic_state)
             compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val,lambda_protocol)
             thermodynamic_state_list.append(compound_thermodynamic_state_copy)
-
-             # now generating a sampler_state for each thermodyanmic state, with relaxed positions
-            context, context_integrator = context_cache.get_context(compound_thermodynamic_state_copy)
-            feptasks.minimize(compound_thermodynamic_state_copy,sampler_state)
+            # now generating a sampler_state for each thermodynamic state
             sampler_state_list.append(copy.deepcopy(sampler_state))
 
         reporter = storage_file
