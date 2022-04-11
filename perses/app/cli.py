@@ -1,11 +1,22 @@
 # New cli for testing
-import datetime
+import logging
+import os
 from pathlib import Path
 
 import click
 import openmmtools.utils
-
 from perses.app.setup_relative_calculation import getSetupOptions, run
+
+# Setting logging level config
+LOGLEVEL = os.environ.get("LOGLEVEL", "DEBUG").upper()
+logging.basicConfig(
+    format="%(asctime)s %(levelname)-8s %(message)s",
+    level=LOGLEVEL,
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+_logger = logging.getLogger()
+_logger.setLevel(LOGLEVEL)
+
 
 percy = """
 MMMMMMMMMMMMXo:ccldOKNNWMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
