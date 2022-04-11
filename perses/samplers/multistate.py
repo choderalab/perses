@@ -32,6 +32,8 @@ class HybridCompatibilityMixin(object):
               n_replicas=None, lambda_schedule=None,
               lambda_protocol=LambdaProtocol(), endstates=True):
 
+        from perses.dispersed import feptasks
+
         hybrid_system = self._factory.hybrid_system
 
         positions = self._factory.hybrid_positions
@@ -67,6 +69,7 @@ class HybridCompatibilityMixin(object):
             compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val,lambda_protocol)
             thermodynamic_state_list.append(compound_thermodynamic_state_copy)
             # now generating a sampler_state for each thermodynamic state
+            feptasks.minimize(compound_thermodynamic_state_copy, sampler_state)
             sampler_state_list.append(copy.deepcopy(sampler_state))
 
         reporter = storage_file
