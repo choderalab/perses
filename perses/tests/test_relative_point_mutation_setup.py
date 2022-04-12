@@ -40,7 +40,6 @@ def test_PointMutationExecutor_endstate_validation():
 
 
 def test_PointMutationExecutor_solvated():
-    from pkg_resources import resource_filename
     import os
     import tempfile
     from openmm import app, unit
