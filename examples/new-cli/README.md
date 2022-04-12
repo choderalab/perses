@@ -83,7 +83,7 @@ To run this example use the following docker command (to make it easier to read 
 ```bash
 docker run -it --rm --gpus device=0 --mount type=bind,source=$HOME/.OpenEye/,target=/openeye/,readonly \
                                     --mount type=bind,source=$HOME/repos/perses/examples/,target=/mnt/ \
-                                    -w /mnt/new-cli choderalab/perses:dev sh ./run_star_map.sh
+                                    -w /mnt/new-cli choderalab/perses:dev bash ./run_star_map.sh
 ```
 
 Of importance there are the paths to the OpenEye license file (in this example is `$HOME/.openeye/`), path to the examples directory in perses (`$HOME/Projects/perses/examples/`)
