@@ -310,8 +310,8 @@ def generate_dipeptide_top_pos_sys(topology,
                 from perses.tests.utils import validate_endstate_energies
 
                 if not topology_proposal.unique_new_atoms:
-                    assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
-                    assert geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
+                    assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {geometry_engine.forward_final_context_reduced_potential})"
+                    assert geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { geometry_engine.forward_atoms_with_positions_reduced_potential})"
                     vacuum_added_valence_energy = 0.0
                 else:
                     added_valence_energy = geometry_engine.forward_final_context_reduced_potential - geometry_engine.forward_atoms_with_positions_reduced_potential
