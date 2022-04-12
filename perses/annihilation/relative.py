@@ -4025,7 +4025,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(self._nonbonded_method))
             custom_force.setUseSwitchingFunction(False)
             custom_force.setCutoffDistance(self._r_cutoff)
-            custom_force.setUseLongRangeCorrection(False)
+            custom_force.setUseLongRangeCorrection(old_system_nbf.getUseDispersionCorrection()) # This should be copied from the og nbf for sterics, but off for electrostatics
 
         elif self._nonbonded_method == openmm.NonbondedForce.NoCutoff:
             custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(self._nonbonded_method))
