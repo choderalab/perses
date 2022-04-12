@@ -666,7 +666,10 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                 if phase == 'vacuum':
                     endstates = False
                 else:
-                    endstates = True
+                    # TODO: Make this True when dispersed.utils.create_endstates is fixed
+                    _logger.info("Disabling creation of endstates with expanded cutoffs in order to support new "
+                                 "alchemical factories.")
+                    endstates = False
 
                 if setup_options['fe_type'] == 'fah':
                     _logger.info('SETUP FOR FAH DONE')

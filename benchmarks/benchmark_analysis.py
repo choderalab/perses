@@ -211,12 +211,12 @@ plotting.plot_DDGs(fe.graph,
                    figsize=5,
                    filename='./plot_relative.png'
                    )
-# Absolute plot
+# Absolute plot, with experimental data shifted to correct mean
+experimental_mean_dg = np.asarray([node[1]["exp_DG"] for node in fe.graph.nodes(data=True)]).mean()
 plotting.plot_DGs(fe.graph,
                   target_name=f'{target}',
                   title=f'Absolute binding energies - {target}',
                   figsize=5,
-                  filename='./plot_absolute.png'
+                  filename='./plot_absolute.png',
+                  shift=experimental_mean_dg,
                   )
-
-
