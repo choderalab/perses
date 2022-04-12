@@ -124,7 +124,7 @@ def test_OEMol_to_omm_ff(molecule=smiles_to_oemol('CC')):
     #default arguments for SystemGenerators
     barostat = None
     forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
-    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus}
     periodic_forcefield_kwargs = { 'nonbondedMethod': app.NoCutoff }
     small_molecule_forcefield = 'gaff-2.11'
     system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs, periodic_forcefield_kwargs=periodic_forcefield_kwargs,

@@ -50,6 +50,6 @@ nsteps_neq: 12500
 # collision rate (relaxation) - 90/picosecond
 # collision rate (neq switching) - 1/picosecond
 # barostat - openmm.MonteCarloBarostat(1.0 * unit.atmosphere, temperature, 50)
-# forcefield_kwargs - {'removeCMMotion': False, 'ewaldErrorTolerance': 0.00025, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+# forcefield_kwargs - {'removeCMMotion': False, 'ewaldErrorTolerance': 0.00025, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus}
 # periodic_forcefield_kwargs={'nonbondedMethod': app.PME}
 # nonperiodic_forcefield_kwargs=None
