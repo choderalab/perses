@@ -28,7 +28,7 @@ class HybridCompatibilityMixin(object):
         super(HybridCompatibilityMixin, self).__init__(*args, **kwargs)
 
     # TODO: Should this overload the create() method from parent instead of breing setup()?
-    def setup(self, n_states, temperature, storage_file,
+    def setup(self, n_states, temperature, storage_file, minimisation_steps=100,
               n_replicas=None, lambda_schedule=None,
               lambda_protocol=LambdaProtocol(), endstates=True):
 
@@ -69,7 +69,7 @@ class HybridCompatibilityMixin(object):
             compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val,lambda_protocol)
             thermodynamic_state_list.append(compound_thermodynamic_state_copy)
             # now generating a sampler_state for each thermodynamic state
-            feptasks.minimize(compound_thermodynamic_state_copy, sampler_state)
+            feptasks.minimize(compound_thermodynamic_state_copy, sampler_state, max_iterations=minimisation_steps)
             sampler_state_list.append(copy.deepcopy(sampler_state))
 
         reporter = storage_file
