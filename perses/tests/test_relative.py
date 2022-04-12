@@ -25,11 +25,6 @@ import pymbar
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
-try:
-    cache.global_context_cache.platform = openmm.Platform.getPlatformByName("Reference")
-except Exception:
-    cache.global_context_cache.platform = openmm.Platform.getPlatformByName("Reference")
-
 #############################################
 # CONSTANTS
 #############################################
@@ -802,10 +797,11 @@ def flattenedHybridTopologyFactory_energies(topology, chain, system, positions, 
     from perses.annihilation.relative import RepartitionedHybridTopologyFactory
     from perses.tests.utils import validate_endstate_energies
 
+    ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS', 'HID', 'HIE', 'HIP']
     ENERGY_THRESHOLD = 1e-6 #kJ/mol
 
     # Create point mutation engine to mutate residue at id 2 to a random amino acid
-    aminos_updated = [amino for amino in aminos if amino not in ['ALA', 'PRO', 'HIS', 'TRP', 'PHE', 'TYR']]
+    aminos_updated = [amino for amino in aminos if amino not in ['ALA', 'PRO']]
     mutant = random.choice(aminos_updated)
     print(f'Making mutation ALA->{mutant}')
     point_mutation_engine = PointMutationEngine(wildtype_topology=topology,
@@ -854,10 +850,14 @@ def flattenedHybridTopologyFactory_energies(topology, chain, system, positions, 
 
         # Create geometry proposals
         for _ in range(5):
+            # We do not allow the geometry engine to conduct energy validation for ring amino acids because we insert
+            # biasing torsions for ring transformations (to ensure the amino acids are somewhat in the right geometry),
+            # which will corrupt the energy addition during energy validation.
+            validate_energy_bookkeeping = False if mutant in ring_amino_acids else True
             new_positions, logp_proposal = geometry_engine.propose(topology_proposal, positions, beta,
-                                                                       validate_energy_bookkeeping=True)
+                                                                       validate_energy_bookkeeping=validate_energy_bookkeeping)
             logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, positions, beta,
-                                                    validate_energy_bookkeeping=True)
+                                                    validate_energy_bookkeeping=validate_energy_bookkeeping)
             # Check potential energy
             platform = openmm.Platform.getPlatformByName('Reference')
             integrator = LangevinIntegrator(temperature=temperature)
