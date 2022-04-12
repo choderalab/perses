@@ -42,6 +42,9 @@ $ perses-cli --yaml my.yaml --override old_ligand_index:2 --override new_ligand_
 This will override the options in the yaml (be sure to change the `trajectory_directory` so you don't overwrite your previous simulation.
 Currently only `key:value` parts of the yaml can be overridden i.e. not sequences or lists.
 
+To view all options ultimately used in the simulation, a file named `parsed-$date-.yaml` is created. 
+This file is located in the same directory as the yaml file used to launch the simulation.
+
 ## Example Use Case
 
 In this example folder we have a protein: [2ZFF](https://www.rcsb.org/structure/2zff) and some ligands which we will use for a series of free energy calculations.
