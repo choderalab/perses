@@ -206,16 +206,20 @@ def generate_dipeptide_top_pos_sys(topology,
                                    conduct_geometry_prop=True,
                                    conduct_htf_prop = False,
                                    validate_energy_bookkeeping=True,
-                                   repartitioned=False,
+                                   generate_repartitioned_hybrid_topology_factory=False,
+                                   generate_rest_capable_hybrid_topology_factory=False,
                                    endstate=None,
                                    flatten_torsions=False,
                                    flatten_exceptions=False,
-                                   validate_endstate_energy=True
+                                   validate_endstate_energy=True # Cannot validate endstate energies if flatten_torsions/exceptions is True
                                    ):
     """generate point mutation engine, geometry_engine, and conduct topology proposal, geometry propsal, and hybrid factory generation"""
     from perses.tests.utils import validate_endstate_energies
+    import copy
+
     if conduct_htf_prop:
         assert conduct_geometry_prop, f"the htf prop can only be conducted if there is a geometry proposal"
+
     # Create the point mutation engine
     from perses.rjmc.topology_proposal import PointMutationEngine
     point_mutation_engine = PointMutationEngine(wildtype_topology=topology,
@@ -260,12 +264,16 @@ def generate_dipeptide_top_pos_sys(topology,
 
     if conduct_htf_prop:
         # Create a hybrid topology factory
-        if not repartitioned:
-            from perses.annihilation.relative import HybridTopologyFactory
-            factory = HybridTopologyFactory
-        else:
+        if generate_repartitioned_hybrid_topology_factory:
             from perses.annihilation.relative import RepartitionedHybridTopologyFactory
             factory = RepartitionedHybridTopologyFactory
+            assert endstate in [0, 1], "endstate must be 0 or 1"
+        elif generate_rest_capable_hybrid_topology_factory:
+            from perses.annihilation.relative import RESTCapableHybridTopologyFactory
+            factory = RESTCapableHybridTopologyFactory
+        else:
+            from perses.annihilation.relative import HybridTopologyFactory
+            factory = HybridTopologyFactory
 
         forward_htf = factory(topology_proposal=topology_proposal,
                      current_positions=positions,
@@ -291,30 +299,59 @@ def generate_dipeptide_top_pos_sys(topology,
         if not validate_endstate_energy:
             return forward_htf
         else:
-            if not topology_proposal.unique_new_atoms:
-                assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
-                assert geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
-                vacuum_added_valence_energy = 0.0
-            else:
-                added_valence_energy = geometry_engine.forward_final_context_reduced_potential - geometry_engine.forward_atoms_with_positions_reduced_potential
+            assert not flatten_torsions and not flatten_exceptions, "Cannot conduct endstate validation if flatten_torsions or flatten_exceptions is True"
 
-            if not topology_proposal.unique_old_atoms:
-                assert geometry_engine.reverse_final_context_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.reverse_final_context_reduced_potential})"
-                assert geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
-                subtracted_valence_energy = 0.0
+            if generate_rest_capable_hybrid_topology_factory:
+                from perses.tests.utils import validate_endstate_energies_point
+                for endstate in [0, 1]:
+                    htf = copy.deepcopy(forward_htf)
+                    validate_endstate_energies_point(htf, endstate=endstate, minimize=True)
             else:
-                subtracted_valence_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
+                from perses.tests.utils import validate_endstate_energies
 
-            zero_state_error, one_state_error = validate_endstate_energies(forward_htf._topology_proposal,
-                                                                           forward_htf,
-                                                                           added_valence_energy,
-                                                                           subtracted_valence_energy,
-                                                                           beta = 1.0/(kB*temperature),
-                                                                           ENERGY_THRESHOLD = ENERGY_THRESHOLD,
-                                                                           platform = openmm.Platform.getPlatformByName('Reference'),
-                                                                           repartitioned_endstate=endstate)
-            print(f"zero state error : {zero_state_error}")
-            print(f"one state error : {one_state_error}")
+                if not topology_proposal.unique_new_atoms:
+                    assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {geometry_engine.forward_final_context_reduced_potential})"
+                    assert geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { geometry_engine.forward_atoms_with_positions_reduced_potential})"
+                    vacuum_added_valence_energy = 0.0
+                else:
+                    added_valence_energy = geometry_engine.forward_final_context_reduced_potential - geometry_engine.forward_atoms_with_positions_reduced_potential
+
+                if not topology_proposal.unique_old_atoms:
+                    assert geometry_engine.reverse_final_context_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's final context reduced potential is not None (i.e. {geometry_engine.reverse_final_context_reduced_potential})"
+                    assert geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. { geometry_engine.reverse_atoms_with_positions_reduced_potential})"
+                    subtracted_valence_energy = 0.0
+                else:
+                    subtracted_valence_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
+
+                if generate_repartitioned_hybrid_topology_factory:
+
+                    if endstate == 0:
+                        zero_state_error, _ = validate_endstate_energies(forward_htf._topology_proposal,
+                                                                         forward_htf,
+                                                                         added_valence_energy,
+                                                                         subtracted_valence_energy,
+                                                                         beta=beta,
+                                                                         ENERGY_THRESHOLD=ENERGY_THRESHOLD,
+                                                                         platform=openmm.Platform.getPlatformByName('Reference'),
+                                                                         repartitioned_endstate=endstate)
+                    else:
+                        _, one_state_error = validate_endstate_energies(forward_htf._topology_proposal,
+                                                                        forward_htf,
+                                                                        added_valence_energy,
+                                                                        subtracted_valence_energy,
+                                                                        beta=beta,
+                                                                        ENERGY_THRESHOLD=ENERGY_THRESHOLD,
+                                                                        platform=openmm.Platform.getPlatformByName('Reference'),
+                                                                        repartitioned_endstate=endstate)
+
+                else:
+                    zero_state_error, one_state_error = validate_endstate_energies(forward_htf._topology_proposal,
+                                                                                   forward_htf,
+                                                                                   added_valence_energy,
+                                                                                   subtracted_valence_energy,
+                                                                                   beta=beta,
+                                                                                   ENERGY_THRESHOLD=ENERGY_THRESHOLD,
+                                                                                   platform=openmm.Platform.getPlatformByName('Reference'))
 
             return forward_htf
 

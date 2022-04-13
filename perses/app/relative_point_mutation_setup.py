@@ -1,20 +1,22 @@
 from __future__ import absolute_import
 
 from perses.utils.openeye import createOEMolFromSDF, extractPositionsFromOEMol
-from perses.annihilation.relative import HybridTopologyFactory, RepartitionedHybridTopologyFactory
+from perses.annihilation.relative import HybridTopologyFactory, RepartitionedHybridTopologyFactory, RESTCapableHybridTopologyFactory
 from perses.rjmc.topology_proposal import PointMutationEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 
 import simtk.openmm as openmm
 import simtk.openmm.app as app
 import simtk.unit as unit
-import numpy as np
+
 from openmoltools import forcefield_generators
-import mdtraj as md
 from openmmtools.constants import kB
-from perses.tests.utils import validate_endstate_energies
 from openff.toolkit.topology import Molecule
 from openmmforcefields.generators import SystemGenerator
+
+import numpy as np
+import mdtraj as md
+import copy
 
 ENERGY_THRESHOLD = 1e-2
 temperature = 300 * unit.kelvin
@@ -110,7 +112,10 @@ class PointMutationExecutor(object):
                  apo_box_dimensions=None,
                  flatten_torsions=False,
                  flatten_exceptions=False,
+                 rest_radius=0.2,
+                 w_scale=0.2,
                  generate_unmodified_hybrid_topology_factory=True,
+                 generate_repartitioned_hybrid_topology_factory=False,
                  generate_rest_capable_hybrid_topology_factory=False,
                  **kwargs):
         """
@@ -132,8 +137,8 @@ class PointMutationExecutor(object):
             phase : str, default complex
                 if phase == vacuum, then the complex will not be solvated with water; else, it will be solvated with tip3p
             conduct_endstate_validation : bool, default True
-                whether to conduct an endstate validation of the HybridTopologyFactory. If using the RepartitionedHybridTopologyFactory,
-                endstate validation cannot and will not be conducted.
+                whether to conduct an endstate validation of the HybridTopologyFactory. If using flatten_torsion=True and/or
+                flatten_exceptions=True, endstate validation should not be conducted (otherwise, it will fail).
             ligand_input : str, default None
                 path to ligand of interest (i.e. small molecule or protein)
                 Note: if this is not solvated, it should be the ligand alone (.sdf or .pdb or .cif) and solvate should be set to True.
@@ -178,10 +183,16 @@ class PointMutationExecutor(object):
                 in the htf, flatten torsions involving unique new atoms at lambda = 0 and unique old atoms are lambda = 1
             flatten_exceptions : bool, default False
                 in the htf, flatten exceptions involving unique new atoms at lambda = 0 and unique old atoms at lambda = 1
+            rest_radius : float, default 0.2
+                radius for rest region, in nanometers
+            w_scale : float, default 0.2
+                scale factor for lifting term
             generate_unmodified_hybrid_topology_factory : bool, default True
                 whether to generate a vanilla HybridTopologyFactory
-            generate_rest_capable_hybrid_topology_factory : bool, default False
+            generate_repartitioned_hybrid_topology_factory : bool, default False
                 whether to generate a RepartitionedHybridTopologyFactory
+            generate_rest_capable_hybrid_topology_factory : bool, default False
+                whether to generate a RESTCapableHybridTopologyFactory
         TODO : allow argument for spectator ligands besides the 'ligand_file'
 
         """
@@ -362,10 +373,16 @@ class PointMutationExecutor(object):
 
             if generate_unmodified_hybrid_topology_factory:
                 repartitioned_endstate = None
-                self.generate_htf(HybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
+                self.generate_htf(HybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex, rest_radius, w_scale)
+            if generate_repartitioned_hybrid_topology_factory:
+                for repartitioned_endstate in [0, 1]:
+                    self.generate_htf(RepartitionedHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex, rest_radius, w_scale)
             if generate_rest_capable_hybrid_topology_factory:
-                 for repartitioned_endstate in [0, 1]:
-                    self.generate_htf(RepartitionedHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex)
+                repartitioned_endstate = None
+                if rest_radius is None:
+                    _logger.info("Trying to generate a RESTCapableHybridTopologyFactory, but rest_radius was not specified. Using 0.2 nm...")
+                    rest_radius = 0.2
+                self.generate_htf(RESTCapableHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex, rest_radius, w_scale)
 
             if not topology_proposal.unique_new_atoms:
                 assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
@@ -380,17 +397,52 @@ class PointMutationExecutor(object):
             else:
                 subtracted_valence_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
 
-            if conduct_endstate_validation and generate_unmodified_hybrid_topology_factory:
-                htf = self.get_complex_htf() if is_complex else self.get_apo_htf()
-                zero_state_error, one_state_error = validate_endstate_energies(htf._topology_proposal, htf, added_valence_energy, subtracted_valence_energy, beta=beta, ENERGY_THRESHOLD=ENERGY_THRESHOLD)
-                if zero_state_error > ENERGY_THRESHOLD:
-                    _logger.warning(f"Reduced potential difference of the nonalchemical and alchemical Lambda = 0 state is above the threshold ({ENERGY_THRESHOLD}): {zero_state_error}")
-                if one_state_error > ENERGY_THRESHOLD:
-                    _logger.warning(f"Reduced potential difference of the nonalchemical and alchemical Lambda = 1 state is above the threshold ({ENERGY_THRESHOLD}): {one_state_error}")
+            # Conduct endstate energy validation
+            if conduct_endstate_validation:
+
+                assert not flatten_torsions and not flatten_exceptions, "Cannot conduct endstate validation if flatten_torsions or flatten_exceptions is True"
+
+                if generate_unmodified_hybrid_topology_factory:
+                    from perses.tests.utils import validate_endstate_energies
+                    htf = self.get_complex_htf() if is_complex else self.get_apo_htf()
+                    zero_state_error, one_state_error = validate_endstate_energies(htf._topology_proposal,
+                                                                                   htf,
+                                                                                   added_valence_energy,
+                                                                                   subtracted_valence_energy,
+                                                                                   beta=beta,
+                                                                                   ENERGY_THRESHOLD=ENERGY_THRESHOLD)
+
+                if generate_repartitioned_hybrid_topology_factory:
+                    from perses.tests.utils import validate_endstate_energies
+                    htf_0 = self.get_complex_rhtf_0() if is_complex else self.get_apo_rhtf_0()
+                    htf_1 = self.get_complex_rhtf_1() if is_complex else self.get_apo_rhtf_1()
+
+                    zero_state_error, _ = validate_endstate_energies(htf_0._topology_proposal,
+                                                                     htf_0,
+                                                                     added_valence_energy,
+                                                                     subtracted_valence_energy,
+                                                                     ENERGY_THRESHOLD=ENERGY_THRESHOLD,
+                                                                     beta=beta,
+                                                                     repartitioned_endstate=0)
+
+                    _, one_state_error = validate_endstate_energies(htf_1._topology_proposal,
+                                                                    htf_1,
+                                                                    added_valence_energy,
+                                                                    subtracted_valence_energy,
+                                                                    ENERGY_THRESHOLD=ENERGY_THRESHOLD,
+                                                                    beta=beta,
+                                                                    repartitioned_endstate=1)
+
+                if generate_rest_capable_hybrid_topology_factory:
+                    from perses.tests.utils import validate_endstate_energies_point
+                    for endstate in [0, 1]:
+                        htf = copy.deepcopy(self.get_complex_rest_htf()) if is_complex else copy.deepcopy(self.get_apo_rest_htf())
+                        validate_endstate_energies_point(htf, endstate=endstate, minimize=True)
+
             else:
                 pass
 
-    def generate_htf(self, factory, topology_proposal, old_positions, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex):
+    def generate_htf(self, factory, topology_proposal, old_positions, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex, rest_radius, w_scale):
         htf = factory(topology_proposal=topology_proposal,
                                       current_positions=old_positions,
                                       new_positions=new_positions,
@@ -410,10 +462,14 @@ class PointMutationExecutor(object):
                                       interpolate_old_and_new_14s=flatten_exceptions,
                                       omitted_terms=None,
                                       endstate=repartitioned_endstate,
-                                      flatten_torsions=flatten_torsions)
+                                      flatten_torsions=flatten_torsions,
+                                      rest_radius=rest_radius,
+                                      w_scale=w_scale)
         if is_complex:
             if factory == HybridTopologyFactory:
                 self.complex_htf = htf
+            elif factory == RESTCapableHybridTopologyFactory:
+                self.complex_rest_htf = htf
             elif factory == RepartitionedHybridTopologyFactory:
                 if repartitioned_endstate == 0:
                     self.complex_rhtf_0 = htf
@@ -422,6 +478,8 @@ class PointMutationExecutor(object):
         else:
             if factory == HybridTopologyFactory:
                 self.apo_htf = htf
+            elif factory == RESTCapableHybridTopologyFactory:
+                self.apo_rest_htf = htf
             elif factory == RepartitionedHybridTopologyFactory:
                 if repartitioned_endstate == 0:
                     self.apo_rhtf_0 = htf
@@ -445,6 +503,12 @@ class PointMutationExecutor(object):
 
     def get_apo_rhtf_1(self):
         return self.apo_rhtf_1
+
+    def get_apo_rest_htf(self):
+        return self.apo_rest_htf
+
+    def get_complex_rest_htf(self):
+        return self.complex_rest_htf
 
     def _get_ion_and_water_parameters(self, system, topology, positive_ion_name="NA", negative_ion_name="CL", water_name="HOH"):
         '''
