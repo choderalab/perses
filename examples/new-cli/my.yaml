@@ -1,5 +1,5 @@
 # Path to protein file
-protein_pdb: 2ZFF.pdb
+protein_pdb: ripk2_receptor.pdb
 
 # Path to ligand SDF file
 ligand_file: ligands.sdf
