@@ -1057,6 +1057,11 @@ def _process_overrides(overrides, yaml_options):
 
         # First lets see if we can make it a int:
         try:
+            # First check if we have a number like 4.2 which python will convert to
+            # 4 if you do int(4.2) but we can check if int(val) and float(val) cast to
+            # the same object
+            if int(val) != float(val):
+                raise ValueError
             val = int(val)
         except ValueError:
             # Now try float
