@@ -20,15 +20,10 @@ from openmmtools.integrators import LangevinIntegrator
 from unittest import skipIf
 
 import pymbar.timeseries as timeseries
-
+import pytest
 import pymbar
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
-
-try:
-    cache.global_context_cache.platform = openmm.Platform.getPlatformByName("Reference")
-except Exception:
-    cache.global_context_cache.platform = openmm.Platform.getPlatformByName("Reference")
 
 #############################################
 # CONSTANTS
@@ -802,10 +797,11 @@ def flattenedHybridTopologyFactory_energies(topology, chain, system, positions, 
     from perses.annihilation.relative import RepartitionedHybridTopologyFactory
     from perses.tests.utils import validate_endstate_energies
 
+    ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS', 'HID', 'HIE', 'HIP']
     ENERGY_THRESHOLD = 1e-6 #kJ/mol
 
     # Create point mutation engine to mutate residue at id 2 to a random amino acid
-    aminos_updated = [amino for amino in aminos if amino not in ['ALA', 'PRO', 'HIS', 'TRP', 'PHE', 'TYR']]
+    aminos_updated = [amino for amino in aminos if amino not in ['ALA', 'PRO']]
     mutant = random.choice(aminos_updated)
     print(f'Making mutation ALA->{mutant}')
     point_mutation_engine = PointMutationEngine(wildtype_topology=topology,
@@ -854,10 +850,14 @@ def flattenedHybridTopologyFactory_energies(topology, chain, system, positions, 
 
         # Create geometry proposals
         for _ in range(5):
+            # We do not allow the geometry engine to conduct energy validation for ring amino acids because we insert
+            # biasing torsions for ring transformations (to ensure the amino acids are somewhat in the right geometry),
+            # which will corrupt the energy addition during energy validation.
+            validate_energy_bookkeeping = False if mutant in ring_amino_acids else True
             new_positions, logp_proposal = geometry_engine.propose(topology_proposal, positions, beta,
-                                                                       validate_energy_bookkeeping=True)
+                                                                       validate_energy_bookkeeping=validate_energy_bookkeeping)
             logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, positions, beta,
-                                                    validate_energy_bookkeeping=True)
+                                                    validate_energy_bookkeeping=validate_energy_bookkeeping)
             # Check potential energy
             platform = openmm.Platform.getPlatformByName('Reference')
             integrator = LangevinIntegrator(temperature=temperature)
@@ -937,3 +937,122 @@ def test_flattenedHybridTopologyFactory_energies():
     # Test alanine dipeptide repartitioned htf with flattened torsions and exceptions in vacuum
     atp, system_generator = generate_atp()
     flattenedHybridTopologyFactory_energies(atp.topology, '1', atp.system, atp.positions, system_generator, repartitioned=True)
+
+
+def run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_energies=True):
+    """
+    Test whether the difference in the nonalchemical zero and alchemical zero states is the forward valence energy.  Also test for the one states.
+
+    By default, runs point energy (of the positions in the htf) test.
+
+    Parameters
+    ----------
+    test_name : str
+        Name of the test system. Currently supports: 'ala-dipeptide', '8mer', 'barstar'.
+    phase : str
+        Name of the phase. Currently supports: 'vacuum', 'solvent'
+    use_point_energies : boolean, default True
+        Whether to run the point energy or MD test for energy validation.
+
+    """
+
+    import tempfile
+    import pickle
+
+    from perses.tests.test_topology_proposal import generate_atp, generate_dipeptide_top_pos_sys
+    from perses.app.relative_point_mutation_setup import PointMutationExecutor
+    from perses.tests.utils import validate_endstate_energies_point, validate_endstate_energies_md
+
+    assert phase in ['vacuum', 'solvent', 'complex'], "Specified phase is invalid! Must be 'vacuum', 'solvent', or 'complex'"
+
+    print(f"{test_name} in {phase}")
+
+    # Generate htf
+    if test_name == 'ala-dipeptide':
+        atp, system_generator = generate_atp(phase=phase)
+        htf = generate_dipeptide_top_pos_sys(atp.topology,
+                                             'THR',
+                                             atp.system,
+                                             atp.positions,
+                                             system_generator,
+                                             conduct_htf_prop=True,
+                                             generate_rest_capable_hybrid_topology_factory=True,
+                                             validate_endstate_energy=False)
+    else:
+        if test_name == '8mer':
+            input_filename = resource_filename('perses', 'data/8mer-example/4zuh_peptide_capped.pdb')
+            chain_id = '1'
+            residue_id = '2'
+            proposed_residue = 'THR'
+        elif test_name == 'barstar':
+            input_filename = resource_filename('perses', 'data/barstar-mutation/1brs_barstar_renumbered.pdb')
+            chain_id = '1'
+            residue_id = '42'
+            proposed_residue = 'ALA'
+        else:
+            raise Exception('Test name not found!')
+
+        solvent_delivery = PointMutationExecutor(input_filename,
+                                                 chain_id,
+                                                 residue_id,
+                                                 proposed_residue,
+                                                 phase=phase,
+                                                 forcefield_files=['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
+                                                 ionic_strength=0.05 * unit.molar,
+                                                 rest_radius=0.2,
+                                                 generate_unmodified_hybrid_topology_factory=False,
+                                                 generate_rest_capable_hybrid_topology_factory=True,
+                                                 conduct_endstate_validation=False,
+                                                 )
+        htf = solvent_delivery.get_apo_rest_htf()
+
+    # Save htf as temporary pickled file
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with open(os.path.join(temp_dir, "htf.pickle"), "wb") as f:
+            pickle.dump(htf, f)
+
+        if use_point_energies:
+            for endstate in [0, 1]:
+                with open(os.path.join(temp_dir, "htf.pickle"), "rb") as f:
+                    htf = pickle.load(f)
+                validate_endstate_energies_point(htf, endstate=endstate, minimize=True)
+        else:
+            for endstate in [0, 1]:
+                with open(os.path.join(temp_dir, "htf.pickle"), "rb") as f:
+                    htf = pickle.load(f)
+                validate_endstate_energies_md(htf, endstate=endstate, n_steps=10)
+
+def test_RESTCapableHybridTopologyFactory_energies():
+    """
+    Uses run_RESTCapableHybridTopologyFactory_energies() to run energy validation for RESTCapableHybridTopologyFactory
+    on alanine dipeptide in vacuum.
+
+    """
+
+    test_cases = [('ala-dipeptide', 'vacuum')]
+
+    for test_name, phase in test_cases:
+        # Run point energy validation test
+        run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_energies=True)
+
+        # Run MD validation test
+        run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_energies=False)
+
+@pytest.mark.gpu_needed
+def test_RESTCapableHybridTopologyFactory_energies_GPU():
+    """
+    Uses run_RESTCapableHybridTopologyFactory_energies() to run energy validation for RESTCapableHybridTopologyFactory
+    on alanine dipeptide, 8mer, and barstar in solvent. Only run this on a GPU as the
+    CPU is too slow.
+
+    """
+
+    test_cases = [('ala-dipeptide', 'solvent'), ('8mer', 'solvent'), ('barstar', 'solvent')]
+
+    for test_name, phase in test_cases:
+        # Run point energy validation test
+        run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_energies=True)
+
+        # Run MD validation test
+        run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_energies=False)
+
