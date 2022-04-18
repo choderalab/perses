@@ -42,7 +42,7 @@ $ perses-cli --yaml my.yaml --override old_ligand_index:2 --override new_ligand_
 This will override the options in the yaml (be sure to change the `trajectory_directory` so you don't overwrite your previous simulation.
 Currently only `key:value` parts of the yaml can be overridden i.e. not sequences or lists.
 
-To view all options ultimately used in the simulation, a file named `parsed-$date-.yaml` is created. 
+To view all options ultimately used in the simulation, a file named `parsed-$date-$yaml_name.yaml` is created. 
 This file is located in the same directory as the yaml file used to launch the simulation.
 
 ## Example Use Case
@@ -52,14 +52,19 @@ We will use a geometric based atom mapping.
 Our yaml file `my.yaml` is setup to do an alchemical transformation from ligand 0 to ligand 1 for the solvent, vacuum, and complex phase.
 We will use a bash loop (see `run_star_map.sh`) to do a star map with 6 different ligands.
 We will put the ligand at index 0 at the center of star map with the following bash script:
+
 ```bash
 #!/usr/bin/env bash
 
-for new_ligand_idx in $(seq 1 5)
+set -xeuo pipefail
+
+old_ligand_idx=0
+for new_ligand_idx in $(seq 1 10)
 do 
-	perses-cli --yaml my.yaml --override old_ligand_index:0 --override new_ligand_index:"$new_ligand_idx" --override trajectory_directory:lig0to"$new_ligand_idx"
+	perses-cli --yaml my.yaml --override old_ligand_index:"$old_ligand_idx" --override new_ligand_index:"$new_ligand_idx" --override trajectory_directory:lig"$old_ligand_idx"to"$new_ligand_idx"
 done
 ```
+
 This is equivalent to running all of these commands manually:
 
 ```bash
