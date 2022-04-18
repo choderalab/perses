@@ -42,8 +42,6 @@ atom_expression:
 bond_expession:
   - DefaultBonds
 
-
-
 # Multi-state sampling scheme
 # One of ['repex', 'nonequilibrium', 'sams']
 fe_type: repex
@@ -75,9 +73,6 @@ atom_selection: not water
 phases:
     - complex
     - solvent
-
-
-h_constraints: true
 
 # Use geometry-derived mapping
 use_given_geometries: true
