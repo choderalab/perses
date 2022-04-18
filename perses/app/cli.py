@@ -95,10 +95,6 @@ def _test_platform(platform_name):
 def cli(yaml, platform_name, override):
     """test"""
     click.echo(click.style(percy, fg="bright_magenta"))
-    click.echo("📖\t Fetching simulation options ")
-    options = getSetupOptions(yaml, override_string=override)
-    click.echo("🖨️\t Printing options")
-    click.echo(options)
     if override:
         click.echo("✍️ \t Overrides used")
     click.echo("🕵️\t Checking OpenEye license")
@@ -107,7 +103,7 @@ def cli(yaml, platform_name, override):
     click.echo("🖥️⚡\t Checking whether requested compute platform is available")
     _test_platform(platform_name)
     click.echo("🏃\t Running simulation")
-    run(yaml_filename=yaml, setup_options=options)
+    run(yaml_filename=yaml, override_string=override)
     click.echo("🧪\t Simulation over")
 
 
