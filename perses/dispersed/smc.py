@@ -1,6 +1,3 @@
-import openmmtools.cache as cache
-import os
-import copy
 from perses.dispersed.utils import *
 
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
@@ -12,17 +9,14 @@ import time
 from collections import namedtuple
 from perses.annihilation.lambda_protocol import LambdaProtocol
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState
-from perses.dispersed import *
 import random
 import pymbar
 from perses.dispersed.parallel import Parallelism
-from openmmtools import utils
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("sMC")
 _logger.setLevel(logging.INFO)
 
-cache.global_context_cache.platform = configure_platform(utils.get_fastest_platform().getName())
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
 DISTRIBUTED_ERROR_TOLERANCE = 1e-4
 
