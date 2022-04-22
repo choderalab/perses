@@ -23,7 +23,8 @@ The `--yaml` argument is the path to the yaml file.
 If `--platform-name` is used e.g. `--platform-name CUDA` then an error will be raised if the requested platform is unavailable.
 This is useful since by default, we attempt to use the fastest platform available.
 If there is misconfiguration issue on a GPU node for example, we will fall back to using the CPU which is likely undesirable.
-Hence, it is recommended to use `--platform-name CUDA` when running on a system with GPU resources. 
+Hence, it is recommended to use `--platform-name CUDA` when running on a system with GPU resources.
+Options for `--platform-name` are `Reference`, `CPU`, `CUDA`, and `OpenCL`.
 
 The `--overrride` option is used to specify and option that will override an option set in the yaml.
 For example, if your yaml file contained
