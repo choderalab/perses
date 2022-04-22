@@ -122,7 +122,7 @@ class PointMutationExecutor(object):
         arguments
             protein_filename : str
                 path to protein (to mutate); .pdb, .cif
-                Note: if there are nonstandard residues, the PDB should contain the standard residue name but the atoms/positions should correspond to the nonstandard residue. E.g. if I want to include HID, the PDB should contain HIS for the residue name, but the atoms should correspond to the atoms present in HID. You can use openmm.app.Modeller.addHydrogens() to generate a PDB like this. The same is true for the ligand_input, if its a PDB. 
+                Note: if there are nonstandard residues, the PDB should contain the standard residue name but the atoms/positions should correspond to the nonstandard residue. E.g. if I want to include HID, the PDB should contain HIS for the residue name, but the atoms should correspond to the atoms present in HID. You can use openmm.app.Modeller.addHydrogens() to generate a PDB like this. The same is true for the ligand_input, if its a PDB.
                 Note: this can be the protein solute only or the solvated protein. if its the former, solvate should be set to True.
                 if its the latter, solvate should be set to False.
             mutation_chain_id : str
@@ -206,6 +206,7 @@ class PointMutationExecutor(object):
         else:
             raise Exception("protein_filename file format is not supported. supported formats: .pdb, .cif")
         protein_positions, protein_topology, protein_md_topology = protein_pdb.positions, protein_pdb.topology, md.Topology.from_openmm(protein_pdb.topology)
+        protein_topology = protein_md_topology.to_openmm() if solvate else protein_topology
         protein_n_atoms = protein_md_topology.n_atoms
 
         # Load the ligand, if present
