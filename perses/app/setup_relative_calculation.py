@@ -7,7 +7,7 @@ import simtk.unit as unit
 import logging
 from pathlib import Path
 
-from perses.annihilation.relative import HybridTopologyFactory
+from perses.annihilation.relative import HybridTopologyFactory, RESTCapableHybridTopologyFactory
 from perses.app.relative_setup import RelativeFEPSetup
 from perses.annihilation.lambda_protocol import LambdaProtocol
 
@@ -306,6 +306,12 @@ def getSetupOptions(filename):
     if not 'rmsd_restraint' in setup_options:
         setup_options['rmsd_restraint'] = False
 
+    # Handling htf input parameter
+    if 'hybrid_topology_factory' not in setup_options:
+        default_htf_class_name = "HybridTopologyFactory"
+        setup_options['hybrid_topology_factory'] = default_htf_class_name
+        _logger.info(f"\t 'hybrid_topology_factory' not specified: default to {default_htf_class_name}")
+
     os.makedirs(trajectory_directory, exist_ok=True)
 
 
@@ -562,33 +568,24 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         else:
             _internal_parallelism = None
 
-
         ne_fep = dict()
         for phase in phases:
             _logger.info(f"\t\tphase: {phase}")
-            hybrid_factory = HybridTopologyFactory(top_prop['%s_topology_proposal' % phase],
-                                               top_prop['%s_old_positions' % phase],
-                                               top_prop['%s_new_positions' % phase],
-                                               neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
-                                               neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
-                                               softcore_LJ_v2 = setup_options['softcore_v2'],
-                                               interpolate_old_and_new_14s = setup_options['anneal_1,4s'],
-                                               rmsd_restraint=setup_options['rmsd_restraint'],
-                                               )
+            hybrid_factory = _generate_htf(phase, top_prop, setup_options)
 
             if build_samplers:
-                ne_fep[phase] = SequentialMonteCarlo(factory = hybrid_factory,
-                                                     lambda_protocol = setup_options['lambda_protocol'],
-                                                     temperature = temperature,
-                                                     trajectory_directory = trajectory_directory,
-                                                     trajectory_prefix = f"{trajectory_prefix}_{phase}",
-                                                     atom_selection = atom_selection,
-                                                     timestep = timestep,
-                                                     eq_splitting_string = eq_splitting,
-                                                     neq_splitting_string = neq_splitting,
-                                                     collision_rate = setup_options['ncmc_collision_rate_ps'],
-                                                     ncmc_save_interval = ncmc_save_interval,
-                                                     internal_parallelism = _internal_parallelism)
+                ne_fep[phase] = SequentialMonteCarlo(factory=hybrid_factory,
+                                                     lambda_protocol=setup_options['lambda_protocol'],
+                                                     temperature=temperature,
+                                                     trajectory_directory=trajectory_directory,
+                                                     trajectory_prefix=f"{trajectory_prefix}_{phase}",
+                                                     atom_selection=atom_selection,
+                                                     timestep=timestep,
+                                                     eq_splitting_string=eq_splitting,
+                                                     neq_splitting_string=neq_splitting,
+                                                     collision_rate=setup_options['ncmc_collision_rate_ps'],
+                                                     ncmc_save_interval=ncmc_save_interval,
+                                                     internal_parallelism=_internal_parallelism)
 
         print("Nonequilibrium switching driver class constructed")
 
@@ -604,15 +601,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
             _logger.info(f"\t\tphase: {phase}:")
             #TODO write a SAMSFEP class that mirrors NonequilibriumSwitchingFEP
             _logger.info(f"\t\twriting HybridTopologyFactory for phase {phase}...")
-            htf[phase] = HybridTopologyFactory(top_prop['%s_topology_proposal' % phase],
-                                               top_prop['%s_old_positions' % phase],
-                                               top_prop['%s_new_positions' % phase],
-                                               neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
-                                               neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
-                                               softcore_LJ_v2 = setup_options['softcore_v2'],
-                                               interpolate_old_and_new_14s = setup_options['anneal_1,4s'],
-                                               rmsd_restraint=setup_options['rmsd_restraint']
-                                               )
+            htf[phase] = _generate_htf(phase, top_prop, setup_options)
 
         for phase in phases:
            # Define necessary vars to check energy bookkeeping
@@ -1022,6 +1011,31 @@ def _resume_run(setup_options):
             _logger.info(f"\t\tFinished phase {phase}")
     else:
         raise("Can't resume")
+
+
+def _generate_htf(phase: str, topology_proposal_dictionary: dict, setup_options: dict):
+    """
+    Generates topology proposal for phase.
+    """
+    factory_name = setup_options['hybrid_topology_factory']
+    if factory_name == HybridTopologyFactory.__name__:
+        factory = HybridTopologyFactory
+    elif factory_name == RESTCapableHybridTopologyFactory.__name__:
+        factory = RESTCapableHybridTopologyFactory
+    try:
+        htf = factory(topology_proposal_dictionary[f'{phase}_topology_proposal'],
+                      topology_proposal_dictionary[f'{phase}_old_positions'],
+                      topology_proposal_dictionary[f'{phase}_new_positions'],
+                      neglected_new_angle_terms=topology_proposal_dictionary[f"{phase}_forward_neglected_angles"],
+                      neglected_old_angle_terms=topology_proposal_dictionary[f"{phase}_reverse_neglected_angles"],
+                      softcore_LJ_v2=setup_options['softcore_v2'],
+                      interpolate_old_and_new_14s=setup_options['anneal_1,4s'],
+                      rmsd_restraint=setup_options['rmsd_restraint']
+                      )
+    except NameError as error:
+        _logger.error(f"{error}. Check 'hybrid_topology_factory' name in input file.")
+        raise
+    return htf
 
 
 if __name__ == "__main__":
