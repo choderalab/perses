@@ -1,6 +1,5 @@
 import logging
 import os
-import shutil
 import subprocess
 import tempfile
 
@@ -17,12 +16,13 @@ from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_point_mutation_setup import PointMutationExecutor
 from perses.app.relative_setup import RelativeFEPSetup
 from perses.samplers.multistate import HybridRepexSampler
+from perses.tests.utils import enter_temp_directory
 
 
 @pytest.mark.gpu_ci
 def test_cli_resume_repex():
 
-    with tempfile.TemporaryDirectory() as temp_dir:
+    with enter_temp_directory() as temp_dir:
         os.chdir(temp_dir)
         # Need to get path to examples dir
         protein_pdb = resource_filename(
@@ -88,7 +88,8 @@ def test_cli_resume_repex():
 @pytest.mark.gpu_ci
 def test_resume_small_molecule():
 
-    with tempfile.TemporaryDirectory() as tmp_path:
+    with enter_temp_directory() as tmp_path:
+        cwd = os.getcwd()  # get current working dir to come back to it
         os.chdir(tmp_path)
 
         smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
@@ -162,7 +163,7 @@ def test_resume_small_molecule():
 @pytest.mark.gpu_ci
 def test_resume_protein_mutation_with_checkpoint(tmp_path):
 
-    with tempfile.TemporaryDirectory() as tmp_path:
+    with enter_temp_directory() as tmp_path:
         os.chdir(tmp_path)
 
         pdb_filename = resource_filename("perses", "data/ala_vacuum.pdb")
@@ -232,7 +233,7 @@ def test_resume_protein_mutation_with_checkpoint(tmp_path):
 @pytest.mark.gpu_ci
 def test_resume_protein_mutation_no_checkpoint(tmp_path):
 
-    with tempfile.TemporaryDirectory() as tmp_path:
+    with enter_temp_directory() as tmp_path:
         os.chdir(tmp_path)
 
         pdb_filename = resource_filename("perses", "data/ala_vacuum.pdb")
