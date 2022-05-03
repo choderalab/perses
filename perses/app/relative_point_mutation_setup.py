@@ -54,7 +54,8 @@ class PointMutationExecutor(object):
                                      ligand_index=0,
                                      forcefield_files=['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
                                      barostat=openmm.MonteCarloBarostat(1.0 * unit.atmosphere, temperature, 50),
-                                     forcefield_kwargs={'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.PME, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus},
+                                     forcefield_kwargs={'removeCMMotion': False, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus},
+                                     periodic_forcefield_kwargs={'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.PME}
                                      small_molecule_forcefields='gaff-2.11')
 
         complex_htf = pm_delivery.get_complex_htf()
@@ -104,8 +105,8 @@ class PointMutationExecutor(object):
                  ionic_strength=0.15 * unit.molar,
                  forcefield_files=['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
                  barostat=openmm.MonteCarloBarostat(1.0 * unit.atmosphere, temperature, 50),
-                 forcefield_kwargs={'removeCMMotion': False, 'ewaldErrorTolerance': 0.00025, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus},
-                 periodic_forcefield_kwargs={'nonbondedMethod': app.PME},
+                 forcefield_kwargs={'removeCMMotion': False, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus},
+                 periodic_forcefield_kwargs={'nonbondedMethod': app.PME, 'ewaldErrorTolerance': 0.00025},
                  nonperiodic_forcefield_kwargs=None,
                  small_molecule_forcefields='gaff-2.11',
                  complex_box_dimensions=None,
@@ -165,9 +166,9 @@ class PointMutationExecutor(object):
                 forcefield files for proteins and solvent
             barostat : openmm.MonteCarloBarostat, default openmm.MonteCarloBarostat(1.0 * unit.atmosphere, 300 * unit.kelvin, 50)
                 barostat to use
-            forcefield_kwargs : dict, default {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus}
+            forcefield_kwargs : dict, default {'removeCMMotion': False, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus}
                 forcefield kwargs for system parametrization
-            periodic_forcefield_kwargs : dict, default {'nonbondedMethod': app.PME}
+            periodic_forcefield_kwargs : dict, default {'nonbondedMethod': app.PME, 'ewaldErrorTolerance': 1e-4}
                 periodic forcefield kwargs for system parametrization
             nonperiodic_forcefield_kwargs : dict, default None
                 non-periodic forcefield kwargs for system parametrization
