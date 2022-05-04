@@ -206,6 +206,7 @@ class PointMutationExecutor(object):
         else:
             raise Exception("protein_filename file format is not supported. supported formats: .pdb, .cif")
         protein_positions, protein_topology, protein_md_topology = protein_pdb.positions, protein_pdb.topology, md.Topology.from_openmm(protein_pdb.topology)
+        protein_topology = protein_md_topology.to_openmm() if solvate else protein_topology
         protein_n_atoms = protein_md_topology.n_atoms
 
         # Load the ligand, if present
