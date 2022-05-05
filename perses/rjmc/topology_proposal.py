@@ -528,60 +528,6 @@ class PolymerProposalEngine(ProposalEngine):
 
         return resname_to_charge[current_resname] - resname_to_charge[new_resname]
 
-    @staticmethod
-    def get_water_indices(charge_diff,
-                               new_positions,
-                               new_topology,
-                               radius=0.8):
-        """
-        Choose random water(s) (at least `radius` nm away from the protein) to turn into ion(s). Returns the atom indices of the water(s) (index w.r.t. new_topology)
-
-        Parameters
-        ----------
-        charge_diff : int
-            the charge difference between the old_system - new_system
-        new_positions : np.ndarray(N, 3)
-            positions (nm) of atoms corresponding to new_topology
-        new_topology : openmm.Topology
-            topology of new system
-        radius : float, default 0.8
-            minimum distance (in nm) that all candidate waters must be from 'protein atoms'
-
-        Returns
-        -------
-        ion_indices : np.array(abs(charge_diff)*3)
-            indices of water atoms to be turned into ions
-        """
-
-        import mdtraj as md
-        from mdtraj.core.residue_names import _SOLVENT_TYPES
-
-        # Create trajectory
-        traj = md.Trajectory(new_positions[np.newaxis, ...], md.Topology.from_openmm(new_topology))
-
-        # Define water atoms
-        water_atoms = traj.topology.select("water")
-
-        # Define solute atoms
-        # TODO: Update this once we either (1) get solvent as a keyword into the MDTraj DSL, or (2) transition to MDAnalysis
-        solvent_types = list(_SOLVENT_TYPES)
-        solute_atoms = [atom.index for atom in traj.topology.atoms if atom.residue.name not in solvent_types]
-
-        # Get water atoms within radius of protein
-        neighboring_atoms = md.compute_neighbors(traj, radius, solute_atoms, haystack_indices=water_atoms)[0]
-
-        # Get water atoms outside of radius of protein
-        nonneighboring_residues = set([atom.residue.index for atom in traj.topology.atoms if (atom.index in water_atoms) and (atom.index not in neighboring_atoms)])
-        assert len(nonneighboring_residues) > 0, "there are no available nonneighboring waters"
-        # Choose N random nonneighboring waters, where N is determined based on the charge_diff
-        choice_residues = np.random.choice(list(nonneighboring_residues), size=abs(charge_diff), replace=False)
-
-        # Get the atom indices in the water(s)
-        choice_indices = np.array([[atom.index for atom in traj.topology.residue(res).atoms] for res in choice_residues])
-
-        return np.ndarray.flatten(choice_indices)
-
-
 
     def propose(self,
                 current_system,
@@ -1119,14 +1065,14 @@ class PolymerProposalEngine(ProposalEngine):
                             demap_CBs=False):
         """
         Construct atom map (key: index to atom in new residue, value: index to atom in old residue) to supply as an argument to the TopologyProposal.
-        
+
         By default, the atom map:
         1) Maps all backbone atoms (exception: for GLY, do not map HA2 and HA3)
         2) Map CBs only (no other sidechain atoms)
-        
+
         If additional sidechains should be mapped, extra_sidechain_map can be supplied to supplement the default map.
         If CBs should be demapped, set demap_CBs=True.
-        
+
         Parameters
         ----------
         residue_map : list(tuples)
@@ -1159,7 +1105,7 @@ class PolymerProposalEngine(ProposalEngine):
         """
         from pkg_resources import resource_filename
         import openeye.oechem as oechem
-        
+
         # Retrieve map of old to new residues
         # old_to_new_residues : dict, key : simtk.openmm.app.topology.Residue old residue, value : simtk.openmm.app.topology.Residue new residue
         old_to_new_residues = {}
@@ -1195,7 +1141,7 @@ class PolymerProposalEngine(ProposalEngine):
         for atom in old_res.atoms():
             old_atom_index = atom.index
             old_atom_name = atom.name
-            
+
             if old_atom_name in backbone_atoms:
                 if old_res_name == 'GLY' and old_atom_name in ['HA2', 'HA3']: # Do not map HA if old residue GLY
                     continue
@@ -1204,14 +1150,14 @@ class PolymerProposalEngine(ProposalEngine):
                 else:
                     new_atom_index = new_res_name_to_index[old_atom_name]
                     local_atom_map[new_atom_index] = old_atom_index
-            
+
             elif old_atom_name in sidechain_atoms:
                 if new_res_name == 'GLY': # Do not map sidechain atoms if GLY
                     continue
                 else:
                     new_atom_index = new_res_name_to_index[old_atom_name]
                     local_atom_map[new_atom_index] = old_atom_index
-        
+
         # Validate extra_sidechain_map
         if extra_sidechain_map:
             assert type(extra_sidechain_map) is dict, "extra_sidechain_map must be a dict"
@@ -1219,15 +1165,15 @@ class PolymerProposalEngine(ProposalEngine):
             new_res_indices = [atom.index for atom in new_res.atoms()]
             assert all([index in new_res_indices for index in extra_sidechain_map.keys()]), "at least one of the new indices in extra_sidechain_map is not present in the new_topology"
             assert all([index in old_res_indices for index in extra_sidechain_map.values()]), "at least one of the new indices in extra_sidechain_map is not present in the old_topology"
-        
+
             # Add extra_sidechain_map to local_atom_map
             local_atom_map.update(extra_sidechain_map)
-        
+
         _logger.info(f"local_atom_map: {local_atom_map}")
-        
+
         mapped_atoms = [(new_res_index_to_name[new_idx], old_res_index_to_name[old_idx]) for new_idx, old_idx in local_atom_map.items()]
-        _logger.info(f"the mapped atom names are: {mapped_atoms}")            
-            
+        _logger.info(f"the mapped atom names are: {mapped_atoms}")
+
         # Retrieve old and new oemols
         old_residue_pdb_filename = resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{old_res_name}.pdb"))
         new_residue_pdb_filename = resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{new_res_name}.pdb"))
@@ -1239,9 +1185,9 @@ class PolymerProposalEngine(ProposalEngine):
         # new_res_to_oemol_map : dict, key : int new atom index (OpenMM topology), value : int new atom index (oemol)
         old_res_to_oemol_map = {atom.index: old_oemol.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx() for atom in old_res.atoms()}
         new_res_to_oemol_map = {atom.index: new_oemol.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx() for atom in new_res.atoms()}
-            
+
         return local_atom_map, old_res_to_oemol_map, new_res_to_oemol_map, old_oemol, new_oemol
-    
+
 
     def _get_mol_atom_matches(self, current_molecule, proposed_molecule, first_atom_index_old, first_atom_index_new):
         """
