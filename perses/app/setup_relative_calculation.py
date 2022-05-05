@@ -14,7 +14,7 @@ from perses.annihilation.lambda_protocol import LambdaProtocol
 from openmmtools import mcmc, cache
 from openmmtools.multistate import MultiStateReporter
 from perses.utils.smallmolecules import render_atom_mapping
-from perses.tests.utils import validate_endstate_energies
+from perses.tests.utils import validate_endstate_energies, validate_endstate_energies_point
 from perses.dispersed.smc import SequentialMonteCarlo
 
 import datetime
@@ -593,6 +593,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
 
         print("Nonequilibrium switching driver class constructed")
 
+        # TODO: Should this function return a single thing instead of two different objects for neq vs others?
         return {'topology_proposals': top_prop, 'ne_fep': ne_fep}
 
     else:
@@ -608,16 +609,10 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
             htf[phase] = _generate_htf(phase, top_prop, setup_options)
 
         for phase in phases:
-           # Define necessary vars to check energy bookkeeping
-            _top_prop = top_prop['%s_topology_proposal' % phase]
-            _htf = htf[phase]
-            _forward_added_valence_energy = top_prop['%s_added_valence_energy' % phase]
-            _reverse_subtracted_valence_energy = top_prop['%s_subtracted_valence_energy' % phase]
-
             if not use_given_geometries:
-                zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD)#, trajectory_directory=f'{xml_directory}{phase}')
-                _logger.info(f"\t\terror in zero state: {zero_state_error}")
-                _logger.info(f"\t\terror in one state: {one_state_error}")
+                _validate_endstate_energies_for_htf(htf, top_prop, phase,
+                                                    beta=1.0 / (kB * temperature),
+                                                    ENERGY_THRESHOLD=ENERGY_THRESHOLD)
             else:
                 _logger.info(f"'use_given_geometries' was passed to setup; skipping endstate validation")
 
@@ -832,6 +827,7 @@ def run(yaml_filename=None):
                 _forward_added_valence_energy = setup_dict['topology_proposals'][f"{phase}_added_valence_energy"]
                 _reverse_subtracted_valence_energy = setup_dict['topology_proposals'][f"{phase}_subtracted_valence_energy"]
 
+                # TODO: Validation here should be done with the same _validate_endstate_energies_for_htf function.
                 zero_state_error, one_state_error = validate_endstate_energies(hybrid_factory._topology_proposal, hybrid_factory, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, trajectory_directory=f'{setup_options["trajectory_directory"]}/xml/{phase}')
                 _logger.info(f"\t\terror in zero state: {zero_state_error}")
                 _logger.info(f"\t\terror in one state: {one_state_error}")
@@ -1040,6 +1036,37 @@ def _generate_htf(phase: str, topology_proposal_dictionary: dict, setup_options:
         _logger.error(f"{error}. Check 'hybrid_topology_factory' name in input file.")
         raise
     return htf
+
+
+def _validate_endstate_energies_for_htf(hybrid_topology_factory_dict: dict, topology_proposal_dict: dict, phase: str,
+                                        **kwargs):
+    """
+    Validates endstate energies according to different hybrid topology factories and phases.
+
+    Parameters
+    ----------
+    hybrid_topology_factory: dict
+        Dictionary with different hybrid topology factories for different phases. Phase as key, HTF as value.
+    topology_proposal_dict: dict
+        Dictionary with different topology proposals for different phases. Phase as key, top_pro as value.
+    phase: str
+        Name of the phase.
+    """
+    htf = hybrid_topology_factory_dict[phase]
+    if htf.__name__ == "Hybrid TopologyFactory":
+        topology_proposal = topology_proposal_dict[f"{phase}_topology_proposal"]
+        forward_added_valence_energy = topology_proposal_dict[f"{phase}_added_valence_energy"]
+        reverse_substracted_valence_energy = topology_proposal_dict[f"{phase}_substracted_valence_energy"]
+        zero_state_error, one_state_error = validate_endstate_energies(topology_proposal,
+                                                                       htf,
+                                                                       forward_added_valence_energy,
+                                                                       reverse_substracted_valence_energy,
+                                                                       **kwargs)
+        _logger.info(f"\t\terror in zero state: {zero_state_error}")
+        _logger.info(f"\t\terror in one state: {one_state_error}")
+    elif htf.__name__ == "RESTCapableHybridTopologyFactory":
+        for endstate in [0, 1]:
+            validate_endstate_energies_point(htf, endstate=endstate, minimize=True)
 
 
 if __name__ == "__main__":
