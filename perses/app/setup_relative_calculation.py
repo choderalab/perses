@@ -312,6 +312,10 @@ def getSetupOptions(filename):
         setup_options['hybrid_topology_factory'] = default_htf_class_name
         _logger.info(f"\t 'hybrid_topology_factory' not specified: default to {default_htf_class_name}")
 
+    # Handling absence platform name input (backwards compatibility)
+    if 'platform' not in setup_options:
+        setup_options['platform'] = None  # defaults to choosing best platform
+
     os.makedirs(trajectory_directory, exist_ok=True)
 
 
@@ -659,7 +663,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                     return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf}
 
                 # get platform
-                platform = get_openmm_platform(platform_name=None)
+                platform = get_openmm_platform(platform_name=setup_options['platform'])
                 # Setup context caches for multistate samplers
                 energy_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
                 sampler_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
@@ -958,7 +962,7 @@ def _resume_run(setup_options):
     from openmmtools.cache import ContextCache
     from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
     # get platform
-    platform = get_openmm_platform(platform_name=None)
+    platform = get_openmm_platform(platform_name=setup_options['platform'])
     # Setup context caches for multistate samplers
     energy_context_cache = ContextCache(capacity=None, time_to_live=None, platform=platform)
     sampler_context_cache = ContextCache(capacity=None, time_to_live=None, platform=platform)
