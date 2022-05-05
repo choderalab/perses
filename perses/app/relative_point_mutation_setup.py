@@ -206,6 +206,7 @@ class PointMutationExecutor(object):
         else:
             raise Exception("protein_filename file format is not supported. supported formats: .pdb, .cif")
         protein_positions, protein_topology, protein_md_topology = protein_pdb.positions, protein_pdb.topology, md.Topology.from_openmm(protein_pdb.topology)
+        protein_topology = protein_md_topology.to_openmm() if solvate else protein_topology
         protein_n_atoms = protein_md_topology.n_atoms
 
         # Load the ligand, if present
@@ -545,7 +546,8 @@ class PointMutationExecutor(object):
         if phase != 'vacuum':
             _logger.info(f"solvating at {ionic_strength} using {water_model}")
             if not box_dimensions:
-                modeller.addSolvent(self.system_generator.forcefield, model=water_model, padding=0.9 * unit.nanometers, ionicStrength=ionic_strength)
+                modeller.addSolvent(self.system_generator.forcefield, model=water_model,
+                        padding=1.1 * unit.nanometers, ionicStrength=ionic_strength)
             else:
                 modeller.addSolvent(self.system_generator.forcefield, model=water_model, boxSize=box_dimensions, ionicStrength=ionic_strength)
         else:

@@ -522,7 +522,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
         modeller.delete(hs)
         modeller.addHydrogens(forcefield=system_generator.forcefield)
-        modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9.0*unit.angstroms)
+        modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=16.0*unit.angstroms)
         solvated_topology = modeller.getTopology()
         solvated_positions = modeller.getPositions()
         solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
