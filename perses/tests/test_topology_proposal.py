@@ -14,7 +14,7 @@ from nose.plugins.attrib import attr
 
 from openmmtools.constants import kB
 from perses.utils.openeye import OEMol_to_omm_ff, smiles_to_oemol
-from perses.utils.smallmolecules import render_atom_mapping
+from perses.utils.charge_changing import get_water_indices
 from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
 from perses.rjmc import topology_proposal
 from collections import defaultdict
@@ -889,10 +889,10 @@ def test_protein_counterion_topology_fix_positive():
     assert charge_diff_test == charge_diff
 
     # Get the array of water indices (w.r.t. new topology) to turn into ions
-    water_indices = PolymerProposalEngine.get_water_indices(charge_diff = charge_diff_test,
-                                             new_positions = new_pos,
-                                             new_topology = top_proposal._new_topology,
-                                             radius=0.8)
+    water_indices = get_water_indices(charge_diff=charge_diff_test,
+                                      new_positions=new_pos,
+                                      new_topology=top_proposal._new_topology,
+                                      radius=0.8)
 
     assert len(water_indices) == 3
 
@@ -936,10 +936,10 @@ def test_protein_counterion_topology_fix_negitive():
     assert charge_diff_test == charge_diff
 
     # Get the array of water indices (w.r.t. new topology) to turn into ions
-    water_indices = PolymerProposalEngine.get_water_indices(charge_diff = charge_diff_test,
-                                             new_positions = new_pos,
-                                             new_topology = top_proposal._new_topology,
-                                             radius=0.8)
+    water_indices = get_water_indices(charge_diff=charge_diff_test,
+                                      new_positions=new_pos,
+                                      new_topology=top_proposal._new_topology,
+                                      radius=0.8)
 
     assert len(water_indices) == 3
 
@@ -984,9 +984,9 @@ def test_protein_counterion_topology_fix_zero():
     assert charge_diff_test == charge_diff
 
     # Get the array of water indices (w.r.t. new topology) to turn into ions
-    water_indices = PolymerProposalEngine.get_water_indices(charge_diff = charge_diff_test,
-                                             new_positions = new_pos,
-                                             new_topology = top_proposal._new_topology,
-                                             radius=0.8)
+    water_indices = get_water_indices(charge_diff=charge_diff_test,
+                                      new_positions=new_pos,
+                                      new_topology=top_proposal._new_topology,
+                                      radius=0.8)
 
     assert len(water_indices) == 0
