@@ -173,7 +173,6 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
     from openmmtools.multistate import MultiStateReporter, MultiStateSamplerAnalyzer
     from openmmtools import cache, utils, mcmc
     platform = configure_platform(utils.get_fastest_platform().getName())
-    cache.global_context_cache.platform = platform
 
     data = {}
     n_iterations = 2
