@@ -362,7 +362,10 @@ class PointMutationExecutor(object):
                                                         validate_energy_bookkeeping=validate_bool)
 
             # Check for charge change...
-            self._handle_charge_changes(topology_proposal, new_positions)
+            if phase != 'vacuum':
+                self._handle_charge_changes(topology_proposal, new_positions)
+            else:
+                _logger.info("Skipping counterion because phase is vacuum.")
 
             if generate_unmodified_hybrid_topology_factory:
                 repartitioned_endstate = None
