@@ -1015,26 +1015,41 @@ def _resume_run(setup_options):
 
 def _generate_htf(phase: str, topology_proposal_dictionary: dict, setup_options: dict):
     """
-    Generates topology proposal for phase.
+    Generates topology proposal for phase. Supports both HybridTopologyFactory and new RESTCapableHybridTopologyFactory
     """
     factory_name = setup_options['hybrid_topology_factory']
+    htf_setup_dict = {
+        "neglected_new_angle_terms": topology_proposal_dictionary[f"{phase}_forward_neglected_angles"],
+        "neglected_old_angle_terms": topology_proposal_dictionary[f"{phase}_reverse_neglected_angles"],
+        "softcore_LJ_v2": setup_options['softcore_v2'],
+        "interpolate_old_and_new_14s": setup_options['anneal_1,4s'],
+        "rmsd_restraint": setup_options['rmsd_restraint']
+    }
+
     if factory_name == HybridTopologyFactory.__name__:
         factory = HybridTopologyFactory
     elif factory_name == RESTCapableHybridTopologyFactory.__name__:
         factory = RESTCapableHybridTopologyFactory
-    try:
-        htf = factory(topology_proposal_dictionary[f'{phase}_topology_proposal'],
-                      topology_proposal_dictionary[f'{phase}_old_positions'],
-                      topology_proposal_dictionary[f'{phase}_new_positions'],
-                      neglected_new_angle_terms=topology_proposal_dictionary[f"{phase}_forward_neglected_angles"],
-                      neglected_old_angle_terms=topology_proposal_dictionary[f"{phase}_reverse_neglected_angles"],
-                      softcore_LJ_v2=setup_options['softcore_v2'],
-                      interpolate_old_and_new_14s=setup_options['anneal_1,4s'],
-                      rmsd_restraint=setup_options['rmsd_restraint']
-                      )
-    except NameError as error:
-        _logger.error(f"{error}. Check 'hybrid_topology_factory' name in input file.")
-        raise
+        # Add/use specified REST HTF parameters if present
+        rest_specific_options = dict()
+        try:
+            rest_specific_options.update({'rest_radius': setup_options['rest_radius']})
+        except KeyError:
+            _logger.info("'rest_radius' not specified. Using default value.")
+        try:
+            rest_specific_options.update({'w_scale': setup_options['w_scale']})
+        except KeyError:
+            _logger.info("'w_scale' not specified. Using default value.")
+
+        # update htf_setup_dictionary with new parameters
+        htf_setup_dict.update(rest_specific_options)
+    else:
+        raise ValueError(f"Unsupported Hybrid Topology Factory. Check 'hybrid_topology_factory' name in input file.")
+    htf = factory(topology_proposal_dictionary[f'{phase}_topology_proposal'],
+                  topology_proposal_dictionary[f'{phase}_old_positions'],
+                  topology_proposal_dictionary[f'{phase}_new_positions'],
+                  **htf_setup_dict
+                  )
     return htf
 
 
