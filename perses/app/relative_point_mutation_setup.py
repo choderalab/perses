@@ -23,6 +23,7 @@ temperature = 300 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS', 'HID', 'HIE', 'HIP']
+KNOWN_PHASES = ['vacuum', 'complex', 'solvent']
 
 # Set up logger
 import logging
@@ -197,6 +198,9 @@ class PointMutationExecutor(object):
 
         """
         from openeye import oechem
+
+        if not phase in KNOWN_PHASES:
+            raise ValueError(f"phase '{phase}' unknown; must be one of {KNOWN_PHASES}")
 
         # First thing to do is load the apo protein to mutate...
         if protein_filename.endswith('pdb'):
