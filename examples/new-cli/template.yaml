@@ -71,8 +71,8 @@ atom_selection: not water
 # Calculation phases to run
 # Permitted phases: ['complex', 'solvent', 'vacuum']
 phases:
-    - complex
     - solvent
+    - complex
 
 # Use geometry-derived mapping
 use_given_geometries: true
