@@ -753,7 +753,9 @@ def run(yaml_filename=None, override_string=None):
     yaml_path = Path(yaml_filename)
     yaml_name = yaml_path.name
     time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-    yaml_parse_name = f"parsed-{time}-{yaml_name}"
+    from uuid import uuid4
+    uuid = str(uuid4()) # append a globally unique ID since the time is not unique
+    yaml_parse_name = f"parsed-{time}-{uuid}-{yaml_name}"
     with open(Path.joinpath(yaml_path.parents[0], yaml_parse_name), "w") as outfile:
             yaml.dump(setup_options, outfile)
 
