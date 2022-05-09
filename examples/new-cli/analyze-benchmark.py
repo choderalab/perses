@@ -165,8 +165,14 @@ def get_perses_network_results(basepath, trajectory_prefix='out'):
     import numpy as np
     from rich.progress import track
     for filename in track(yaml_filenames, description='[blue]Retrieving results of perses calculations...'):
-        with open(filename, 'rt') as infile:
-            perses_input = yaml.safe_load(infile)
+        try:
+            with open(filename, 'rt') as infile:
+                perses_input = yaml.safe_load(infile)
+        except yaml.scanner.ScannerError as e:
+            # Some files may become corrupted for unknown reasons
+            print(e)
+            continue
+            
         # Extract initial and final ligand indices
         old_ligand_index = perses_input['old_ligand_index']
         new_ligand_index = perses_input['new_ligand_index']

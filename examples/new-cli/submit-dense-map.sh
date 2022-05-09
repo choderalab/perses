@@ -12,6 +12,8 @@
 #BSUB -eo out_%J_%I.stderr
 #BSUB -L /bin/bash
 
+set -xeuo pipefail
+
 source ~/.bashrc
 OPENMM_CPU_THREADS=1
 
@@ -36,7 +38,6 @@ NLIGANDS=14
 old_ligand_index=$(( LSB_JOBINDEX / NLIGANDS ))
 new_ligand_index=$(( LSB_JOBINDEX % NLIGANDS ))
 if (( $old_ligand_index < $new_ligand_index )); then
-    echo perses-cli --yaml template.yaml --override old_ligand_index:${old_ligand_index} --override new_ligand_index:${new_ligand_index} --override n_cycles:1000 --override trajectory_directory:1ns_lig${old_ligand_index}to${new_ligand_index}
-    perses-cli --yaml template.yaml --override old_ligand_index:${old_ligand_index} --override new_ligand_index:${new_ligand_index} --override n_cycles:1000 --override trajectory_directory:1ns_lig${old_ligand_index}to${new_ligand_index}
+    perses-cli --yaml template.yaml --override old_ligand_index:${old_ligand_index} --override new_ligand_index:${new_ligand_index} --override n_cycles:10000 --override trajectory_directory:10ns_lig${old_ligand_index}to${new_ligand_index}
 fi
 
