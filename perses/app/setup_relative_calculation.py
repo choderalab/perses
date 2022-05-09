@@ -1067,21 +1067,21 @@ def _validate_endstate_energies_for_htf(hybrid_topology_factory_dict: dict, topo
     phase: str
         Name of the phase.
     """
-    htf = hybrid_topology_factory_dict[phase]
-    if htf.__name__ == "Hybrid TopologyFactory":
+    current_htf = hybrid_topology_factory_dict[phase]
+    if isinstance(current_htf, HybridTopologyFactory):
         topology_proposal = topology_proposal_dict[f"{phase}_topology_proposal"]
         forward_added_valence_energy = topology_proposal_dict[f"{phase}_added_valence_energy"]
-        reverse_substracted_valence_energy = topology_proposal_dict[f"{phase}_substracted_valence_energy"]
+        reverse_substracted_valence_energy = topology_proposal_dict[f"{phase}_subtracted_valence_energy"]
         zero_state_error, one_state_error = validate_endstate_energies(topology_proposal,
-                                                                       htf,
+                                                                       current_htf,
                                                                        forward_added_valence_energy,
                                                                        reverse_substracted_valence_energy,
                                                                        **kwargs)
         _logger.info(f"\t\terror in zero state: {zero_state_error}")
         _logger.info(f"\t\terror in one state: {one_state_error}")
-    elif htf.__name__ == "RESTCapableHybridTopologyFactory":
+    elif isinstance(current_htf, RESTCapableHybridTopologyFactory):
         for endstate in [0, 1]:
-            validate_endstate_energies_point(htf, endstate=endstate, minimize=True)
+            validate_endstate_energies_point(current_htf, endstate=endstate, minimize=True)
 
 
 if __name__ == "__main__":
