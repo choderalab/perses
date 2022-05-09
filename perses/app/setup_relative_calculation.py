@@ -748,15 +748,12 @@ def run(yaml_filename=None, override_string=None):
     setup_options = getSetupOptions(yaml_filename, override_string=override_string)
     _logger.debug(f"Setup Options {setup_options}")
 
-    # We want to make sure that if the file is in a directory, we put the parsed file in
-    # the same directory
-    yaml_path = Path(yaml_filename)
-    yaml_name = yaml_path.name
+    # The parsed yaml file will live in the experiment directory to avoid race conditions with other experiments
+    yaml_path = Path(setup_options['trajectory_directory'])
+    yaml_name = Path(yaml_filename).name  # extract name from input/template yaml file.
     time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-    from uuid import uuid4
-    uuid = str(uuid4()) # append a globally unique ID since the time is not unique
-    yaml_parse_name = f"parsed-{time}-{uuid}-{yaml_name}"
-    with open(Path.joinpath(yaml_path.parents[0], yaml_parse_name), "w") as outfile:
+    yaml_parse_name = f"perses-{time}-{yaml_name}"
+    with open(Path.joinpath(yaml_path, yaml_parse_name), "w") as outfile:
             yaml.dump(setup_options, outfile)
 
     # The name of the reporter file includes the phase name, so we need to check each
