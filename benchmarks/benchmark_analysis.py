@@ -153,7 +153,7 @@ def to_arsenic_csv(experimental_data: dict, simulation_data: list, out_csv: str 
 # Defining command line arguments
 # fetching targets from github repo
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-targets_url = f"{base_repo_url}/raw/master/data/targets.yml"
+targets_url = f"{base_repo_url}/raw/main/data/targets.yml"
 with urllib.request.urlopen(targets_url) as response:
     targets_dict = yaml.safe_load(response.read())
 # get the possible choices from targets yaml file
@@ -178,9 +178,9 @@ target = args.target
 # Download experimental data
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
 # TODO: Let's cache this data when we set up the initial simulations in case it changes in between setting up and running the calculations and analysis.
-# TODO: Let's also be sure to use a specific release tag rather than 'master'
+# TODO: Let's also be sure to use a specific release tag rather than 'main'
 target_dir = targets_dict[target]['dir']
-ligands_url = f"{base_repo_url}/raw/master/data/{target_dir}/00_data/ligands.yml"
+ligands_url = f"{base_repo_url}/raw/main/data/{target_dir}/00_data/ligands.yml"
 with urllib.request.urlopen(ligands_url) as response:
     yaml_contents = response.read()
     print(yaml_contents)
@@ -211,12 +211,12 @@ plotting.plot_DDGs(fe.graph,
                    figsize=5,
                    filename='./plot_relative.png'
                    )
-# Absolute plot
+# Absolute plot, with experimental data shifted to correct mean
+experimental_mean_dg = np.asarray([node[1]["exp_DG"] for node in fe.graph.nodes(data=True)]).mean()
 plotting.plot_DGs(fe.graph,
                   target_name=f'{target}',
                   title=f'Absolute binding energies - {target}',
                   figsize=5,
-                  filename='./plot_absolute.png'
+                  filename='./plot_absolute.png',
+                  shift=experimental_mean_dg,
                   )
-
-
