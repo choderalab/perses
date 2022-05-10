@@ -418,6 +418,8 @@ class RelativeFEPSetup(object):
                 self._complex_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
                 self._complex_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
             self._complex_geometry_engine = copy.deepcopy(self._geometry_engine)
+            self._handle_charge_changes(topology_proposal = self._complex_topology_proposal,
+                                        new_positions = self._complex_positions_new_solvated)
 
 
         if 'solvent' in phases:
@@ -470,6 +472,8 @@ class RelativeFEPSetup(object):
                 self._solvent_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
                 self._solvent_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
             self._solvent_geometry_engine = copy.deepcopy(self._geometry_engine)
+            self._handle_charge_changes(topology_proposal = self._solvent_topology_proposal,
+                                        new_positions = self._ligand_positions_new_solvated)
 
         if 'vacuum' in phases:
             _logger.info(f"Detected solvent...")
@@ -847,6 +851,38 @@ class RelativeFEPSetup(object):
             _logger.info('Both trajectory_directory and trajectory_prefix need to be provided to save .pdb')
 
         return solvated_topology, solvated_positions, solvated_system
+
+    def _handle_charge_changes(self, topology_proposal, new_positions):
+        """
+        modifies the atom mapping in the topology proposal and the new system parameters to handle the transformation of
+        waters into appropriate counterions upon a charge-changing ligand transformation
+        """
+        from perses.utils.charge_changing import (get_ion_and_water_parameters,
+                                                  transform_waters_into_ions,
+                                                  get_charge_difference,
+                                                  get_water_indices,
+                                                  modify_atom_classes)
+
+        charge_diff = get_charge_difference(self._ligand_oemol_old, self._ligand_oemol_new)
+        if charge_diff != 0: # then handle this.
+            new_water_indices_to_ionize = get_water_indices(charge_diff = charge_diff,
+                                                                                           new_positions = new_positions,
+                                                                                           new_topology = topology_proposal.new_topology,
+                                                                                           radius=0.8)
+            _logger.info(f"new water indices to ionize {new_water_indices_to_ionize}")
+            particle_parameters = get_ion_and_water_parameters(system=topology_proposal.old_system,
+                                                               topology = topology_proposal.old_topology,
+                                                               positive_ion_name="NA",
+                                                               negative_ion_name="CL",
+                                                               water_name="HOH")
+            # modify new system in place
+            transform_waters_into_ions(water_atoms = new_water_indices_to_ionize,
+                                       system = topology_proposal._new_system,
+                                       charge_diff = charge_diff,
+                                       particle_parameter_dict = particle_parameters)
+
+            # modify the topology proposal
+            modify_atom_classes(new_water_indices_to_ionize, topology_proposal)
 
     @property
     def complex_topology_proposal(self):
