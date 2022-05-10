@@ -38,6 +38,6 @@ NLIGANDS=14
 old_ligand_index=$(( LSB_JOBINDEX / NLIGANDS ))
 new_ligand_index=$(( LSB_JOBINDEX % NLIGANDS ))
 if (( $old_ligand_index < $new_ligand_index )); then
-    perses-cli --yaml template.yaml --override old_ligand_index:${old_ligand_index} --override new_ligand_index:${new_ligand_index} --override n_cycles:10000 --override trajectory_directory:10ns_lig${old_ligand_index}to${new_ligand_index}
+    perses-cli --yaml template.yaml --override old_ligand_index:${old_ligand_index} --override new_ligand_index:${new_ligand_index} --override n_cycles:5000 --override trajectory_directory:5ns_lig${old_ligand_index}to${new_ligand_index}
 fi
 

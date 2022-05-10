@@ -37,4 +37,4 @@ nvidia-smi --query-gpu=name --format=csv
 # launching a benchmark pair (target, edge) per job (0-based thus substract 1)
 # python run_benchmarks.py --target tyk2 --edge $(( $LSB_JOBINDEX - 1 ))
 target_ligand=${LSB_JOBINDEX}
-perses-cli --yaml my.yaml --override old_ligand_index:0 --override new_ligand_index:${target_ligand} --override n_cycles:10000 --override trajectory_directory:10ns_lig0to${target_ligand}
+perses-cli --yaml my.yaml --override old_ligand_index:0 --override new_ligand_index:${target_ligand} --override n_cycles:5000 --override trajectory_directory:5ns_lig0to${target_ligand}
