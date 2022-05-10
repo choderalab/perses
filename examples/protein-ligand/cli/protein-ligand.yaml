@@ -39,7 +39,7 @@ bond_expession:
 n_steps_per_move_application: 1
 
 #the type of free energy calculation.
-#currently, this could be either nonequilibrium or sams
+#currently, this could be either nonequilibrium, sams or repex
 fe_type: repex 
 
 #checkpoint interval in iterations:
