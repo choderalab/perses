@@ -44,7 +44,7 @@ _logger.setLevel(LOGLEVEL)
 ENERGY_THRESHOLD = 1e-4
 from openmmtools.constants import kB
 
-def getSetupOptions(filename):
+def getSetupOptions(filename, override_string=None):
     """
     Reads input yaml file, makes output directory and returns setup options
 
@@ -52,6 +52,11 @@ def getSetupOptions(filename):
     ----------
     filename : str
         .yaml file containing simulation parameters
+
+    override_string : List[str]
+        List of strings in the form of key:value to override simulation
+        parameters set in yaml file.
+        Default: None
 
     Returns
     -------
@@ -63,7 +68,8 @@ def getSetupOptions(filename):
     yaml_file = open(filename, 'r')
     setup_options = yaml.load(yaml_file, Loader=yaml.FullLoader)
     yaml_file.close()
-
+    if override_string:
+        setup_options = _process_overrides(override_string, setup_options)
     _logger.info("\tDetecting phases...")
     if 'phases' not in setup_options:
         setup_options['phases'] = ['complex','solvent']
@@ -412,7 +418,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     forcefield_files = setup_options['forcefield_files']
 
     if "timestep" in setup_options:
-        if isinstance(setup_options['timestep'], float):
+        if isinstance(setup_options['timestep'], (float, int)):
             timestep = setup_options['timestep'] * unit.femtoseconds
         else:
             timestep = setup_options['timestep']
@@ -443,19 +449,19 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     else:
         measure_shadow_work = False
         _logger.info(f"\tno measure_shadow_work specified: defaulting to False.")
-    if isinstance(setup_options['pressure'],float):
+    if isinstance(setup_options['pressure'], (float, int)):
         pressure = setup_options['pressure'] * unit.atmosphere
     else:
         pressure = setup_options['pressure']
-    if isinstance(setup_options['temperature'], float):
+    if isinstance(setup_options['temperature'], (float, int)):
         temperature = setup_options['temperature'] * unit.kelvin
     else:
         temperature = setup_options['temperature']
-    if isinstance(setup_options['solvent_padding'], float):
+    if isinstance(setup_options['solvent_padding'], (float, int)):
         solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
     else:
         solvent_padding_angstroms = setup_options['solvent_padding']
-    if isinstance(setup_options['ionic_strength'], float):
+    if isinstance(setup_options['ionic_strength'], (float, int)):
         ionic_strength = setup_options['ionic_strength'] * unit.molar
     else:
         ionic_strength = setup_options['ionic_strength']
@@ -728,7 +734,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 
 
-def run(yaml_filename=None):
+def run(yaml_filename=None, override_string=None):
     _logger.info("Beginning Setup...")
     if yaml_filename is None:
        try:
@@ -739,15 +745,15 @@ def run(yaml_filename=None):
 
     _logger.info(f"Getting setup options from {yaml_filename}")
 
-    setup_options = getSetupOptions(yaml_filename)
+    setup_options = getSetupOptions(yaml_filename, override_string=override_string)
+    _logger.debug(f"Setup Options {setup_options}")
 
-    # We want to make sure that if the file is in a directory, we put the parsed file in
-    # the same directory
-    yaml_path = Path(yaml_filename)
-    yaml_name = yaml_path.name
+    # The parsed yaml file will live in the experiment directory to avoid race conditions with other experiments
+    yaml_path = Path(setup_options['trajectory_directory'])
+    yaml_name = Path(yaml_filename).name  # extract name from input/template yaml file.
     time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-    yaml_parse_name = f"parsed-{time}-{yaml_name}"
-    with open(Path.joinpath(yaml_path.parents[0], yaml_parse_name), "w") as outfile:
+    yaml_parse_name = f"perses-{time}-{yaml_name}"
+    with open(Path.joinpath(yaml_path, yaml_parse_name), "w") as outfile:
             yaml.dump(setup_options, outfile)
 
     # The name of the reporter file includes the phase name, so we need to check each
@@ -815,8 +821,8 @@ def run(yaml_filename=None):
 
         #write out topology proposals
         try:
-            _logger.info(f"Writing topology proposal {trajectory_prefix}_topology_proposals.pkl to {trajectory_directory}...")
-            with open(os.path.join(trajectory_directory, "%s_topology_proposals.pkl" % (trajectory_prefix)), 'wb') as f:
+            _logger.info(f"Writing topology proposal {trajectory_prefix}-topology_proposals.pkl to {trajectory_directory}...")
+            with open(os.path.join(trajectory_directory, "%s-topology_proposals.pkl" % (trajectory_prefix)), 'wb') as f:
                 pickle.dump(setup_dict['topology_proposals'], f)
         except Exception as e:
             print(e)
@@ -906,8 +912,8 @@ def run(yaml_filename=None):
 
         elif setup_options['fe_type'] == 'sams':
             _logger.info(f"Detecting sams as fe_type...")
-            _logger.info(f"Writing hybrid factory {trajectory_prefix}hybrid_factory.npy to {trajectory_directory}...")
-            np.savez(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
+            _logger.info(f"Writing hybrid factory {trajectory_prefix}-hybrid_factory.npy to {trajectory_directory}...")
+            np.savez(os.path.join(trajectory_directory, trajectory_prefix + "-hybrid_factory.npy"),
                     setup_dict['hybrid_topology_factories'])
 
             hss = setup_dict['hybrid_samplers']
@@ -940,8 +946,8 @@ def run(yaml_filename=None):
 
         elif setup_options['fe_type'] == 'repex':
             _logger.info(f"Detecting repex as fe_type...")
-            _logger.info(f"Writing hybrid factory {trajectory_prefix}hybrid_factory.npy to {trajectory_directory}...")
-            np.savez(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
+            _logger.info(f"Writing hybrid factory {trajectory_prefix}-hybrid_factory.npy to {trajectory_directory}...")
+            np.savez(os.path.join(trajectory_directory, trajectory_prefix + "-hybrid_factory.npy"),
                     setup_dict['hybrid_topology_factories'])
 
             hss = setup_dict['hybrid_samplers']
@@ -1022,6 +1028,47 @@ def _resume_run(setup_options):
             _logger.info(f"\t\tFinished phase {phase}")
     else:
         raise("Can't resume")
+
+def _process_overrides(overrides, yaml_options):
+    """
+    Takes in a string of overrides, converts them into a dict, then merges them with the
+    yaml_options dict to override options set in the file
+    """
+
+    overrides_dict = {}
+    for opt in overrides:
+        key, val = opt.split(":")
+
+        # Check for duplicates
+        if key in overrides_dict:
+            raise ValueError(
+                f"There were duplicate override options, result will be ambiguous! Key {key} repeated!"
+            )
+
+        # I don't like this part, but I rather do this then to try and add type checking
+        # and casting in setup_relative.py
+        # We do int then float since slices might need a int, but if we can't make it an
+        # int then it is probably a float, and if we can 't do that, then it is a str.
+
+        # First lets see if we can make it a int:
+        try:
+            # First check if we have a number like 4.2 which python will convert to
+            # 4 if you do int(4.2) but we can check if int(val) and float(val) cast to
+            # the same object
+            if int(val) != float(val):
+                raise ValueError
+            val = int(val)
+        except ValueError:
+            # Now try float
+            try:
+                val = float(val)
+            except ValueError:
+                # Just keep it a str
+                pass
+
+        overrides_dict[key] = val
+
+    return {**yaml_options, **overrides_dict}
 
 
 if __name__ == "__main__":

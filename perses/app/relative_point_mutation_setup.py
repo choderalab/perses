@@ -23,6 +23,7 @@ temperature = 300 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS', 'HID', 'HIE', 'HIP']
+KNOWN_PHASES = ['vacuum', 'complex', 'solvent']
 
 # Set up logger
 import logging
@@ -198,6 +199,9 @@ class PointMutationExecutor(object):
         """
         from openeye import oechem
 
+        if not phase in KNOWN_PHASES:
+            raise ValueError(f"phase '{phase}' unknown; must be one of {KNOWN_PHASES}")
+
         # First thing to do is load the apo protein to mutate...
         if protein_filename.endswith('pdb'):
             protein_pdb = app.PDBFile(protein_filename)
@@ -362,7 +366,10 @@ class PointMutationExecutor(object):
                                                         validate_energy_bookkeeping=validate_bool)
 
             # Check for charge change...
-            self._handle_charge_changes(topology_proposal, new_positions)
+            if phase != 'vacuum':
+                self._handle_charge_changes(topology_proposal, new_positions)
+            else:
+                _logger.info("Skipping counterion because phase is vacuum.")
 
             if generate_unmodified_hybrid_topology_factory:
                 repartitioned_endstate = None
