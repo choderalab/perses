@@ -522,8 +522,8 @@ def HybridTopologyFactory_energies(current_mol = 'toluene', proposed_mol = '1,2-
     # Remove the dispersion correction
     force_names_old_system = {force.__class__.__name__ : index for index, force in enumerate(top_proposal._old_system.getForces())}
     force_names_new_system = {force.__class__.__name__ : index for index, force in enumerate(top_proposal._new_system.getForces())}
-    force_names_old_system["NonbondedForce"].setUseDispersionCorrection(False)
-    force_names_new_system["NonbondedForce"].setUseDispersionCorrection(False)
+    top_proposal._old_system.getForce(force_names_old_system["NonbondedForce"]).setUseDispersionCorrection(False)
+    top_proposal._new_system.getForce(force_names_new_system["NonbondedForce"]).setUseDispersionCorrection(False)
 
     # Run geometry engine to generate old and new positions
     _geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
