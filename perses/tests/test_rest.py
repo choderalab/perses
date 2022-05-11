@@ -156,7 +156,7 @@ def compare_energies(REST_system, other_system, positions, rest_atoms, T_min, T)
     force_name_map = {force.__class__.__name__ : index for index, force in enumerate(other_system.getForces())}
 
     # Scale the terms in the bond force appropriately
-    bond_force = other_system.getForce(force_name_map['HarmonicAngleForce'])
+    bond_force = other_system.getForce(force_name_map['HarmonicBondForce'])
     for bond in range(bond_force.getNumBonds()):
         p1, p2, length, k = bond_force.getBondParameters(bond)
         if p1 in solute and p2 in solute:
