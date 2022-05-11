@@ -1,0 +1,79 @@
+# Path to protein file
+protein_pdb: ripk2_receptor.pdb
+
+# Path to ligand SDF file
+ligand_file: ligands.sdf
+
+# Indices of old and new ligands within SDF file
+old_ligand_index: 0
+new_ligand_index: 1
+
+#
+# Force fields
+#
+
+# OpenMM ffxml force field files installed via the openmm-forcefields package
+# for biopolymers and solvents.
+# Note that small molecule force field files should NOT be included here.
+forcefield_files:
+    - amber/ff14SB.xml # ff14SB protein force field
+    - amber/tip3p_standard.xml # TIP3P and recommended monovalent ion parameters
+    - amber/tip3p_HFE_multivalent.xml # for divalent ions
+    - amber/phosaa10.xml # HANDLES THE TPO
+
+# Small molecule force field
+# Options include anything allowed by the openmmforcefields SystemGenerator
+# e.g. one of ['openff-2.0.0', 'gaff-2.11']
+small_molecule_forcefield: openff-2.0.0
+
+#
+# Simulation conditions
+#
+
+# Simulation setup options
+solvent_padding: 9.0 # angstroms
+pressure: 1 # atmsopheres
+temperature: 300 # kelvin
+timestep: 4 # femtoseconds
+
+# Atom mapping specification
+atom_expression:
+  - IntType
+bond_expession:
+  - DefaultBonds
+
+# Multi-state sampling scheme
+# One of ['repex', 'nonequilibrium', 'sams']
+fe_type: repex
+checkpoint_interval: 50 # number of iterations
+
+# Number of iterations to run
+n_cycles: 5000
+
+# Number of integration stpes per iteration
+n_steps_per_move_application: 250
+
+# Number of alchemical intermediate states to use
+n_states: 12
+
+# Number of equilibration iterations
+n_equilibration_iterations: 0
+
+# Location for storing trajectories
+trajectory_directory: lig0to1
+
+# Prefix for trajectory files (project-specific name)
+trajectory_prefix: out
+
+# Atoms to store in NetCDF files (MDTraj selection syntax)
+atom_selection: not water
+
+# Calculation phases to run
+# Permitted phases: ['complex', 'solvent', 'vacuum']
+phases:
+    - solvent
+    - complex
+
+# Use geometry-derived mapping
+use_given_geometries: true
+given_geometries_tolerance: 0.4 # angstroms

@@ -1,10 +1,22 @@
 # New cli for testing
-import datetime
+import logging
+import os
 from pathlib import Path
 
 import click
 import openmmtools.utils
-from perses.app.setup_relative_calculation import getSetupOptions
+from perses.app.setup_relative_calculation import getSetupOptions, run
+
+# Setting logging level config
+LOGLEVEL = os.environ.get("LOGLEVEL", "DEBUG").upper()
+logging.basicConfig(
+    format="%(asctime)s %(levelname)-8s %(message)s",
+    level=LOGLEVEL,
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+_logger = logging.getLogger()
+_logger.setLevel(LOGLEVEL)
+
 
 percy = """
 MMMMMMMMMMMMXo:ccldOKNNWMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
@@ -72,99 +84,26 @@ def _test_platform(platform_name):
 
     # If a user asks for a platform, try and see if we can use it
     if platform_name:
-        assert openmmtools.utils.platform_supports_precision(platform_name, 'mixed')
+        assert openmmtools.utils.platform_supports_precision(platform_name, "mixed")
         click.echo("🎉\t Platform test successful!")
-
-
-def _write_out_files(path, options):
-
-    # Convert path to a pathlib object
-    yaml_path = Path(path)
-
-    # Generate parsed yaml name
-    yaml_name = yaml_path.name
-    time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-    yaml_parse_name = f"parsed-{time}-{yaml_name}"
-
-    # First make files in same dir as yaml
-    files_next_to_yaml = [
-        "debug.png",
-        "system.xml",
-        yaml_parse_name,
-    ]
-
-    for _file in files_next_to_yaml:
-        with open(_file, "w") as fp:
-            pass
-
-    # Now we make the directory structure
-    trajectory_directory = Path(options["trajectory_directory"])
-    dirs_to_make = trajectory_directory.joinpath("xml")
-    Path(dirs_to_make).mkdir(parents=True, exist_ok=True)
-
-    # Now files that belong in the lower directories
-    files_in_lower_dir = [
-        "atom_mapping.png",
-        "out-complex_checkpoint.nc",
-        "out-complex.nc",
-        "out-complex.pdb",
-        "outhybrid_factory.npy.npz",
-        "out-solvent_checkpoint.nc",
-        "out-solvent.nc",
-        "out-solvent.pdb",
-        "out_topology_proposals.pkl",
-        "out-vacuum_checkpoint.nc",
-        "out-vacuum.nc",
-    ]
-
-    # add the dir prefix
-    files_in_lower_dir = [
-        Path(trajectory_directory).joinpath(_) for _ in files_in_lower_dir
-    ]
-
-    for _file in files_in_lower_dir:
-        with open(_file, "w") as fp:
-            pass
-
-    # Now the files in the 'xml' dir
-    files_in_xml_dir = [
-        "complex-hybrid-system.gz",
-        "complex-new-system.gz",
-        "complex-old-system.gz",
-        "solvent-hybrid-system.gz",
-        "solvent-new-system.gz",
-        "solvent-old-system.gz",
-        "vacuum-hybrid-system.gz",
-        "vacuum-new-system.gz",
-        "vacuum-old-system.gz",
-    ]
-
-    # add the dir prefix
-    files_in_xml_dir = [dirs_to_make.joinpath(_) for _ in files_in_xml_dir]
-
-    for _file in files_in_lower_dir:
-        with open(_file, "w") as fp:
-            pass
 
 
 @click.command()
 @click.option("--yaml", type=click.Path(exists=True, dir_okay=False), required=True)
 @click.option("--platform-name", type=str, default=None)
-def cli(yaml, platform_name):
+@click.option("--override", multiple=True, required=False, default=None)
+def cli(yaml, platform_name, override):
     """test"""
     click.echo(click.style(percy, fg="bright_magenta"))
-    click.echo("📖\t Fetching simulation options ")
-    options = getSetupOptions(yaml)
-    click.echo("🖨️\t Printing options")
-    click.echo(options)
+    if override:
+        click.echo("✍️ \t Overrides used")
     click.echo("🕵️\t Checking OpenEye license")
     _check_openeye_license()
     click.echo("✅\t OpenEye license good")
     click.echo("🖥️⚡\t Checking whether requested compute platform is available")
     _test_platform(platform_name)
-    click.echo("🖨️\t Writing out files")
-    trajectory_directory = options["trajectory_directory"]
-    _write_out_files(trajectory_directory, options)
+    click.echo("🏃\t Running simulation")
+    run(yaml_filename=yaml, override_string=override)
     click.echo("🧪\t Simulation over")
 
 

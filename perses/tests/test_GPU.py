@@ -45,10 +45,6 @@ def test_gpu_platforms(platform_type):
             "1",
             "2",
             "ALA",
-            ligand_input=resource_filename(
-                "perses",
-                os.path.join("data", "barstar-mutation", "1brs_barnase_renumbered.pdb"),
-            ),
             ionic_strength=0.05 * unit.molar,
             flatten_torsions=True,
             flatten_exceptions=True,

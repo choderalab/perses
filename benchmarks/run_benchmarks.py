@@ -100,7 +100,7 @@ def run_relative_perturbation(lig_a_idx, lig_b_idx, reverse=False, tidy=True):
 # Defining command line arguments
 # fetching targets from github repo
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-targets_url = f"{base_repo_url}/raw/master/data/targets.yml"
+targets_url = f"{base_repo_url}/raw/main/data/targets.yml"
 with fetch_url_contents(targets_url) as response:
     targets_dict = yaml.safe_load(response.read())
 # get the possible choices from targets yaml file
@@ -132,12 +132,12 @@ is_reversed = args.reversed
 # Fetch protein pdb file
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
 target_dir = targets_dict[target]['dir']
-pdb_url = f"{base_repo_url}/raw/master/data/{target_dir}/01_protein/crd/protein.pdb"
+pdb_url = f"{base_repo_url}/raw/main/data/{target_dir}/01_protein/crd/protein.pdb"
 pdb_file = retrieve_file_url(pdb_url)
 
 # Fetch cofactors crystalwater pdb file
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-cofactors_url = f"{base_repo_url}/raw/master/data/{target_dir}/01_protein/crd/cofactors_crystalwater.pdb"
+cofactors_url = f"{base_repo_url}/raw/main/data/{target_dir}/01_protein/crd/cofactors_crystalwater.pdb"
 cofactors_file = retrieve_file_url(cofactors_url)
 
 # Concatenate protein with cofactors pdbs
@@ -145,12 +145,12 @@ concatenate_files((pdb_file, cofactors_file), 'target.pdb')
 
 # Fetch ligands sdf files and concatenate them in one
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-ligands_url = f"{base_repo_url}/raw/master/data/{target_dir}/00_data/ligands.yml"
+ligands_url = f"{base_repo_url}/raw/main/data/{target_dir}/00_data/ligands.yml"
 with fetch_url_contents(ligands_url) as response:
     ligands_dict = yaml.safe_load(response.read())
 ligand_files = []
 for ligand in ligands_dict.keys():
-    ligand_url = f"{base_repo_url}/raw/master/data/{target_dir}/02_ligands/{ligand}/crd/{ligand}.sdf"
+    ligand_url = f"{base_repo_url}/raw/main/data/{target_dir}/02_ligands/{ligand}/crd/{ligand}.sdf"
     ligand_file = retrieve_file_url(ligand_url)
     ligand_files.append(ligand_file)
 # concatenate sdfs
@@ -159,7 +159,7 @@ concatenate_files(ligand_files, 'ligands.sdf')
 # run simulation
 # fetch edges information
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-edges_url = f"{base_repo_url}/raw/master/data/{target_dir}/00_data/edges.yml"
+edges_url = f"{base_repo_url}/raw/main/data/{target_dir}/00_data/edges.yml"
 with fetch_url_contents(edges_url) as response:
     edges_dict = yaml.safe_load(response.read())
 edges_list = list(edges_dict.values())  # suscriptable edges object - note dicts are ordered for py>=3.7

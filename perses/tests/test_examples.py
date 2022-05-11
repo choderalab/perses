@@ -49,6 +49,8 @@ def find_example_scripts():
         example_posix_path = example_file_path.as_posix()
         if "barnase-barstar" in example_posix_path or "kinase-neq-switching" in example_posix_path:
             example_posix_path = pytest.param(example_posix_path, marks=pytest.mark.slow)
+        elif "analyze-benchmark" in example_posix_path:
+            example_posix_path = pytest.param(example_posix_path, marks=pytest.mark.skip("not an example"))
         example_file_paths.append(example_posix_path)
 
     return example_file_paths
