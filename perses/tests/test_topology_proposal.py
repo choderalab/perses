@@ -304,8 +304,7 @@ def generate_dipeptide_top_pos_sys(topology,
             if generate_rest_capable_hybrid_topology_factory:
                 from perses.tests.utils import validate_endstate_energies_point
                 for endstate in [0, 1]:
-                    htf = copy.deepcopy(forward_htf)
-                    validate_endstate_energies_point(htf, endstate=endstate, minimize=True)
+                    validate_endstate_energies_point(forward_htf, endstate=endstate, minimize=True)
             else:
                 from perses.tests.utils import validate_endstate_energies
 

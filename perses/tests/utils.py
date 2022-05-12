@@ -846,7 +846,7 @@ def validate_endstate_energies(topology_proposal,
     return zero_error, one_error
 
 
-def validate_endstate_energies_point(htf, endstate=0, minimize=False):
+def validate_endstate_energies_point(input_htf, endstate=0, minimize=False):
     """
     ** Used for validating endstate energies for RESTCapableHybridTopologyFactory **
 
@@ -856,7 +856,7 @@ def validate_endstate_energies_point(htf, endstate=0, minimize=False):
 
     Parameters
     ----------
-    htf : RESTCapableHybridTopologyFactory
+    input_htf : RESTCapableHybridTopologyFactory
         the RESTCapableHybridTopologyFactory to test
     endstate : int, default=0
         the endstate to test (0 or 1)
@@ -868,6 +868,9 @@ def validate_endstate_energies_point(htf, endstate=0, minimize=False):
 
     # Check that endstate is 0 or 1
     assert endstate in [0, 1], "Endstate must be 0 or 1"
+
+    # Make deep copy to ensure original object remains unaltered
+    htf = copy.deepcopy(input_htf)
 
     # Get original system
     system = htf._topology_proposal.old_system if endstate == 0 else htf._topology_proposal.new_system
@@ -971,7 +974,7 @@ def validate_endstate_energies_point(htf, endstate=0, minimize=False):
     print(f"Success! Energies are equal at lambda {endstate}!")
 
 
-def validate_endstate_energies_md(htf, T_max=300 * unit.kelvin, endstate=0, n_steps=125000):
+def validate_endstate_energies_md(input_htf, T_max=300 * unit.kelvin, endstate=0, n_steps=125000):
     """
     Check that the hybrid system's energy (without unique old/new valence energy) matches the original system's
     energy for snapshots extracted (every 1 ps) from a MD simulation.
@@ -980,7 +983,7 @@ def validate_endstate_energies_md(htf, T_max=300 * unit.kelvin, endstate=0, n_st
 
     Parameters
     ----------
-    htf : RESTCapableHybridTopologyFactory
+    input_htf : RESTCapableHybridTopologyFactory
         the RESTCapableHybridTopologyFactory to test
     T_max : unit.kelvin default=300 * unit.kelvin
         T_max at which to test the factory. This should not actually affect the energy differences, since T_max should equal T_min at the endstates
@@ -995,6 +998,9 @@ def validate_endstate_energies_md(htf, T_max=300 * unit.kelvin, endstate=0, n_st
 
     # Check that endstate is 0 or 1
     assert endstate in [0, 1], "Endstate must be 0 or 1"
+
+    # Make deep copy to ensure original object remains unaltered
+    htf = copy.deepcopy(input_htf)
 
     # Set temperature
     T_min = temperature
