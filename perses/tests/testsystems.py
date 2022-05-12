@@ -177,7 +177,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         # Create a system generator for our desired forcefields.
 
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
-        #forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+        #forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus}
         #small_molecule_forcefield = 'gaff-2.11'
 
         system_generators = dict()
