@@ -432,7 +432,7 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene",atom_express
     molecules = [Molecule.from_openeye(oemol) for oemol in [refmol, mol]]
     barostat = None
     forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
-    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus}
     nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff}
 
     system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs, nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
@@ -598,7 +598,7 @@ def test_RMSD_restraint():
              temperature=300.0 * unit.kelvin,
              solvent_padding=9.0 * unit.angstroms,
              ionic_strength=0.15 * unit.molar,
-             hmass=4*unit.amus,
+             hmass=3*unit.amus,
              neglect_angles=False,
              map_strength='default',
              atom_expr=None,
@@ -775,7 +775,7 @@ def test_RepartitionedHybridTopologyFactory_energies():
                                        forcefield_kwargs={'removeCMMotion': False,
                                                           'ewaldErrorTolerance': 0.00025,
                                                           'constraints': app.HBonds,
-                                                          'hydrogenMass': 4 * unit.amus},
+                                                          'hydrogenMass': 3 * unit.amus},
                                        periodic_forcefield_kwargs=None,
                                        small_molecule_forcefield='gaff-2.11',
                                        nonperiodic_forcefield_kwargs={'nonbondedMethod': app.NoCutoff},
