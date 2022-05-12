@@ -1091,7 +1091,8 @@ def _generate_htf(phase: str, topology_proposal_dictionary: dict, setup_options:
         # update htf_setup_dictionary with new parameters
         htf_setup_dict.update(rest_specific_options)
     else:
-        raise ValueError(f"Unsupported Hybrid Topology Factory. Check 'hybrid_topology_factory' name in input file.")
+        raise ValueError(f"You specified an unsupported factory type: {factory_name}. Currently, the supported "
+                         f"factories are: HybridTopologyFactory and RESTCapableHybridTopologyFactory.")
     htf = factory(topology_proposal_dictionary[f'{phase}_topology_proposal'],
                   topology_proposal_dictionary[f'{phase}_old_positions'],
                   topology_proposal_dictionary[f'{phase}_new_positions'],
