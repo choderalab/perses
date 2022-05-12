@@ -506,7 +506,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         barostat = None
 
     forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
-    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus}
     periodic_forcefield_kwargs = {'nonbondedMethod': nonbonded_method}
     small_molecule_forcefield = 'gaff-2.11'
 
