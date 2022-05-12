@@ -152,8 +152,11 @@ def compare_energies(REST_system, other_system, positions, rest_atoms, T_min, T)
     solute_scaling = beta_m / beta_0
     inter_scaling = np.sqrt(beta_m / beta_0)
 
+    # Build force dictionary
+    force_name_map = {force.__class__.__name__ : index for index, force in enumerate(other_system.getForces())}
+
     # Scale the terms in the bond force appropriately
-    bond_force = other_system.getForce(0)
+    bond_force = other_system.getForce(force_name_map['HarmonicBondForce'])
     for bond in range(bond_force.getNumBonds()):
         p1, p2, length, k = bond_force.getBondParameters(bond)
         if p1 in solute and p2 in solute:
@@ -162,7 +165,7 @@ def compare_energies(REST_system, other_system, positions, rest_atoms, T_min, T)
             bond_force.setBondParameters(bond, p1, p2, length, k * inter_scaling)
 
     # Scale the terms in the angle force appropriately
-    angle_force = other_system.getForce(1)
+    angle_force = other_system.getForce(force_name_map['HarmonicAngleForce'])
     for angle_index in range(angle_force.getNumAngles()):
         p1, p2, p3, angle, k = angle_force.getAngleParameters(angle_index)
         if p1 in solute and p2 in solute and p3 in solute:
@@ -172,7 +175,7 @@ def compare_energies(REST_system, other_system, positions, rest_atoms, T_min, T)
             angle_force.setAngleParameters(angle_index, p1, p2, p3, angle, k * inter_scaling)
 
     # Scale the terms in the torsion force appropriately
-    torsion_force = other_system.getForce(2)
+    torsion_force = other_system.getForce(force_name_map['PeriodicTorsionForce'])
     for torsion_index in range(torsion_force.getNumTorsions()):
         p1, p2, p3, p4, periodicity, phase, k = torsion_force.getTorsionParameters(torsion_index)
         if p1 in solute and p2 in solute and p3 in solute and p4 in solute:
@@ -182,7 +185,7 @@ def compare_energies(REST_system, other_system, positions, rest_atoms, T_min, T)
             torsion_force.setTorsionParameters(torsion_index, p1, p2, p3, p4, periodicity, phase, k * inter_scaling)
 
     # Scale the exceptions in the nonbonded force appropriately
-    nb_force = other_system.getForce(3)
+    nb_force = other_system.getForce(force_name_map['NonbondedForce'])
     for nb_index in range(nb_force.getNumExceptions()):
         p1, p2, chargeProd, sigma, epsilon = nb_force.getExceptionParameters(nb_index)
         if p1 in solute and p2 in solute:
