@@ -323,13 +323,13 @@ def compute_potential_components(context, beta = beta, platform = DEFAULT_PLATFO
     context.setPositions(positions)
     for (parameter, value) in parameters.items():
         context.setParameter(parameter, value)
-    energy_components = list()
+    energy_components = dict()
     for index in range(system.getNumForces()):
         force = system.getForce(index)
         forcename = force.__class__.__name__
-        groups = 1<<index
+        groups = 1 << index
         potential = beta * context.getState(getEnergy=True, groups=groups).getPotentialEnergy()
-        energy_components.append((forcename, potential))
+        energy_components[forcename] = potential
     del context, integrator
     return energy_components
 

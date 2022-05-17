@@ -1122,6 +1122,7 @@ def _guessFileFormat(file, filename):
     file.seek(0)
     return 'pdb'
 
+# TODO: This function is not being used by anything. Remove?
 def run_geometry_engine(index=0):
     """
     Run the geometry engine a few times to make sure that it actually runs
