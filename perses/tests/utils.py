@@ -1130,12 +1130,19 @@ def track_torsions(hybrid_factory):
     unique_new_atoms = hybrid_factory._atom_classes['unique_new_atoms']
     core_atoms = hybrid_factory._atom_classes['core_atoms']
 
+    # Build force name to index dict and pull out forces
+    old_system_force_names = {force.__class__.__name__ : index for index, force in enumerate(old_system.getForces())}
+    new_system_force_names = {force.__class__.__name__ : index for index, force in enumerate(new_system.getForces())}
+
+    old_system_torsions = old_system.getForce(old_system_force_names["PeriodicTorsionForce"])
+    new_system_torsions = new_system.getForce(new_system_force_names["PeriodicTorsionForce"])
+
     # First, grab all of the old/new torsions
-    num_old_torsions, num_new_torsions = old_system.getForce(2).getNumTorsions(), new_system.getForce(2).getNumTorsions()
+    num_old_torsions, num_new_torsions = old_system_torsions.getNumTorsions(), new_system_torsions.getNumTorsions()
     print(f"num old torsions, new torsions: {num_old_torsions}, {num_new_torsions}")
 
-    old_torsions = [old_system.getForce(2).getTorsionParameters(i) for i in range(num_old_torsions)]
-    new_torsions = [new_system.getForce(2).getTorsionParameters(i) for i in range(num_new_torsions)]
+    old_torsions = [old_system_torsions.getTorsionParameters(i) for i in range(num_old_torsions)]
+    new_torsions = [new_system_torsions.getTorsionParameters(i) for i in range(num_new_torsions)]
 
     # Reformat the last two entries
     old_torsions = [[old_to_hybrid[q] for q in i[:4]] + [float(i[4])] + [i[5]/unit.radian] + [i[6]/(unit.kilojoule/unit.mole)] for i in old_torsions]
