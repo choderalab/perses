@@ -51,19 +51,21 @@ def compare_energy_components(rest_system, other_system, positions, platform=REF
     components_rest = compute_potential_components(context_rest, beta=beta, platform=platform)
 
     # Check that bond, angle, and torsion energies match
-    components_bonded_keys_other = ('HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce')
-    components_bonded_keys_rest = ('CustomBondForce', 'CustomAngleForce', 'CustomTorsionForce')
-    components_values_other = [components_other[key] for key in components_bonded_keys_other]
-    components_values_rest = [components_rest[key] for key in components_bonded_keys_rest]
+    # Build map between other and rest force keys - keys are for other, values are for rest
+    bonded_keys_other_to_rest = {'HarmonicBondForce': 'CustomBondForce', 'HarmonicAngleForce': 'CustomAngleForce',
+                                 'PeriodicTorsionForce': 'CustomTorsionForce'}
+    components_values_other = [components_other[key] for key in bonded_keys_other_to_rest.keys()]
+    components_values_rest = [components_rest[key] for key in bonded_keys_other_to_rest.values()]
     for other, rest in zip(components_values_other, components_values_rest):
         assert np.isclose([other], [rest]), f"The energies do not match for the {other}: {other} (other system)" \
                                             f" vs. {rest} (REST system)"
 
     # Check that nonbonded (rest of components) energies match
     sum_components_values_other_nonbonded = sum([components_other[key] for key in components_other.keys()
-                                                if key not in components_bonded_keys_other])
+                                                if key not in bonded_keys_other_to_rest.keys()])
     sum_components_values_rest_nonbonded = sum([components_rest[key] for key in components_rest.keys()
-                                               if key not in components_bonded_keys_rest])
+                                               if key not in bonded_keys_other_to_rest.values()])
+    print(components_other)
     print(components_rest)
     assert np.isclose([sum_components_values_other_nonbonded], [sum_components_values_rest_nonbonded]), \
         f"The energies do not match for the NonbondedForce: {sum_components_values_other_nonbonded} (other system) " \

@@ -98,16 +98,14 @@ def compare_at_lambdas(context, functions):
     print("-----------------------")
     print("Energy components at lambda=0")
 
-    for i in range(len(energy_components_0)):
-        name, value = energy_components_0[i]
-        print("%s\t%s" % (name, str(value)))
+    for name, value in energy_components_0.items():
+        print(f"{name}\t{value}")
 
     print("-----------------------")
     print("Energy components at lambda=1")
 
-    for i in range(len(energy_components_1)):
-        name, value = energy_components_1[i]
-        print("%s\t%s" % (name, str(value)))
+    for name, value in energy_components_1.items():
+        print(f"{name}\t{value}")
 
     print("------------------------")
 
@@ -808,19 +806,20 @@ def validate_endstate_energies(topology_proposal,
         else:
             integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
             context = state.create_context(integrator, platform)
-            samplerstate = states.SamplerState(positions = pos, box_vectors = box_vectors)
+            samplerstate = states.SamplerState(positions=pos, box_vectors=box_vectors)
             samplerstate.apply_to_context(context)
             rp = state.reduced_potential(context)
             rp_list.append(rp)
             energy_comps = compute_potential_components(context)
-            for name, force in energy_comps:
-               print("\t\t\t{}: {}".format(name, force))
-            _logger.debug(f'added forces:{sum([energy for name, energy in energy_comps])}')
+            for name, force in energy_comps.items():
+               print(f"\t\t\t{name}: {force}")
+            _logger.debug(f'added forces:{sum(energy_comps.values())}')
             _logger.debug(f'rp: {rp}')
             if trajectory_directory is not None:
                 _logger.info(f'Saving {state_name} state xml to {trajectory_directory}/{state_name}-state.gz')
-                state = context.getState(getPositions=True, getVelocities=True, getForces=True, getEnergy=True, getParameters=True)
-                data.serialize(state,f'{trajectory_directory}-{state_name}-state.gz')
+                state = context.getState(getPositions=True, getVelocities=True, getForces=True, getEnergy=True,
+                                         getParameters=True)
+                data.serialize(state, f'{trajectory_directory}-{state_name}-state.gz')
             del context, integrator
 
     nonalch_zero_rp, alch_zero_rp, alch_one_rp, nonalch_one_rp = rp_list[0], rp_list[1], rp_list[2], rp_list[3]
@@ -959,14 +958,22 @@ def validate_endstate_energies_point(htf, endstate=0, minimize=False):
 
     # Check that each of the valence force energies are concordant
     # TODO: Instead of checking with np.isclose(), check whether the ratio of differences is less than a specified energy threshold (like in validate_endstate_energies())
-    for i in range(3):
-        print(f"{components_other[i][0]} -- og: {components_other[i][1]}, hybrid: {components_hybrid[i][1]}")
-        assert np.isclose(components_other[i][1], components_hybrid[i][1])
+    # Build map between other and rest force keys - keys are for other, values are for rest
+    bonded_keys_other_to_hybrid = {'HarmonicBondForce': 'CustomBondForce', 'HarmonicAngleForce': 'CustomAngleForce',
+                                   'PeriodicTorsionForce': 'CustomTorsionForce'}
+    for other_key, hybrid_key in bonded_keys_other_to_hybrid.items():
+        other_value = components_other[other_key]
+        hybrid_value = components_hybrid[hybrid_key]
+        print(f"{other_key} -- og: {other_value}, hybrid: {hybrid_value}")
+        assert np.isclose(other_value, hybrid_value)
 
-    # Check that the nonbonded force energies are concordant
+    # Check that the nonbonded (rest of the components) force energies are concordant
+    nonbonded_hybrid_values = [components_hybrid[key] for key in components_hybrid.keys()
+                               if key not in bonded_keys_other_to_hybrid.values()]
     print(
-        f"Nonbondeds -- og: {components_other[3][1]}, hybrid: {np.sum([components_hybrid[i][1] for i in range(3, 8)])}")
-    assert np.isclose([components_other[3][1]], np.sum([components_hybrid[i][1] for i in range(3, 8)]))
+        f"Nonbondeds -- og: {components_other['NonbondedForce']}, hybrid: {np.sum(nonbonded_hybrid_values)}"
+    )
+    assert np.isclose([components_other[3][1]], np.sum(nonbonded_hybrid_values))
 
     print(f"Success! Energies are equal at lambda {endstate}!")
 
