@@ -324,7 +324,7 @@ def compute_potential_components(context, beta = beta, platform = DEFAULT_PLATFO
     energy_components = dict()
     for index in range(system.getNumForces()):
         force = system.getForce(index)
-        forcename = force.__class__.__name__
+        forcename = force.getName()
         groups = 1 << index
         potential = beta * context.getState(getEnergy=True, groups=groups).getPotentialEnergy()
         energy_components[forcename] = potential
@@ -973,7 +973,7 @@ def validate_endstate_energies_point(htf, endstate=0, minimize=False):
     print(
         f"Nonbondeds -- og: {components_other['NonbondedForce']}, hybrid: {np.sum(nonbonded_hybrid_values)}"
     )
-    assert np.isclose([components_other[3][1]], np.sum(nonbonded_hybrid_values))
+    assert np.isclose([components_other['NonbondedForce']], np.sum(nonbonded_hybrid_values))
 
     print(f"Success! Energies are equal at lambda {endstate}!")
 
