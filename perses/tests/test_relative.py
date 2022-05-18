@@ -958,9 +958,6 @@ def run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_en
 
     """
 
-    import tempfile
-    import pickle
-
     from perses.tests.test_topology_proposal import generate_atp, generate_dipeptide_top_pos_sys
     from perses.app.relative_point_mutation_setup import PointMutationExecutor
     from perses.tests.utils import validate_endstate_energies_point, validate_endstate_energies_md
@@ -1008,21 +1005,13 @@ def run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_en
                                                  )
         htf = solvent_delivery.get_apo_rest_htf()
 
-    # Save htf as temporary pickled file
-    with tempfile.TemporaryDirectory() as temp_dir:
-        with open(os.path.join(temp_dir, "htf.pickle"), "wb") as f:
-            pickle.dump(htf, f)
-
-        if use_point_energies:
-            for endstate in [0, 1]:
-                with open(os.path.join(temp_dir, "htf.pickle"), "rb") as f:
-                    htf = pickle.load(f)
-                validate_endstate_energies_point(htf, endstate=endstate, minimize=True)
-        else:
-            for endstate in [0, 1]:
-                with open(os.path.join(temp_dir, "htf.pickle"), "rb") as f:
-                    htf = pickle.load(f)
-                validate_endstate_energies_md(htf, endstate=endstate, n_steps=10)
+    # validating endstate energies
+    if use_point_energies:
+        for endstate in [0, 1]:
+            validate_endstate_energies_point(htf, endstate=endstate, minimize=True)
+    else:
+        for endstate in [0, 1]:
+            validate_endstate_energies_md(htf, endstate=endstate, n_steps=10)
 
 def test_RESTCapableHybridTopologyFactory_energies():
     """

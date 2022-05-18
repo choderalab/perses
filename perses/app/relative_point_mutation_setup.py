@@ -437,7 +437,7 @@ class PointMutationExecutor(object):
                 if generate_rest_capable_hybrid_topology_factory:
                     from perses.tests.utils import validate_endstate_energies_point
                     for endstate in [0, 1]:
-                        htf = copy.deepcopy(self.get_complex_rest_htf()) if is_complex else copy.deepcopy(self.get_apo_rest_htf())
+                        htf = self.get_complex_rest_htf() if is_complex else self.get_apo_rest_htf()
                         validate_endstate_energies_point(htf, endstate=endstate, minimize=True)
 
             else:
