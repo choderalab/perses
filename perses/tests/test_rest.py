@@ -33,32 +33,43 @@ def compare_energy_components(rest_system, other_system, positions, platform=REF
 
     # Create context for non-rest system
     integrator_other = openmm.VerletIntegrator(1.0*unit.femtosecond)
-    context_other = thermostate_other.create_context(integrator_other)
+    context_other = thermostate_other.create_context(integrator_other, platform=platform)
     context_other.setPositions(positions)
 
     # Get energy components for non-rest system
-    components_other = [component[1] for component in compute_potential_components(context_other, beta=beta)]
+    components_other = compute_potential_components(context_other, beta=beta, platform=platform)
 
     # Create thermodynamic state for rest_system
     thermostate_rest = ThermodynamicState(system=rest_system, temperature=temperature)
 
     # Create context forrest system
     integrator_rest = openmm.VerletIntegrator(1.0 * unit.femtosecond)
-    context_rest = thermostate_rest.create_context(integrator_rest)
+    context_rest = thermostate_rest.create_context(integrator_rest, platform=platform)
     context_rest.setPositions(positions)
 
     # Get energy components for rest system
-    components_rest = [component[1] for component in compute_potential_components(context_rest, beta=beta)]
+    components_rest = compute_potential_components(context_rest, beta=beta, platform=platform)
 
     # Check that bond, angle, and torsion energies match
-    for other, rest in zip(components_other[:3], components_rest[:3]):
-        assert np.isclose([other], [rest]), f"The energies do not match for the {other[0]}: {other[1]} (other system) vs. {rest[1]} (REST system)"
+    # Build map between other and rest force keys - keys are for other, values are for rest
+    bonded_keys_other_to_rest = {'HarmonicBondForce': 'CustomBondForce', 'HarmonicAngleForce': 'CustomAngleForce',
+                                 'PeriodicTorsionForce': 'CustomTorsionForce'}
+    components_values_other = [components_other[key] for key in bonded_keys_other_to_rest.keys()]
+    components_values_rest = [components_rest[key] for key in bonded_keys_other_to_rest.values()]
+    for other, rest in zip(components_values_other, components_values_rest):
+        assert np.isclose([other], [rest]), f"The energies do not match for the {other}: {other} (other system)" \
+                                            f" vs. {rest} (REST system)"
 
-    # Check that nonbonded energies match
+    # Check that nonbonded (rest of components) energies match
+    sum_components_values_other_nonbonded = sum([components_other[key] for key in components_other.keys()
+                                                if key not in bonded_keys_other_to_rest.keys()])
+    sum_components_values_rest_nonbonded = sum([components_rest[key] for key in components_rest.keys()
+                                               if key not in bonded_keys_other_to_rest.values()])
+    print(components_other)
     print(components_rest)
-    nonbonded_other = np.array(components_other[3:]).sum()
-    nonbonded_rest = np.array(components_rest[3:]).sum()
-    assert np.isclose([nonbonded_other], [nonbonded_rest]), f"The energies do not match for the NonbondedForce: {nonbonded_other} (other system) vs. {nonbonded_rest} (REST system)"
+    assert np.isclose([sum_components_values_other_nonbonded], [sum_components_values_rest_nonbonded]), \
+        f"The energies do not match for the NonbondedForce: {sum_components_values_other_nonbonded} (other system) " \
+        f"vs. {sum_components_values_rest_nonbonded} (REST system)"
 
 
 def test_bookkeeping():
