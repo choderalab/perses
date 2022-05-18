@@ -853,6 +853,16 @@ def validate_endstate_energies_point(htf, endstate=0, minimize=False):
 
     E.g. at endstate=0, the hybrid system's energy (with unique new valence terms zeroed) should match the old system's energy.
 
+    .. note ::
+    Note that this function assumes that the RESTCapableHybridTopologyFactory hybrid system contains the following
+    forces
+
+    ['MonteCarloBarostat', 'CustomBondForce', 'CustomAngleForce', 'CustomTorsionForce',
+     'CustomNonbondedForce_electrostatics', 'CustomNonbondedForce_sterics', 'CustomBondForce_exceptions',
+     'NonbondedForce_reciprocal', 'NonbondedForce_sterics'].
+
+    It may fail if there have been changes to the forces or force names, so proceed with caution"
+
     Parameters
     ----------
     htf : RESTCapableHybridTopologyFactory
@@ -861,7 +871,6 @@ def validate_endstate_energies_point(htf, endstate=0, minimize=False):
         the endstate to test (0 or 1)
     minimize : bool, default=False
         whether to minimize the positions before testing that the energies match
-
     """
     from perses.dispersed import feptasks
 
