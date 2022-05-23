@@ -8,10 +8,10 @@ The open eye license file is not included and must be passed in as a mount point
 The container expects `oe_license.txt` in `/openeye/` because we set `ENV OE_LICENSE=/openeye/oe_license.txt` in the Dockerfile.
 
 To do that use the `--mount` option.
-For example, if you have an `oe_license.txt` file in `$HOME/.openeye/`.
+For example, if you have an `oe_license.txt` file in `$HOME/.OpenEye/`.
 
 ```
-$ docker run --rm --mount type=bind,source=$HOME/.openeye/,target=/openeye/,readonly choderalab/perses:0.9.2 python -c "import openeye; assert openeye.oechem.OEChemIsLicensed(), 'OpenEye license checks failed!'"
+$ docker run --rm --mount type=bind,source=$HOME/.OpenEye/,target=/openeye/,readonly choderalab/perses:0.9.2 python -c "import openeye; assert openeye.oechem.OEChemIsLicensed(), 'OpenEye license checks failed!'"
 ```
 
 ## GPU Support
@@ -19,7 +19,7 @@ $ docker run --rm --mount type=bind,source=$HOME/.openeye/,target=/openeye/,read
 Pass the option `--gpus device=0` to use the host's GPU:
 
 ```
-$ docker run -it --rm --gpus device=0 --mount type=bind,source=$HOME/.openeye/,target=/openeye/,readonly choderalab/perses:0.9.2 python -m simtk.testInstallation
+$ docker run -it --rm --gpus device=0 --mount type=bind,source=$HOME/.OpenEye/,target=/openeye/,readonly choderalab/perses:0.9.2 python -m simtk.testInstallation
 OpenMM Version: 7.5.1
 Git Revision: a9cfd7fb9343e21c3dbb76e377c721328830a3ee
 

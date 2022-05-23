@@ -98,16 +98,14 @@ def compare_at_lambdas(context, functions):
     print("-----------------------")
     print("Energy components at lambda=0")
 
-    for i in range(len(energy_components_0)):
-        name, value = energy_components_0[i]
-        print("%s\t%s" % (name, str(value)))
+    for name, value in energy_components_0.items():
+        print(f"{name}\t{value}")
 
     print("-----------------------")
     print("Energy components at lambda=1")
 
-    for i in range(len(energy_components_1)):
-        name, value = energy_components_1[i]
-        print("%s\t%s" % (name, str(value)))
+    for name, value in energy_components_1.items():
+        print(f"{name}\t{value}")
 
     print("------------------------")
 
@@ -323,13 +321,13 @@ def compute_potential_components(context, beta = beta, platform = DEFAULT_PLATFO
     context.setPositions(positions)
     for (parameter, value) in parameters.items():
         context.setParameter(parameter, value)
-    energy_components = list()
+    energy_components = dict()
     for index in range(system.getNumForces()):
         force = system.getForce(index)
-        forcename = force.__class__.__name__
-        groups = 1<<index
+        forcename = force.getName()
+        groups = 1 << index
         potential = beta * context.getState(getEnergy=True, groups=groups).getPotentialEnergy()
-        energy_components.append((forcename, potential))
+        energy_components[forcename] = potential
     del context, integrator
     return energy_components
 
@@ -506,7 +504,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         barostat = None
 
     forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
-    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus}
     periodic_forcefield_kwargs = {'nonbondedMethod': nonbonded_method}
     small_molecule_forcefield = 'gaff-2.11'
 
@@ -808,19 +806,20 @@ def validate_endstate_energies(topology_proposal,
         else:
             integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
             context = state.create_context(integrator, platform)
-            samplerstate = states.SamplerState(positions = pos, box_vectors = box_vectors)
+            samplerstate = states.SamplerState(positions=pos, box_vectors=box_vectors)
             samplerstate.apply_to_context(context)
             rp = state.reduced_potential(context)
             rp_list.append(rp)
             energy_comps = compute_potential_components(context)
-            for name, force in energy_comps:
-               print("\t\t\t{}: {}".format(name, force))
-            _logger.debug(f'added forces:{sum([energy for name, energy in energy_comps])}')
+            for name, force in energy_comps.items():
+               print(f"\t\t\t{name}: {force}")
+            _logger.debug(f'added forces:{sum(energy_comps.values())}')
             _logger.debug(f'rp: {rp}')
             if trajectory_directory is not None:
                 _logger.info(f'Saving {state_name} state xml to {trajectory_directory}/{state_name}-state.gz')
-                state = context.getState(getPositions=True, getVelocities=True, getForces=True, getEnergy=True, getParameters=True)
-                data.serialize(state,f'{trajectory_directory}-{state_name}-state.gz')
+                state = context.getState(getPositions=True, getVelocities=True, getForces=True, getEnergy=True,
+                                         getParameters=True)
+                data.serialize(state, f'{trajectory_directory}-{state_name}-state.gz')
             del context, integrator
 
     nonalch_zero_rp, alch_zero_rp, alch_one_rp, nonalch_one_rp = rp_list[0], rp_list[1], rp_list[2], rp_list[3]
@@ -846,7 +845,7 @@ def validate_endstate_energies(topology_proposal,
     return zero_error, one_error
 
 
-def validate_endstate_energies_point(htf, endstate=0, minimize=False):
+def validate_endstate_energies_point(input_htf, endstate=0, minimize=False):
     """
     ** Used for validating endstate energies for RESTCapableHybridTopologyFactory **
 
@@ -854,20 +853,32 @@ def validate_endstate_energies_point(htf, endstate=0, minimize=False):
 
     E.g. at endstate=0, the hybrid system's energy (with unique new valence terms zeroed) should match the old system's energy.
 
+    .. note ::
+    Note that this function assumes that the RESTCapableHybridTopologyFactory hybrid system contains the following
+    forces
+
+    ['MonteCarloBarostat', 'CustomBondForce', 'CustomAngleForce', 'CustomTorsionForce',
+     'CustomNonbondedForce_electrostatics', 'CustomNonbondedForce_sterics', 'CustomBondForce_exceptions',
+     'NonbondedForce_reciprocal', 'NonbondedForce_sterics'].
+
+    It may fail if there have been changes to the forces or force names, so proceed with caution"
+
     Parameters
     ----------
-    htf : RESTCapableHybridTopologyFactory
+    input_htf : RESTCapableHybridTopologyFactory
         the RESTCapableHybridTopologyFactory to test
     endstate : int, default=0
         the endstate to test (0 or 1)
     minimize : bool, default=False
         whether to minimize the positions before testing that the energies match
-
     """
     from perses.dispersed import feptasks
 
     # Check that endstate is 0 or 1
     assert endstate in [0, 1], "Endstate must be 0 or 1"
+
+    # Make deep copy to ensure original object remains unaltered
+    htf = copy.deepcopy(input_htf)
 
     # Get original system
     system = htf._topology_proposal.old_system if endstate == 0 else htf._topology_proposal.new_system
@@ -959,19 +970,27 @@ def validate_endstate_energies_point(htf, endstate=0, minimize=False):
 
     # Check that each of the valence force energies are concordant
     # TODO: Instead of checking with np.isclose(), check whether the ratio of differences is less than a specified energy threshold (like in validate_endstate_energies())
-    for i in range(3):
-        print(f"{components_other[i][0]} -- og: {components_other[i][1]}, hybrid: {components_hybrid[i][1]}")
-        assert np.isclose(components_other[i][1], components_hybrid[i][1])
+    # Build map between other and rest force keys - keys are for other, values are for rest
+    bonded_keys_other_to_hybrid = {'HarmonicBondForce': 'CustomBondForce', 'HarmonicAngleForce': 'CustomAngleForce',
+                                   'PeriodicTorsionForce': 'CustomTorsionForce'}
+    for other_key, hybrid_key in bonded_keys_other_to_hybrid.items():
+        other_value = components_other[other_key]
+        hybrid_value = components_hybrid[hybrid_key]
+        print(f"{other_key} -- og: {other_value}, hybrid: {hybrid_value}")
+        assert np.isclose(other_value, hybrid_value)
 
-    # Check that the nonbonded force energies are concordant
+    # Check that the nonbonded (rest of the components) force energies are concordant
+    nonbonded_hybrid_values = [components_hybrid[key] for key in components_hybrid.keys()
+                               if key not in bonded_keys_other_to_hybrid.values()]
     print(
-        f"Nonbondeds -- og: {components_other[3][1]}, hybrid: {np.sum([components_hybrid[i][1] for i in range(3, 8)])}")
-    assert np.isclose([components_other[3][1]], np.sum([components_hybrid[i][1] for i in range(3, 8)]))
+        f"Nonbondeds -- og: {components_other['NonbondedForce']}, hybrid: {np.sum(nonbonded_hybrid_values)}"
+    )
+    assert np.isclose([components_other['NonbondedForce']], np.sum(nonbonded_hybrid_values))
 
     print(f"Success! Energies are equal at lambda {endstate}!")
 
 
-def validate_endstate_energies_md(htf, T_max=300 * unit.kelvin, endstate=0, n_steps=125000):
+def validate_endstate_energies_md(input_htf, T_max=300 * unit.kelvin, endstate=0, n_steps=125000):
     """
     Check that the hybrid system's energy (without unique old/new valence energy) matches the original system's
     energy for snapshots extracted (every 1 ps) from a MD simulation.
@@ -980,7 +999,7 @@ def validate_endstate_energies_md(htf, T_max=300 * unit.kelvin, endstate=0, n_st
 
     Parameters
     ----------
-    htf : RESTCapableHybridTopologyFactory
+    input_htf : RESTCapableHybridTopologyFactory
         the RESTCapableHybridTopologyFactory to test
     T_max : unit.kelvin default=300 * unit.kelvin
         T_max at which to test the factory. This should not actually affect the energy differences, since T_max should equal T_min at the endstates
@@ -995,6 +1014,9 @@ def validate_endstate_energies_md(htf, T_max=300 * unit.kelvin, endstate=0, n_st
 
     # Check that endstate is 0 or 1
     assert endstate in [0, 1], "Endstate must be 0 or 1"
+
+    # Make deep copy to ensure original object remains unaltered
+    htf = copy.deepcopy(input_htf)
 
     # Set temperature
     T_min = temperature
@@ -1123,12 +1145,19 @@ def track_torsions(hybrid_factory):
     unique_new_atoms = hybrid_factory._atom_classes['unique_new_atoms']
     core_atoms = hybrid_factory._atom_classes['core_atoms']
 
+    # Build force name to index dict and pull out forces
+    old_system_force_names = {force.__class__.__name__ : index for index, force in enumerate(old_system.getForces())}
+    new_system_force_names = {force.__class__.__name__ : index for index, force in enumerate(new_system.getForces())}
+
+    old_system_torsions = old_system.getForce(old_system_force_names["PeriodicTorsionForce"])
+    new_system_torsions = new_system.getForce(new_system_force_names["PeriodicTorsionForce"])
+
     # First, grab all of the old/new torsions
-    num_old_torsions, num_new_torsions = old_system.getForce(2).getNumTorsions(), new_system.getForce(2).getNumTorsions()
+    num_old_torsions, num_new_torsions = old_system_torsions.getNumTorsions(), new_system_torsions.getNumTorsions()
     print(f"num old torsions, new torsions: {num_old_torsions}, {num_new_torsions}")
 
-    old_torsions = [old_system.getForce(2).getTorsionParameters(i) for i in range(num_old_torsions)]
-    new_torsions = [new_system.getForce(2).getTorsionParameters(i) for i in range(num_new_torsions)]
+    old_torsions = [old_system_torsions.getTorsionParameters(i) for i in range(num_old_torsions)]
+    new_torsions = [new_system_torsions.getTorsionParameters(i) for i in range(num_new_torsions)]
 
     # Reformat the last two entries
     old_torsions = [[old_to_hybrid[q] for q in i[:4]] + [float(i[4])] + [i[5]/unit.radian] + [i[6]/(unit.kilojoule/unit.mole)] for i in old_torsions]

@@ -23,6 +23,7 @@ temperature = 300 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS', 'HID', 'HIE', 'HIP']
+KNOWN_PHASES = ['vacuum', 'complex', 'solvent']
 
 # Set up logger
 import logging
@@ -54,7 +55,8 @@ class PointMutationExecutor(object):
                                      ligand_index=0,
                                      forcefield_files=['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
                                      barostat=openmm.MonteCarloBarostat(1.0 * unit.atmosphere, temperature, 50),
-                                     forcefield_kwargs={'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.PME, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus},
+                                     forcefield_kwargs={'removeCMMotion': False, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus},
+                                     periodic_forcefield_kwargs={'ewaldErrorTolerance': 1e-4, 'nonbondedMethod': app.PME}
                                      small_molecule_forcefields='gaff-2.11')
 
         complex_htf = pm_delivery.get_complex_htf()
@@ -104,8 +106,8 @@ class PointMutationExecutor(object):
                  ionic_strength=0.15 * unit.molar,
                  forcefield_files=['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
                  barostat=openmm.MonteCarloBarostat(1.0 * unit.atmosphere, temperature, 50),
-                 forcefield_kwargs={'removeCMMotion': False, 'ewaldErrorTolerance': 0.00025, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus},
-                 periodic_forcefield_kwargs={'nonbondedMethod': app.PME},
+                 forcefield_kwargs={'removeCMMotion': False, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus},
+                 periodic_forcefield_kwargs={'nonbondedMethod': app.PME, 'ewaldErrorTolerance': 0.00025},
                  nonperiodic_forcefield_kwargs=None,
                  small_molecule_forcefields='gaff-2.11',
                  complex_box_dimensions=None,
@@ -165,9 +167,9 @@ class PointMutationExecutor(object):
                 forcefield files for proteins and solvent
             barostat : openmm.MonteCarloBarostat, default openmm.MonteCarloBarostat(1.0 * unit.atmosphere, 300 * unit.kelvin, 50)
                 barostat to use
-            forcefield_kwargs : dict, default {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+            forcefield_kwargs : dict, default {'removeCMMotion': False, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus}
                 forcefield kwargs for system parametrization
-            periodic_forcefield_kwargs : dict, default {'nonbondedMethod': app.PME}
+            periodic_forcefield_kwargs : dict, default {'nonbondedMethod': app.PME, 'ewaldErrorTolerance': 1e-4}
                 periodic forcefield kwargs for system parametrization
             nonperiodic_forcefield_kwargs : dict, default None
                 non-periodic forcefield kwargs for system parametrization
@@ -197,6 +199,9 @@ class PointMutationExecutor(object):
 
         """
         from openeye import oechem
+
+        if not phase in KNOWN_PHASES:
+            raise ValueError(f"phase '{phase}' unknown; must be one of {KNOWN_PHASES}")
 
         # First thing to do is load the apo protein to mutate...
         if protein_filename.endswith('pdb'):
@@ -362,7 +367,10 @@ class PointMutationExecutor(object):
                                                         validate_energy_bookkeeping=validate_bool)
 
             # Check for charge change...
-            self._handle_charge_changes(topology_proposal, new_positions)
+            if phase != 'vacuum':
+                self._handle_charge_changes(topology_proposal, new_positions)
+            else:
+                _logger.info("Skipping counterion because phase is vacuum.")
 
             if generate_unmodified_hybrid_topology_factory:
                 repartitioned_endstate = None
@@ -429,7 +437,7 @@ class PointMutationExecutor(object):
                 if generate_rest_capable_hybrid_topology_factory:
                     from perses.tests.utils import validate_endstate_energies_point
                     for endstate in [0, 1]:
-                        htf = copy.deepcopy(self.get_complex_rest_htf()) if is_complex else copy.deepcopy(self.get_apo_rest_htf())
+                        htf = self.get_complex_rest_htf() if is_complex else self.get_apo_rest_htf()
                         validate_endstate_energies_point(htf, endstate=endstate, minimize=True)
 
             else:

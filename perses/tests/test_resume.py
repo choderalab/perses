@@ -247,7 +247,7 @@ def test_resume_protein_mutation_no_checkpoint(tmp_path):
             flatten_exceptions=True,
             conduct_endstate_validation=False,
             barostat=None,
-            phase="vaccum",
+            phase="vacuum",
             periodic_forcefield_kwargs=None,
             nonperiodic_forcefield_kwargs={"nonbondedMethod": app.NoCutoff},
         )

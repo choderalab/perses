@@ -25,7 +25,7 @@ from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
 #default arguments for SystemGenerators
 barostat = None
 forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
-forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus}
 nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff}
 small_molecule_forcefield = 'gaff-2.11'
 
@@ -118,7 +118,7 @@ def create_simple_protein_system_generator():
     from openmmforcefields.generators import SystemGenerator
     barostat = None
     forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
-    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus}
     nonperiodic_forcefield_kwargs={'nonbondedMethod': app.NoCutoff}
 
     system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs, nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
@@ -147,7 +147,7 @@ def generate_atp(phase = 'vacuum'):
     """
     import openmmtools.testsystems as ts
     from openmmforcefields.generators import SystemGenerator
-    atp = ts.AlanineDipeptideVacuum(constraints = app.HBonds, hydrogenMass = 4 * unit.amus)
+    atp = ts.AlanineDipeptideVacuum(constraints = app.HBonds, hydrogenMass = 3 * unit.amus)
 
 
     forcefield_files = ['gaff.xml', 'amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
@@ -159,7 +159,7 @@ def generate_atp(phase = 'vacuum'):
                                        forcefield_kwargs={'removeCMMotion': False,
                                                             'ewaldErrorTolerance': 1e-4,
                                                             'constraints' : app.HBonds,
-                                                            'hydrogenMass' : 4 * unit.amus},
+                                                            'hydrogenMass' : 3 * unit.amus},
                                         nonperiodic_forcefield_kwargs={'nonbondedMethod': app.NoCutoff},
                                         small_molecule_forcefield='gaff-2.11',
                                         molecules=None,
@@ -175,7 +175,7 @@ def generate_atp(phase = 'vacuum'):
                                    forcefield_kwargs={'removeCMMotion': False,
                                                         'ewaldErrorTolerance': 1e-4,
                                                         'constraints' : app.HBonds,
-                                                        'hydrogenMass' : 4 * unit.amus},
+                                                        'hydrogenMass' : 3 * unit.amus},
                                     periodic_forcefield_kwargs={'nonbondedMethod': app.PME},
                                     small_molecule_forcefield='gaff-2.11',
                                     molecules=None,
@@ -304,8 +304,7 @@ def generate_dipeptide_top_pos_sys(topology,
             if generate_rest_capable_hybrid_topology_factory:
                 from perses.tests.utils import validate_endstate_energies_point
                 for endstate in [0, 1]:
-                    htf = copy.deepcopy(forward_htf)
-                    validate_endstate_energies_point(htf, endstate=endstate, minimize=True)
+                    validate_endstate_energies_point(forward_htf, endstate=endstate, minimize=True)
             else:
                 from perses.tests.utils import validate_endstate_energies
 

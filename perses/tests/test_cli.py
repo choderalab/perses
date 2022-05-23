@@ -1,4 +1,9 @@
+import os
+import subprocess
+
 from click.testing import CliRunner
+from pkg_resources import resource_filename
+
 from perses.app.cli import cli
 
 test_yaml = """
@@ -29,7 +34,6 @@ trajectory_directory: temp/offlig10to24
 trajectory_prefix: out
 atom_selection: not water
 phases:
-  - complex
   - solvent
   - vacuum
 timestep: 4
@@ -37,13 +41,28 @@ h_constraints: true
 """
 
 
-def test_dummy_cli(in_tmpdir):
+def test_dummy_cli_with_override(in_tmpdir):
     runner = CliRunner()
     with runner.isolated_filesystem():
         with open("test.yaml", "w") as f:
             f.write(test_yaml)
 
-        result = runner.invoke(cli, ["--yaml", "test.yaml"])
-        print(result)
-        print(result.output)
+        protein_pdb = resource_filename(
+            "perses", os.path.join("data", "Tyk2_ligands_example", "Tyk2_protein.pdb")
+        )
+        ligand_file = resource_filename(
+            "perses",
+            os.path.join("data", "Tyk2_ligands_example", "Tyk2_ligands_shifted.sdf"),
+        )
+        result = runner.invoke(
+            cli,
+            [
+                "--yaml",
+                "test.yaml",
+                "--override",
+                f"protein_pdb:{protein_pdb}",
+                "--override",
+                f"ligand_file:{ligand_file}",
+            ],
+        )
         assert result.exit_code == 0
