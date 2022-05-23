@@ -284,7 +284,7 @@ def render_protein_residue_atom_mapping(topology_proposal, filename, width = 120
         width : int
             width of image
         height : int
-            height of image 
+            height of image
     """
     from perses.utils.smallmolecules import render_atom_mapping
     oe_res_maps = {}

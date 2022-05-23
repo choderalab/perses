@@ -14,7 +14,7 @@ from nose.plugins.attrib import attr
 
 from openmmtools.constants import kB
 from perses.utils.openeye import OEMol_to_omm_ff, smiles_to_oemol
-from perses.utils.smallmolecules import render_atom_mapping
+from perses.utils.charge_changing import get_water_indices
 from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
 from perses.rjmc import topology_proposal
 from collections import defaultdict
@@ -25,7 +25,7 @@ from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
 #default arguments for SystemGenerators
 barostat = None
 forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
-forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus}
 nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff}
 small_molecule_forcefield = 'gaff-2.11'
 
@@ -118,7 +118,7 @@ def create_simple_protein_system_generator():
     from openmmforcefields.generators import SystemGenerator
     barostat = None
     forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
-    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus}
     nonperiodic_forcefield_kwargs={'nonbondedMethod': app.NoCutoff}
 
     system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs, nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
@@ -147,7 +147,7 @@ def generate_atp(phase = 'vacuum'):
     """
     import openmmtools.testsystems as ts
     from openmmforcefields.generators import SystemGenerator
-    atp = ts.AlanineDipeptideVacuum(constraints = app.HBonds, hydrogenMass = 4 * unit.amus)
+    atp = ts.AlanineDipeptideVacuum(constraints = app.HBonds, hydrogenMass = 3 * unit.amus)
 
 
     forcefield_files = ['gaff.xml', 'amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
@@ -159,7 +159,7 @@ def generate_atp(phase = 'vacuum'):
                                        forcefield_kwargs={'removeCMMotion': False,
                                                             'ewaldErrorTolerance': 1e-4,
                                                             'constraints' : app.HBonds,
-                                                            'hydrogenMass' : 4 * unit.amus},
+                                                            'hydrogenMass' : 3 * unit.amus},
                                         nonperiodic_forcefield_kwargs={'nonbondedMethod': app.NoCutoff},
                                         small_molecule_forcefield='gaff-2.11',
                                         molecules=None,
@@ -175,7 +175,7 @@ def generate_atp(phase = 'vacuum'):
                                    forcefield_kwargs={'removeCMMotion': False,
                                                         'ewaldErrorTolerance': 1e-4,
                                                         'constraints' : app.HBonds,
-                                                        'hydrogenMass' : 4 * unit.amus},
+                                                        'hydrogenMass' : 3 * unit.amus},
                                     periodic_forcefield_kwargs={'nonbondedMethod': app.PME},
                                     small_molecule_forcefield='gaff-2.11',
                                     molecules=None,
@@ -183,7 +183,7 @@ def generate_atp(phase = 'vacuum'):
 
     if phase == 'solvent':
         modeller = app.Modeller(atp.topology, atp.positions)
-        modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9*unit.angstroms, ionicStrength=0.15*unit.molar)
+        modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=11*unit.angstroms, ionicStrength=0.15*unit.molar)
         solvated_topology = modeller.getTopology()
         solvated_positions = modeller.getPositions()
 
@@ -304,8 +304,7 @@ def generate_dipeptide_top_pos_sys(topology,
             if generate_rest_capable_hybrid_topology_factory:
                 from perses.tests.utils import validate_endstate_energies_point
                 for endstate in [0, 1]:
-                    htf = copy.deepcopy(forward_htf)
-                    validate_endstate_energies_point(htf, endstate=endstate, minimize=True)
+                    validate_endstate_energies_point(forward_htf, endstate=endstate, minimize=True)
             else:
                 from perses.tests.utils import validate_endstate_energies
 
@@ -376,11 +375,11 @@ def test_mutate_from_alanine():
             _ = generate_dipeptide_top_pos_sys(ala.topology, amino, ala.system, ala.positions, system_generator, conduct_geometry_prop=False)
 
 def test_protein_atom_maps():
-    
+
     # Get alanine dipeptide in vacuum test system
     ala, system_generator = generate_atp()
-    
-    
+
+
     # Define function for checking that the atom map is correct
     def check_atom_map(topology_proposal, reference_map):
         # Retrieve atom index to name mapping for old and new residues
@@ -391,32 +390,32 @@ def test_protein_atom_maps():
 
         # Check whether the atom map generated matches the reference map
         atom_map = topology_proposal._core_new_to_old_atom_map
-        
+
         mapped_atoms = [(new_res_index_to_name[new_idx], old_res_index_to_name[old_idx]) for new_idx, old_idx in atom_map.items() if new_idx in new_res_index_to_name.keys() and old_idx in old_res_index_to_name.keys()]
         assert sorted(reference_map) == sorted(mapped_atoms), f"{topology_proposal.old_residue_name}->{topology_proposal.new_residue_name} map does not match reference map"
-    
+
     # ALA -> SER
     topology_proposal, new_positions, logp_proposal, logp_reverse = generate_dipeptide_top_pos_sys(ala.topology, 'SER', ala.system, ala.positions, system_generator, conduct_geometry_prop=True)
     ser_topology, ser_system = topology_proposal.new_topology, topology_proposal.new_system
     reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB')]
     check_atom_map(topology_proposal, reference_map)
-    
+
     # SER -> ALA
     topology_proposal = generate_dipeptide_top_pos_sys(ser_topology, 'ALA', ser_system, new_positions, system_generator, conduct_geometry_prop=False)
     reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB')]
     check_atom_map(topology_proposal, reference_map)
-    
+
     # ALA -> VAL
-    topology_proposal, new_positions, logp_proposal, logp_reverse = generate_dipeptide_top_pos_sys(ala.topology, 'VAL', ala.system, ala.positions, system_generator, conduct_geometry_prop=True) 
+    topology_proposal, new_positions, logp_proposal, logp_reverse = generate_dipeptide_top_pos_sys(ala.topology, 'VAL', ala.system, ala.positions, system_generator, conduct_geometry_prop=True)
     val_topology, val_system = topology_proposal.new_topology, topology_proposal.new_system
     reference_map =  [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB')]
     check_atom_map(topology_proposal, reference_map)
-    
+
     # VAL -> ALA
     topology_proposal = generate_dipeptide_top_pos_sys(val_topology, 'ALA', val_system, new_positions, system_generator, conduct_geometry_prop=False)
     reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB')]
     check_atom_map(topology_proposal, reference_map)
-    
+
     # VAL -> ILE
     topology_proposal = generate_dipeptide_top_pos_sys(val_topology, 'ILE', val_system, new_positions, system_generator, conduct_geometry_prop=False)
     reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB')]
@@ -426,13 +425,13 @@ def test_protein_atom_maps():
     topology_proposal = generate_dipeptide_top_pos_sys(val_topology, 'ILE', val_system, new_positions, system_generator, extra_sidechain_map={13:13, 17: 18, 18: 19, 19: 20, 20: 21}, conduct_geometry_prop=False)
     reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB'), ('HB', 'HB'), ('CG2', 'CG2'), ('HG21', 'HG21'), ('HG22', 'HG22'), ('HG23', 'HG23')]
     check_atom_map(topology_proposal, reference_map)
-    
+
     # ALA -> GLY
     topology_proposal, new_positions, logp_proposal, logp_reverse = generate_dipeptide_top_pos_sys(ala.topology, 'GLY', ala.system, ala.positions, system_generator, conduct_geometry_prop=True)
     gly_topology, gly_system = topology_proposal.new_topology, topology_proposal.new_system
     reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('C', 'C'), ('O', 'O')]
     check_atom_map(topology_proposal, reference_map)
-    
+
     # GLY -> ALA
     topology_proposal = generate_dipeptide_top_pos_sys(gly_topology, 'ALA', gly_system, new_positions, system_generator, conduct_geometry_prop=False)
     reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('C', 'C'), ('O', 'O')]
@@ -862,7 +861,7 @@ def test_protein_counterion_topology_fix_positive():
 
     # Make a solvated system/topology/positions with modeller
     modeller = app.Modeller(atp.topology, atp.positions)
-    modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9*unit.angstroms, ionicStrength=0.15*unit.molar)
+    modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=11*unit.angstroms, ionicStrength=0.15*unit.molar)
     solvated_topology = modeller.getTopology()
     solvated_positions = modeller.getPositions()
 
@@ -889,10 +888,10 @@ def test_protein_counterion_topology_fix_positive():
     assert charge_diff_test == charge_diff
 
     # Get the array of water indices (w.r.t. new topology) to turn into ions
-    water_indices = PolymerProposalEngine.get_water_indices(charge_diff = charge_diff_test,
-                                             new_positions = new_pos,
-                                             new_topology = top_proposal._new_topology,
-                                             radius=0.8)
+    water_indices = get_water_indices(charge_diff=charge_diff_test,
+                                      new_positions=new_pos,
+                                      new_topology=top_proposal._new_topology,
+                                      radius=0.8)
 
     assert len(water_indices) == 3
 
@@ -909,7 +908,7 @@ def test_protein_counterion_topology_fix_negitive():
 
     # Make a solvated system/topology/positions with modeller
     modeller = app.Modeller(atp.topology, atp.positions)
-    modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9*unit.angstroms, ionicStrength=0.15*unit.molar)
+    modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=11*unit.angstroms, ionicStrength=0.15*unit.molar)
     solvated_topology = modeller.getTopology()
     solvated_positions = modeller.getPositions()
 
@@ -936,10 +935,10 @@ def test_protein_counterion_topology_fix_negitive():
     assert charge_diff_test == charge_diff
 
     # Get the array of water indices (w.r.t. new topology) to turn into ions
-    water_indices = PolymerProposalEngine.get_water_indices(charge_diff = charge_diff_test,
-                                             new_positions = new_pos,
-                                             new_topology = top_proposal._new_topology,
-                                             radius=0.8)
+    water_indices = get_water_indices(charge_diff=charge_diff_test,
+                                      new_positions=new_pos,
+                                      new_topology=top_proposal._new_topology,
+                                      radius=0.8)
 
     assert len(water_indices) == 3
 
@@ -957,7 +956,7 @@ def test_protein_counterion_topology_fix_zero():
 
     # Make a solvated system/topology/positions with modeller
     modeller = app.Modeller(atp.topology, atp.positions)
-    modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9*unit.angstroms, ionicStrength=0.15*unit.molar)
+    modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=11*unit.angstroms, ionicStrength=0.15*unit.molar)
     solvated_topology = modeller.getTopology()
     solvated_positions = modeller.getPositions()
 
@@ -984,9 +983,9 @@ def test_protein_counterion_topology_fix_zero():
     assert charge_diff_test == charge_diff
 
     # Get the array of water indices (w.r.t. new topology) to turn into ions
-    water_indices = PolymerProposalEngine.get_water_indices(charge_diff = charge_diff_test,
-                                             new_positions = new_pos,
-                                             new_topology = top_proposal._new_topology,
-                                             radius=0.8)
+    water_indices = get_water_indices(charge_diff=charge_diff_test,
+                                      new_positions=new_pos,
+                                      new_topology=top_proposal._new_topology,
+                                      radius=0.8)
 
     assert len(water_indices) == 0

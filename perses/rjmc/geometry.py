@@ -484,13 +484,17 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         #Print the energy of the system before unique_new/old atoms are placed...
         state = atoms_with_positions_context.getState(getEnergy=True)
         atoms_with_positions_reduced_potential = beta*state.getPotentialEnergy()
-        atoms_with_positions_reduced_potential_components = [(force, energy) for force, energy in compute_potential_components(atoms_with_positions_context)]
+        atoms_with_positions_reduced_potential_components = compute_potential_components(atoms_with_positions_context)
         _logger.debug(f'atoms_with_positions_reduced_potential_components:')
-        for f, e in atoms_with_positions_reduced_potential_components:
+        for f, e in atoms_with_positions_reduced_potential_components.items():
             _logger.debug(f'\t{f} : {e}')
-        atoms_with_positions_methods_differences = abs(atoms_with_positions_reduced_potential - sum([i[1] for i in atoms_with_positions_reduced_potential_components]))
+        atoms_with_positions_methods_differences = abs(atoms_with_positions_reduced_potential -
+                                                       sum(atoms_with_positions_reduced_potential_components.values()))
         _logger.debug(f'Diffence in energy on adding unique atoms: {atoms_with_positions_methods_differences}')
-        assert atoms_with_positions_methods_differences < ENERGY_THRESHOLD, f"the difference between the atoms_with_positions_reduced_potential and the sum of atoms_with_positions_reduced_potential_components is {atoms_with_positions_methods_differences}"
+        assert atoms_with_positions_methods_differences < \
+               ENERGY_THRESHOLD, f"the difference between the atoms_with_positions_reduced_potential and the sum of " \
+                                 f"atoms_with_positions_reduced_potential_components is" \
+                                 f" {atoms_with_positions_methods_differences}"
 
         # Place each atom in predetermined order
         _logger.info("There are {} new atoms".format(len(atom_proposal_order)))
@@ -643,19 +647,23 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         state = final_context.getState(getEnergy=True)
         final_context_reduced_potential = beta*state.getPotentialEnergy()
-        final_context_components = [(force, energy*beta) for force, energy in compute_potential_components(final_context)]
-        atoms_with_positions_reduced_potential_components = [(force, energy*beta) for force, energy in compute_potential_components(atoms_with_positions_context)]
+        final_context_components = [(force, energy*beta) for force, energy in
+                                    compute_potential_components(final_context).items()]
+        atoms_with_positions_reduced_potential_components = [
+            (force, energy*beta) for force, energy in compute_potential_components(atoms_with_positions_context).items()
+        ]
         _logger.debug(f"reduced potential components before atom placement:")
         for item in atoms_with_positions_reduced_potential_components:
             _logger.debug(f"\t\t{item[0]}: {item[1]}")
         _logger.info(f"total reduced potential before atom placement: {atoms_with_positions_reduced_potential}")
 
         _logger.debug(f"potential components added from growth system:")
-        added_energy_components = [(force, energy*beta) for force, energy in compute_potential_components(context)]
+        added_energy_components = [(force, energy*beta) for force, energy in
+                                   compute_potential_components(context).items()]
         for item in added_energy_components:
             _logger.debug(f"\t\t{item[0]}: {item[1]}")
 
-        #now for the corrected reduced_potential_energy
+        # now for the corrected reduced_potential_energy
         if direction == 'forward':
             positions = new_positions
         else:
@@ -722,7 +730,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         mod_state = mod_context.getState(getEnergy=True)
         modified_reduced_potential_energy = beta * mod_state.getPotentialEnergy()
 
-        added_energy_components = [(force, energy) for force, energy in compute_potential_components(mod_context)]
+        added_energy_components = compute_potential_components(mod_context)
         print(f"added energy components: {added_energy_components}")
 
         return modified_reduced_potential_energy
@@ -2225,22 +2233,22 @@ class GeometrySystemGenerator(object):
                 growth_idx = self._calculate_growth_idx(topology_index_map, growth_indices)
                 atom_names = [torsion.a.GetName(), torsion.b.GetName(), torsion.c.GetName(), torsion.d.GetName()]
 
-            #print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
-            #If this is a CustomTorsionForce, we need to pass the parameters as a list, and it will have the growth_idx parameter.
-            #If it's a regular PeriodicTorsionForce, there is no growth_index and the parameters are passed separately.
+                #print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
+                #If this is a CustomTorsionForce, we need to pass the parameters as a list, and it will have the growth_idx parameter.
+                #If it's a regular PeriodicTorsionForce, there is no growth_index and the parameters are passed separately.
 
-            p1, p2, p3, p4 = topology_index_map
-            possible_omissions = [(p1,p2), (p2,p3), (p3,p4), (p2,p1), (p3,p2), (p4,p3)]
-            if growth_idx > 0:
-                if any(torsion_pair in self.omitted_bonds for torsion_pair in possible_omissions):
-                    pass
+                p1, p2, p3, p4 = topology_index_map
+                possible_omissions = [(p1,p2), (p2,p3), (p3,p4), (p2,p1), (p3,p2), (p4,p3)]
+                if growth_idx > 0:
+                    if any(torsion_pair in self.omitted_bonds for torsion_pair in possible_omissions):
+                        pass
+                    else:
+                        _torsion_index = torsion_force.addTorsion(topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, adjusted_phase, k, growth_idx])
+                        self.extra_torsion_terms[_torsion_index] = (topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, adjusted_phase, k, growth_idx])
+                        _logger.debug(f"\t\t\t\t{(topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3])}")
                 else:
-                    _torsion_index = torsion_force.addTorsion(topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, adjusted_phase, k, growth_idx])
-                    self.extra_torsion_terms[_torsion_index] = (topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, adjusted_phase, k, growth_idx])
-                    _logger.debug(f"\t\t\t\t{(topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3])}")
-            else:
-                pass
-                #we omit terms wherein the growth index only pertains to the
+                    pass
+                    #we omit terms wherein the growth index only pertains to the
 
         _logger.debug(f"\t\t\trelevant torsions for chirality restraints being added...")
         #set chirality restraints (adapted from https://github.com/choderalab/perses/blob/protein_mutations_ivy/perses/rjmc/geometry.py)

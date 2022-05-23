@@ -7,7 +7,6 @@ def test_gpu_platforms(platform_type):
     import logging
     import os
     import pathlib
-    import tempfile
     import time
 
     import numpy as np
@@ -16,10 +15,10 @@ def test_gpu_platforms(platform_type):
     from simtk import openmm, unit
 
     from perses.app.relative_point_mutation_setup import PointMutationExecutor
+    from perses.tests.utils import enter_temp_directory
 
     # change to temp dir
-    with tempfile.TemporaryDirectory() as temp_dir:
-        os.chdir(temp_dir)
+    with enter_temp_directory() as temp_dir:
 
         # Set up logger
         _logger = logging.getLogger()
@@ -45,10 +44,6 @@ def test_gpu_platforms(platform_type):
             "1",
             "2",
             "ALA",
-            ligand_input=resource_filename(
-                "perses",
-                os.path.join("data", "barstar-mutation", "1brs_barnase_renumbered.pdb"),
-            ),
             ionic_strength=0.05 * unit.molar,
             flatten_torsions=True,
             flatten_exceptions=True,
