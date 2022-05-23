@@ -329,10 +329,3 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
         assert np.isclose(np.array([data['arg-ala']['free_energy'] + data['ala-arg']['free_energy']]), np.array([data['lys-ala']['free_energy'] + data['ala-lys']['free_energy']]))
 
 
-# if __name__=="__main__":
-    # for t in test_hybrid_scheme():
-    #     t()
-#    for t in test_samplers():
-#        print(t.description)
-#        t()
-#     run_RESTCapableHybridTopologyFactory_repex()
