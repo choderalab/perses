@@ -109,7 +109,7 @@ jobs:
                 && github.event != 'schedule' }}
         uses: codecov/codecov-action@v1
         with:
-          file: ./perses/coverage.xml
+          file: ./coverage.xml
           fail_ci_if_error: true
 
   stop-runner:
