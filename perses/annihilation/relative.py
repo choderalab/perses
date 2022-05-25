@@ -2155,9 +2155,8 @@ class HybridTopologyFactory(object):
         # making sure hybrid positions are simtk.unit.Quantity objects
         if not isinstance(hybrid_positions, unit.Quantity):
             hybrid_positions = unit.Quantity(hybrid_positions, unit=unit.nanometer)
-        old_positions = unit.Quantity(np.zeros([n_atoms_old, 3]), unit=unit.nanometer)
-        for idx in range(n_atoms_old):
-            old_positions[idx, :] = hybrid_positions[idx, :]
+        hybrid_indices = [self._old_to_hybrid_map[idx] for idx in range(n_atoms_old)]
+        old_positions = unit.Quantity(hybrid_positions[hybrid_indices, :], unit=unit.nanometer)
         return old_positions
 
     def new_positions(self, hybrid_positions):
@@ -2178,9 +2177,8 @@ class HybridTopologyFactory(object):
         # making sure hybrid positions are simtk.unit.Quantity objects
         if not isinstance(hybrid_positions, unit.Quantity):
             hybrid_positions = unit.Quantity(hybrid_positions, unit=unit.nanometer)
-        new_positions = unit.Quantity(np.zeros([n_atoms_new, 3]), unit=unit.nanometer)
-        for idx in range(n_atoms_new):
-            new_positions[idx, :] = hybrid_positions[self._new_to_hybrid_map[idx], :]
+        hybrid_indices = [self._new_to_hybrid_map[idx] for idx in range(n_atoms_new)]
+        new_positions = unit.Quantity(hybrid_positions[hybrid_indices, :], unit=unit.nanometer)
         return new_positions
 
     @property
