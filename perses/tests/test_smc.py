@@ -2,15 +2,12 @@
 # IMPORTS
 ###########################################
 from simtk import unit, openmm
-import numpy as np
-import os
 from nose.tools import nottest
 from unittest import skipIf
 from perses.app.setup_relative_calculation import *
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_setup import RelativeFEPSetup
 from perses.dispersed.smc import SequentialMonteCarlo
-from openmmtools.constants import kB
 from perses.dispersed.utils import *
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
