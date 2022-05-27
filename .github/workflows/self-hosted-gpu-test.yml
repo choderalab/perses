@@ -66,7 +66,7 @@ jobs:
       - name: Refine test env
         shell: bash -l {0}
         run: |
-          mamba install -y cudatoolkit==11.0.3 openmm==7.6
+          mamba install -y cudatoolkit==11.0.3 openmm>=7.7
       
       - name: Additional info about the build
         shell: bash -l {0}
@@ -109,7 +109,7 @@ jobs:
                 && github.event != 'schedule' }}
         uses: codecov/codecov-action@v1
         with:
-          file: ./perses/coverage.xml
+          file: ./coverage.xml
           fail_ci_if_error: true
 
   stop-runner:
