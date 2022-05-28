@@ -56,7 +56,7 @@ def test_PointMutationExecutor_solvated():
             "1",
             "2",
             "ASP",
-            solvate=False,
+            is_solvated=True,
             flatten_torsions=False,
             flatten_exceptions=False,
             conduct_endstate_validation=False
