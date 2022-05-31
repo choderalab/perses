@@ -3894,9 +3894,9 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         self._hybrid_system_forces[name] = custom_force
 
         # Add global parameters
-        custom_force.addGlobalParameter(f"lambda_rest_electrostatics", 1.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_electrostatics_old", 1.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_electrostatics_new", 0.0)
+        custom_force.addGlobalParameter("lambda_rest_electrostatics", 1.0)
+        custom_force.addGlobalParameter("lambda_alchemical_electrostatics_old", 1.0)
+        custom_force.addGlobalParameter("lambda_alchemical_electrostatics_new", 0.0)
 
         # Add per-particle parameters for rest scaling -- these three sets are disjoint
         custom_force.addPerParticleParameter("is_rest")
@@ -3983,9 +3983,9 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         custom_force.addInteractionGroup(environment_rest_atoms, environment_nonrest_atoms)
 
         # Add global parameters
-        custom_force.addGlobalParameter(f"lambda_rest_sterics", 1.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_sterics_old", 1.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_sterics_new", 0.0)
+        custom_force.addGlobalParameter("lambda_rest_sterics", 1.0)
+        custom_force.addGlobalParameter("lambda_alchemical_sterics_old", 1.0)
+        custom_force.addGlobalParameter("lambda_alchemical_sterics_new", 0.0)
 
         # Add per-particle parameters for rest scaling -- these three sets are disjoint
         custom_force.addPerParticleParameter("is_rest")
@@ -4250,12 +4250,12 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         self._hybrid_system_forces[name] = custom_force
 
         # Add global parameters
-        custom_force.addGlobalParameter(f"lambda_rest_electrostatics_exceptions", 1.0)
-        custom_force.addGlobalParameter(f"lambda_rest_sterics_exceptions", 1.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_electrostatics_exceptions_old", 1.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_electrostatics_exceptions_new", 0.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_sterics_exceptions_old", 1.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_sterics_exceptions_new", 0.0)
+        custom_force.addGlobalParameter("lambda_rest_electrostatics_exceptions", 1.0)
+        custom_force.addGlobalParameter("lambda_rest_sterics_exceptions", 1.0)
+        custom_force.addGlobalParameter("lambda_alchemical_electrostatics_exceptions_old", 1.0)
+        custom_force.addGlobalParameter("lambda_alchemical_electrostatics_exceptions_new", 0.0)
+        custom_force.addGlobalParameter("lambda_alchemical_sterics_exceptions_old", 1.0)
+        custom_force.addGlobalParameter("lambda_alchemical_sterics_exceptions_new", 0.0)
 
         # Add per-bond parameters for rest scaling -- these sets are disjoint
         custom_force.addPerBondParameter("is_rest")
