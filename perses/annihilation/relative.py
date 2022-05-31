@@ -2717,11 +2717,11 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     For example, for each bond, the additional parameters are: length_old, length_new, K_old, K_new
 
     The nonbonded interactions are handled with 4 forces:
-    - CustomNonbondedForce - direct space PME electrostatics interactions (with long range correction off)
-    - CustomNonbondedForce - steric interactions for scaled interactions (with long range correction off)
-    - CustomBondForce - electrostatics (uses Coulomb and not PME) and steric exceptions
-    - NonbondedForce - reciprocal space PME electrostatics interactions/exceptions
-    - NonbondedForce - steric interactions for non-scaled interactions (with long range correction on)
+    - CustomNonbondedForce_electrostatics - direct space PME electrostatics interactions (with long range correction off)
+    - CustomNonbondedForce_sterics - steric interactions for scaled interactions (with long range correction off)
+    - CustomBondForce_exceptions - electrostatics (uses Coulomb and not PME) and scaled steric exceptions
+    - NonbondedForce_reciprocal - reciprocal space PME electrostatics interactions/exceptions (with long range correction off)
+    - NonbondedForce_sterics - steric interactions for non-scaled interactions/exceptions (with long range correction on)
     * Note that 'scaled interaction' means at least one atom in the interaction is scaled via rest or alchemically.
     Aka at least one atom in the interaction is part of at least one of the following atom classes: rest, inter, core, unique old, unique new.
 
@@ -4128,6 +4128,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             - CustomNonbondedForce for electrostatics interactions (not exceptions)
             - CustomNonbondedForce for sterics interactions (not exceptions)
             - NonbondedForce for reciprocal space electrostatic interactions and exceptions
+            - NonbondedForce for non-scaled steric interactions and exceptions
 
         """
 
@@ -4292,7 +4293,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
     def _copy_exceptions(self):
         """
-        Add exceptions to the CustomBondForce for exceptions and the NonbondedForce for the reciprocal space.
+        Add exceptions to:
+            - CustomBondForce for scaled exceptions
+            - NonbondedForce for the reciprocal space interactions and exceptions
+            - NonbondedForce for non-scaled sterics interactions and exceptions
         """
 
         # Retrieve old and new nb forces
@@ -4380,7 +4384,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             chargeProd_product_old = p1_params[-2] * p2_params[-2]
             chargeProd_product_new = p1_params[-1] * p2_params[-1]
 
-            # Add exclusions to the custon nb forces and bond to the custom bond force
+            # Add exclusions to the custom nb forces and bond to the custom bond force
             params = (hybrid_index_pair[0], hybrid_index_pair[1],
                                    rest_id + alch_id +
                                    [chargeProd_old, chargeProd_new, chargeProd_product_old, chargeProd_product_new, sigma_old, sigma_new, epsilon_old_bond, epsilon_new_bond])
