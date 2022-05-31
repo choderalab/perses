@@ -1008,7 +1008,7 @@ def run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_en
         # For theses tests, we need to turn the LRC on for the CustomNonbondedForce scaled steric interactions,
         # since there is no way to turn the LRC on for the non-scaled interactions only
         force_dict = {force.getName(): index for index, force in enumerate(htf.hybrid_system.getForces())}
-        custom_force = hybrid_system.getForce(force_dict['CustomNonbondedForce_sterics'])
+        custom_force = htf.hybrid_system.getForce(force_dict['CustomNonbondedForce_sterics'])
         custom_force.setUseLongRangeCorrection(True)
 
     # validating endstate energies
