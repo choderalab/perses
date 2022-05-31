@@ -3024,10 +3024,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                  new_positions,
 
                  # rest scaling arguments
-                 rest_radius=0.2,
+                 rest_radius=0.3,
 
                  # nonbonded parameters
-                 w_scale=0.1,
+                 w_scale=0.3,
 
                  **kwargs):
 
@@ -3040,9 +3040,9 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                 positions of coordinates of old system
             new_positions : [m,3] np.ndarray of float
                 positions of coordinates of new system
-            rest_radius : float, default 0.2
+            rest_radius : float, default 0.3
                 radius for rest region, in nanometers
-            w_scale : float
+            w_scale : float, default 0.3
                 maximum offset to add for the 4th dimension lifting
         """
 
@@ -4025,7 +4025,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(self._nonbonded_method))
             custom_force.setUseSwitchingFunction(False)
             custom_force.setCutoffDistance(self._r_cutoff)
-            custom_force.setUseLongRangeCorrection(old_system_nbf.getUseDispersionCorrection()) # This should be copied from the og nbf for sterics, but off for electrostatics
+            custom_force.setUseLongRangeCorrection(False)
 
         elif self._nonbonded_method == openmm.NonbondedForce.NoCutoff:
             custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(self._nonbonded_method))
