@@ -1109,6 +1109,9 @@ def run_unsampled_endstate_energies(test_name, use_point_energies=True, use_md_e
         vanilla_htf = solvent_delivery.get_apo_htf()
         htfs = [htf, vanilla_htf]
 
+    else:
+        raise Exception(f"You specified test case name: {test_name}, but the allowed test_names are: 'ala-dipeptide' and 'barstar'")
+
     for htf in htfs:
         # Modify the htf for tests
         # For these tests, we need to turn the LRC on for the CustomNonbondedForce, since the LRC is on for the real systems
