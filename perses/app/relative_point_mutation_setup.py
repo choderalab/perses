@@ -438,6 +438,13 @@ class PointMutationExecutor(object):
                     from perses.tests.utils import validate_endstate_energies_point
                     for endstate in [0, 1]:
                         htf = self.get_complex_rest_htf() if is_complex else self.get_apo_rest_htf()
+
+                        # For endstate validation, we need to turn the LRC on for the CustomNonbondedForce scaled steric interactions,
+                        # since there is no way to turn the LRC on for the non-scaled interactions only in the real systems
+                        force_dict = {force.getName(): index for index, force in enumerate(htf.hybrid_system.getForces())}
+                        custom_force = htf.hybrid_system.getForce(force_dict['CustomNonbondedForce_sterics'])
+                        custom_force.setUseLongRangeCorrection(True)
+
                         validate_endstate_energies_point(htf, endstate=endstate, minimize=True)
 
             else:
