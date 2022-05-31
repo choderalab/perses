@@ -1835,7 +1835,7 @@ class HybridTopologyFactory(object):
 
 
         nonbonded_exceptions_force = openmm.CustomBondForce(old_new_nonbonded_exceptions)
-        name = nonbonded_exceptions_force.__class__.__name__ + '_exceptions'        
+        name = f"{nonbonded_exceptions_force.__class__.__name__}_exceptions"        
         nonbonded_exceptions_force.setName(name)
         self._hybrid_system.addForce(nonbonded_exceptions_force)
         _logger.debug(f"\thandle_old_new_exceptions: {nonbonded_exceptions_force} added to hybrid system")
