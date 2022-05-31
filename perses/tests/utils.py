@@ -900,6 +900,10 @@ def validate_endstate_energies_point(input_htf, endstate=0, minimize=False):
     forces = [bond_force, angle_force, torsion_force, electrostatics_force, scaled_sterics_force]
     force_names = ['bonds', 'angles', 'torsions', 'electrostatics', 'sterics']
 
+    # For this test, we need to turn the LRC on for the CustomNonbondedForce scaled steric interactions,
+    # since there is no way to turn the LRC on for the non-scaled interactions only in the real systems
+    scaled_sterics_force.setUseLongRangeCorrection(True)
+
     # Set global parameters for valence + electrostatics/scaled_sterics forces
     lambda_old = 1 if endstate == 0 else 0
     lambda_new = 0 if endstate == 0 else 1
@@ -1025,6 +1029,12 @@ def validate_endstate_energies_md(input_htf, T_max=300 * unit.kelvin, endstate=0
     hybrid_system = htf.hybrid_system
     hybrid_positions = htf.hybrid_positions
     box_vectors = hybrid_system.getDefaultPeriodicBoxVectors()
+
+    # For this test, we need to turn the LRC on for the CustomNonbondedForce scaled steric interactions,
+    # since there is no way to turn the LRC on for the non-scaled interactions only in the real systems
+    force_dict = {force.getName(): index for index, force in enumerate(hybrid_system.getForces())}
+    custom_force = hybrid_system.getForce(force_dict['CustomNonbondedForce_sterics'])
+    custom_force.setUseLongRangeCorrection(True)
 
     # Create compound thermodynamic state
     lambda_protocol = RESTCapableLambdaProtocol()
