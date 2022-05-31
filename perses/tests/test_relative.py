@@ -520,8 +520,10 @@ def HybridTopologyFactory_energies(current_mol = 'toluene', proposed_mol = '1,2-
     top_proposal, old_positions, _ = generate_solvated_hybrid_test_topology(current_mol_name = current_mol, proposed_mol_name = proposed_mol)
 
     # Remove the dispersion correction
-    top_proposal._old_system.getForce(3).setUseDispersionCorrection(False)
-    top_proposal._new_system.getForce(3).setUseDispersionCorrection(False)
+    force_names_old_system = {force.__class__.__name__ : index for index, force in enumerate(top_proposal._old_system.getForces())}
+    force_names_new_system = {force.__class__.__name__ : index for index, force in enumerate(top_proposal._new_system.getForces())}
+    top_proposal._old_system.getForce(force_names_old_system["NonbondedForce"]).setUseDispersionCorrection(False)
+    top_proposal._new_system.getForce(force_names_new_system["NonbondedForce"]).setUseDispersionCorrection(False)
 
     # Run geometry engine to generate old and new positions
     _geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
@@ -819,16 +821,16 @@ def flattenedHybridTopologyFactory_energies(topology, chain, system, positions, 
         # Make list of off atoms that should have flattened torsions/exceptions
         off_atoms = topology_proposal.unique_new_atoms if endstate == 0 else topology_proposal.unique_old_atoms
         system = topology_proposal.old_system if endstate == 0 else topology_proposal.new_system
-
+        force_names = {force.__class__.__name__ : index for index, force in enumerate(system.getForces())}
         # Flatten torsions involving off atoms
-        periodic_torsion = system.getForce(2)
+        periodic_torsion = system.getForce(force_names["PeriodicTorsionForce"])
         for i in range(periodic_torsion.getNumTorsions()):
             p1, p2, p3, p4, periodicity, phase, k = periodic_torsion.getTorsionParameters(i)
             if p1 in off_atoms or p2 in off_atoms or p3 in off_atoms or p4 in off_atoms:
                 periodic_torsion.setTorsionParameters(i, p1, p2, p3, p4, periodicity, phase, 0. * k)
 
         # Flatten exceptions involving off atoms
-        nb_force = system.getForce(3)
+        nb_force = system.getForce(force_names["NonbondedForce"])
         for i in range(nb_force.getNumExceptions()):
             p1, p2, chargeProd, sigma, epsilon = nb_force.getExceptionParameters(i)
             if p1 in off_atoms or p2 in off_atoms:
@@ -956,9 +958,6 @@ def run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_en
 
     """
 
-    import tempfile
-    import pickle
-
     from perses.tests.test_topology_proposal import generate_atp, generate_dipeptide_top_pos_sys
     from perses.app.relative_point_mutation_setup import PointMutationExecutor
     from perses.tests.utils import validate_endstate_energies_point, validate_endstate_energies_md
@@ -1007,21 +1006,13 @@ def run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_en
                                                  )
         htf = solvent_delivery.get_apo_rest_htf()
 
-    # Save htf as temporary pickled file
-    with tempfile.TemporaryDirectory() as temp_dir:
-        with open(os.path.join(temp_dir, "htf.pickle"), "wb") as f:
-            pickle.dump(htf, f)
-
-        if use_point_energies:
-            for endstate in [0, 1]:
-                with open(os.path.join(temp_dir, "htf.pickle"), "rb") as f:
-                    htf = pickle.load(f)
-                validate_endstate_energies_point(htf, endstate=endstate, minimize=True)
-        else:
-            for endstate in [0, 1]:
-                with open(os.path.join(temp_dir, "htf.pickle"), "rb") as f:
-                    htf = pickle.load(f)
-                validate_endstate_energies_md(htf, endstate=endstate, n_steps=10)
+    # validating endstate energies
+    if use_point_energies:
+        for endstate in [0, 1]:
+            validate_endstate_energies_point(htf, endstate=endstate, minimize=True)
+    else:
+        for endstate in [0, 1]:
+            validate_endstate_energies_md(htf, endstate=endstate, n_steps=10)
 
 def test_RESTCapableHybridTopologyFactory_energies():
     """

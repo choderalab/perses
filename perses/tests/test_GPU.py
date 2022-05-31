@@ -7,7 +7,6 @@ def test_gpu_platforms(platform_type):
     import logging
     import os
     import pathlib
-    import tempfile
     import time
 
     import numpy as np
@@ -16,10 +15,10 @@ def test_gpu_platforms(platform_type):
     from simtk import openmm, unit
 
     from perses.app.relative_point_mutation_setup import PointMutationExecutor
+    from perses.tests.utils import enter_temp_directory
 
     # change to temp dir
-    with tempfile.TemporaryDirectory() as temp_dir:
-        os.chdir(temp_dir)
+    with enter_temp_directory() as temp_dir:
 
         # Set up logger
         _logger = logging.getLogger()
