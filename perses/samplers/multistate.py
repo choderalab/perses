@@ -6,7 +6,7 @@ from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaP
 
 from openmmtools.multistate import sams, replicaexchange
 from openmmtools.states import CompoundThermodynamicState, SamplerState, ThermodynamicState
-from perses.dispersed.utils import create_endstates
+from perses.dispersed.utils import create_endstates, create_endstates_from_real_systems
 
 import numpy as np
 import copy
@@ -86,7 +86,7 @@ class HybridCompatibilityMixin(object):
         if endstates:
             # generating unsampled endstates
             _logger.info('Generating unsampled endstates.')
-            unsampled_dispersion_endstates = create_endstates(copy.deepcopy(thermodynamic_state_list[0]), copy.deepcopy(thermodynamic_state_list[-1]))
+            unsampled_dispersion_endstates = create_endstates_from_real_systems(self._hybrid_factory)
             self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state_list,
                     storage=reporter, unsampled_thermodynamic_states=unsampled_dispersion_endstates)
         else:
