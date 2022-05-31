@@ -34,10 +34,11 @@ _logger.setLevel(logging.INFO)
 class PointMutationExecutor(object):
     """
     This class generates the input files necessary to run a relative binding free energy calculation for a protein mutation
-    in a protein-ligand or protein-protein system. Two hybrid factories are required:
+    in a protein-ligand or protein-protein system. This class will generate two hybrid factories:
         1. 'wildtype' -> 'point mutant' complex hybrid factory
         2. 'wildtype' -> 'point mutant' apo hybrid factory (i.e. without ligand or protein partner bound)
-    If you wish to generate a hybrid factory without a ligand or protein binding partner, leave the `ligand_input` argument as None.
+    You can also choose to generate a single hybrid factory for apo (without a ligand or protein binding partner) -- just
+    leave the `ligand_input` argument as None.
 
     The following factories are available (implemented in perses/annihilation/relative.py):
     - `HybridTopologyFactory` -- allows for alchemical scaling only
@@ -181,7 +182,7 @@ class PointMutationExecutor(object):
                 counterions will be added (if the transformation involves a charge change)
                 otherwise, the topology will not be solvated and counterions will not be added
             is_solvated : bool, default False
-                whether to protein (and complex, if ligand_input is specified) topology is already solvated.
+                whether the protein (and complex, if ligand_input is specified) topology is already solvated.
                 if False, the protein/complex topology is not already solvated
                 otherwise, the input protein_filename (and ligand_input, if specified) are already solvated
                 and should correspond to the solvated protein PDB and solvated complex PDB, respectively.
@@ -193,7 +194,7 @@ class PointMutationExecutor(object):
                 This does not include ions that are added to neutralize the system.
                 Note that only monovalent ions are currently supported.
             padding : float * unit.nanometer, default 1.1 * unit.nanometer
-                padding to use for creating the solvent box
+                padding (in nanometers) to use for creating the solvent box
             box_shape : string, default 'cube'
                 shape to use for creating the solvent box. options: 'cube', 'octahedron', 'dodecahedron'
             forcefield_files : list of str, default ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
