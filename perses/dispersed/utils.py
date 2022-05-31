@@ -456,6 +456,8 @@ def create_endstates(first_thermostate, last_thermostate):
     3. set PME tolerance to 1e-5
     4. enable LJPME to handle long range dispersion corrections in a physically reasonable manner
 
+    Works for `HybridTopologyFactory`
+
     Parameters
     ----------
     first_thermostate : openmmtools.states.CompoundThermodynamicState
@@ -508,6 +510,8 @@ def create_endstates_from_real_systems(htf, for_testing=False):
     """
     Generates unsampled endstates using LJPME as the nonbonded method to more accurately account for
     long-range steric interactions at the lambda = 0 and lambda = 1 endstates.
+
+    Works for `HybridTopologyFactory` and `RESTCapableHybridTopologyFactory`
 
     Tested in tests/test_relative.py::test_create_endstates()
 
