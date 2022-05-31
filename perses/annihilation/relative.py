@@ -2144,19 +2144,19 @@ class HybridTopologyFactory(object):
         Parameters
         ----------
         hybrid_positions : [n, 3] np.ndarray or simtk.unit.Quantity
-            The positions of the hybrid system
+            The positions of the hybrid system (in nanometers)
 
         Returns
         -------
         old_positions : [m, 3] np.ndarray with unit
-            The positions of the old system
+            The positions of the old system (in nanometers)
         """
         n_atoms_old = self._topology_proposal.n_atoms_old
         # making sure hybrid positions are simtk.unit.Quantity objects
         if not isinstance(hybrid_positions, unit.Quantity):
             hybrid_positions = unit.Quantity(hybrid_positions, unit=unit.nanometer)
         hybrid_indices = [self._old_to_hybrid_map[idx] for idx in range(n_atoms_old)]
-        old_positions = unit.Quantity(hybrid_positions[hybrid_indices, :], unit=unit.nanometer)
+        old_positions = hybrid_positions[hybrid_indices, :]
         return old_positions
 
     def new_positions(self, hybrid_positions):
@@ -2166,19 +2166,19 @@ class HybridTopologyFactory(object):
         Parameters
         ----------
         hybrid_positions : [n, 3] np.ndarray or simtk.unit.Quantity
-            The positions of the hybrid system
+            The positions of the hybrid system (in nanometers)
 
         Returns
         -------
         new_positions : [m, 3] np.ndarray with unit
-            The positions of the new system
+            The positions of the new system (in nanometers)
         """
         n_atoms_new = self._topology_proposal.n_atoms_new
         # making sure hybrid positions are simtk.unit.Quantity objects
         if not isinstance(hybrid_positions, unit.Quantity):
             hybrid_positions = unit.Quantity(hybrid_positions, unit=unit.nanometer)
         hybrid_indices = [self._new_to_hybrid_map[idx] for idx in range(n_atoms_new)]
-        new_positions = unit.Quantity(hybrid_positions[hybrid_indices, :], unit=unit.nanometer)
+        new_positions = hybrid_positions[hybrid_indices, :]
         return new_positions
 
     @property
