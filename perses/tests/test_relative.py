@@ -1114,7 +1114,7 @@ def run_unsampled_endstate_energies(test_name, use_point_energies=True, use_md_e
         # For these tests, we need to turn the LRC on for the CustomNonbondedForce, since the LRC is on for the real systems
         force_dict = {force.getName(): index for index, force in enumerate(htf.hybrid_system.getForces())}
         if htf.__class__.__name__ == 'HybridTopologyFactory':
-            htf.hybrid_system.getForce(forces['CustomNonbondedForce']).setUseLongRangeCorrection(True)
+            htf.hybrid_system.getForce(force_dict['CustomNonbondedForce']).setUseLongRangeCorrection(True)
             htf.hybrid_system.getForce(9).setName("CustomBondForce_exceptions")  # TODO: This can be removed once PR #1022 is merged
         elif htf.__class__.__name__ == 'RESTCapableHybridTopologyFactory':
             htf.hybrid_system.getForce(force_dict['CustomNonbondedForce_sterics']).setUseLongRangeCorrection(True)
