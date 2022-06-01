@@ -19,15 +19,15 @@ _logger.setLevel(logging.INFO)
 class RESTTopologyFactory(HybridTopologyFactory):
     """
     This class takes a standard simtk.openmm.system equipped with
-        a. `HarmonicBondForce`
-        b. `HarmonicAngleForce`
-        c. `PeriodicTorsionForce`
-        d. `NonbondedForce`
+        a. ``HarmonicBondForce``
+        b. ``HarmonicAngleForce``
+        c. ``PeriodicTorsionForce``
+        d. ``NonbondedForce``
     and will convert to another system equipped with
-        a. `CustomBondForce`: rewrite `HarmonicBondForce`
-        b. `CustomAngleForce`: rewrite `HarmonicAngleForce`
-        c. `CustomTorsionForce`: rewrite `PeriodicTorsionForce`
-        d. `NonbondedForce`: rewrite `NonbondedForce` using offsets to allow for rest scaling
+        a. ``CustomBondForce`` : rewrite ``HarmonicBondForce``
+        b. ``CustomAngleForce``: rewrite ``HarmonicAngleForce``
+        c. ``CustomTorsionForce``: rewrite ``PeriodicTorsionForce``
+        d. ``NonbondedForce``: rewrite ``NonbondedForce`` using offsets to allow for rest scaling
     """
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
 
