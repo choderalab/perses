@@ -28,6 +28,18 @@ class HybridTopologyFactory(object):
     environment_atom : these atoms are mapped, and are not part of a changing residue. Their interactions are always
         on and are alchemically unmodified.
 
+    Here are the forces in the hybrid system:
+    - CustomBondForce -- handles bonds involving `core_atoms` (these are interpolated)
+    - HarmonicBondForce -- handles bonds involving `environment_atoms`, `unique_old_atoms` and `unique_new_atoms` (these are never scaled)
+    - CustomAngleForce -- handles angles involving `core_atoms` (these are interpolated)
+    - HarmonicAngleForce -- handles angles involving `environment_atoms`, `unique_old_atoms` and `unique_new_atoms` (these are never scaled)
+    - CustomTorsionForce -- handles torsions involving `core_atoms` (these are interpolated)
+    - PeriodicTorsionForce -- handles torsions involving `environment_atoms`, `unique_old_atoms` and `unique_new_atoms` (these are never scaled)
+    - NonbondedForce -- handles all electrostatic interactions, environment-environment steric interactions
+    - CustomNonbondedForce -- handle all non environment-environment sterics
+    - CustomBondForce_exceptions -- handles all electrostatics and sterics exceptions involving unique old/new atoms when interpolate_14s is True, otherwise the electrostatics/sterics exception is in the NonbondedForce
+    * where `interactions` refers to any pair of atoms that is not 1-2, 1-3, 1-4
+
     This class can be tested using perses.tests.utils.validate_endstate_energies(), as is done by perses.tests.test_relative.compare_energies
 
     Properties
@@ -1823,6 +1835,8 @@ class HybridTopologyFactory(object):
 
 
         nonbonded_exceptions_force = openmm.CustomBondForce(old_new_nonbonded_exceptions)
+        name = f"{nonbonded_exceptions_force.__class__.__name__}_exceptions"        
+        nonbonded_exceptions_force.setName(name)
         self._hybrid_system.addForce(nonbonded_exceptions_force)
         _logger.debug(f"\thandle_old_new_exceptions: {nonbonded_exceptions_force} added to hybrid system")
 
