@@ -322,6 +322,10 @@ def getSetupOptions(filename, override_string=None):
     if 'platform' not in setup_options:
         setup_options['platform'] = None  # defaults to choosing best platform
 
+    # Handle counterion
+    if 'transform_waters_into_ions_for_charge_changes' not in setup_options:
+        setup_options['transform_waters_into_ions_for_charge_changes'] = True
+
     os.makedirs(trajectory_directory, exist_ok=True)
 
 
