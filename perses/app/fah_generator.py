@@ -457,6 +457,12 @@ def run_neq_fah_setup(ligand_file,
     setup_options['bond_expr'] = generate_expression(setup_options['bond_expression'])
 
     # Generate topology proposals and hybrid topology factories via perses run_setup
+    # Manually add the new 'hybrid_topology_factory' key
+    # TODO: This should be changed once we have a new API (i.e. OpenFE Settings classes)
+    if 'hybrid_topology_factory' not in setup_options:
+        default_htf_class_name = "HybridTopologyFactory"
+        setup_options['hybrid_topology_factory'] = default_htf_class_name
+        _logger.info(f"\t 'hybrid_topology_factory' not specified: default to {default_htf_class_name}")
     _logger.info(f"spectators: {setup_options['spectators']}")
     if setup == 'small_molecule':
         _logger.info(f"Setting up a small molecule transformation")

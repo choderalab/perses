@@ -237,7 +237,7 @@ def test_host_guest_deterministic_geometries():
                  temperature=300.0 * unit.kelvin,
                  solvent_padding=9.0 * unit.angstroms,
                  ionic_strength=0.15 * unit.molar,
-                 hmass=4*unit.amus,
+                 hmass=3*unit.amus,
                  neglect_angles=False,
                  map_strength='default',
                  atom_expr=None,
@@ -254,6 +254,56 @@ def test_host_guest_deterministic_geometries():
                  remove_constraints=False,
                  use_given_geometries = True
                  )
+
+def test_relative_setup_charge_change():
+    """
+    execute `RelativeFEPSetup` in solvent/complex phase on a charge change and assert that the modified new system and old system charge difference is zero.
+    also assert endstate validation.
+    """
+    from perses.app.relative_setup import RelativeFEPSetup
+    import numpy as np
+    # Setup directory
+    ligand_sdf = resource_filename("perses", "data/bace-example/Bace_ligands_shifted.sdf")
+    host_pdb = resource_filename("perses", "data/bace-example/Bace_protein.pdb/receptor.pdb")
+
+    setup = RelativeFEPSetup(
+                 ligand_input = ligand_sdf,
+                 old_ligand_index=0,
+                 new_ligand_index=12,
+                 forcefield_files = ['amber/ff14SB.xml','amber/tip3p_standard.xml','amber/tip3p_HFE_multivalent.xml'],
+                 phases = ['solvent', 'vacuum'],
+                 protein_pdb_filename=host_pdb,
+                 receptor_mol2_filename=None,
+                 pressure=1.0 * unit.atmosphere,
+                 temperature=300.0 * unit.kelvin,
+                 solvent_padding=9.0 * unit.angstroms,
+                 ionic_strength=0.15 * unit.molar,
+                 hmass=4*unit.amus,
+                 neglect_angles=False,
+                 map_strength='default',
+                 atom_expr=None,
+                 bond_expr=None,
+                 anneal_14s=False,
+                 small_molecule_forcefield='gaff-2.11',
+                 small_molecule_parameters_cache=None,
+                 trajectory_directory=None,
+                 trajectory_prefix=None,
+                 spectator_filenames=None,
+                 nonbonded_method = 'PME',
+                 complex_box_dimensions=None,
+                 solvent_box_dimensions=None,
+                 remove_constraints=False,
+                 use_given_geometries = False
+                 )
+
+    # sum all of the charges of topology.
+    """strictly speaking, this is redundant because endstate validation is done in the `RelativeFEPSetup`"""
+    old_nbf = [force for force in setup._solvent_topology_proposal._old_system.getForces() if force.__class__.__name__ == 'NonbondedForce'][0]
+    new_nbf = [force for force in setup._solvent_topology_proposal._new_system.getForces() if force.__class__.__name__ == 'NonbondedForce'][0]
+    old_system_charge_sum = sum([old_nbf.getParticleParameters(i)[0].value_in_unit_system(unit.md_unit_system) for i in range(old_nbf.getNumParticles())])
+    new_system_charge_sum = sum([old_nbf.getParticleParameters(i)[0].value_in_unit_system(unit.md_unit_system) for i in range(new_nbf.getNumParticles())])
+    charge_diff = int(old_system_charge_sum - new_system_charge_sum)
+    assert np.isclose(charge_diff, 0), f"charge diff is {charge_diff} but should be zero."
 
 # if __name__=="__main__":
 #     test_run_cdk2_iterations_repex()
