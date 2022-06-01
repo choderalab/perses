@@ -425,6 +425,8 @@ class RelativeFEPSetup(object):
             if transform_waters_into_ions_for_charge_changes:
                 self._handle_charge_changes(topology_proposal=self._complex_topology_proposal,
                                             new_positions=self._complex_positions_new_solvated)
+            else:
+                _logger.info("Skipping counterion")
 
 
         if 'solvent' in phases:
@@ -481,6 +483,8 @@ class RelativeFEPSetup(object):
             if transform_waters_into_ions_for_charge_changes:
                 self._handle_charge_changes(topology_proposal=self._solvent_topology_proposal,
                                             new_positions=self._ligand_positions_new_solvated)
+            else:
+                _logger.info("Skipping counterion")
 
         if 'vacuum' in phases:
             _logger.info(f"Detected solvent...")

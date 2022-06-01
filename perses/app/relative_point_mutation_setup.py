@@ -374,7 +374,7 @@ class PointMutationExecutor(object):
             if phase != 'vacuum' and transform_waters_into_ions_for_charge_changes:
                 self._handle_charge_changes(topology_proposal, new_positions)
             else:
-                _logger.info("Skipping counterion because phase is vacuum.")
+                _logger.info(f"Skipping counterion")
 
             if generate_unmodified_hybrid_topology_factory:
                 repartitioned_endstate = None
