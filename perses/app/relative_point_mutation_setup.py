@@ -110,6 +110,7 @@ class PointMutationExecutor(object):
                  periodic_forcefield_kwargs={'nonbondedMethod': app.PME, 'ewaldErrorTolerance': 0.00025},
                  nonperiodic_forcefield_kwargs=None,
                  small_molecule_forcefields='gaff-2.11',
+                 transform_waters_into_ions_for_charge_changes=True,
                  complex_box_dimensions=None,
                  apo_box_dimensions=None,
                  flatten_torsions=False,
@@ -175,6 +176,9 @@ class PointMutationExecutor(object):
                 non-periodic forcefield kwargs for system parametrization
             small_molecule_forcefields : str, default 'gaff-2.11'
                 the forcefield string for small molecule parametrization
+            transform_waters_into_ions_for_charge_changes : bool, default True
+                whether to introduce a counterion by transforming water(s) into ion(s) for charge changing transformations
+                if False, counterions will not be introduced.
             complex_box_dimensions : Vec3, default None
                 define box dimensions of complex phase;
                 if None, padding is 1nm
@@ -367,7 +371,7 @@ class PointMutationExecutor(object):
                                                         validate_energy_bookkeeping=validate_bool)
 
             # Check for charge change...
-            if phase != 'vacuum':
+            if phase != 'vacuum' and transform_waters_into_ions_for_charge_changes:
                 self._handle_charge_changes(topology_proposal, new_positions)
             else:
                 _logger.info("Skipping counterion because phase is vacuum.")

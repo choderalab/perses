@@ -130,6 +130,9 @@ class RelativeFEPSetup(object):
             if True, `complex` must be in `phases` and .sdf or .mol2 file of ligand must be provided
         given_geometries_tolerance : simtk.unit.Quantity with units of length, default=0.2*angstrom
             If use_given_geometries=True, use this tolerance for identifying mapped atoms
+        transform_waters_into_ions_for_charge_changes : bool, default True
+            whether to introduce a counterion by transforming water(s) into ion(s) for charge changing transformations
+            if False, counterions will not be introduced.
         """
         from openeye import oechem
 
@@ -418,8 +421,10 @@ class RelativeFEPSetup(object):
                 self._complex_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
                 self._complex_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
             self._complex_geometry_engine = copy.deepcopy(self._geometry_engine)
-            self._handle_charge_changes(topology_proposal = self._complex_topology_proposal,
-                                        new_positions = self._complex_positions_new_solvated)
+
+            if transform_waters_into_ions_for_charge_changes:
+                self._handle_charge_changes(topology_proposal=self._complex_topology_proposal,
+                                            new_positions=self._complex_positions_new_solvated)
 
 
         if 'solvent' in phases:
@@ -472,8 +477,10 @@ class RelativeFEPSetup(object):
                 self._solvent_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
                 self._solvent_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
             self._solvent_geometry_engine = copy.deepcopy(self._geometry_engine)
-            self._handle_charge_changes(topology_proposal = self._solvent_topology_proposal,
-                                        new_positions = self._ligand_positions_new_solvated)
+
+            if transform_waters_into_ions_for_charge_changes:
+                self._handle_charge_changes(topology_proposal=self._solvent_topology_proposal,
+                                            new_positions=self._ligand_positions_new_solvated)
 
         if 'vacuum' in phases:
             _logger.info(f"Detected solvent...")
