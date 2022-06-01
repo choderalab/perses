@@ -5,6 +5,7 @@ from perses.tests.utils import enter_temp_directory
 # Tolerance for energy differences tests
 ENERGY_DIFF_TOLERANCE_KT = 0.5
 
+
 @pytest.mark.gpu_needed
 def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
     """
@@ -88,7 +89,6 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
             f"ALA-THR is {forward_data}. THR-ALA is {reverse_data}."
 
 
-@pytest.mark.skip("This would take days on current CI workflow. Skipping.")
 @pytest.mark.gpu_needed
 def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
     """
