@@ -71,6 +71,7 @@ class RelativeFEPSetup(object):
                  remove_constraints=False,
                  use_given_geometries = False,
                  given_geometries_tolerance=0.2*unit.angstroms,
+                 transform_waters_into_ions_for_charge_changes=True,
                  ):
         """
         Initialize a NonequilibriumFEPSetup object
