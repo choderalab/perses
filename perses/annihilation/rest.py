@@ -27,12 +27,7 @@ class RESTTopologyFactory(HybridTopologyFactory):
         a. `CustomBondForce`: rewrite `HarmonicBondForce`
         b. `CustomAngleForce`: rewrite `HarmonicAngleForce`
         c. `CustomTorsionForce`: rewrite `PeriodicTorsionForce`
-        d. `NonbondedForce`: solvent-solvent
-            solvent sterics and electrostatics and exceptions are treated in standard form (no scaling), but solute terms are _all_ zeroed
-        e. `CustomNonbondedForce`: solvent-solute and solute-solute
-            creates a solvent and solute interaction group. the solute interacts with itself with a rescaling factor, and the solvent interacts with solute (via separate rescaling factor)
-        f. `CustomBondForce`:
-            since we cannot appropriately treat exceptions in the solute region or the solute/solvent region, we need to treat them as an exception force
+        d. `NonbondedForce`: rewrite `NonbondedForce` using offsets to allow for rest scaling
     """
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
 
