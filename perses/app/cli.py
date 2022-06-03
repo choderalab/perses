@@ -1,11 +1,10 @@
 # New cli for testing
 import logging
 import os
-from pathlib import Path
+import openmm.testInstallation
 
 import click
 import openmmtools.utils
-from perses.app.setup_relative_calculation import getSetupOptions, run
 
 # Setting logging level config
 LOGLEVEL = os.environ.get("LOGLEVEL", "DEBUG").upper()
@@ -78,22 +77,21 @@ def _check_openeye_license():
 
 
 def _test_platform(platform_name):
-    import openmm.testInstallation
-
-    openmm.testInstallation.main()
-
     # If a user asks for a platform, try and see if we can use it
-    if platform_name:
-        assert openmmtools.utils.platform_supports_precision(platform_name, "mixed")
-        click.echo("🎉\t Platform test successful!")
+    assert openmmtools.utils.platform_supports_precision(platform_name, "mixed")
+    click.echo(f"🎉\t Platform test successful! Perses will be using platform {platform_name}.")
 
 
 @click.command()
-@click.option("--yaml", type=click.Path(exists=True, dir_okay=False), required=True)
-@click.option("--platform-name", type=str, default=None)
-@click.option("--override", multiple=True, required=False, default=None)
+@click.option("--yaml", type=click.Path(exists=True, dir_okay=False), required=True,
+              help='Input yaml file with simulation parameters and options.')
+@click.option("--platform-name", "--platform", type=str, default=None,
+              help='Platform name to be used during the simulation. (i.e. cuda, OpenCL, CPU, Reference).')
+@click.option("--override", multiple=True, required=False, default=None,
+              help='Override specific option using key:value format.')
 def cli(yaml, platform_name, override):
-    """test"""
+    """Run perses relative free energy calculation."""
+    from perses.app.setup_relative_calculation import run
     click.echo(click.style(percy, fg="bright_magenta"))
     if override:
         click.echo("✍️ \t Overrides used")
@@ -101,7 +99,11 @@ def cli(yaml, platform_name, override):
     _check_openeye_license()
     click.echo("✅\t OpenEye license good")
     click.echo("🖥️⚡\t Checking whether requested compute platform is available")
-    _test_platform(platform_name)
+    openmm.testInstallation.main()  # Test openmm installation
+    if platform_name:
+        _test_platform(platform_name)  # test platform compatibility
+        override = list(override)  # make override (click.Tuple) a list
+        override.append(f"platform:{platform_name}")  # override platform option
     click.echo("🏃\t Running simulation")
     run(yaml_filename=yaml, override_string=override)
     click.echo("🧪\t Simulation over")
