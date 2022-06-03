@@ -38,7 +38,7 @@ class HybridTopologyFactory(object):
     - NonbondedForce -- handles all electrostatic interactions, environment-environment steric interactions
     - CustomNonbondedForce -- handle all non environment-environment sterics
     - CustomBondForce_exceptions -- handles all electrostatics and sterics exceptions involving unique old/new atoms when interpolate_14s is True, otherwise the electrostatics/sterics exception is in the NonbondedForce
-    * where `interactions` refers to any pair of atoms that is not 1-2, 1-3, 1-4
+    where `interactions` refers to any pair of atoms that is not 1-2, 1-3, 1-4
 
     This class can be tested using perses.tests.utils.validate_endstate_energies(), as is done by perses.tests.test_relative.compare_energies
 
@@ -2158,20 +2158,19 @@ class HybridTopologyFactory(object):
         Parameters
         ----------
         hybrid_positions : [n, 3] np.ndarray or simtk.unit.Quantity
-            The positions of the hybrid system
+            The positions of the hybrid system (in nanometers)
 
         Returns
         -------
         old_positions : [m, 3] np.ndarray with unit
-            The positions of the old system
+            The positions of the old system (in nanometers)
         """
         n_atoms_old = self._topology_proposal.n_atoms_old
         # making sure hybrid positions are simtk.unit.Quantity objects
         if not isinstance(hybrid_positions, unit.Quantity):
             hybrid_positions = unit.Quantity(hybrid_positions, unit=unit.nanometer)
-        old_positions = unit.Quantity(np.zeros([n_atoms_old, 3]), unit=unit.nanometer)
-        for idx in range(n_atoms_old):
-            old_positions[idx, :] = hybrid_positions[idx, :]
+        hybrid_indices = [self._old_to_hybrid_map[idx] for idx in range(n_atoms_old)]
+        old_positions = hybrid_positions[hybrid_indices, :]
         return old_positions
 
     def new_positions(self, hybrid_positions):
@@ -2181,20 +2180,19 @@ class HybridTopologyFactory(object):
         Parameters
         ----------
         hybrid_positions : [n, 3] np.ndarray or simtk.unit.Quantity
-            The positions of the hybrid system
+            The positions of the hybrid system (in nanometers)
 
         Returns
         -------
         new_positions : [m, 3] np.ndarray with unit
-            The positions of the new system
+            The positions of the new system (in nanometers)
         """
         n_atoms_new = self._topology_proposal.n_atoms_new
         # making sure hybrid positions are simtk.unit.Quantity objects
         if not isinstance(hybrid_positions, unit.Quantity):
             hybrid_positions = unit.Quantity(hybrid_positions, unit=unit.nanometer)
-        new_positions = unit.Quantity(np.zeros([n_atoms_new, 3]), unit=unit.nanometer)
-        for idx in range(n_atoms_new):
-            new_positions[idx, :] = hybrid_positions[self._new_to_hybrid_map[idx], :]
+        hybrid_indices = [self._new_to_hybrid_map[idx] for idx in range(n_atoms_new)]
+        new_positions = hybrid_positions[hybrid_indices, :]
         return new_positions
 
     @property

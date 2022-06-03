@@ -5,6 +5,7 @@ import os
 import sys
 import simtk.unit as unit
 import logging
+import warnings
 from pathlib import Path
 
 from perses.annihilation.relative import HybridTopologyFactory, RESTCapableHybridTopologyFactory
@@ -727,6 +728,9 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
 
 
 def run(yaml_filename=None, override_string=None):
+    cli_tool_name = sys.argv[0].split(os.sep)[-1]
+    if cli_tool_name == "perses-relative":
+        warnings.warn("perses-relative will be removed in 0.11, see https://github.com/choderalab/perses/tree/main/examples/new-cli for new CLI tool", FutureWarning)
     _logger.info("Beginning Setup...")
     if yaml_filename is None:
        try:
