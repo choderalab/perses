@@ -4125,10 +4125,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     def _copy_nonbondeds(self):
         """
         Add particles to each of the following nonbonded forces:
-            - CustomNonbondedForce for electrostatics interactions (not exceptions)
-            - CustomNonbondedForce for sterics interactions (not exceptions)
-            - NonbondedForce for reciprocal space electrostatic interactions and exceptions
-            - NonbondedForce for non-scaled steric interactions and exceptions
+            - CustomNonbondedForce_electrostatics for electrostatics interactions (not exceptions)
+            - CustomNonbondedForce_sterics for sterics interactions (not exceptions)
+            - NonbondedForce_reciprocal for reciprocal space electrostatic interactions and exceptions
+            - NonbondedForce_sterics for non-scaled steric interactions and exceptions
 
         """
 
@@ -4294,9 +4294,9 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     def _copy_exceptions(self):
         """
         Add exceptions to:
-            - CustomBondForce for scaled exceptions
-            - NonbondedForce for the reciprocal space interactions and exceptions
-            - NonbondedForce for non-scaled sterics interactions and exceptions
+            - CustomBondForce_exceptions for scaled exceptions
+            - NonbondedForce_reciprocal for the reciprocal space interactions and exceptions
+            - NonbondedForce_sterics for non-scaled sterics interactions and exceptions
         """
 
         # Retrieve old and new nb forces
