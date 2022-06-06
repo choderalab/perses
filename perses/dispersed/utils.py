@@ -457,6 +457,9 @@ def create_endstates(first_thermostate, last_thermostate):
     4. enable LJPME to handle long range dispersion corrections in a physically reasonable manner
 
     Works for `HybridTopologyFactory`
+    Note that this function is kept for legacy purposes and that `create_endstates_from_real_systems' is a more
+    general version of this function. For `HybridTopologyFactory`, both functions do the same thing, so either can be used
+    when generating unsampled endstates for `HybridTopologyFactory`. By default, `create_endstates_from_real_systems` is used.
 
     Parameters
     ----------
