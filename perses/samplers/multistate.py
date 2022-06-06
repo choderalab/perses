@@ -6,7 +6,7 @@ from openmm import unit
 
 from openmmtools.multistate import sams, replicaexchange
 from openmmtools.states import CompoundThermodynamicState, SamplerState, ThermodynamicState
-from perses.dispersed.utils import create_endstates, create_endstates_from_real_systems
+from perses.dispersed.utils import create_endstates_from_real_systems
 from openmmtools.constants import kB
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState, RESTCapableRelativeAlchemicalState, LambdaProtocol, RESTCapableLambdaProtocol
 
