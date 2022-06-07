@@ -39,8 +39,6 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
                 "1",
                 "2",
                 mutant_name.upper(),
-                phase="solvent",
-                w_scale=0.3,
                 generate_unmodified_hybrid_topology_factory=False,
                 generate_rest_capable_hybrid_topology_factory=True,
                 conduct_endstate_validation=False
@@ -133,8 +131,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
                     "1",
                     "2",
                     mutant_name.upper(),
-                    solvate=False,
-                    w_scale=0.3,
+                    is_solvated=True,
                     generate_unmodified_hybrid_topology_factory=False,
                     generate_rest_capable_hybrid_topology_factory=True,
                     conduct_endstate_validation=False
