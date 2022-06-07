@@ -20,6 +20,10 @@ import dask.distributed as distributed
 from scipy.special import logsumexp
 import openmmtools.cache as cache
 
+temperature = 300.0 * unit.kelvin
+kT = kB * temperature
+beta = 1.0/kT
+
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("sMC_utils")
@@ -452,6 +456,11 @@ def create_endstates(first_thermostate, last_thermostate):
     3. set PME tolerance to 1e-5
     4. enable LJPME to handle long range dispersion corrections in a physically reasonable manner
 
+    Works for `HybridTopologyFactory`
+    Note that this function is kept for legacy purposes and that `create_endstates_from_real_systems' is a more
+    general version of this function. For `HybridTopologyFactory`, both functions do the same thing, so either can be used
+    when generating unsampled endstates for `HybridTopologyFactory`. By default, `create_endstates_from_real_systems` is used.
+
     Parameters
     ----------
     first_thermostate : openmmtools.states.CompoundThermodynamicState
@@ -497,6 +506,174 @@ def create_endstates(first_thermostate, last_thermostate):
                         force.setGlobalParameterDefaultValue(parameter_index, master_lambda)
         # Store the unsampled endstate
         unsampled_endstates.append(ThermodynamicState(dispersion_system, temperature = endstate.temperature))
+
+    return unsampled_endstates
+
+def create_endstates_from_real_systems(htf, for_testing=False):
+    """
+    Generates unsampled endstates using LJPME as the nonbonded method to more accurately account for
+    long-range steric interactions at the lambda = 0 and lambda = 1 endstates.
+
+    Works for `HybridTopologyFactory` and `RESTCapableHybridTopologyFactory`
+
+    Tested in tests/test_relative.py::test_create_endstates()
+
+    Parameters
+    ----------
+    htf : HybridTopologyFactory or RESTCapableHybridTopologyFactory
+        hybrid factory from which to create the unsampled endstates
+    for_testing : bool, default False
+        whether to generate the unsampled endstates for testing
+        For energy validation tests, we'll use PME as the nonbonded method, since the original hybrid system uses PME (not LJPME).
+
+    Returns
+    -------
+    unsampled_endstates : list of ThermodynamicState
+        the unsampled endstate at lambda = 0, then the unsampled endstate at lambda = 1
+    """
+    import openmm
+    from perses.annihilation.relative import RESTCapableHybridTopologyFactory
+
+    TIGHT_PME_TOLERANCE = 1.0e-5
+
+    # Retrieve old and new NonbondedForces
+    old_system_nbf = htf._old_system_forces['NonbondedForce']
+    new_system_nbf = htf._new_system_forces['NonbondedForce']
+
+    # Load original hybrid_system
+    hybrid_system = htf.hybrid_system
+
+    # Make a copy of the hybrid_system
+    hybrid_system_0 = copy.deepcopy(hybrid_system)
+    hybrid_system_1 = copy.deepcopy(hybrid_system)
+
+    # Delete existing nonbonded-related forces, create a new NonbondedForce, copy particles/exceptions
+    unsampled_endstates = []
+    for lambda_val, hybrid_system in zip([0, 1], [hybrid_system_0, hybrid_system_1]):
+        # Delete existing nonbonded-related forces
+        forces = {hybrid_system.getForce(index).getName(): index for index in range(hybrid_system.getNumForces())}
+        indices_to_remove = [index for name, index in forces.items() if 'Nonbonded' in name or 'exceptions' in name]
+        for index in sorted(indices_to_remove, reverse=True):
+            hybrid_system.removeForce(index)
+
+        # Create NonbondedForce
+        nonbonded_force = openmm.NonbondedForce()
+        hybrid_system.addForce(nonbonded_force)
+
+        # Set nonbonded method and related attributes
+        if not for_testing:
+            nonbonded_force.setNonbondedMethod(openmm.NonbondedForce.LJPME)
+            nonbonded_force.setEwaldErrorTolerance(TIGHT_PME_TOLERANCE)
+        else:
+            nonbonded_force.setNonbondedMethod(openmm.NonbondedForce.PME)
+            [alpha_ewald, nx, ny, nz] = old_system_nbf.getPMEParameters()
+            delta = old_system_nbf.getEwaldErrorTolerance()
+            nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
+            nonbonded_force.setEwaldErrorTolerance(delta)
+            nonbonded_force.setCutoffDistance(old_system_nbf.getCutoffDistance())
+
+        # Retrieve name of atom class for which to zero the charges/epsilons
+        atom_class_to_zero = 'unique_new_atoms' if lambda_val == 0 else 'unique_old_atoms'
+
+        # Iterate over particles in the old NonbondedForce and add them to the NonbondedForce for the hybrid system
+        done_indices = []
+        for idx in range(old_system_nbf.getNumParticles()):
+            # Given the atom index, get charge, sigma, epsilon, and hybrid index
+            hybrid_idx = htf._old_to_hybrid_map[idx]
+            alch_id, atom_class = RESTCapableHybridTopologyFactory.get_alch_identifier(htf, hybrid_idx)
+            charge, sigma, epsilon = old_system_nbf.getParticleParameters(idx)
+            if atom_class == atom_class_to_zero:
+                charge, sigma, epsilon = charge * 0, sigma, epsilon * 0
+            elif atom_class == 'core_atoms' and lambda_val == 1:  # Retrieve new system parameters for core atoms
+                new_idx = htf._hybrid_to_new_map[hybrid_idx]
+                charge, sigma, epsilon = new_system_nbf.getParticleParameters(new_idx)
+
+            # Add particle to the NonbondedForce
+            nonbonded_force.addParticle(charge, sigma, epsilon)
+
+            # Keep track of indices that have already been added
+            done_indices.append(hybrid_idx)
+
+        # Iterate over particles in the new NonbondedForce and add them to the NonbondedForce for the hybrid system
+        remaining_hybrid_indices = sorted(set(range(hybrid_system.getNumParticles())).difference(set(done_indices)))
+        for hybrid_idx in remaining_hybrid_indices:
+            # Given the atom index, get charge, sigma, and epsilon
+            idx = htf._hybrid_to_new_map[hybrid_idx]
+            alch_id, atom_class = RESTCapableHybridTopologyFactory.get_alch_identifier(htf, hybrid_idx)
+            charge, sigma, epsilon = new_system_nbf.getParticleParameters(idx)
+            if atom_class == atom_class_to_zero:
+                charge, sigma, epsilon = charge * 0, sigma, epsilon * 0
+
+            # Add particle to NonbondedForce, with zeroed charge and epsilon
+            nonbonded_force.addParticle(charge, sigma, epsilon)
+
+        # Now remove interactions between unique old/new
+        unique_news = htf._atom_classes['unique_new_atoms']
+        unique_olds = htf._atom_classes['unique_old_atoms']
+        for new in unique_news:
+            for old in unique_olds:
+                nonbonded_force.addException(old,
+                                             new,
+                                             0.0 * unit.elementary_charge ** 2,
+                                             1.0 * unit.nanometers,
+                                             0.0 * unit.kilojoules_per_mole)
+
+        # Now add add all nonzeroed exceptions to custom bond force
+        old_term_collector = {}
+        new_term_collector = {}
+
+        # Gather the old system exceptions into a dict
+        for term_idx in range(old_system_nbf.getNumExceptions()):
+            p1, p2, chargeProd, sigma, epsilon = old_system_nbf.getExceptionParameters(term_idx)  # Grab the parameters
+            hybrid_p1, hybrid_p2 = htf._old_to_hybrid_map[p1], htf._old_to_hybrid_map[p2]  # Make hybrid indices
+            sorted_indices = tuple(sorted([hybrid_p1, hybrid_p2]))  # Sort the indices
+            assert not sorted_indices in old_term_collector.keys(), f"this exception already exists"
+            old_term_collector[sorted_indices] = [term_idx, chargeProd, sigma, epsilon]
+
+        # Repeat for the new system exceptions
+        for term_idx in range(new_system_nbf.getNumExceptions()):
+            p1, p2, chargeProd, sigma, epsilon = new_system_nbf.getExceptionParameters(term_idx)
+            hybrid_p1, hybrid_p2 = htf._new_to_hybrid_map[p1], htf._new_to_hybrid_map[p2]
+            sorted_indices = tuple(sorted([hybrid_p1, hybrid_p2]))
+            assert not sorted_indices in new_term_collector.keys(), f"this exception already exists"
+            new_term_collector[sorted_indices] = [term_idx, chargeProd, sigma, epsilon]
+
+        htf_class = htf.__class__.__name__
+
+        # Iterate over the old_term_collector and add exceptions to the NonbondedForce for the hybrid system
+        for hybrid_index_pair in old_term_collector.keys():
+            # Get terms
+            idx_set = set(list(hybrid_index_pair))
+            alch_id, atom_class = RESTCapableHybridTopologyFactory.get_alch_identifier(htf, idx_set)
+            idx, chargeProd, sigma, epsilon = old_term_collector[hybrid_index_pair]
+            if atom_class == atom_class_to_zero:
+                if htf_class == 'HybridTopologyFactory' and not htf._interpolate_14s:  # When _interpolate_14s is False, the exceptions always remain on
+                    pass
+                else:
+                    chargeProd, sigma, epsilon = chargeProd * 0, sigma, epsilon * 0
+            elif atom_class == 'core_atoms' and lambda_val == 1:  # Retrieve new system parameters for core atoms
+                new_idx, chargeProd, sigma, epsilon = new_term_collector[hybrid_index_pair]
+
+            # Add exception
+            nonbonded_force.addException(hybrid_index_pair[0], hybrid_index_pair[1], chargeProd, sigma, epsilon)
+
+        # Now iterate over the new_term_collector and add exceptions to the NonbondedForce for the hybrid system
+        for hybrid_index_pair in new_term_collector.keys():
+            if hybrid_index_pair not in old_term_collector.keys():
+                # Get terms
+                idx_set = set(list(hybrid_index_pair))
+                alch_id, atom_class = RESTCapableHybridTopologyFactory.get_alch_identifier(htf, idx_set)
+                idx, chargeProd, sigma, epsilon = new_term_collector[hybrid_index_pair]
+                if atom_class == atom_class_to_zero:
+                    if htf_class == 'HybridTopologyFactory' and not htf._interpolate_14s:  # When _interpolate_14s is False, the exceptions always remain on
+                        pass
+                    else:
+                        chargeProd, sigma, epsilon = chargeProd * 0, sigma, epsilon * 0
+
+                # Add exception
+                nonbonded_force.addException(hybrid_index_pair[0], hybrid_index_pair[1], chargeProd, sigma, epsilon)
+
+        unsampled_endstates.append(ThermodynamicState(hybrid_system, temperature=temperature))
 
     return unsampled_endstates
 
