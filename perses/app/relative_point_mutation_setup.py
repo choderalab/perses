@@ -139,8 +139,8 @@ class PointMutationExecutor(object):
                  conduct_endstate_validation=True,
                  flatten_torsions=False,
                  flatten_exceptions=False,
-                 rest_radius=0.2,
-                 w_scale=0.2,
+                 rest_radius=0.3,
+                 w_scale=0.3,
                  generate_unmodified_hybrid_topology_factory=True,
                  generate_repartitioned_hybrid_topology_factory=False,
                  generate_rest_capable_hybrid_topology_factory=False,
@@ -216,9 +216,9 @@ class PointMutationExecutor(object):
                 in the HybridTopologyFactory, flatten torsions involving unique new atoms at lambda = 0 and unique old atoms are lambda = 1
             flatten_exceptions : bool, default False
                 in the HybridTopologyFactory, flatten exceptions involving unique new atoms at lambda = 0 and unique old atoms at lambda = 1
-            rest_radius : float, default 0.2
+            rest_radius : float, default 0.3
                 radius for rest region, in nanometers
-            w_scale : float, default 0.2
+            w_scale : float, default 0.3
                 scale factor for lifting term
             generate_unmodified_hybrid_topology_factory : bool, default True
                 whether to generate a vanilla HybridTopologyFactory

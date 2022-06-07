@@ -30,6 +30,9 @@ class TimeFilter(logging.Filter):
         self.last = record.relativeCreated
         return True
 
+# TODO: We need to import these for logging to work, even if we don't use them. Why?
+from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
+
 fmt = logging.Formatter(fmt="%(asctime)s:(%(relative)ss):%(name)s:%(message)s")
 #logging.basicConfig(level = logging.NOTSET)
 LOGLEVEL = os.environ.get("LOGLEVEL", "INFO").upper()
