@@ -991,11 +991,12 @@ def run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_en
         else:
             raise Exception('Test name not found!')
 
+        is_vacuum = True if phase == 'vacuum' else False
         solvent_delivery = PointMutationExecutor(input_filename,
                                                  chain_id,
                                                  residue_id,
                                                  proposed_residue,
-                                                 phase=phase,
+                                                 is_vacuum=is_vacuum,
                                                  forcefield_files=['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
                                                  ionic_strength=0.05 * unit.molar,
                                                  rest_radius=0.2,
