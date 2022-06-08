@@ -46,7 +46,7 @@ fe_type: repex
 checkpoint_interval: 50 
 
 #number of iterations
-n_cycles: 1
+n_cycles: 4
 
 #The number of SAMS states
 n_states: 3
@@ -67,9 +67,13 @@ atom_selection: not water
 phases:
     - complex
     - solvent
-    - vacuum
+#    - vacuum
 
 #timestep in fs
 timestep: 4.
 
 h_constraints: True
+
+offline-freq: 2
+
+unsampled_endstates: True
