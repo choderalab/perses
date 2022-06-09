@@ -8,6 +8,13 @@ This section lists features and improvements of note in each release.
 
 The full release history can be viewed `at the GitHub perses releases page <https://github.com/choderalab/perses/releases>`_.
 
+0.10.0 - Release
+----------------
+
+Enhancements
+------------
+- Introduce ``unsampled_endstates`` boolean option in input YAML file, for enabling/disabling creation of unsampled endstates long-range sterics correction. Issue `#1033 <https://github.com/choderalab/perses/issues/1033>`_ (`#1037 <https://github.com/choderalab/perses/pull/1037>`_).
+
 0.9.5 - Release
 ---------------
 

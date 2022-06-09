@@ -46,7 +46,7 @@ fe_type: repex
 checkpoint_interval: 50 
 
 #number of iterations
-n_cycles: 1
+n_cycles: 4
 
 #The number of SAMS states
 n_states: 3
@@ -72,4 +72,8 @@ phases:
 #timestep in fs
 timestep: 4.
 
-h_constraints: True
+# Interval in iterations to use for offline real time analysis
+offline-freq: 2
+
+# Create unsampled endstates for long-range sterics correction
+unsampled_endstates: True

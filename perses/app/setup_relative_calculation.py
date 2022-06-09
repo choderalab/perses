@@ -326,6 +326,10 @@ def getSetupOptions(filename, override_string=None):
     if 'platform' not in setup_options:
         setup_options['platform'] = None  # defaults to choosing best platform
 
+    # Handling unsampled_endstates long range correction flag
+    if 'unsampled_endstates' not in setup_options:
+        setup_options['unsampled_endstates'] = True   # True by default (matches class default)
+
     os.makedirs(trajectory_directory, exist_ok=True)
 
 
@@ -658,10 +662,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                 if phase == 'vacuum':
                     endstates = False
                 else:
-                    # TODO: Make this True when dispersed.utils.create_endstates is fixed
-                    _logger.info("Disabling creation of endstates with expanded cutoffs in order to support new "
-                                 "alchemical factories.")
-                    endstates = False
+                    endstates = setup_options['unsampled_endstates']
 
                 if setup_options['fe_type'] == 'fah':
                     _logger.info('SETUP FOR FAH DONE')
