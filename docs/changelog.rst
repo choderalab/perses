@@ -35,7 +35,7 @@ Enhancements
 - Performance increase when retrieving the old or new positions from the hybrid positions. Issue `#1005 <https://github.com/choderalab/perses/issues/1005>`_ (`#1020 <https://github.com/choderalab/perses/pull/1020>`_)
 - Use of unique names for force components in ``HybridTopologyFactory`` (`#1022 <https://github.com/choderalab/perses/pull/1022>`_).
 - New function ``create_endstates_from_real_systems()`` for creating unsampled endstates for currently supported hybrid topology factories (`#1023 <https://github.com/choderalab/perses/pull/1023>`_).
-- Improve the readability and usability of ``PointMutationExecutor`` (`#1024 <https://github.com/choderalab/perses/pull/1024>`_).
+- Improve the readability and usability of ``PointMutationExecutor`` and updates how parameters are specified for solvation (`#1024 <https://github.com/choderalab/perses/pull/1024>`_).
 
 New features
 ^^^^^^^^^^^^
