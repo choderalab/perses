@@ -20,18 +20,18 @@ Bugfixes
 - Fixed energy bookkeeping in test of ``HybridTopologyFactory`` when a ring amino acid is involved in transformation. (`#969 <https://github.com/choderalab/perses/pull/969>`_)
 - Avoid changing the global context cache behavior on module imports. Issue `#968 <https://github.com/choderalab/perses/issues/968>`_ (`#977 <https://github.com/choderalab/perses/pull/977>`_).
 - Benchmark free energy plots now shift data to experimental mean. (`#981 <https://github.com/choderalab/perses/pull/981>`_)
+- Skip introduction of counterion for charge changing mutations in vacuum and fix typo in the phase name in ``test_resume_protein_mutation_no_checkpoint`` (`#991 <https://github.com/choderalab/perses/pull/991>`_).
 - Recovered logging capabilities respecting the ``LOGLEVEL`` environment variable. Issue `#1018 <https://github.com/choderalab/perses/issues/1018>`_ (`#1032 <https://github.com/choderalab/perses/pull/1032>`_).
 
 
 Enhancements
 ^^^^^^^^^^^^
 - Improved continuous integration (CI) performance. (`#961 <https://github.com/choderalab/perses/pull/961>`_)
-- ``PointMutationExecutor`` now accepts both solute and solvated PDBs. (`#967 <https://github.com/choderalab/perses/pull/967>`_)
+- ``PointMutationExecutor`` now accepts both solute and solvated PDBs (previously only accepted solute PDBs). (`#967 <https://github.com/choderalab/perses/pull/967>`_)
 - Tests and examples are now using ``openff-2.0.0`` force field instead of ``openff-1.0.0``. (`#971 <https://github.com/choderalab/perses/pull/971>`_)
 - Use names (instead of indices) for fetching the force components of a system, avoiding issues with force reordering upstream in ``openmm``. Issue `#993 <https://github.com/choderalab/perses/issues/993>`_ (`#976 <https://github.com/choderalab/perses/pull/976>`_ and `#1007 <https://github.com/choderalab/perses/pull/1007>`_)
 - Increase stability of simulations by decreasing the default hydrogen mass to 3 amu in the ``PointMutationExecutor``. Issue `#982 <https://github.com/choderalab/perses/issues/982>`_ (`#983 <https://github.com/choderalab/perses/pull/983>`_).
-- Improved CI tests on both CPU and GPU (`#985 <https://github.com/choderalab/perses/pull/985>`_ `#989 <https://github.com/choderalab/perses/pull/989>`_ `#1012 <https://github.com/choderalab/perses/pull/1012>`_)
-- ``PointMutationExecutor`` now raises an error if an invalid phase is specified (`#991 <https://github.com/choderalab/perses/pull/991>`_).
+- Improved CI tests on both CPU and GPU. Better handling of temporary directories, closing opened reporter files when tests are finished, and using same environments for CPU and GPU (`#985 <https://github.com/choderalab/perses/pull/985>`_ `#989 <https://github.com/choderalab/perses/pull/989>`_ `#1012 <https://github.com/choderalab/perses/pull/1012>`_)
 - Performance increase when retrieving the old or new positions from the hybrid positions. Issue `#1005 <https://github.com/choderalab/perses/issues/1005>`_ (`#1020 <https://github.com/choderalab/perses/pull/1020>`_)
 - Use of unique names for force components in ``HybridTopologyFactory`` (`#1022 <https://github.com/choderalab/perses/pull/1022>`_).
 - New function ``create_endstates_from_real_systems()`` for creating unsampled endstates for currently supported hybrid topology factories (`#1023 <https://github.com/choderalab/perses/pull/1023>`_).
