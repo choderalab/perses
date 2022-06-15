@@ -2752,8 +2752,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     In order to avoid singularities in the alchemical region (specifically in interactions of unique old/new atoms),
     we introduce a decoupling in the 4th dimensional distance. Decoupling does not affect core or env atoms.
     The unique old/new atoms are 'lifted' into the 4th dimension 'w' upon 'alchemification' and the length of the 4th dimension is
-    given by r_cutoff * w_scale. w_scale is a user-defined scalar between 0 (non-inclusive) and 1. Taking 'w_scale' to 1
-    means that once the term is maximally 'lifted' into the 4th dimension, the 4th dimension is effectively of length 'r_cutoff'.
+    given by w_lifting. w_lifting is a user-defined scalar in nanometers.
 
     For the first NonbondedForce, global parameters (to be used with particle parameter offsets) are defined to allow
     for alchemical scaling, but not rest scaling. Computation of contributions from the direct space is disabled.
@@ -2803,12 +2802,12 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         key: name of the force (e.g. HarmonicBondForce), value: force object in the new system
     _nonbonded_method : openmm.NonbondedForce.NonbondedMethod
         nonbonded method to use for the hybrid system, determined from the old system's nonbonded method
-    _r_cutoff : openmm.unit.nanometer
-        cutoff to be used in for the forces that encompass the nonbonded interactions in the hybrid system 
+    _cutoff : openmm.unit.nanometer
+        cutoff distance to be used in for the forces that encompass the nonbonded interactions in the hybrid system
     _alpha_ewald : float
         alpha to be used for PME electrostatics in the CustomNonbondedForce_electrostatics and CustomBondForce_exceptions forces
-    _w_scale : float
-        a user-defined scalar between 0 (non-inclusive) and 1. Taking 'w_scale' to 1 means that once the lifting term is maximally 'lifted' into the 4th dimension, the 4th dimension is effectively of length '_r_cutoff'.
+    _w_lifting : float
+        maximal length of the 4th dimension
     _hybrid_system : openmm.System
         the hybrid system that allows both alchemical and rest scaling
     _hybrid_to_old_map : dict of ints
@@ -2849,7 +2848,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         "U_electrostatics;",
 
         # Define electrostatics functional form
-        f"U_electrostatics = {ONE_4PI_EPS0} * chargeProd  * erfc(alpha * r_eff_electrostatics)/ r_eff_electrostatics;",
+        f"U_electrostatics = {ONE_4PI_EPS0} * chargeProd * erfc(alpha * r_eff_electrostatics) / r_eff_electrostatics;",
 
         # Define chargeProd (with REST scaling)
         "chargeProd = charge1 * electrostatics_rest_scale1 * charge2 * electrostatics_rest_scale2;",
@@ -2861,11 +2860,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         "r_eff_electrostatics = sqrt(r^2 + w_electrostatics^2);",
 
         # Define 4th dimension terms
-        "w_electrostatics = w_scale * r_cutoff * (is_unique_old * (1 - lambda_alchemical_electrostatics_old) + is_unique_new * (1 - lambda_alchemical_electrostatics_new));", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
+        "w_electrostatics = w_lifting * (is_unique_old * (1 - lambda_alchemical_electrostatics_old) + is_unique_new * (1 - lambda_alchemical_electrostatics_new));", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
         "is_unique_old = step(is_unique_old1 + is_unique_old2 - 0.1);", # if at least one of the particles in the interaction is unique old
         "is_unique_new = step(is_unique_new1 + is_unique_new2 - 0.1);", # if at least one of the particles in the interaction is unique new
-        "w_scale = {w_scale};",
-        "r_cutoff = {r_cutoff};"
+        "w_lifting = {w_lifting};"
 
     ]
 
@@ -2888,12 +2886,11 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         "r_eff_sterics = sqrt(r^2 + w_sterics^2);",
 
         # Define 4th dimension terms
-        # Note that w_scale here should be the same as it is for w_electrostatics, otherwise may get nans
-        "w_sterics = w_scale * r_cutoff * (is_unique_old * (1 - lambda_alchemical_sterics_old) + is_unique_new * (1 - lambda_alchemical_sterics_new));", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
+        # Note that w_lifting here should be the same as it is for w_electrostatics, otherwise may get nans
+        "w_sterics = w_lifting * (is_unique_old * (1 - lambda_alchemical_sterics_old) + is_unique_new * (1 - lambda_alchemical_sterics_new));", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
         "is_unique_old = step(is_unique_old1 + is_unique_old2 - 0.1);", # if at least one of the particles in the interaction is unique old
         "is_unique_new = step(is_unique_new1 + is_unique_new2 - 0.1);", # if at least one of the particles in the interaction is unique new
-        "w_scale = {w_scale};",
-        "r_cutoff = {r_cutoff};"
+        "w_lifting = {w_lifting};"
 
     ]
 
@@ -2969,11 +2966,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         "r_eff_electrostatics = sqrt(r^2 + w_electrostatics^2);",
 
         # Define 4th dimension terms
-        "w_electrostatics = w_scale * r_cutoff * (is_unique_old * (1 - lambda_alchemical_electrostatics_old) + is_unique_new * (1 - lambda_alchemical_electrostatics_new));", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
+        "w_electrostatics = w_lifting * (is_unique_old * (1 - lambda_alchemical_electrostatics_old) + is_unique_new * (1 - lambda_alchemical_electrostatics_new));", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
         "is_unique_old = step(is_unique_old1 + is_unique_old2 - 0.1);", # if at least one of the particles in the interaction is unique old
         "is_unique_new = step(is_unique_new1 + is_unique_new2 - 0.1);", # if at least one of the particles in the interaction is unique new
-        "w_scale = {w_scale};",
-        "r_cutoff = {r_cutoff};"
+        "w_lifting = {w_lifting};"
 
     ]
 
@@ -3014,12 +3010,11 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         "r_eff_sterics = sqrt(r^2 + w_sterics^2);",
 
         # Define 4th dimension terms
-        # Note that w_scale here should be the same as it is for w_electrostatics, otherwise may get nans
-        "w_sterics = w_scale * r_cutoff * (is_unique_old * (1 - lambda_alchemical_sterics_old) + is_unique_new * (1 - lambda_alchemical_sterics_new));", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
+        # Note that w_lifting here should be the same as it is for w_electrostatics, otherwise may get nans
+        "w_sterics = w_lifting * (is_unique_old * (1 - lambda_alchemical_sterics_old) + is_unique_new * (1 - lambda_alchemical_sterics_new));", # because we want w for unique old atoms to go from 0 to 1 and the opposite for unique new atoms
         "is_unique_old = step(is_unique_old1 + is_unique_old2 - 0.1);", # if at least one of the particles in the interaction is unique old
         "is_unique_new = step(is_unique_new1 + is_unique_new2 - 0.1);", # if at least one of the particles in the interaction is unique new
-        "w_scale = {w_scale};",
-        "r_cutoff = {r_cutoff};"
+        "w_lifting = {w_lifting};"
 
     ]
 
@@ -3039,7 +3034,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                  rest_radius=0.3,
 
                  # nonbonded parameters
-                 w_scale=0.3,
+                 w_lifting=0.3 * unit.nanometers,
 
                  **kwargs):
 
@@ -3054,8 +3049,8 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                 positions of coordinates of new system
             rest_radius : float, default 0.3
                 radius for rest region, in nanometers
-            w_scale : float, default 0.3
-                maximum offset to add for the 4th dimension lifting
+            w_lifting : unit.nanometers, default 0.3 * unit.nanometers
+                maximal distance to add for the 4th dimension lifting, in nanometers
         """
 
         _logger.info("*** Generating RESTCapableHybridTopologyFactory ***")
@@ -3086,20 +3081,20 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         # Set nonbonded parameters
         self._nonbonded_method = self._old_system_forces['NonbondedForce'].getNonbondedMethod()
         if self._nonbonded_method == openmm.NonbondedForce.NoCutoff:
-            self._r_cutoff = 100 * unit.nanometer # TODO: what should r_cutoff be for the lifting term in vacuum?
+            self._cutoff = 100 * unit.nanometer
             self._alpha_ewald = 0
         else:
-            self._r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
+            self._cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
             [alpha_ewald, nx, ny, nz] = self._old_system_forces['NonbondedForce'].getPMEParameters()
             if (alpha_ewald / alpha_ewald.unit) == 0.0:
                 # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
                 tol = self._old_system_forces['NonbondedForce'].getEwaldErrorTolerance()
-                alpha_ewald = (1.0 / self._r_cutoff) * np.sqrt(-np.log(2.0 * tol))
+                alpha_ewald = (1.0 / self._cutoff) * np.sqrt(-np.log(2.0 * tol))
             self._alpha_ewald = alpha_ewald.value_in_unit_system(unit.md_unit_system)
-        self._w_scale = w_scale
-        _logger.info(f"r_cutoff is {self._r_cutoff}")
+        self._w_lifting = w_lifting
+        _logger.info(f"cutoff is {self._cutoff}")
         _logger.info(f"alpha_ewald is {self._alpha_ewald}")
-        _logger.info(f"w_scale is {self._w_scale}")
+        _logger.info(f"w_lifting is {self._w_lifting}")
 
         # Start by creating an empty system. This will become the hybrid system.
         _logger.info(f"Creating hybrid system")
@@ -3897,8 +3892,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         else:
             expression = self._alternate_electrostatics_expression
         formatted_expression = expression.format(alpha_ewald=self._alpha_ewald,
-                                                 w_scale=self._w_scale,
-                                                 r_cutoff=self._r_cutoff.value_in_unit_system(unit.md_unit_system))
+                                                 w_lifting=self._w_lifting.value_in_unit_system(unit.md_unit_system))
         custom_force = openmm.CustomNonbondedForce(formatted_expression)
         name = custom_force.__class__.__name__ + '_electrostatics'
         custom_force.setName(name)
@@ -3943,7 +3937,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                                          openmm.NonbondedForce.Ewald]:
             custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(self._nonbonded_method))
             custom_force.setUseSwitchingFunction(False)
-            custom_force.setCutoffDistance(self._r_cutoff)
+            custom_force.setCutoffDistance(self._cutoff)
             custom_force.setUseLongRangeCorrection(False)
 
         elif self._nonbonded_method == openmm.NonbondedForce.NoCutoff:
@@ -3963,8 +3957,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             expression = self._default_sterics_expression
         else:
             expression = self._alternate_sterics_expression
-        formatted_expression = expression.format(w_scale=self._w_scale,
-                                                 r_cutoff=self._r_cutoff.value_in_unit_system(unit.md_unit_system))
+        formatted_expression = expression.format(w_lifting=self._w_lifting.value_in_unit_system(unit.md_unit_system))
         custom_force = openmm.CustomNonbondedForce(formatted_expression)
         name = custom_force.__class__.__name__ + '_sterics'
         custom_force.setName(name)
@@ -4036,7 +4029,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                                       openmm.NonbondedForce.Ewald]:
             custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(self._nonbonded_method))
             custom_force.setUseSwitchingFunction(False)
-            custom_force.setCutoffDistance(self._r_cutoff)
+            custom_force.setCutoffDistance(self._cutoff)
             custom_force.setUseLongRangeCorrection(False)
 
         elif self._nonbonded_method == openmm.NonbondedForce.NoCutoff:
@@ -4064,13 +4057,13 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         standard_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
         if self._nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.CutoffNonPeriodic]:
             standard_nonbonded_force.setReactionFieldDielectric(old_system_nbf.getReactionFieldDielectric())
-            standard_nonbonded_force.setCutoffDistance(self._r_cutoff)
+            standard_nonbonded_force.setCutoffDistance(self._cutoff)
         elif self._nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
             [alpha_ewald, nx, ny, nz] = old_system_nbf.getPMEParameters()
             delta = old_system_nbf.getEwaldErrorTolerance()
             standard_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
             standard_nonbonded_force.setEwaldErrorTolerance(delta)
-            standard_nonbonded_force.setCutoffDistance(self._r_cutoff)
+            standard_nonbonded_force.setCutoffDistance(self._cutoff)
         elif self._nonbonded_method in [openmm.NonbondedForce.NoCutoff]:
             pass
         else:
@@ -4109,13 +4102,13 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         standard_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
         if self._nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.CutoffNonPeriodic]:
             standard_nonbonded_force.setReactionFieldDielectric(old_system_nbf.getReactionFieldDielectric())
-            standard_nonbonded_force.setCutoffDistance(self._r_cutoff)
+            standard_nonbonded_force.setCutoffDistance(self._cutoff)
         elif self._nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
             [alpha_ewald, nx, ny, nz] = old_system_nbf.getPMEParameters()
             delta = old_system_nbf.getEwaldErrorTolerance()
             standard_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
             standard_nonbonded_force.setEwaldErrorTolerance(delta)
-            standard_nonbonded_force.setCutoffDistance(self._r_cutoff)
+            standard_nonbonded_force.setCutoffDistance(self._cutoff)
         elif self._nonbonded_method in [openmm.NonbondedForce.NoCutoff]:
             pass
         else:
