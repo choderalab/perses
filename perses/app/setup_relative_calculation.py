@@ -1084,7 +1084,7 @@ def _generate_htf(phase: str, topology_proposal_dictionary: dict, setup_options:
         "rmsd_restraint": setup_options['rmsd_restraint']
     }
 
-    if factory_name == HybridTopologyFactory.__name__:f
+    if factory_name == HybridTopologyFactory.__name__:
         factory = HybridTopologyFactory
     elif factory_name == RESTCapableHybridTopologyFactory.__name__:
         factory = RESTCapableHybridTopologyFactory
