@@ -700,7 +700,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                         hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                     )
                     hss[phase].setup(n_states=n_states, temperature=temperature, storage_file=reporter,
-                                     lambda_protocol=lambda_protocol, endstates=endstates)
+                                     endstates=endstates)
                     # We need to specify contexts AFTER setup
                     hss[phase].energy_context_cache = energy_context_cache
                     hss[phase].sampler_context_cache = sampler_context_cache
