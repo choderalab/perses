@@ -3031,7 +3031,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                  new_positions,
 
                  # rest scaling arguments
-                 rest_radius=0.3,
+                 rest_radius=0.3 * unit.nanometers,
 
                  # nonbonded parameters
                  w_lifting=0.3 * unit.nanometers,
@@ -3047,7 +3047,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                 positions of coordinates of old system
             new_positions : [m,3] np.ndarray of float
                 positions of coordinates of new system
-            rest_radius : float, default 0.3
+            rest_radius : unit.nanometers, default 0.3 * unit.nanometers
                 radius for rest region, in nanometers
             w_lifting : unit.nanometers, default 0.3 * unit.nanometers
                 maximal distance to add for the 4th dimension lifting, in nanometers
@@ -3136,7 +3136,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         # Generate rest region
         self._rest_radius = rest_radius
         self._rest_region = self._generate_rest_region()
-        _logger.info(f"Rest radius: {self._rest_radius} nm")
+        _logger.info(f"Rest radius: {self._rest_radius}")
         _logger.info(f"Rest region: {self._rest_region}")
 
         # Prep look up dict for determining if atom is solvent
@@ -3222,7 +3222,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         # Retrieve neighboring atoms within self._rest_radius nm of the query atoms
         traj = md.Trajectory(np.array(self._hybrid_positions), self._hybrid_topology)
         solute_atoms = list(traj.topology.select("is_protein"))
-        rest_atoms = list(md.compute_neighbors(traj, self._rest_radius, query_indices, haystack_indices=solute_atoms)[0])
+        rest_atoms = list(md.compute_neighbors(traj, self._rest_radius.value_in_unit_system(unit.md_unit_system), query_indices, haystack_indices=solute_atoms)[0])
 
         # Retrieve full residues for all atoms in rest region
         residues = [atom.residue.index for atom in traj.topology.atoms if atom.index in rest_atoms]
