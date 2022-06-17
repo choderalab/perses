@@ -126,6 +126,7 @@ class PointMutationExecutor(object):
                  ionic_strength=0.15 * unit.molar,
                  padding=1.1 * unit.nanometer,
                  box_shape='cube',
+                 transform_waters_into_ions_for_charge_changes=True,
 
                  # System generation parameters
                  forcefield_files=['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
@@ -197,6 +198,9 @@ class PointMutationExecutor(object):
                 padding (in nanometers) to use for creating the solvent box
             box_shape : string, default 'cube'
                 shape to use for creating the solvent box. options: 'cube', 'octahedron', 'dodecahedron'
+            transform_waters_into_ions_for_charge_changes : bool, default True
+                whether to introduce a counterion by transforming water(s) into ion(s) for charge changing transformations
+                if False, counterions will not be introduced.
             forcefield_files : list of str, default ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
                 forcefield files for proteins and solvent
             barostat : openmm.MonteCarloBarostat, default openmm.MonteCarloBarostat(1.0 * unit.atmosphere, 300 * unit.kelvin, 50)
@@ -396,10 +400,10 @@ class PointMutationExecutor(object):
             logp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, pos, beta, validate_energy_bookkeeping=validate_bool)
 
             # Add counterion(s) for charge changing mutations
-            if not is_vacuum:
+            if not is_vacuum and transform_waters_into_ions_for_charge_changes:
                 self._handle_charge_changes(topology_proposal, new_positions)
             else:
-                _logger.info("Skipping counterion because phase is vacuum.")
+                _logger.info(f"Skipping counterion")
 
             # Create hybrid factories
             if generate_unmodified_hybrid_topology_factory:

@@ -326,12 +326,15 @@ def getSetupOptions(filename, override_string=None):
     if 'platform' not in setup_options:
         setup_options['platform'] = None  # defaults to choosing best platform
 
+    # Handling counterion
+    if 'transform_waters_into_ions_for_charge_changes' not in setup_options:
+        setup_options['transform_waters_into_ions_for_charge_changes'] = True
+
     # Handling unsampled_endstates long range correction flag
     if 'unsampled_endstates' not in setup_options:
         setup_options['unsampled_endstates'] = True   # True by default (matches class default)
 
     os.makedirs(trajectory_directory, exist_ok=True)
-
 
     return setup_options
 
@@ -519,7 +522,8 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
                                           trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'],
                                           complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'], ionic_strength=ionic_strength, remove_constraints=setup_options['remove_constraints'],
-                                          use_given_geometries=use_given_geometries, given_geometries_tolerance=given_geometries_tolerance)
+                                          use_given_geometries=use_given_geometries, given_geometries_tolerance=given_geometries_tolerance,
+                                          transform_waters_into_ions_for_charge_changes = setup_options['transform_waters_into_ions_for_charge_changes'])
 
 
         _logger.info(f"\twriting pickle output...")

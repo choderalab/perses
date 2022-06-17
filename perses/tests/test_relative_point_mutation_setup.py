@@ -1,11 +1,17 @@
 def test_PointMutationExecutor():
+    """
+    Check that a PointMutationExecutor can be instantiated properly for ALA->ASP dipeptide in solvent and that a
+    HybridTopologyFactory object can be generated.
+    Also check that counterions are added.
+
+    """
     from pkg_resources import resource_filename
     from simtk import unit
 
     from perses.app.relative_point_mutation_setup import PointMutationExecutor
 
     pdb_filename = resource_filename("perses", "data/ala_vacuum.pdb")
-    PointMutationExecutor(
+    solvent_delivery = PointMutationExecutor(
         pdb_filename,
         "1",
         "2",
@@ -15,9 +21,21 @@ def test_PointMutationExecutor():
         flatten_exceptions=True,
         conduct_endstate_validation=False,
     )
+    htf = solvent_delivery.get_apo_htf()
+
+    # If there is a counterion, there should be water atoms in the core atom class
+    solvent_atoms = set(htf.hybrid_topology.select('water'))
+    assert len(solvent_atoms.intersection(htf._atom_classes['core_atoms'])) != 0, "There are no water atoms in the core atom " \
+                                                                           "class, which may mean that the counterion was not introduced"
 
 
 def test_PointMutationExecutor_endstate_validation():
+    """
+    Check that HybridTopologyFactory, RepartitionedHybridTopologyFactory, and RESTCapableHybridTopologyFactory objects
+    can be generated for ALA->ASP dipeptide in solvent and conduct endstate validation to sure that the endstate energies
+    match those of the real systems.
+
+    """
     from pkg_resources import resource_filename
     from simtk import unit
 
@@ -40,6 +58,11 @@ def test_PointMutationExecutor_endstate_validation():
 
 
 def test_PointMutationExecutor_solvated():
+    """
+    Check that a PointMutationExecutor can be instantiated properly for ALA->ASP dipeptide in solvent when the input PDB
+    is solvated.
+
+    """
     import os
     import tempfile
     from openmm import app, unit
@@ -61,3 +84,34 @@ def test_PointMutationExecutor_solvated():
             flatten_exceptions=False,
             conduct_endstate_validation=False
         )
+
+
+def test_PointMutationExecutor_without_counterion():
+    """
+    Check that a PointMutationExecutor can be instantiated properly for ALA->ASP dipeptide in solvent without a counterion.
+
+    """
+    from pkg_resources import resource_filename
+    from simtk import unit
+
+    from perses.app.relative_point_mutation_setup import PointMutationExecutor
+
+    pdb_filename = resource_filename("perses", "data/ala_vacuum.pdb")
+    solvent_delivery = PointMutationExecutor(
+        pdb_filename,
+        "1",
+        "2",
+        "ASP",
+        ionic_strength=0.15 * unit.molar,
+        flatten_torsions=True,
+        flatten_exceptions=True,
+        conduct_endstate_validation=False,
+        transform_waters_into_ions_for_charge_changes=False
+    )
+    htf = solvent_delivery.get_apo_htf()
+
+    # If there is no counterion, there should be no water atoms in the core atom class
+    solvent_atoms = set(htf.hybrid_topology.select('water'))
+    assert len(solvent_atoms.intersection(htf._atom_classes['core_atoms'])) == 0, "There are water atoms in the core atom " \
+                                                                                  "class, which may mean that a counterion is being introduced"
+
