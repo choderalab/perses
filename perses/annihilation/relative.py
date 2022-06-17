@@ -2729,11 +2729,11 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     For example, for each bond, the additional parameters are: length_old, length_new, K_old, K_new
 
     The nonbonded interactions are handled with 4 forces:
-    - CustomNonbondedForce - direct space PME electrostatics interactions (with long range correction off)
-    - CustomNonbondedForce - steric interactions for scaled interactions (with long range correction off)
-    - CustomBondForce - electrostatics (uses Coulomb and not PME) and steric exceptions
-    - NonbondedForce - reciprocal space PME electrostatics interactions/exceptions
-    - NonbondedForce - steric interactions for non-scaled interactions (with long range correction on)
+    - CustomNonbondedForce_electrostatics - direct space PME electrostatics interactions (with long range correction off)
+    - CustomNonbondedForce_sterics - steric interactions for scaled interactions (with long range correction off)
+    - CustomBondForce_exceptions - electrostatics (uses Coulomb and not PME) and scaled steric exceptions
+    - NonbondedForce_reciprocal - reciprocal space PME electrostatics interactions/exceptions (with long range correction off)
+    - NonbondedForce_sterics - steric interactions for non-scaled interactions/exceptions (with long range correction on)
     * Note that 'scaled interaction' means at least one atom in the interaction is scaled via rest or alchemically.
     Aka at least one atom in the interaction is part of at least one of the following atom classes: rest, inter, core, unique old, unique new.
 
@@ -3036,10 +3036,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                  new_positions,
 
                  # rest scaling arguments
-                 rest_radius=0.2,
+                 rest_radius=0.3,
 
                  # nonbonded parameters
-                 w_scale=0.1,
+                 w_scale=0.3,
 
                  **kwargs):
 
@@ -3052,9 +3052,9 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
                 positions of coordinates of old system
             new_positions : [m,3] np.ndarray of float
                 positions of coordinates of new system
-            rest_radius : float, default 0.2
+            rest_radius : float, default 0.3
                 radius for rest region, in nanometers
-            w_scale : float
+            w_scale : float, default 0.3
                 maximum offset to add for the 4th dimension lifting
         """
 
@@ -3906,9 +3906,9 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         self._hybrid_system_forces[name] = custom_force
 
         # Add global parameters
-        custom_force.addGlobalParameter(f"lambda_rest_electrostatics", 1.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_electrostatics_old", 1.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_electrostatics_new", 0.0)
+        custom_force.addGlobalParameter("lambda_rest_electrostatics", 1.0)
+        custom_force.addGlobalParameter("lambda_alchemical_electrostatics_old", 1.0)
+        custom_force.addGlobalParameter("lambda_alchemical_electrostatics_new", 0.0)
 
         # Add per-particle parameters for rest scaling -- these three sets are disjoint
         custom_force.addPerParticleParameter("is_rest")
@@ -3995,9 +3995,9 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         custom_force.addInteractionGroup(environment_rest_atoms, environment_nonrest_atoms)
 
         # Add global parameters
-        custom_force.addGlobalParameter(f"lambda_rest_sterics", 1.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_sterics_old", 1.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_sterics_new", 0.0)
+        custom_force.addGlobalParameter("lambda_rest_sterics", 1.0)
+        custom_force.addGlobalParameter("lambda_alchemical_sterics_old", 1.0)
+        custom_force.addGlobalParameter("lambda_alchemical_sterics_new", 0.0)
 
         # Add per-particle parameters for rest scaling -- these three sets are disjoint
         custom_force.addPerParticleParameter("is_rest")
@@ -4037,7 +4037,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(self._nonbonded_method))
             custom_force.setUseSwitchingFunction(False)
             custom_force.setCutoffDistance(self._r_cutoff)
-            custom_force.setUseLongRangeCorrection(old_system_nbf.getUseDispersionCorrection()) # This should be copied from the og nbf for sterics, but off for electrostatics
+            custom_force.setUseLongRangeCorrection(False)
 
         elif self._nonbonded_method == openmm.NonbondedForce.NoCutoff:
             custom_force.setNonbondedMethod(self._translate_nonbonded_method_to_custom(self._nonbonded_method))
@@ -4137,9 +4137,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     def _copy_nonbondeds(self):
         """
         Add particles to each of the following nonbonded forces:
-            - CustomNonbondedForce for electrostatics interactions (not exceptions)
-            - CustomNonbondedForce for sterics interactions (not exceptions)
-            - NonbondedForce for reciprocal space electrostatic interactions and exceptions
+            - CustomNonbondedForce_electrostatics for electrostatics interactions (not exceptions)
+            - CustomNonbondedForce_sterics for sterics interactions (not exceptions)
+            - NonbondedForce_reciprocal for reciprocal space electrostatic interactions and exceptions
+            - NonbondedForce_sterics for non-scaled steric interactions and exceptions
 
         """
 
@@ -4262,12 +4263,12 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         self._hybrid_system_forces[name] = custom_force
 
         # Add global parameters
-        custom_force.addGlobalParameter(f"lambda_rest_electrostatics_exceptions", 1.0)
-        custom_force.addGlobalParameter(f"lambda_rest_sterics_exceptions", 1.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_electrostatics_exceptions_old", 1.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_electrostatics_exceptions_new", 0.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_sterics_exceptions_old", 1.0)
-        custom_force.addGlobalParameter(f"lambda_alchemical_sterics_exceptions_new", 0.0)
+        custom_force.addGlobalParameter("lambda_rest_electrostatics_exceptions", 1.0)
+        custom_force.addGlobalParameter("lambda_rest_sterics_exceptions", 1.0)
+        custom_force.addGlobalParameter("lambda_alchemical_electrostatics_exceptions_old", 1.0)
+        custom_force.addGlobalParameter("lambda_alchemical_electrostatics_exceptions_new", 0.0)
+        custom_force.addGlobalParameter("lambda_alchemical_sterics_exceptions_old", 1.0)
+        custom_force.addGlobalParameter("lambda_alchemical_sterics_exceptions_new", 0.0)
 
         # Add per-bond parameters for rest scaling -- these sets are disjoint
         custom_force.addPerBondParameter("is_rest")
@@ -4304,7 +4305,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
     def _copy_exceptions(self):
         """
-        Add exceptions to the CustomBondForce for exceptions and the NonbondedForce for the reciprocal space.
+        Add exceptions to:
+            - CustomBondForce_exceptions for scaled exceptions
+            - NonbondedForce_reciprocal for the reciprocal space interactions and exceptions
+            - NonbondedForce_sterics for non-scaled sterics interactions and exceptions
         """
 
         # Retrieve old and new nb forces
@@ -4392,7 +4396,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             chargeProd_product_old = p1_params[-2] * p2_params[-2]
             chargeProd_product_new = p1_params[-1] * p2_params[-1]
 
-            # Add exclusions to the custon nb forces and bond to the custom bond force
+            # Add exclusions to the custom nb forces and bond to the custom bond force
             params = (hybrid_index_pair[0], hybrid_index_pair[1],
                                    rest_id + alch_id +
                                    [chargeProd_old, chargeProd_new, chargeProd_product_old, chargeProd_product_new, sigma_old, sigma_new, epsilon_old_bond, epsilon_new_bond])

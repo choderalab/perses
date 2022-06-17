@@ -39,8 +39,6 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
                 "1",
                 "2",
                 mutant_name.upper(),
-                phase="solvent",
-                w_scale=0.3,
                 generate_unmodified_hybrid_topology_factory=False,
                 generate_rest_capable_hybrid_topology_factory=True,
                 conduct_endstate_validation=False
@@ -69,7 +67,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
                                     hybrid_factory=htf,
                                     online_analysis_interval=None)
             hss.setup(n_states=12, temperature=300 * unit.kelvin, t_max=300 * unit.kelvin,
-                      storage_file=reporter, endstates=False)
+                      storage_file=reporter, endstates=True)
             hss.energy_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
             hss.sampler_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
 
@@ -133,8 +131,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
                     "1",
                     "2",
                     mutant_name.upper(),
-                    solvate=False,
-                    w_scale=0.3,
+                    is_solvated=True,
                     generate_unmodified_hybrid_topology_factory=False,
                     generate_rest_capable_hybrid_topology_factory=True,
                     conduct_endstate_validation=False
@@ -170,7 +167,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
                                         hybrid_factory=htf,
                                         online_analysis_interval=None)
                 hss.setup(n_states=12, temperature=300 * unit.kelvin, t_max=300 * unit.kelvin,
-                          storage_file=reporter, endstates=False)
+                          storage_file=reporter, endstates=True)
                 hss.energy_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
                 hss.sampler_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
 

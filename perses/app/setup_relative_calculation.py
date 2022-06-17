@@ -30,6 +30,9 @@ class TimeFilter(logging.Filter):
         self.last = record.relativeCreated
         return True
 
+# TODO: We need to import these for logging to work, even if we don't use them. Why?
+from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
+
 fmt = logging.Formatter(fmt="%(asctime)s:(%(relative)ss):%(name)s:%(message)s")
 #logging.basicConfig(level = logging.NOTSET)
 LOGLEVEL = os.environ.get("LOGLEVEL", "INFO").upper()
@@ -323,12 +326,15 @@ def getSetupOptions(filename, override_string=None):
     if 'platform' not in setup_options:
         setup_options['platform'] = None  # defaults to choosing best platform
 
-    # Handle counterion
+    # Handling counterion
     if 'transform_waters_into_ions_for_charge_changes' not in setup_options:
         setup_options['transform_waters_into_ions_for_charge_changes'] = True
 
-    os.makedirs(trajectory_directory, exist_ok=True)
+    # Handling unsampled_endstates long range correction flag
+    if 'unsampled_endstates' not in setup_options:
+        setup_options['unsampled_endstates'] = True   # True by default (matches class default)
 
+    os.makedirs(trajectory_directory, exist_ok=True)
 
     return setup_options
 
@@ -659,10 +665,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                 if phase == 'vacuum':
                     endstates = False
                 else:
-                    # TODO: Make this True when dispersed.utils.create_endstates is fixed
-                    _logger.info("Disabling creation of endstates with expanded cutoffs in order to support new "
-                                 "alchemical factories.")
-                    endstates = False
+                    endstates = setup_options['unsampled_endstates']
 
                 if setup_options['fe_type'] == 'fah':
                     _logger.info('SETUP FOR FAH DONE')
@@ -1081,7 +1084,7 @@ def _generate_htf(phase: str, topology_proposal_dictionary: dict, setup_options:
         "rmsd_restraint": setup_options['rmsd_restraint']
     }
 
-    if factory_name == HybridTopologyFactory.__name__:
+    if factory_name == HybridTopologyFactory.__name__:f
         factory = HybridTopologyFactory
     elif factory_name == RESTCapableHybridTopologyFactory.__name__:
         factory = RESTCapableHybridTopologyFactory
