@@ -282,6 +282,7 @@ def run_neq_fah_setup(ligand_file,
                       rmsd_restraint=False,
                       impose_virtual_bonds=True,
                       use_given_geometries=True,
+                      transform_waters_into_ions_for_charge_changes=True,
                       **kwargs):
     """
     Set up perses relative free energy calculations for Folding@home
@@ -412,6 +413,9 @@ def run_neq_fah_setup(ligand_file,
     use_given_geometries : bool, optional, default=True
         whether to extract the positions of ligand B and set the unique_new atom positions deterministically;
         if True, `complex` must be in `phases` and .sdf or .mol2 file of ligand must be provided
+    transform_waters_into_ions_for_charge_changes : bool, optional, default=True
+        whether to introduce a counterion by transforming water(s) into ion(s) for charge changing transformations
+        if False, counterions will not be introduced.
     kwargs
         Other arguments are passed on in setup_options
     """
