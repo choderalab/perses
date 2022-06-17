@@ -38,8 +38,8 @@ class HybridCompatibilityMixin(object):
 
         # Retrieve class name, hybrid system, and hybrid positions
         factory_name = self._hybrid_factory.__class__.__name__
-        hybrid_system = self._factory.hybrid_system
-        positions = self._factory.hybrid_positions
+        hybrid_system = self._hybrid_factory.hybrid_system
+        positions = self._hybrid_factory.hybrid_positions
 
         # Create alchemical state and lambda protocol
         if factory_name == 'HybridTopologyFactory':
