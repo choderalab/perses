@@ -139,8 +139,8 @@ class PointMutationExecutor(object):
                  conduct_endstate_validation=True,
                  flatten_torsions=False,
                  flatten_exceptions=False,
-                 rest_radius=0.3,
-                 w_scale=0.3,
+                 rest_radius=0.3 * unit.nanometer,
+                 w_lifting=0.3 * unit.nanometer,
                  generate_unmodified_hybrid_topology_factory=True,
                  generate_repartitioned_hybrid_topology_factory=False,
                  generate_rest_capable_hybrid_topology_factory=False,
@@ -216,10 +216,10 @@ class PointMutationExecutor(object):
                 in the HybridTopologyFactory, flatten torsions involving unique new atoms at lambda = 0 and unique old atoms are lambda = 1
             flatten_exceptions : bool, default False
                 in the HybridTopologyFactory, flatten exceptions involving unique new atoms at lambda = 0 and unique old atoms at lambda = 1
-            rest_radius : float, default 0.3
+            rest_radius : unit.nanometer, default 0.3 * unit.nanometer
                 radius for rest region, in nanometers
-            w_scale : float, default 0.3
-                scale factor for lifting term
+            w_lifting : unit.nanometer, default 0.3 * unit.nanometer
+                maximal distance for lifting term, in nanometers
             generate_unmodified_hybrid_topology_factory : bool, default True
                 whether to generate a vanilla HybridTopologyFactory
             generate_repartitioned_hybrid_topology_factory : bool, default False
@@ -404,16 +404,16 @@ class PointMutationExecutor(object):
             # Create hybrid factories
             if generate_unmodified_hybrid_topology_factory:
                 repartitioned_endstate = None
-                self.generate_htf(HybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex, rest_radius, w_scale)
+                self.generate_htf(HybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex, rest_radius, w_lifting)
             if generate_repartitioned_hybrid_topology_factory:
                 for repartitioned_endstate in [0, 1]:
-                    self.generate_htf(RepartitionedHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex, rest_radius, w_scale)
+                    self.generate_htf(RepartitionedHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex, rest_radius, w_lifting)
             if generate_rest_capable_hybrid_topology_factory:
                 repartitioned_endstate = None
                 if rest_radius is None:
                     _logger.info("Trying to generate a RESTCapableHybridTopologyFactory, but rest_radius was not specified. Using 0.2 nm...")
                     rest_radius = 0.2
-                self.generate_htf(RESTCapableHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex, rest_radius, w_scale)
+                self.generate_htf(RESTCapableHybridTopologyFactory, topology_proposal, pos, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex, rest_radius, w_lifting)
 
             # Gather energies needed for validating endstate energies
             if not topology_proposal.unique_new_atoms:
@@ -468,7 +468,7 @@ class PointMutationExecutor(object):
             else:
                 pass
 
-    def generate_htf(self, factory, topology_proposal, old_positions, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex, rest_radius, w_scale):
+    def generate_htf(self, factory, topology_proposal, old_positions, new_positions, flatten_exceptions, flatten_torsions, repartitioned_endstate, is_complex, rest_radius, w_lifting):
         """
         Generate hybrid factory.
 
@@ -492,10 +492,10 @@ class PointMutationExecutor(object):
         is_complex : bool
             if False, the factory is generated for the apo protein
             otherwise, the factory is generated for the complex
-        rest_radius : float, default 0.2
+        rest_radius : unit.nanometer, default 0.3 * unit.nanometer
             radius for rest region, in nanometers
-        w_scale : float
-            maximum offset to add for the 4th dimension lifting
+        w_lifting : unit.nanometer, default 0.3 * unit.nanometer
+            maximum distance to use for the 4th dimension lifting, in nanometers
 
         """
 
@@ -520,7 +520,7 @@ class PointMutationExecutor(object):
                                       endstate=repartitioned_endstate,
                                       flatten_torsions=flatten_torsions,
                                       rest_radius=rest_radius,
-                                      w_scale=w_scale)
+                                      w_lifting=w_lifting)
         if is_complex:
             if factory == HybridTopologyFactory:
                 self.complex_htf = htf
