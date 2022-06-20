@@ -1207,11 +1207,11 @@ def test_unsampled_endstate_energies_GPU():
    Only run this on a GPU as the CPU is too slow.
    """
 
-    # # Alanine dipeptide in solvent -- Run MD energy validation test
-    # run_unsampled_endstate_energies('ala-dipeptide', use_point_energies=False, use_md_energies=True)
-    #
-    # # Apo barstar -- Run point and MD energy validation tests
-    # run_unsampled_endstate_energies('barstar', use_point_energies=True, use_md_energies=True)
-    #
+    # Alanine dipeptide in solvent -- Run MD energy validation test
+    run_unsampled_endstate_energies('ala-dipeptide', use_point_energies=False, use_md_energies=True)
+
+    # Apo barstar -- Run point and MD energy validation tests
+    run_unsampled_endstate_energies('barstar', use_point_energies=True, use_md_energies=True)
+
     # Tyk2 -- Run point and MD energy validation tests
     run_unsampled_endstate_energies('tyk2', use_point_energies=True, use_md_energies=True)
