@@ -556,6 +556,24 @@ def create_endstates_from_real_systems(htf, for_testing=False):
         for index in sorted(indices_to_remove, reverse=True):
             hybrid_system.removeForce(index)
 
+            # Set defaults for global parameters depending on the factory
+            htf_class = htf.__class__.__name__
+            for force_index, force in enumerate(list(hybrid_system.getForces())):
+                if hasattr(force, 'getNumGlobalParameters'): # Only custom forces will have global parameters to set
+                    for parameter_index in range(force.getNumGlobalParameters()):
+                        global_parameter_name = force.getGlobalParameterName(parameter_index)
+                        if global_parameter_name[0:7] == 'lambda_':
+                            if htf_class == 'HybridTopologyFactory':
+                                force.setGlobalParameterDefaultValue(parameter_index, lambda_val)
+                            elif htf_class == 'RESTCapableHybridTopologyFactory':
+                                if 'old' in global_parameter_name:
+                                    force.setGlobalParameterDefaultValue(parameter_index, 1 - lambda_val)
+                                elif 'new' in global_parameter_name:
+                                    force.setGlobalParameterDefaultValue(parameter_index, lambda_val)
+                            else:
+                                raise Exception(
+                                    f"{htf_class} is not supported. Supported factories: HybridTopologyFactory, RESTCapableHybridTopologyFactory")
+
         # Create NonbondedForce
         nonbonded_force = openmm.NonbondedForce()
         hybrid_system.addForce(nonbonded_force)
