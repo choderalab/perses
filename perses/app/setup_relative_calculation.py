@@ -1096,9 +1096,9 @@ def _generate_htf(phase: str, topology_proposal_dictionary: dict, setup_options:
         except KeyError:
             _logger.info("'rest_radius' not specified. Using default value.")
         try:
-            rest_specific_options.update({'w_scale': setup_options['w_scale']})
+            rest_specific_options.update({'w_lifting': setup_options['w_lifting']})
         except KeyError:
-            _logger.info("'w_scale' not specified. Using default value.")
+            _logger.info("'w_lifting' not specified. Using default value.")
 
         # update htf_setup_dictionary with new parameters
         htf_setup_dict.update(rest_specific_options)
