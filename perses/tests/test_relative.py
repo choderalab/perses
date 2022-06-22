@@ -1110,6 +1110,59 @@ def run_unsampled_endstate_energies(test_name, use_point_energies=True, use_md_e
         vanilla_htf = solvent_delivery.get_apo_htf()
         htfs = [htf, vanilla_htf]
 
+    elif test_name == 'tyk2':
+        import tempfile
+        from perses.utils.url_utils import retrieve_file_url
+        from perses.annihilation.relative import HybridTopologyFactory, RESTCapableHybridTopologyFactory
+        from perses.app.relative_setup import RelativeFEPSetup
+
+        def concatenate_files(input_files, output_file):
+            """
+            Concatenate files given in input_files iterator into output_file.
+            """
+            with open(output_file, 'w') as outfile:
+                for filename in input_files:
+                    with open(filename) as infile:
+                        for line in infile:
+                            outfile.write(line)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Fetch ligands sdf files and concatenate them in one
+            base_repo_url = "https://github.com/openforcefield/protein-ligand-benchmark"
+            ligand_files = []
+            for ligand in ['lig_ejm_42', 'lig_ejm_54']:
+                ligand_url = f"{base_repo_url}/raw/main/data/2020-02-07_tyk2/02_ligands/{ligand}/crd/{ligand}.sdf"
+                ligand_file = retrieve_file_url(ligand_url)
+                ligand_files.append(ligand_file)
+            concatenate_files(ligand_files, os.path.join(temp_dir, 'ligands.sdf'))
+            ligands_filename = os.path.join(temp_dir, 'ligands.sdf')
+
+            # Retrieve host PDB
+            pdb_url = f"{base_repo_url}/raw/main/data/2020-02-07_tyk2/01_protein/crd/protein.pdb"
+            host_pdb = retrieve_file_url(pdb_url)
+
+            # Generate topology proposal, old/new positions
+            fe_setup = RelativeFEPSetup(
+                ligand_input=ligands_filename,
+                protein_pdb_filename=host_pdb,
+                old_ligand_index=0,
+                new_ligand_index=1,
+                forcefield_files=['amber/ff14SB.xml', 'amber/tip3p_standard.xml', 'amber/tip3p_HFE_multivalent.xml'],
+                small_molecule_forcefield="gaff-2.11",
+                phases=["complex"],
+            )
+
+            # Generate htfs
+            factories = [HybridTopologyFactory, RESTCapableHybridTopologyFactory]
+            htfs = []
+            for factory in factories:
+                htf =factory(
+                    topology_proposal=fe_setup.complex_topology_proposal,
+                    current_positions=fe_setup.complex_old_positions,
+                    new_positions=fe_setup.complex_new_positions
+                )
+                htfs.append(htf)
+
     else:
         raise Exception(f"You specified test case name: {test_name}, but the allowed test_names are: 'ala-dipeptide' and 'barstar'")
 
@@ -1157,5 +1210,8 @@ def test_unsampled_endstate_energies_GPU():
     # Alanine dipeptide in solvent -- Run MD energy validation test
     run_unsampled_endstate_energies('ala-dipeptide', use_point_energies=False, use_md_energies=True)
 
-    # Apo barstar -- Run point and MD energy validation test
+    # Apo barstar -- Run point and MD energy validation tests
     run_unsampled_endstate_energies('barstar', use_point_energies=True, use_md_energies=True)
+
+    # Tyk2 -- Run point and MD energy validation tests
+    run_unsampled_endstate_energies('tyk2', use_point_energies=True, use_md_energies=True)

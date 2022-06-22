@@ -1210,8 +1210,8 @@ def validate_unsampled_endstates_point(htf, hybrid_system, endstate=0, minimize=
         assert np.isclose(other_value, hybrid_value)
 
     # Check that the nonbonded (rest of the components) force energies are concordant
-    nonbonded_other_values = [components_other[key] for key in components_other.keys() if key not in bonded_keys and 'Force' in key]  # Do not include thermostats in barostats
-    print([key for key in components_other.keys() if key not in bonded_keys])
+    nonbonded_other_values = [components_other[key] for key in components_other.keys() if key not in bonded_keys and 'Force' in key]  # Do not include thermostats and barostats
+    print([key for key in components_other.keys() if key not in bonded_keys and 'Force' in key])
     print(f"Nonbondeds -- og: {np.sum(nonbonded_other_values)}, hybrid: {components_hybrid['NonbondedForce']}")
     assert np.isclose([components_hybrid['NonbondedForce']], np.sum(nonbonded_other_values))
 
