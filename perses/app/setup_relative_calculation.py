@@ -748,13 +748,8 @@ def run(yaml_filename=None, override_string=None):
     setup_options = getSetupOptions(yaml_filename, override_string=override_string)
     _logger.debug(f"Setup Options {setup_options}")
 
-    # The parsed yaml file will live in the experiment directory to avoid race conditions with other experiments
-    yaml_path = Path(setup_options['trajectory_directory'])
-    yaml_name = Path(yaml_filename).name  # extract name from input/template yaml file.
-    time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-    yaml_parse_name = f"perses-{time}-{yaml_name}"
-    with open(Path.joinpath(yaml_path, yaml_parse_name), "w") as outfile:
-            yaml.dump(setup_options, outfile)
+    # Generate yaml file with parsed setup options
+    _generate_parsed_yaml(setup_options=setup_options, input_yaml_filename=yaml_filename)
 
     # The name of the reporter file includes the phase name, so we need to check each
     # one
@@ -1142,6 +1137,30 @@ def _validate_endstate_energies_for_htf(hybrid_topology_factory_dict: dict, topo
     elif isinstance(current_htf, RESTCapableHybridTopologyFactory):
         for endstate in [0, 1]:
             validate_endstate_energies_point(current_htf, endstate=endstate, minimize=True)
+
+def _generate_parsed_yaml(setup_options, input_yaml_filename):
+    """
+    Creates YAML file with parsed setup options in the working directory of the simulation.
+
+    It adds timestamp and ligands names information (old and new).
+    """
+    from openff.toolkit.topology import Molecule
+    # The parsed yaml file will live in the experiment directory to avoid race conditions with other experiments
+    yaml_path = Path(setup_options['trajectory_directory'])
+    yaml_name = Path(input_yaml_filename).name  # extract name from input/template yaml file.
+    time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    yaml_parse_name = f"perses-{time}-{yaml_name}"
+    # Add timestamp information
+    setup_options["timestamp"] = time
+    # Read input sdf file and save into list
+    ligands_list = Molecule.from_file(setup_options['ligand_file'])
+    # Get names according to indices in parsed setup options
+    setup_options['old_ligand_name'] = ligands_list[setup_options['old_ligand_index']].name
+    setup_options['new_ligand_name'] = ligands_list[setup_options['new_ligand_index']].name
+    # Write parsed and added setup options into yaml file
+    with open(Path.joinpath(yaml_path, yaml_parse_name), "w") as outfile:
+        yaml.dump(setup_options, outfile)
+
 
 
 if __name__ == "__main__":
