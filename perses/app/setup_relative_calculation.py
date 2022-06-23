@@ -1166,8 +1166,8 @@ def _generate_parsed_yaml(setup_options, input_yaml_file_path):
     yaml_parse_name = f"perses-{time}-{yaml_name}"
     # Add timestamp information
     setup_options["timestamp"] = time
-    # Read input sdf file and save into list
-    ligands_list = Molecule.from_file(setup_options['ligand_file'])
+    # Read input sdf file and save into list -- We don't check stereochemistry
+    ligands_list = Molecule.from_file(setup_options['ligand_file'], allow_undefined_stereo=True)
     # Get names according to indices in parsed setup options
     setup_options['old_ligand_name'] = ligands_list[setup_options['old_ligand_index']].name
     setup_options['new_ligand_name'] = ligands_list[setup_options['new_ligand_index']].name
