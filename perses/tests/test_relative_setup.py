@@ -1,4 +1,6 @@
 import os
+import shutil
+
 from pkg_resources import resource_filename
 from simtk import unit
 from perses.dispersed import feptasks
@@ -6,6 +8,9 @@ from perses.app import setup_relative_calculation
 import mdtraj as md
 from openmmtools import states, alchemy, testsystems, cache
 from unittest import skipIf
+
+from perses.tests.utils import enter_temp_directory
+
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
 default_forward_functions = {
@@ -36,6 +41,43 @@ def generate_example_waterbox_states(temperature=300.0*unit.kelvin, pressure=1.0
     cpd_thermodynamic_state = states.CompoundThermodynamicState(thermodynamic_state, [alchemical_state])
 
     return cpd_thermodynamic_state, sampler_state, water_ts.topology
+
+
+def test_parsed_yaml_generation():
+    """
+    Test input yaml options are correctly parsed into output yaml options file. Including extra metadata (timestamp and
+    ligands names).
+    """
+    import yaml
+    from perses.app.setup_relative_calculation import getSetupOptions, _generate_parsed_yaml
+    with enter_temp_directory():
+        base_dir = resource_filename(
+            "perses",
+            os.path.join("data", "Tyk2_ligands_example"),
+        )
+        input_yaml_file = os.path.join(base_dir, "tyk2_0_3.yaml")  # Get yaml path from perses data directory
+        # Read the contents of input YAML file
+        with open(input_yaml_file) as input_file:
+            input_yaml_data = yaml.load(input_file, Loader=yaml.FullLoader)
+        # generate setup options from input file
+        setup_options = getSetupOptions(input_yaml_file)
+        # Copy the ligand file -- needed for getting ligands names
+        shutil.copy(os.path.join(base_dir, 'Tyk2_ligands_shifted.sdf'), ".")
+        # generate parsed yaml file from setup options
+        parsed_yaml_file_path = _generate_parsed_yaml(setup_options=setup_options, input_yaml_file_path=input_yaml_file)
+
+        # Make sure keys in input exist in parsed yaml file
+        with open(parsed_yaml_file_path) as parsed_file:
+            parsed_yaml_data = yaml.load(parsed_file, Loader=yaml.FullLoader)
+        input_keys_set = set(input_yaml_data.keys())
+        parsed_keys_set = set(parsed_yaml_data.keys())
+        assert input_keys_set.issubset(parsed_keys_set), "Input yaml file options are not a subset of the parsed yaml" \
+                                                         " file."
+        # Also check that the metadata keys are added (timestamp and ligands names)
+        metadata_keys_set = {'timestamp', 'old_ligand_name', 'new_ligand_name'}
+        assert metadata_keys_set.issubset(parsed_keys_set), \
+            f"Metadata keys {metadata_keys_set} not found in parsed keys."
+
 
 # TODO fails as integrator not bound to context
 @skipIf(running_on_github_actions, "Skip analysis test on GH Actions.  Currently broken")
@@ -304,6 +346,26 @@ def test_relative_setup_charge_change():
     new_system_charge_sum = sum([old_nbf.getParticleParameters(i)[0].value_in_unit_system(unit.md_unit_system) for i in range(new_nbf.getNumParticles())])
     charge_diff = int(old_system_charge_sum - new_system_charge_sum)
     assert np.isclose(charge_diff, 0), f"charge diff is {charge_diff} but should be zero."
+
+
+def test_relative_setup_solvent_padding():
+    """
+    Check that the user inputted solvent_padding argument to `RelativeFEPSetup` actually changes the padding for the solvent phase
+    """
+    from perses.app.relative_setup import RelativeFEPSetup
+    import numpy as np
+
+    input_solvent_padding = 1.7 * unit.nanometers
+    smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
+    fe_setup = RelativeFEPSetup(
+        ligand_input=smiles_filename,
+        old_ligand_index=0,
+        new_ligand_index=1,
+        forcefield_files=["amber14/tip3p.xml"],
+        small_molecule_forcefield="gaff-2.11",
+        phases=["solvent"],
+        solvent_padding=input_solvent_padding)
+    assert input_solvent_padding == fe_setup._padding, f"Input solvent padding, {input_solvent_padding}, is different from setup object solvent padding, {fe_setup._padding}."
 
 # if __name__=="__main__":
 #     test_run_cdk2_iterations_repex()
