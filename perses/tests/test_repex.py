@@ -84,6 +84,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
         assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6  * dDDG})"
 
 
+@pytest.mark.skip(reason="Currently taking too long in CI.")
 @pytest.mark.gpu_needed
 def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
     """
