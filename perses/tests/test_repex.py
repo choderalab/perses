@@ -32,12 +32,11 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
         for wt_name, mutant_name in mutations:
             # Generate htf
             pdb_filename = resource_filename("perses", f"data/{wt_name}_vacuum.pdb")
-            solvent_delivery = PointMutationExecutor(
+            solvent_delivery = PointMutationExecutor( # TODO: Need to be specify larger padding (1.7 nm) to work with openmm >= 7.8
                 pdb_filename,
                 "1",
                 "2",
                 mutant_name.upper(),
-                padding=1.7 * unit.nanometers,
                 generate_unmodified_hybrid_topology_factory=False,
                 generate_rest_capable_hybrid_topology_factory=True,
                 conduct_endstate_validation=False
@@ -127,12 +126,11 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
             for wt_name, mutant_name in mutations:
                 # Generate htf
                 pdb_filename = resource_filename("perses", f"data/{wt_name}_solvated.cif") if mutation_type == 'forward' else os.path.join(temp_dir, f"{wt_name}.cif")
-                solvent_delivery = PointMutationExecutor(
+                solvent_delivery = PointMutationExecutor( # TODO: Need to be specify larger padding (1.7 nm) to work with openmm >= 7.8
                     pdb_filename,
                     "1",
                     "2",
                     mutant_name.upper(),
-                    padding=1.7 * unit.nanometers,
                     is_solvated=True,
                     generate_unmodified_hybrid_topology_factory=False,
                     generate_rest_capable_hybrid_topology_factory=True,
