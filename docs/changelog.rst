@@ -8,6 +8,25 @@ This section lists features and improvements of note in each release.
 
 The full release history can be viewed `at the GitHub perses releases page <https://github.com/choderalab/perses/releases>`_.
 
+0.10.1 - Release
+----------------
+
+Bugfix release.
+
+Bugfixes
+^^^^^^^^
+- Bug when trying to use the new ``RESTCapableHybridTopologyFactory`` in the small molecule pipeline -- fixed by not specifying a protocol, hence allowing the ``HybridCompatibilityMixin`` object to automatically handle it. Issue `#1039 <https://github.com/choderalab/perses/issues/1039>`_ (PR `#1045 <https://github.com/choderalab/perses/pull/1045>`_)
+- Bug in ``create_endstates_from_real_systems()`` -- fixed by setting the global parameters for valence forces to the appropriate endstate. Also added tyk2 transformation test. Issue `#1041 <https://github.com/choderalab/perses/issues/1041>`_ (PR `#1050 <https://github.com/choderalab/perses/pull/1050>`_).
+- Bug in the ``RESTCapableHybridTopologyFactory`` lifting expression -- fixed by separating the cutoff distance from the lifting distance. (PR `#1046 <https://github.com/choderalab/perses/pull/1046>`_)
+- Fix bug in ``RelativeFEPSetup`` that prevents user from controlling the padding when solvating for solvent phase calculations. (PR `#1053 <https://github.com/choderalab/perses/pull/1053>`_)
+- Bug in ``test_unsampled_endstate_energies_GPU`` and ``test_RESTCapableHybridTopologyFactory_energies_GPU`` -- fixed by removing unit-less ``rest_radius`` argument and using default instead. (PR `#1057 <https://github.com/choderalab/perses/pull/1057>`_)
+
+Enhancements
+^^^^^^^^^^^^
+- Add flag ``transform_waters_into_ions_for_charge_changes`` for disabling the introduction of a counterion for charge changing transformations. Issue `#1004 <https://github.com/choderalab/perses/issues/1004>`_ (PR `#1030 <https://github.com/choderalab/perses/pull/1030>`_)
+- Perses output yaml file now adds timestamp and ligands names information (for old and new ligands). Issue `#998 <https://github.com/choderalab/perses/issues/998>`_ (PR `#1052 <https://github.com/choderalab/perses/pull/1052>`_).
+- Protein mutation repex internal consistency tests to ensure convergence. So far only testing neutral transformations. Issue `#1044 <https://github.com/choderalab/perses/issues/1044>`_ (PR `#1054 <https://github.com/choderalab/perses/pull/1054>`_).
+
 0.10.0 - Release
 ----------------
 
