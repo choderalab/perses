@@ -119,7 +119,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
     platform = configure_platform(utils.get_fastest_platform().getName())
 
     data = {}
-    n_iterations = 2000
+    n_iterations = 3000
     d_mutations = {'forward': [('arg', 'ala'), ('lys', 'ala')], 'reverse': [('ala', 'arg'), ('ala', 'lys')]}
 
     with enter_temp_directory() as temp_dir:
