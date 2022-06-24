@@ -190,3 +190,98 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
 
         assert np.isclose([arg_ala_arg], [lys_ala_lys], atol=ENERGY_DIFF_TOLERANCE_KT), \
             f"ARG-ALA-ARG is {arg_ala_arg}. LYS-ALA-LYS is {lys_ala_lys}."
+
+def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
+    """
+    Run CCC->CCCC and CCCC->CCC repex with the RESTCapableHybridTopologyFactory and make sure that the free energies are
+    equal and opposite.
+
+    """
+
+    from pkg_resources import resource_filename
+    import numpy as np
+
+    from openmm import unit
+
+    from perses.dispersed.utils import configure_platform
+    from perses.app.relative_setup import RelativeFEPSetup
+    from perses.samplers.multistate import HybridRepexSampler
+    from perses.annihilation.lambda_protocol import LambdaProtocol
+    from perses.annihilation.relative import RESTCapableHybridTopologyFactory
+
+    from openmmtools.multistate import MultiStateReporter, MultiStateSamplerAnalyzer
+    from openmmtools import cache, utils, mcmc
+    platform = configure_platform(utils.get_fastest_platform().getName())
+
+    data = {}
+    n_iterations = 3000
+    n_states = 12
+    transformations = [(0, 1), (1, 0)]  # Ligand indices in perses/data/test.smi
+
+    with enter_temp_directory() as temp_dir:
+        for ligand_A_index, ligand_B_index in transformations:
+            # Generate topology proposal and positions
+            smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
+            fe_setup = RelativeFEPSetup(
+                ligand_input=smiles_filename,
+                old_ligand_index=ligand_A_index,
+                new_ligand_index=ligand_B_index,
+                forcefield_files=["amber14/tip3p.xml"],
+                small_molecule_forcefield="gaff-2.11",
+                phases=["solvent"],
+                solvent_padding=1.7 * unit.nanometers)
+
+            # Generate htf
+            htf = RESTCapableHybridTopologyFactory(
+                topology_proposal=fe_setup.solvent_topology_proposal,
+                current_positions=fe_setup.solvent_old_positions,
+                new_positions=fe_setup.solvent_new_positions
+            )
+
+            # Create a reporter
+            selection = "not water"
+            reporter_file = os.path.join(temp_dir, f"{ligand_A_index}_{ligand_B_index}.nc")
+            reporter = MultiStateReporter(
+                reporter_file,
+                analysis_particle_indices=htf.hybrid_topology.select(selection),
+                checkpoint_interval=10)
+
+            # Build the hybrid repex sampler
+            sampler = HybridRepexSampler(
+                mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
+                    timestep=4.0 * unit.femtoseconds,
+                    collision_rate=1.0 / unit.picosecond,
+                    n_steps=50,
+                    reassign_velocities=False,
+                    n_restart_attempts=20,
+                    splitting="V R R R O R R R V",
+                    constraint_tolerance=1e-06),
+                replica_mixing_scheme='swap-all',
+                hybrid_factory=htf,
+                online_analysis_interval=10)
+
+            sampler.setup(
+                n_states=n_states,
+                temperature=300 * unit.kelvin,
+                storage_file=reporter,
+                minimisation_steps=0,
+                endstates=True)
+
+            sampler.energy_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
+            sampler.sampler_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
+
+            # Run repex
+            sampler.extend(n_iterations)
+
+            # Retrieve free energy
+            reporter.close()
+            reporter = MultiStateReporter(reporter_file)
+            analyzer = MultiStateSamplerAnalyzer(reporter, max_n_iterations=n_iterations)
+            f_ij, df_ij = analyzer.get_free_energy()
+            data[f"{ligand_A_index}-{ligand_B_index}"] = {'free_energy': f_ij[0, -1], 'error': df_ij[0, -1]}
+
+        DDG = abs(data['0-1']['free_energy'] - data['1-0']['free_energy'] * -1)
+        dDDG = np.sqrt(data['0-1']['error'] ** 2 + data['1-0']['error'] ** 2)
+        assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6 * dDDG})"
+
+
