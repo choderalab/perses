@@ -305,5 +305,25 @@ def test_relative_setup_charge_change():
     charge_diff = int(old_system_charge_sum - new_system_charge_sum)
     assert np.isclose(charge_diff, 0), f"charge diff is {charge_diff} but should be zero."
 
+
+def test_relative_setup_solvent_padding():
+    """
+    Check that the user inputted solvent_padding argument to `RelativeFEPSetup` actually changes the padding for the solvent phase
+    """
+    from perses.app.relative_setup import RelativeFEPSetup
+    import numpy as np
+
+    input_solvent_padding = 1.7 * unit.nanometers
+    smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
+    fe_setup = RelativeFEPSetup(
+        ligand_input=smiles_filename,
+        old_ligand_index=0,
+        new_ligand_index=1,
+        forcefield_files=["amber14/tip3p.xml"],
+        small_molecule_forcefield="gaff-2.11",
+        phases=["solvent"],
+        solvent_padding=input_solvent_padding)
+    assert input_solvent_padding == fe_setup._padding
+
 # if __name__=="__main__":
 #     test_run_cdk2_iterations_repex()

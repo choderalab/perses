@@ -826,8 +826,6 @@ class RelativeFEPSetup(object):
         #hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
         #modeller.delete(hs)
         #modeller.addHydrogens(forcefield=self._system_generator.forcefield)
-        _logger.info(f'box_dimensions: {box_dimensions}')
-        _logger.info(f'solvent padding: {self._padding}')
         run_solvate = True
 
         if phase == 'vacuum':
@@ -839,8 +837,10 @@ class RelativeFEPSetup(object):
         if run_solvate:
             _logger.info(f"\tpreparing to add solvent")
             if box_dimensions is None:
+                _logger.info(f'solvent padding: {self._padding}')
                 modeller.addSolvent(self._system_generator.forcefield, model=model, padding=self._padding, ionicStrength=ionic_strength)
             else:
+                _logger.info(f'box_dimensions: {box_dimensions}')
                 modeller.addSolvent(self._system_generator.forcefield, model=model, ionicStrength=ionic_strength, boxSize=box_dimensions)
         solvated_topology = modeller.getTopology()
         if phase == 'complex' and self._padding == 0. and box_dimensions is not None:
