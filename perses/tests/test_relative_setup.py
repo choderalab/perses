@@ -323,7 +323,7 @@ def test_relative_setup_solvent_padding():
         small_molecule_forcefield="gaff-2.11",
         phases=["solvent"],
         solvent_padding=input_solvent_padding)
-    assert input_solvent_padding == fe_setup._padding
+    assert input_solvent_padding == fe_setup._padding, f"Input solvent padding, {input_solvent_padding}, is different from setup object solvent padding, {fe_setup._padding}."
 
 # if __name__=="__main__":
 #     test_run_cdk2_iterations_repex()
