@@ -829,8 +829,7 @@ class RelativeFEPSetup(object):
         _logger.info(f'box_dimensions: {box_dimensions}')
         _logger.info(f'solvent padding: {self._padding}')
         run_solvate = True
-        if phase == 'solvent':
-            self._padding = 9. * unit.angstrom
+
         if phase == 'vacuum':
             run_solvate = False
             _logger.info(f"\tSkipping solvation of vacuum perturbation")
