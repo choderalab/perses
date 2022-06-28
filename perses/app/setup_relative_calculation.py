@@ -1033,7 +1033,7 @@ def _process_overrides(overrides, yaml_options):
 
     overrides_dict = {}
     for opt in overrides:
-        key, val = opt.split(":")
+        key, val = opt.split(":", maxsplit=1)
 
         # Check for duplicates
         if key in overrides_dict:
