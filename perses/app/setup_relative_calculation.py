@@ -748,13 +748,8 @@ def run(yaml_filename=None, override_string=None):
     setup_options = getSetupOptions(yaml_filename, override_string=override_string)
     _logger.debug(f"Setup Options {setup_options}")
 
-    # The parsed yaml file will live in the experiment directory to avoid race conditions with other experiments
-    yaml_path = Path(setup_options['trajectory_directory'])
-    yaml_name = Path(yaml_filename).name  # extract name from input/template yaml file.
-    time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-    yaml_parse_name = f"perses-{time}-{yaml_name}"
-    with open(Path.joinpath(yaml_path, yaml_parse_name), "w") as outfile:
-            yaml.dump(setup_options, outfile)
+    # Generate yaml file with parsed setup options
+    _generate_parsed_yaml(setup_options=setup_options, input_yaml_file_path=yaml_filename)
 
     # The name of the reporter file includes the phase name, so we need to check each
     # one
@@ -1038,7 +1033,7 @@ def _process_overrides(overrides, yaml_options):
 
     overrides_dict = {}
     for opt in overrides:
-        key, val = opt.split(":")
+        key, val = opt.split(":", maxsplit=1)
 
         # Check for duplicates
         if key in overrides_dict:
@@ -1096,9 +1091,9 @@ def _generate_htf(phase: str, topology_proposal_dictionary: dict, setup_options:
         except KeyError:
             _logger.info("'rest_radius' not specified. Using default value.")
         try:
-            rest_specific_options.update({'w_scale': setup_options['w_scale']})
+            rest_specific_options.update({'w_lifting': setup_options['w_lifting']})
         except KeyError:
-            _logger.info("'w_scale' not specified. Using default value.")
+            _logger.info("'w_lifting' not specified. Using default value.")
 
         # update htf_setup_dictionary with new parameters
         htf_setup_dict.update(rest_specific_options)
@@ -1142,6 +1137,47 @@ def _validate_endstate_energies_for_htf(hybrid_topology_factory_dict: dict, topo
     elif isinstance(current_htf, RESTCapableHybridTopologyFactory):
         for endstate in [0, 1]:
             validate_endstate_energies_point(current_htf, endstate=endstate, minimize=True)
+
+
+def _generate_parsed_yaml(setup_options, input_yaml_file_path):
+    """
+    Creates YAML file with parsed setup options in the working directory of the simulation.
+
+    It adds timestamp and ligands names information (old and new).
+
+    Parameters
+    ----------
+    setup_options: dict
+        Dictionary with perses setup options. Meant to be the returned dictionary from 
+        ``perses.app.setup_relative_calculation.getSetupOptions``,
+    input_yaml_file_path: str or Path object
+        Path to input yaml file with perses parameters
+
+    Returns
+    -------
+    out_yaml_path: str
+        String with the path to the generated parsed yaml file.
+    """
+    from openff.toolkit.topology import Molecule
+    # The parsed yaml file will live in the experiment directory to avoid race conditions with other experiments
+    yaml_path = Path(setup_options['trajectory_directory'])
+    yaml_name = Path(input_yaml_file_path).name  # extract name from input/template yaml file.
+    time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    yaml_parse_name = f"perses-{time}-{yaml_name}"
+    # Add timestamp information
+    setup_options["timestamp"] = time
+    # Read input sdf file and save into list -- We don't check stereochemistry
+    ligands_list = Molecule.from_file(setup_options['ligand_file'], allow_undefined_stereo=True)
+    # Get names according to indices in parsed setup options
+    setup_options['old_ligand_name'] = ligands_list[setup_options['old_ligand_index']].name
+    setup_options['new_ligand_name'] = ligands_list[setup_options['new_ligand_index']].name
+    # Write parsed and added setup options into yaml file
+    out_file_path = Path.joinpath(yaml_path, yaml_parse_name)
+    with open(out_file_path, "w") as outfile:
+        yaml.dump(setup_options, outfile)
+
+    return out_file_path
+
 
 
 if __name__ == "__main__":
