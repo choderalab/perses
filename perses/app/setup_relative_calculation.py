@@ -70,8 +70,9 @@ def getSetupOptions(filename, override_string=None):
     phases : list of strings
         phases to simulate, can be 'complex', 'solvent' or 'vacuum'
     """
+
+    filename = AnyPath(filename)
     yaml_file = open(filename, 'r')
-    yaml_file = AnyPath(yaml_file)
     setup_options = yaml.load(yaml_file, Loader=yaml.FullLoader)
     yaml_file.close()
     if override_string:
@@ -531,8 +532,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
 
         _logger.info(f"\twriting pickle output...")
         if setup_pickle_file is not None:
-            #TODO Problem with os.getcwd
-            with open(os.path.join(os.getcwd(), trajectory_directory, setup_pickle_file), 'wb') as f:
+            with open(AnyPath(os.path.join(trajectory_directory, setup_pickle_file)), 'wb') as f:
                 try:
                     pickle.dump(fe_setup, f)
                     _logger.info(f"\tsuccessfully dumped pickle.")
