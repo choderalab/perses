@@ -238,6 +238,14 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
                 new_positions=fe_setup.solvent_new_positions
             )
 
+            # Make sure LRC is set correctly
+            hybrid_system = htf.hybrid_system
+            force_dict = {force.getName(): index for index, force in enumerate(hybrid_system.getForces())}
+            custom_force = hybrid_system.getForce(force_dict['CustomNonbondedForce_sterics'])
+            nonbonded_force = hybrid_system.getForce(force_dict['NonbondedForce_sterics'])
+            custom_force.setUseLongRangeCorrection(False)
+            nonbonded_force.setUseDispersionCorrection(True)
+
             # Create a reporter
             selection = "not water"
             reporter_file = os.path.join(temp_dir, f"{ligand_A_index}_{ligand_B_index}.nc")
@@ -339,6 +347,14 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
                     current_positions=old_positions,
                     new_positions=new_positions
                 )
+
+                # Make sure LRC is set correctly
+                hybrid_system = htf.hybrid_system
+                force_dict = {force.getName(): index for index, force in enumerate(hybrid_system.getForces())}
+                custom_force = hybrid_system.getForce(force_dict['CustomNonbondedForce_sterics'])
+                nonbonded_force = hybrid_system.getForce(force_dict['NonbondedForce_sterics'])
+                custom_force.setUseLongRangeCorrection(False)
+                nonbonded_force.setUseDispersionCorrection(True)
 
                 # Create a reporter
                 selection = "not water"
