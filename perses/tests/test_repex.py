@@ -315,9 +315,9 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
     with enter_temp_directory() as temp_dir:
         for ligand_A_index, ligand_B_index in transformations:
             # Generate topology proposal and positions
-            guest_1_filename = resource_filename("perses", os.path.join("data", "host-guest", "a1.mol2"))
-            guest_2_filename = resource_filename("perses", os.path.join("data", "host-guest", "a2.mol2"))
-            host_filename = resource_filename("perses", os.path.join("data", "host-guest", "cb7.mol2"))
+            guest_1_filename = resource_filename("perses", os.path.join("data", "host-guest", "a1.sybyl.mol2"))
+            guest_2_filename = resource_filename("perses", os.path.join("data", "host-guest", "a2.sybyl.mol2"))
+            host_filename = resource_filename("perses", os.path.join("data", "host-guest", "cb7.sybyl.mol2"))
             fe_setup = RelativeFEPSetup(
                 ligand_input=[guest_1_filename, guest_2_filename],
                 receptor_mol2_filename=host_filename,
@@ -332,8 +332,8 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
             for phase in phases:
                 # Generate htf
                 topology_proposal = fe_setup.solvent_topology_proposal if phase == 'solvent' else fe_setup.complex_topology_proposal
-                old_positions = e_setup.solvent_old_positions if phase == 'solvent' else fe_setup.complex_old_positions
-                new_positions = e_setup.solvent_new_positions if phase == 'solvent' else fe_setup.complex_new_positions
+                old_positions = fe_setup.solvent_old_positions if phase == 'solvent' else fe_setup.complex_old_positions
+                new_positions = fe_setup.solvent_new_positions if phase == 'solvent' else fe_setup.complex_new_positions
                 htf = RESTCapableHybridTopologyFactory(
                     topology_proposal=topology_proposal,
                     current_positions=old_positions,
@@ -382,11 +382,10 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
                 f_ij, df_ij = analyzer.get_free_energy()
                 data[f"{ligand_A_index}-{ligand_B_index}_{phase}"] = {'free_energy': f_ij[0, -1], 'error': df_ij[0, -1]}
 
-        forward_DG = data['0-1_complex']['free_energy'] - data['0-1_apo']['free_energy']
-        reverse_DG = data['1-0_complex']['free_energy'] - data['1-0_apo']['free_energy']
-        print(forward_DG)
-        print(reverse_DG)
-        dDDG = np.sqrt(data['0-1_complex']['error'] ** 2 + data['0-1_apo']['error'] ** 2 + data['1-0_complex']['error'] ** 2 + data['1-0_apo']['error'] ** 2)
+        forward_DG = data['0-1_complex']['free_energy'] - data['0-1_solvent']['free_energy']
+        reverse_DG = data['1-0_complex']['free_energy'] - data['1-0_solvent']['free_energy']
+        DDG = abs(forward_DG - reverse_DG)
+        dDDG = np.sqrt(data['0-1_complex']['error'] ** 2 + data['0-1_solvent']['error'] ** 2 + data['1-0_complex']['error'] ** 2 + data['1-0_solvent']['error'] ** 2)
         assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6 * dDDG})"
 
 
