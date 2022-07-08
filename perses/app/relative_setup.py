@@ -166,24 +166,24 @@ class RelativeFEPSetup(object):
 
         if protein_pdb_filename:
             self.protein_pdb_filename = AnyPath(protein_pdb_filename)
-        else: 
+        else:
             self.protein_pdb_filename = protein_pdb_filename
-        
+
         if receptor_mol2_filename:
             self.receptor_mol2_filename = AnyPath(receptor_mol2_filename)
         else:
             self.receptor_mol2_filename = receptor_mol2_filename
-        
+
         if small_molecule_parameters_cache:
             self.small_molecule_parameters_cache = AnyPath(small_molecule_parameters_cache)
         else:
             self.small_molecule_parameters_cache = small_molecule_parameters_cache
-        
+
         if trajectory_prefix:
             self._trajectory_prefix = AnyPath(trajectory_prefix)
         else:
             self._trajectory_prefix = trajectory_prefix
-        
+
         if trajectory_directory:
             self._trajectory_directory = AnyPath(trajectory_directory)
         else:
@@ -194,7 +194,7 @@ class RelativeFEPSetup(object):
                 self.forcefield_files = [AnyPath(forcefield_file) for forcefield_file in forcefield_files]
             else:
                 self.forcefield_files = AnyPath(forcefield_files)
-        else: 
+        else:
             self.forcefield_files = forcefield_files
 
 
