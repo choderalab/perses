@@ -874,7 +874,7 @@ class RelativeFEPSetup(object):
         solvated_positions = modeller.getPositions()
 
         # canonicalize the solvated positions: turn tuples into np.array
-        ssuffixolvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
+        solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
         _logger.info(f"\tparameterizing...")
         solvated_system = self._system_generator.create_system(solvated_topology)
         _logger.info(f"\tSystem parameterized")
