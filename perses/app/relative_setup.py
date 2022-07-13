@@ -199,7 +199,7 @@ class RelativeFEPSetup(object):
 
 
         if self._use_given_geometries:
-            assert self._ligand_input.suffex == '.sdf' or self._ligand_input.suffex == '.mol2', f"cannot use deterministic atom placement if the ligand input files do not contain geometry information (e.g. in .sdf or .mol2 format)"
+            assert self._ligand_input.suffix == '.sdf' or self._ligand_input.suffix == '.mol2', f"cannot use deterministic atom placement if the ligand input files do not contain geometry information (e.g. in .sdf or .mol2 format)"
             assert 'complex' in phases, f"cannot use deterministic atom placement if complex is not in the specified phases to generate"
             # TODO: add deterministic geometry proposal to solvent and vacuum
 

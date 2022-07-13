@@ -66,3 +66,27 @@ def test_dummy_cli_with_override(in_tmpdir):
             ],
         )
         assert result.exit_code == 0
+
+def test_s3_yaml_read(in_tmpdir):
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        protein_pdb = resource_filename(
+            "perses", os.path.join("data", "Tyk2_ligands_example", "Tyk2_protein.pdb")
+        )
+        ligand_file = resource_filename(
+            "perses",
+            os.path.join("data", "Tyk2_ligands_example", "Tyk2_ligands_shifted.sdf"),
+        )
+        result = runner.invoke(
+            cli,
+            [
+                "--yaml",
+                "test.yaml",
+                "--override",
+                f"protein_pdb:{protein_pdb}",
+                "--override",
+                f"ligand_file:{ligand_file}",
+            ],
+        )
+        assert result.exit_code == 0
