@@ -1,6 +1,7 @@
 import os
 import subprocess
 
+import pytest
 from click.testing import CliRunner
 from pkg_resources import resource_filename
 
@@ -68,6 +69,10 @@ def test_dummy_cli_with_override(in_tmpdir):
         assert result.exit_code == 0
 
 
+@pytest.mark.skipif(
+    not os.environ.get("GITHUB_ACTIONS", None),
+    reason="This test needs API keys from AWS to work",
+)
 def test_s3_yaml_read(in_tmpdir):
     from cloudpathlib import S3Client
 
