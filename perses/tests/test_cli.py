@@ -67,7 +67,17 @@ def test_dummy_cli_with_override(in_tmpdir):
         )
         assert result.exit_code == 0
 
+
 def test_s3_yaml_read(in_tmpdir):
+    from cloudpathlib import S3Client
+
+    # This is needed since we use aws envars in CI, so we need to use
+    # non-default names
+    client = S3Client(
+        aws_access_key_id=os.getenv("S3_TEST_KEY"),
+        aws_secret_access_key=os.getenv("S3_TEST_SECRET"),
+    )
+    client.set_as_default_client()
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -82,7 +92,7 @@ def test_s3_yaml_read(in_tmpdir):
             cli,
             [
                 "--yaml",
-                "test.yaml",
+                "s3://perses-testing/s3_test.yaml",
                 "--override",
                 f"protein_pdb:{protein_pdb}",
                 "--override",
