@@ -8,6 +8,7 @@ TODO:
 
 import os
 from unittest import skipIf
+import pytest
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
 #default arguments for tests
@@ -26,7 +27,8 @@ DEFAULT_N_STEPS_NEQ = 250
 forcefield_files = ['amber/ff14SB.xml','amber/tip3p_standard.xml','amber/tip3p_HFE_multivalent.xml']
 
 
-@skipIf(running_on_github_actions, "Skip slow test on GH Actions")
+#@skipIf(running_on_github_actions, "Skip slow test on GH Actions")
+@pytest.mark.skip(reason="Skip slow test on GH Actions")
 def test_pipeline_small_molecule():
     """Test setup of small molecule transformation in complex and solvent (for BACE from JACS set) on Folding@home"""
     from pkg_resources import resource_filename
@@ -76,7 +78,8 @@ def test_pipeline_small_molecule_solvent():
     for val in projs.values():
         os.system(f"rm -r {val}")
 
-@skipIf(running_on_github_actions, "Skip slow test on GH Actions")
+#@skipIf(running_on_github_actions, "Skip slow test on GH Actions")
+@pytest.mark.skip(reason="Skip slow test on GH Actions")
 def test_pipeline_protein():
     """Test setup of protein mutation in complex and apo (for barnase-barstar) for Folding@home"""
     from pkg_resources import resource_filename

@@ -209,7 +209,8 @@ def test_simple_overlap_pairs(pairs=None):
         test_simple_overlap(pair[1],pair[0])
 
 @nottest # This is, in fact, a helper function that is called in other working tests
-@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+#@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+@pytest.mark.skip(reason="Skip helper function on GH Actions")
 def test_simple_overlap(name1='pentane', name2='butane', forcefield_kwargs=None, system_generator_kwargs=None):
     """Test that the variance of the hybrid -> real perturbation in vacuum is sufficiently small.
 
@@ -238,7 +239,8 @@ def test_simple_overlap(name1='pentane', name2='butane', forcefield_kwargs=None,
             message += str(e)
             raise Exception(message)
 
-@skipIf(running_on_github_actions, "Skip expensive test on GH Actions")
+#@skipIf(running_on_github_actions, "Skip expensive test on GH Actions")
+@pytest.mark.skip(reason="Skip expensive test on GH Actions")
 def test_hostguest_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for host-guest system in vacuum"""
     topology_proposal, current_positions, new_positions = utils.generate_vacuum_hostguest_proposal()
@@ -252,8 +254,9 @@ def test_hostguest_overlap():
             message += str(e)
             raise Exception(message)
 
-@skipIf(running_on_github_actions, "Skip broken test on GH Actions")
+#@skipIf(running_on_github_actions, "Skip broken test on GH Actions")
 @nottest # At the moment, the mapping between imatinib and nilotinib is faulty
+@pytest.mark.skip(reason="Skip broken test on GH Actions")
 def test_difficult_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for imatinib->nilotinib in solvent"""
     name1 = 'imatinib'
@@ -1201,7 +1204,7 @@ def test_unsampled_endstate_energies_GPU():
    RESTCapableHybridTopologyFactory and HybridTopologyFactory.
 
    Test systems: alanine dipeptide in solvent and barstar in solvent
-   
+
    Only run this on a GPU as the CPU is too slow.
    """
 

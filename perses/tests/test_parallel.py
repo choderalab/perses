@@ -5,6 +5,7 @@ import numpy as np
 import os
 from nose.tools import nottest
 from unittest import skipIf
+import pytest
 
 ###
 from perses.dispersed import parallel
@@ -34,7 +35,8 @@ def test_Parallelism_local():
 
 
 # Run this test on a cluster to test parallelism
-@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+#@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+@pytest.mark.skip(reason="Skip helper function on GH Actions")
 def test_Parallelism_distributed():
    """
    following function will create a distributed Parallelism instance and run all of the used methods.
@@ -49,7 +51,8 @@ def test_Parallelism_distributed():
 
 
 @nottest
-@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+#@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+@pytest.mark.skip(reason="Skip helper function on GH Actions")
 def run_parallelism(_parallel, data):
     """
     helper function to run through the parallelism tests
@@ -112,7 +115,8 @@ def run_parallelism(_parallel, data):
 
 
 @nottest
-@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+#@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+@pytest.mark.skip(reason="Skip helper function on GH Actions")
 def dummy_function(_arg):
     """
     dummy function to distribute;

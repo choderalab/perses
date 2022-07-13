@@ -11,6 +11,7 @@ from perses.dispersed.smc import SequentialMonteCarlo
 from perses.dispersed.utils import *
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
+import pytest
 #######################
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
@@ -36,7 +37,8 @@ os.system(f"mkdir {trajectory_directory}")
 #######################
 
 @nottest
-@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+#@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+@pytest.mark.skip(reason="Skip helper function on GH Actions")
 def sMC_setup():
     """
     function to setup local sMC
