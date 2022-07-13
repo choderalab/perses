@@ -85,6 +85,7 @@ def test_s3_yaml_read(in_tmpdir):
     client.set_as_default_client()
 
     runner = CliRunner()
+    env = os.environ
     with runner.isolated_filesystem():
         protein_pdb = resource_filename(
             "perses", os.path.join("data", "Tyk2_ligands_example", "Tyk2_protein.pdb")
@@ -103,5 +104,6 @@ def test_s3_yaml_read(in_tmpdir):
                 "--override",
                 f"ligand_file:{ligand_file}",
             ],
+            env=env,
         )
         assert result.exit_code == 0
