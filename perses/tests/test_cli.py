@@ -76,12 +76,6 @@ def test_dummy_cli_with_override(in_tmpdir):
 def test_s3_yaml_read(in_tmpdir):
     runner = CliRunner()
 
-    key = os.getenv("S3_TEST_KEY")
-    secret = os.getenv("S3_TEST_SECRET")
-
-    env = os.environ
-    env["AWS_SECRET_ACCESS_KEY"] = secret
-    env["AWS_ACCESS_KEY_ID"] = key
     with runner.isolated_filesystem():
         protein_pdb = resource_filename(
             "perses", os.path.join("data", "Tyk2_ligands_example", "Tyk2_protein.pdb")
@@ -100,6 +94,5 @@ def test_s3_yaml_read(in_tmpdir):
                 "--override",
                 f"ligand_file:{ligand_file}",
             ],
-            env=env,
         )
         assert result.exit_code == 0
