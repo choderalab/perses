@@ -108,6 +108,7 @@ def sMC_setup():
     assert decorrelated_1 == sorted(decorrelated_1_files), f"there is a discrepancy between the decorrelated 1 equilibrium states and the decorrelated equilibria saved to disk"
     return ne_fep
 
+@pytest.mark.skip(reason="Skip helper function on GH Actions")
 def test_local_AIS():
     """
     test local annealed importance sampling method in it's entirety
