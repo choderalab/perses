@@ -50,8 +50,9 @@ def test_Parallelism_distributed():
    run_parallelism(_parallel, data)
 
 
-@nottest
+
 #@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+@nottest
 @pytest.mark.skip(reason="Skip helper function on GH Actions")
 def run_parallelism(_parallel, data):
     """
@@ -114,8 +115,9 @@ def run_parallelism(_parallel, data):
         assert all(i == j for i, j in zip(locals, run_all_futures)), f"run_all is returning {run_all_futures} instead of {dummy_function(data)}"
 
 
-@nottest
+
 #@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+@nottest
 @pytest.mark.skip(reason="Skip helper function on GH Actions")
 def dummy_function(_arg):
     """

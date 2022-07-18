@@ -909,9 +909,10 @@ def align_molecules(mol1, mol2):
         new_to_old_atom_mapping[new_index] = old_index
     return new_to_old_atom_mapping
 
+
+#@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 @attr('advanced')
 @nottest
-#@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 @pytest.mark.skip(reason="Skip advanced test on GH Actions")
 def test_mutate_from_all_to_all(): # TODO: fix protein mutations
     """
@@ -970,9 +971,10 @@ def test_mutate_from_all_to_all(): # TODO: fix protein mutations
             if np.isnan(potential_without_units):
                 raise Exception("Energy after proposal is NaN")
 
+
+#@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 @attr('advanced')
 @nottest
-#@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 @pytest.mark.skip(reason="Skip advanced test on GH Actions")
 def test_propose_lysozyme_ligands(): # TODO: fix protein mutations
     """
@@ -984,9 +986,10 @@ def test_propose_lysozyme_ligands(): # TODO: fix protein mutations
     proposals = make_geometry_proposal_array(smiles_list, forcefield=['data/T4-inhibitors.xml', 'data/gaff.xml'])
     run_proposals(proposals)
 
+
+#@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 @attr('advanced')
 @nottest
-#@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 @pytest.mark.skip(reason="Skip advanced test on GH Actions")
 def test_propose_kinase_inhibitors(): # TODO: fix protein mutations
     from perses.tests.testsystems import KinaseInhibitorsTestSystem

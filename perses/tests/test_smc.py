@@ -36,8 +36,9 @@ internal_parallelism = {'library': ('dask', 'LSF'), 'num_processes': 2}
 os.system(f"mkdir {trajectory_directory}")
 #######################
 
-@nottest
+
 #@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+@nottest
 @pytest.mark.skip(reason="Skip helper function on GH Actions")
 def sMC_setup():
     """

@@ -208,8 +208,9 @@ def test_simple_overlap_pairs(pairs=None):
         print('{} -> {}'.format(pair[1],pair[0]))
         test_simple_overlap(pair[1],pair[0])
 
-@nottest # This is, in fact, a helper function that is called in other working tests
+
 #@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+@nottest # This is, in fact, a helper function that is called in other working tests
 @pytest.mark.skip(reason="Skip helper function on GH Actions")
 def test_simple_overlap(name1='pentane', name2='butane', forcefield_kwargs=None, system_generator_kwargs=None):
     """Test that the variance of the hybrid -> real perturbation in vacuum is sufficiently small.
