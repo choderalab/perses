@@ -74,18 +74,14 @@ def test_dummy_cli_with_override(in_tmpdir):
     reason="This test needs API keys from AWS to work",
 )
 def test_s3_yaml_read(in_tmpdir):
-    from cloudpathlib import S3Client
-
-    # This is needed since we use aws envars in CI, so we need to use
-    # non-default names
-    client = S3Client(
-        aws_access_key_id=os.getenv("S3_TEST_KEY"),
-        aws_secret_access_key=os.getenv("S3_TEST_SECRET"),
-    )
-    client.set_as_default_client()
-
     runner = CliRunner()
+
+    key = os.getenv("S3_TEST_KEY")
+    secret = os.getenv("S3_TEST_SECRET")
+
     env = os.environ
+    env["AWS_SECRET_ACCESS_KEY"] = secret
+    env["AWS_ACCESS_KEY_ID"] = key
     with runner.isolated_filesystem():
         protein_pdb = resource_filename(
             "perses", os.path.join("data", "Tyk2_ligands_example", "Tyk2_protein.pdb")
