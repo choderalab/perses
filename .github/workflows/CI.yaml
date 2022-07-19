@@ -88,9 +88,12 @@ jobs:
 
       - name: Test the package
         shell: bash -l {0}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_TEST_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_TEST_SECRET }}
         run: |
           export TRAVIS=true
-          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto -m "not gpu_needed" perses/tests
+          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto -m "not gpu_needed" -k test_s3_yaml_read perses/tests
 
       - name: Codecov
         if: ${{ github.repository == 'choderalab/perses'
