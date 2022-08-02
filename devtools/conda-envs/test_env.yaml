@@ -20,7 +20,7 @@ dependencies:
   - openmm >=7.6
   - openmoltools # may need to sort out ambermini/ambertools/parmed dependencies (we don't want ambertools)
   - openmmtools >=0.21.2 # may need to sort out ambermini/ambertools/parmed dependencies
-  - numba
+  - numba==0.56.0
   - netcdf4
   - matplotlib
   - seaborn
