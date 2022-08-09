@@ -30,7 +30,7 @@ def get_data_filename(relative_path):
     fn = resource_filename('perses', relative_path)
 
     if not os.path.exists(fn):
-        raise valueerror("sorry! %s does not exist. if you just added it, you'll have to re-install" % fn)
+        raise ValueError(f"sorry! {fn} does not exist. if you just added it, you'll have to re-install")
 
     return fn
 
@@ -123,3 +123,15 @@ def serialize(item, filename):
         with open(filename, 'w') as outfile:
             serialized_thing = XmlSerializer.serialize(item)
             outfile.write(serialized_thing)
+
+
+def concatenate_files(input_files, output_file, endfile=""):
+    """
+    Concatenate files given in input_files iterator into output_file.
+    """
+    with open(output_file, 'w') as outfile:
+        for filename in input_files:
+            with open(filename) as infile:
+                for line in infile:
+                    outfile.write(line)
+                outfile.write(endfile)  # Write last line
