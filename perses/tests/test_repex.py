@@ -104,7 +104,6 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
 
     """
 
-    import tempfile
     from pkg_resources import resource_filename
     import numpy as np
 
@@ -206,7 +205,6 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
     from perses.dispersed.utils import configure_platform
     from perses.app.relative_setup import RelativeFEPSetup
     from perses.samplers.multistate import HybridRepexSampler
-    from perses.annihilation.lambda_protocol import LambdaProtocol
     from perses.annihilation.relative import RESTCapableHybridTopologyFactory
 
     from openmmtools.multistate import MultiStateReporter, MultiStateSamplerAnalyzer
@@ -292,6 +290,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
         dDDG = np.sqrt(data['0-1']['error'] ** 2 + data['1-0']['error'] ** 2)
         assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6 * dDDG})"
 
+
 def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
     """
     Run repex on a host-guest charge-changing transformation (CB7:A1->A2 and CB7:A2->A1) with the
@@ -307,7 +306,6 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
     from perses.dispersed.utils import configure_platform
     from perses.app.relative_setup import RelativeFEPSetup
     from perses.samplers.multistate import HybridRepexSampler
-    from perses.annihilation.lambda_protocol import LambdaProtocol
     from perses.annihilation.relative import RESTCapableHybridTopologyFactory
 
     from openmmtools.multistate import MultiStateReporter, MultiStateSamplerAnalyzer

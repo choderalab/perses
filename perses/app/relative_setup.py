@@ -78,7 +78,7 @@ class RelativeFEPSetup(object):
 
         Parameters
         ----------
-        ligand_input : str
+        ligand_input : str or list of str
             the name of the ligand file (any openeye supported format)
             this can either be an .sdf or list of .sdf files, or a list of SMILES strings
         forcefield_files : list of str
