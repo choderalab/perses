@@ -33,7 +33,7 @@ import os.path
 import numpy as np
 from functools import partial
 from openmmtools import states
-from openmmtools.mcmc import MCMCSampler, LangevinSplittingDynamicsMove
+from openmmtools.mcmc import MCMCSampler, LangevinDynamicsMove
 from perses.utils.smallmolecules import sanitizeSMILES, canonicalize_SMILES
 from perses.storage import NetCDFStorage, NetCDFStorageView
 from perses.rjmc.topology_proposal import OESMILES_OPTIONS
@@ -117,7 +117,7 @@ class PersesTestSystem(object):
         self._timestep = 1.0*unit.femtosecond
         self._ncmc_nsteps = ncmc_nsteps
         self._mcmc_nsteps = mcmc_nsteps
-        self._move = LangevinSplittingDynamicsMove(timestep=self._timestep, splitting=self._splitting, n_restart_attempts=10)
+        self._move = LangevinDynamicsMove(timestep=self._timestep, n_restart_attempts=10)
         self._move.n_restart_attempts = 10
 
 

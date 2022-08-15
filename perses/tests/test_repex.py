@@ -54,16 +54,15 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
             # Set up repex simulation
             reporter_file = os.path.join(temp_dir, f"{wt_name}-{mutant_name}.nc")
             reporter = MultiStateReporter(reporter_file, checkpoint_interval=10)
-            hss = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=4.0 * unit.femtoseconds,
-                                                                                   collision_rate=1.0 / unit.picosecond,
-                                                                                   n_steps=50,
-                                                                                   reassign_velocities=False,
-                                                                                   n_restart_attempts=20,
-                                                                                   splitting="V R R R O R R R V",
-                                                                                   constraint_tolerance=1e-06),
-                                                                                   replica_mixing_scheme='swap-all',
-                                    hybrid_factory=htf,
-                                    online_analysis_interval=None)
+            hss = HybridRepexSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=4.0 * unit.femtoseconds,
+                                                                          collision_rate=1.0 / unit.picosecond,
+                                                                          n_steps=50,
+                                                                          reassign_velocities=False,
+                                                                          n_restart_attempts=20,
+                                                                          constraint_tolerance=1e-06),
+                                     replica_mixing_scheme='swap-all',
+                                     hybrid_factory=htf,
+                                     online_analysis_interval=None)
             hss.setup(n_states=12, temperature=300 * unit.kelvin, t_max=300 * unit.kelvin,
                       storage_file=reporter, minimisation_steps=0, endstates=True)
             hss.energy_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
@@ -156,16 +155,15 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
                 # Set up repex simulation
                 reporter_file = os.path.join(temp_dir, f"{wt_name}-{mutant_name}.nc")
                 reporter = MultiStateReporter(reporter_file, checkpoint_interval=10)
-                hss = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=4.0 * unit.femtoseconds,
-                                                                                       collision_rate=1.0 / unit.picosecond,
-                                                                                       n_steps=50,
-                                                                                       reassign_velocities=False,
-                                                                                       n_restart_attempts=20,
-                                                                                       splitting="V R R R O R R R V",
-                                                                                       constraint_tolerance=1e-06),
-                                                                                       replica_mixing_scheme='swap-all',
-                                        hybrid_factory=htf,
-                                        online_analysis_interval=None)
+                hss = HybridRepexSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=4.0 * unit.femtoseconds,
+                                                                              collision_rate=1.0 / unit.picosecond,
+                                                                              n_steps=50,
+                                                                              reassign_velocities=False,
+                                                                              n_restart_attempts=20,
+                                                                              constraint_tolerance=1e-06),
+                                         replica_mixing_scheme='swap-all',
+                                         hybrid_factory=htf,
+                                         online_analysis_interval=None)
                 hss.setup(n_states=36, temperature=300 * unit.kelvin, t_max=300 * unit.kelvin,
                           storage_file=reporter, minimisation_steps=0, endstates=True)
                 hss.energy_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
@@ -190,6 +188,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
         assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6 * dDDG})"
 
 
+@pytest.mark.gpu_needed
 def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
     """
     Run CCC->CCCC and CCCC->CCC repex with the RESTCapableHybridTopologyFactory and make sure that the free energies are
@@ -254,13 +253,12 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
 
             # Build the hybrid repex sampler
             sampler = HybridRepexSampler(
-                mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
+                mcmc_moves=mcmc.LangevinDynamicsMove(
                     timestep=4.0 * unit.femtoseconds,
                     collision_rate=1.0 / unit.picosecond,
                     n_steps=50,
                     reassign_velocities=False,
                     n_restart_attempts=20,
-                    splitting="V R R R O R R R V",
                     constraint_tolerance=1e-06),
                 replica_mixing_scheme='swap-all',
                 hybrid_factory=htf,
@@ -291,6 +289,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
         assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6 * dDDG})"
 
 
+@pytest.mark.gpu_needed
 def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
     """
     Run repex on a host-guest charge-changing transformation (CB7:A1->A2 and CB7:A2->A1) with the
@@ -364,13 +363,12 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
 
                 # Build the hybrid repex sampler
                 sampler = HybridRepexSampler(
-                    mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
+                    mcmc_moves=mcmc.LangevinDynamicsMove(
                         timestep=4.0 * unit.femtoseconds,
                         collision_rate=1.0 / unit.picosecond,
                         n_steps=50,
                         reassign_velocities=False,
                         n_restart_attempts=20,
-                        splitting="V R R R O R R R V",
                         constraint_tolerance=1e-06),
                     replica_mixing_scheme='swap-all',
                     hybrid_factory=htf,
