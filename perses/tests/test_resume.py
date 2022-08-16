@@ -127,12 +127,13 @@ def test_resume_small_molecule():
             checkpoint_interval=checkpoint_interval,
         )
         hss = HybridRepexSampler(
-            mcmc_moves=mcmc.LangevinDynamicsMove(
+            mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
                 timestep=4.0 * unit.femtoseconds,
                 collision_rate=5.0 / unit.picosecond,
                 n_steps=250,
                 reassign_velocities=False,
                 n_restart_attempts=20,
+                splitting="V R R R O R R R V",
                 constraint_tolerance=1e-06,
             ),
             hybrid_factory=htf,
@@ -196,12 +197,13 @@ def test_resume_protein_mutation_with_checkpoint(tmp_path):
             checkpoint_interval=checkpoint_interval,
         )
         hss = HybridRepexSampler(
-            mcmc_moves=mcmc.LangevinDynamicsMove(
+            mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
                 timestep=4.0 * unit.femtoseconds,
                 collision_rate=5.0 / unit.picosecond,
                 n_steps=250,
                 reassign_velocities=False,
                 n_restart_attempts=20,
+                splitting="V R R R O R R R V",
                 constraint_tolerance=1e-06,
             ),
             hybrid_factory=htf,
@@ -266,12 +268,13 @@ def test_resume_protein_mutation_no_checkpoint(tmp_path):
             checkpoint_interval=checkpoint_interval,
         )
         hss = HybridRepexSampler(
-            mcmc_moves=mcmc.LangevinDynamicsMove(
+            mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
                 timestep=4.0 * unit.femtoseconds,
                 collision_rate=5.0 / unit.picosecond,
                 n_steps=250,
                 reassign_velocities=False,
                 n_restart_attempts=20,
+                splitting="V R R R O R R R V",
                 constraint_tolerance=1e-06,
             ),
             hybrid_factory=htf,
