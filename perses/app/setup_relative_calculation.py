@@ -566,6 +566,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
 
         if 'render_atom_map' in list(setup_options.keys()) and setup_options['render_atom_map']:
             try:
+                atom_map_outfile = str(atom_map_outfile)
                 render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
             except TypeError:
                 _logger.critical("COULD NOT WRITE ATOM MAPPING. \
