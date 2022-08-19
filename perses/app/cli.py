@@ -2,6 +2,7 @@
 import logging
 import os
 import openmm.testInstallation
+from cloudpathlib import AnyPath
 
 import click
 import openmmtools.utils
@@ -83,7 +84,7 @@ def _test_platform(platform_name):
 
 
 @click.command()
-@click.option("--yaml", type=click.Path(exists=True, dir_okay=False), required=True,
+@click.option("--yaml", type=click.Path(path_type=AnyPath), required=True,
               help='Input yaml file with simulation parameters and options.')
 @click.option("--platform-name", "--platform", type=str, default=None,
               help='Platform name to be used during the simulation. (i.e. cuda, OpenCL, CPU, Reference).')

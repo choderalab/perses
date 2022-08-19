@@ -242,7 +242,7 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     # Set up image options
     itf = oechem.OEInterface()
     oedepict.OEConfigureImageOptions(itf)
-    ext = oechem.OEGetFileExtension(filename)
+    ext = oechem.OEGetFileExtension(str(filename))
     if not oedepict.OEIsRegisteredImageFile(ext):
         raise Exception('Unknown image type for filename %s' % filename)
     ofs = oechem.oeofstream()
