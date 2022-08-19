@@ -106,15 +106,17 @@ def serialize(item, filename):
     item : System, State, or Integrator
         The thing to be serialized
     filename : str
-        The filename to serialize to    
+        The filename to serialize to
     """
+    from cloudpathlib import AnyPath
     from simtk.openmm import XmlSerializer
-    if filename[-2:] == 'gz':
+    filename = AnyPath(filename)
+    if filename.suffix== '.gz':
         import gzip
         with gzip.open(filename, 'wb') as outfile:
             serialized_thing = XmlSerializer.serialize(item)
             outfile.write(serialized_thing.encode())
-    if filename[-3:] == 'bz2':
+    if filename.suffix == '.bz2':
         import bz2
         with bz2.open(filename, 'wb') as outfile:
             serialized_thing = XmlSerializer.serialize(item)

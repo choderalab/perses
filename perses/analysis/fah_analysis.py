@@ -1,3 +1,4 @@
+from cloudpathlib import AnyPath
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -107,7 +108,7 @@ def free_energies(
     """
 
     # load pandas dataframe from FAH
-    work = pd.read_pickle(work_file_path)
+    work = pd.read_pickle(AnyPath(work_file_path))
 
     # convert columns to numeric
     for c in [
@@ -124,7 +125,7 @@ def free_energies(
 
     details = {}
     for path in details_file_path:
-        with open(path, "r") as f:
+        with open(AnyPath(path), "r") as f:
             new = json.load(f)
             details = {**details, **new}
 
