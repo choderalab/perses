@@ -8,6 +8,7 @@ from perses.app import setup_relative_calculation
 import mdtraj as md
 from openmmtools import states, alchemy, testsystems, cache
 from unittest import skipIf
+import pytest
 
 from perses.tests.utils import enter_temp_directory
 
@@ -80,7 +81,8 @@ def test_parsed_yaml_generation():
 
 
 # TODO fails as integrator not bound to context
-@skipIf(running_on_github_actions, "Skip analysis test on GH Actions.  Currently broken")
+#@skipIf(running_on_github_actions, "Skip analysis test on GH Actions.  Currently broken")
+@pytest.mark.skip(reason="Skip analysis test on GH Actions.  Currently broken")
 def test_run_nonequilibrium_switching_move():
     """
     Test that the NonequilibriumSwitchingMove changes lambda from 0 to 1 in multiple iterations
@@ -153,7 +155,8 @@ def test_run_nonequilibrium_switching_move():
 #    lambda_one_npy = np.stack([np.load(filename) for filename in lambda_one_filenames])
 #    assert np.shape(lambda_one_npy) == (n_iterations, n_work_values_per_iteration+1)
 
-@skipIf(running_on_github_actions, "Skip analysis test on GH Actions. SLOW")
+#@skipIf(running_on_github_actions, "Skip analysis test on GH Actions. SLOW")
+@pytest.mark.skip(reason="Skip analysis test on GH Actions. SLOW")
 def test_run_cdk2_iterations_repex():
     """
     Ensure that we can instantiate and run a repex relative free energy calculation the cdk2 ligands in vacuum
@@ -203,7 +206,8 @@ def test_run_cdk2_iterations_repex():
 
         # TODO: Check output
 
-@skipIf(running_on_github_actions, "Skip analysis test on GH Actions. SLOW")
+#@skipIf(running_on_github_actions, "Skip analysis test on GH Actions. SLOW")
+@pytest.mark.skip(reason="Skip analysis test on GH Actions. SLOW")
 def test_run_bace_spectator():
     """
     Ensure that we can instantiate and run a repex relative free energy calculation the cdk2 ligands in vacuum
