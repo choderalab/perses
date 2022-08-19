@@ -53,7 +53,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
 
             # Set up repex simulation
             reporter_file = os.path.join(temp_dir, f"{wt_name}-{mutant_name}.nc")
-            reporter = MultiStateReporter(reporter_file, checkpoint_interval=10)
+            reporter = MultiStateReporter(reporter_file, checkpoint_interval=100)
             hss = HybridRepexSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=4.0 * unit.femtoseconds,
                                                                           collision_rate=1.0 / unit.picosecond,
                                                                           n_steps=50,
@@ -80,7 +80,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
 
         DDG = abs(data['ala-thr']['free_energy'] - data['thr-ala']['free_energy'] * -1)
         dDDG = np.sqrt(data['ala-thr']['error'] ** 2 + data['thr-ala']['error'] ** 2)
-        assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6  * dDDG})"
+        assert DDG < 3 * dDDG, f"DDG ({DDG}) is greater than 3 * dDDG ({3  * dDDG})"
 
 
 @pytest.mark.skip(reason="Currently taking too long in CI.")
@@ -117,7 +117,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
     platform = configure_platform(utils.get_fastest_platform().getName())
 
     data = {}
-    n_iterations = 3000
+    n_iterations = 1000
     d_mutations = {'forward': [('arg', 'ala'), ('lys', 'ala')], 'reverse': [('ala', 'arg'), ('ala', 'lys')]}
 
     with enter_temp_directory() as temp_dir:
@@ -154,7 +154,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
 
                 # Set up repex simulation
                 reporter_file = os.path.join(temp_dir, f"{wt_name}-{mutant_name}.nc")
-                reporter = MultiStateReporter(reporter_file, checkpoint_interval=10)
+                reporter = MultiStateReporter(reporter_file, checkpoint_interval=100)
                 hss = HybridRepexSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=4.0 * unit.femtoseconds,
                                                                               collision_rate=1.0 / unit.picosecond,
                                                                               n_steps=50,
@@ -185,7 +185,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
                        + data['ala-arg']['error'] ** 2
                        + data['lys-ala']['error'] ** 2
                        + data['ala-lys']['error'] ** 2)
-        assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6 * dDDG})"
+        assert DDG < 3 * dDDG, f"DDG ({DDG}) is greater than 3 * dDDG ({3 * dDDG})"
 
 
 @pytest.mark.gpu_needed
@@ -226,7 +226,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
                 forcefield_files=["amber14/tip3p.xml"],
                 small_molecule_forcefield="gaff-2.11",
                 phases=["solvent"],
-                solvent_padding=1.7 * unit.nanometers)
+                solvent_padding=1.1 * unit.nanometers)
 
             # Generate htf
             htf = RESTCapableHybridTopologyFactory(
@@ -249,7 +249,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
             reporter = MultiStateReporter(
                 reporter_file,
                 analysis_particle_indices=htf.hybrid_topology.select(selection),
-                checkpoint_interval=10)
+                checkpoint_interval=100)
 
             # Build the hybrid repex sampler
             sampler = HybridRepexSampler(
@@ -262,7 +262,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
                     constraint_tolerance=1e-06),
                 replica_mixing_scheme='swap-all',
                 hybrid_factory=htf,
-                online_analysis_interval=10)
+                online_analysis_interval=None)
 
             sampler.setup(
                 n_states=n_states,
@@ -332,7 +332,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
                 small_molecule_forcefield="gaff-2.11",
                 small_molecule_parameters_cache=resource_filename("perses", os.path.join("data", "host-guest", "cache.json")),
                 phases=phases,
-                solvent_padding=1.7 * unit.nanometers)
+                solvent_padding=1.1 * unit.nanometers)
 
             for phase in phases:
                 # Generate htf
@@ -359,7 +359,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
                 reporter = MultiStateReporter(
                     reporter_file,
                     analysis_particle_indices=htf.hybrid_topology.select(selection),
-                    checkpoint_interval=10)
+                    checkpoint_interval=100)
 
                 # Build the hybrid repex sampler
                 sampler = HybridRepexSampler(
@@ -372,7 +372,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
                         constraint_tolerance=1e-06),
                     replica_mixing_scheme='swap-all',
                     hybrid_factory=htf,
-                    online_analysis_interval=10)
+                    online_analysis_interval=None)
 
                 sampler.setup(
                     n_states=n_states,
