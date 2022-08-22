@@ -732,6 +732,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         added_energy_components = compute_potential_components(mod_context)
         print(f"added energy components: {added_energy_components}")
 
+        # Explicitly clean up context memory allocation
+        del mod_context
+
         return modified_reduced_potential_energy
 
 
