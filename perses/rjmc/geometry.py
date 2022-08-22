@@ -325,8 +325,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         pdbfile.flush()
         pdbfile.write('ENDMDL\n')
 
-    def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward',
-                      validate_energy_bookkeeping=True, platform_name='CPU'):
+    def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward', validate_energy_bookkeeping = True):
         """
         This is an INTERNAL function that handles both the proposal and the logp calculation,
         to reduce code duplication. Whether it proposes or just calculates a logp is based on
@@ -450,6 +449,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         if self._storage:
             self._storage.write_object("{}_proposal_order".format(direction), proposal_order_tool, iteration=self.nproposed)
+
+        platform_name = 'CUDA'
 
         # Create an OpenMM context
         from simtk import openmm
