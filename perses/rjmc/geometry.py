@@ -325,7 +325,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         pdbfile.flush()
         pdbfile.write('ENDMDL\n')
 
-    def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward', validate_energy_bookkeeping = True):
+    def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward',
+                      validate_energy_bookkeeping=True, platform_name='CPU'):
         """
         This is an INTERNAL function that handles both the proposal and the logp calculation,
         to reduce code duplication. Whether it proposes or just calculates a logp is based on
@@ -449,8 +450,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         if self._storage:
             self._storage.write_object("{}_proposal_order".format(direction), proposal_order_tool, iteration=self.nproposed)
-
-        platform_name = 'CUDA'
 
         # Create an OpenMM context
         from simtk import openmm
@@ -732,6 +731,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         added_energy_components = compute_potential_components(mod_context)
         print(f"added energy components: {added_energy_components}")
+
+        # Explicitly clean up context memory allocation
+        del mod_context
 
         return modified_reduced_potential_energy
 
