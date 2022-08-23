@@ -478,7 +478,7 @@ class PointMutationExecutor(object):
 
         Parameters
         ----------
-        factory : str
+        factory : Callable
             name of the hybrid factory of which to generate. allowed options: 'HybridTopologyFactory',
             'RepartitionedHybridTopologyFactory', 'RESTCapableHybridTopologyFactory'
         topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
