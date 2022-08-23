@@ -371,7 +371,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         _logger.info("Conducting forward proposal...")
         import copy
-        from perses.tests.utils import compute_potential_components
+        from perses.dispersed.utils import compute_potential_components
         # Ensure all parameters have the expected units
         check_dimensionality(old_positions, unit.angstroms)
         if new_positions is not None:
@@ -711,7 +711,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         import copy
         from simtk import openmm
-        from perses.tests.utils import compute_potential_components
+        from perses.dispersed.utils import compute_potential_components
         _integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
         growth_system = copy.deepcopy(growth_system_generator.get_modified_system())
         #the last thing to do for bookkeeping is to delete the torsion force associated with the extra ring-closing and chirality restraints

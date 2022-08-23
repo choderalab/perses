@@ -16,7 +16,7 @@ from perses.annihilation.lambda_protocol import LambdaProtocol
 from openmmtools import mcmc, cache
 from openmmtools.multistate import MultiStateReporter
 from perses.utils.smallmolecules import render_atom_mapping
-from perses.tests.utils import validate_endstate_energies, validate_endstate_energies_point
+from perses.dispersed.utils import validate_endstate_energies, validate_endstate_energies_point
 from perses.dispersed.smc import SequentialMonteCarlo
 
 import datetime
