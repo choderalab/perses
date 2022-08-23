@@ -49,3 +49,11 @@ dependencies:
   - arsenic
   - click
   - rich
+  - cloudpathlib-all
+
+  # gufe deps
+  - pydantic
+  - openff-units
+  - typing-extensions
+  - pip:
+    - git+https://github.com/OpenFreeEnergy/gufe.git@dag-rework
