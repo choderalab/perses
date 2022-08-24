@@ -80,10 +80,10 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
 
         DDG = abs(data['ala-thr']['free_energy'] - data['thr-ala']['free_energy'] * -1)
         dDDG = np.sqrt(data['ala-thr']['error'] ** 2 + data['thr-ala']['error'] ** 2)
-        assert DDG < 3 * dDDG, f"DDG ({DDG}) is greater than 3 * dDDG ({3  * dDDG})"
+        assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6  * dDDG})"
 
 
-@pytest.mark.skip(reason="Currently taking too long in CI.")
+# @pytest.mark.skip(reason="Currently taking too long in CI.")
 @pytest.mark.gpu_needed
 def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
     """
@@ -185,7 +185,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
                        + data['ala-arg']['error'] ** 2
                        + data['lys-ala']['error'] ** 2
                        + data['ala-lys']['error'] ** 2)
-        assert DDG < 3 * dDDG, f"DDG ({DDG}) is greater than 3 * dDDG ({3 * dDDG})"
+        assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6 * dDDG})"
 
 
 @pytest.mark.gpu_needed
