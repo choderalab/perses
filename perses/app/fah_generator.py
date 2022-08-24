@@ -11,6 +11,8 @@ import simtk.unit as unit
 from simtk import openmm
 import logging
 import datetime
+from cloudpathlib import AnyPath
+
 
 # TODO: Move logging filters to utils module
 class TimeFilter(logging.Filter):
@@ -152,7 +154,7 @@ def make_core_file(numSteps,
 
     # Serialize core.xml
     import dicttoxml
-    with open(f'{directory}/core.xml', 'wt') as outfile:
+    with open(AnyPath(f'{directory}/core.xml'), 'wt') as outfile:
         #core_parameters = create_core_parameters(phase)
         xml = dicttoxml.dicttoxml(core_parameters, custom_root='config', attr_type=False)
         from xml.dom.minidom import parseString
@@ -512,7 +514,7 @@ def run_neq_fah_setup(ligand_file,
             pass
 
         import yaml
-        metadata_filename = f'{dir}/metadata.yaml'
+        metadata_filename = AnyPath(f'{dir}/metadata.yaml')
         with open(metadata_filename, 'wt') as outfile:
             outfile.write(yaml.dump(metadata))
 
@@ -559,7 +561,7 @@ def run_neq_fah_setup(ligand_file,
         # TODO: This is really clunky.
         # TODO: Improve the way we serialize these atom mappings
         htf = htfs[phase]
-        np.savez(f'{dir}/hybrid_atom_mappings.npz',
+        np.savez(AnyPath(f'{dir}/hybrid_atom_mappings.npz'),
                  # Full system maps
                  hybrid_to_old_map=htf._hybrid_to_old_map,
                  hybrid_to_new_map=htf._hybrid_to_new_map,
@@ -583,7 +585,7 @@ def run_neq_fah_setup(ligand_file,
         # NOTE: This uses a fragile, slow, and inconvenient numpy savez + pickle scheme
         # TODO: Replace this with a better serialization scheme to enable more rapid access to useful information
         _logger.info(f'Serializing hybrid topology factory...')
-        np.savez_compressed(f'{dir}/htf',htfs[phase])
+        np.savez_compressed(AnyPath(f'{dir}/htf'),htfs[phase])
 
         # Serialize the hybrid_system OpenMM System for execution on Folding@home
         _logger.info(f'Serializing hybrid System...')
@@ -639,6 +641,7 @@ def run(yaml_filename=None):
 
     # Read setup options from the YAML file
     import yaml
+    yaml_filename = AnyPath(yaml_filename)
     yaml_file = open(yaml_filename, 'r')
     setup_options = yaml.load(yaml_file, Loader=yaml.FullLoader)
     yaml_file.close()

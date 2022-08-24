@@ -19,7 +19,7 @@ import os
 import os.path
 from functools import partial
 from unittest import skipIf
-
+import pytest
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
@@ -27,7 +27,8 @@ running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 # TEST MCMCSAMPLER
 ################################################################################
 
-@skipIf(running_on_github_actions, "Skip analysis test on GH Actions.  Currently broken")
+#@skipIf(running_on_github_actions, "Skip analysis test on GH Actions.  Currently broken")
+@pytest.mark.skip(reason="Skip analysis test on GH Actions.  Currently broken")
 def test_valence():
     """
     Test valence-only test system.

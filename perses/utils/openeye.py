@@ -345,7 +345,7 @@ def createOEMolFromSDF(sdf_filename, index=0, add_hydrogens=True, allow_undefine
 
     # TODO this needs a test
     ifs = oechem.oemolistream()
-    ifs.open(sdf_filename)
+    ifs.open(str(sdf_filename))
     # get the list of molecules
     mol_list = [oechem.OEMol(mol) for mol in ifs.GetOEMols()]
     # we'll always take the first for now

@@ -17,13 +17,15 @@ import os.path
 import tempfile
 from perses.analysis.analysis import Analysis
 from unittest import skipIf
+import pytest
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 ################################################################################
 # TEST ANALYSIS
 ################################################################################
 
-@skipIf(running_on_github_actions, "Skip analysis test on GH Actions. Currently broken")
+#@skipIf(running_on_github_actions, "Skip analysis test on GH Actions. Currently broken")
+@pytest.mark.skip(reason="Skip analysis test on GH Actions. Currently broken")
 def test_analysis():
    """Test analysis tools.
    """

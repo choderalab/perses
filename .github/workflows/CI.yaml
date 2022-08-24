@@ -23,8 +23,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.8, 3.9]
+        python-version: [3.8, 3.9, "3.10"]
         openmm: ["nightly", "7.6", "7.7"]
+        exclude:
+          - python-version: "3.10"
+            openmm: "7.6"
 
     env:
       OPENMM: ${{ matrix.openmm }}
@@ -88,6 +91,9 @@ jobs:
 
       - name: Test the package
         shell: bash -l {0}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_TEST_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_TEST_SECRET }}
         run: |
           export TRAVIS=true
           pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto -m "not gpu_needed" perses/tests
