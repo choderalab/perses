@@ -6,6 +6,7 @@ import sys
 import simtk.unit as unit
 import logging
 import warnings
+from cloudpathlib import AnyPath
 from pathlib import Path
 
 from perses.annihilation.relative import HybridTopologyFactory, RESTCapableHybridTopologyFactory
@@ -15,7 +16,7 @@ from perses.annihilation.lambda_protocol import LambdaProtocol
 from openmmtools import mcmc, cache
 from openmmtools.multistate import MultiStateReporter
 from perses.utils.smallmolecules import render_atom_mapping
-from perses.tests.utils import validate_endstate_energies, validate_endstate_energies_point
+from perses.dispersed.utils import validate_endstate_energies, validate_endstate_energies_point
 from perses.dispersed.smc import SequentialMonteCarlo
 
 import datetime
@@ -69,6 +70,8 @@ def getSetupOptions(filename, override_string=None):
     phases : list of strings
         phases to simulate, can be 'complex', 'solvent' or 'vacuum'
     """
+
+    filename = AnyPath(filename)
     yaml_file = open(filename, 'r')
     setup_options = yaml.load(yaml_file, Loader=yaml.FullLoader)
     yaml_file.close()
@@ -207,6 +210,7 @@ def getSetupOptions(filename, override_string=None):
             _logger.info(f"'run_type' was called as {setup_options['run_type']} attempting to detect file")
             for phase in setup_options['phases']:
                 path = os.path.join(setup_options['trajectory_directory'], f"{setup_options['trajectory_prefix']}_{phase}_fep.eq.pkl")
+                path = AnyPath(path)
                 if os.path.exists(path):
                     _logger.info(f"\t\t\tfound {path}; loading and proceeding to anneal")
                 else:
@@ -276,7 +280,7 @@ def getSetupOptions(filename, override_string=None):
 
         setup_options['n_steps_per_move_application'] = 1 #setting the writeout to 1 for now
 
-    trajectory_directory = setup_options['trajectory_directory']
+    trajectory_directory = AnyPath(setup_options['trajectory_directory'])
 
     # check if the neglect_angles is specified in yaml
 
@@ -493,10 +497,11 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
 
     setup_pickle_file = setup_options['save_setup_pickle_as'] if 'save_setup_pickle_as' in list(setup_options) else None
     _logger.info(f"\tsetup pickle file: {setup_pickle_file}")
-    trajectory_directory = setup_options['trajectory_directory']
+    trajectory_directory = AnyPath(setup_options['trajectory_directory'])
     _logger.info(f"\ttrajectory directory: {trajectory_directory}")
     try:
         atom_map_file = setup_options['atom_map']
+        atom_map_file = AnyPath(atom_map_file)
         with open(atom_map_file, 'r') as f:
             atom_map = {int(x.split()[0]): int(x.split()[1]) for x in f.readlines()}
         _logger.info(f"\tsucceeded parsing atom map.")
@@ -528,7 +533,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
 
         _logger.info(f"\twriting pickle output...")
         if setup_pickle_file is not None:
-            with open(os.path.join(os.getcwd(), trajectory_directory, setup_pickle_file), 'wb') as f:
+            with open(AnyPath(os.path.join(trajectory_directory, setup_pickle_file)), 'wb') as f:
                 try:
                     pickle.dump(fe_setup, f)
                     _logger.info(f"\tsuccessfully dumped pickle.")
@@ -556,11 +561,17 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         top_prop['ligand_oemol_old'] = fe_setup._ligand_oemol_old
         top_prop['ligand_oemol_new'] = fe_setup._ligand_oemol_new
         top_prop['non_offset_new_to_old_atom_map'] = fe_setup.non_offset_new_to_old_atom_map
-        _logger.info(f"\twriting atom_mapping.png")
-        atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'atom_mapping.png')
+        _logger.info(f"\twriting atom_mapping.png in {trajectory_directory}")
+        atom_map_outfile = trajectory_directory / "atom_mapping.png"
 
         if 'render_atom_map' in list(setup_options.keys()) and setup_options['render_atom_map']:
-            render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
+            try:
+                atom_map_outfile = str(atom_map_outfile)
+                render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
+            except TypeError:
+                _logger.critical("COULD NOT WRITE ATOM MAPPING. \
+                        YOU ARE PROBALLY WRITING TO A CLOUD FILE SYSTEM. \
+                        CURRENTLY THIS IS NOT SUPPORTED FOR RENDERING ATOM MAPS")
 
     else:
         _logger.info(f"\tloading topology proposal from yaml setup options...")
@@ -568,7 +579,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
 
     n_steps_per_move_application = setup_options['n_steps_per_move_application']
     _logger.info(f"\t steps per move application: {n_steps_per_move_application}")
-    trajectory_directory = setup_options['trajectory_directory']
+    trajectory_directory = AnyPath(setup_options['trajectory_directory'])
 
     trajectory_prefix = setup_options['trajectory_prefix']
     _logger.info(f"\ttrajectory prefix: {trajectory_prefix}")
@@ -656,7 +667,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                 else:
                     selection_indices = None
 
-                storage_name = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
+                storage_name = AnyPath(trajectory_directory) / f"{trajectory_prefix}-{phase}.nc"
                 _logger.info(f'\tstorage_name: {storage_name}')
                 _logger.info(f'\tselection_indices {selection_indices}')
                 _logger.info(f'\tcheckpoint interval {checkpoint_interval}')
@@ -718,15 +729,15 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                 _logger.info('WRITING OUT XML FILES')
                 #old_thermodynamic_state, new_thermodynamic_state, hybrid_thermodynamic_state, _ = generate_endpoint_thermodynamic_states(htf[phase].hybrid_system, _top_prop)
 
-                xml_directory = f'{setup_options["trajectory_directory"]}/xml/'
+                xml_directory = AnyPath(setup_options["trajectory_directory"]) / "xml"
                 if not os.path.exists(xml_directory):
                     os.makedirs(xml_directory)
                 from perses.utils import data
                 _logger.info('WRITING OUT XML FILES')
                 _logger.info(f'Saving the hybrid, old and new system to disk')
-                data.serialize(htf[phase].hybrid_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-hybrid-system.gz')
-                data.serialize(htf[phase]._old_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-old-system.gz')
-                data.serialize(htf[phase]._new_system, f'{setup_options["trajectory_directory"]}/xml/{phase}-new-system.gz')
+                data.serialize(htf[phase].hybrid_system, trajectory_directory / "xml" /f"{phase}-hybrid-system.gz")
+                data.serialize(htf[phase]._old_system, trajectory_directory / "xml" / f"{phase}-old-system.gz")
+                data.serialize(htf[phase]._new_system, trajectory_directory / "xml" /f"{phase}-new-system.gz")
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 
@@ -756,7 +767,7 @@ def run(yaml_filename=None, override_string=None):
     for phase in setup_options['phases']:
         trajectory_directory = setup_options['trajectory_directory']
         trajectory_prefix = setup_options['trajectory_prefix']
-        reporter_file = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
+        reporter_file = AnyPath(f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc")
         # Once we find one, we are good to resume the simulation
         if os.path.isfile(reporter_file):
             _resume_run(setup_options)
@@ -778,10 +789,10 @@ def run(yaml_filename=None, override_string=None):
     if setup_options['run_type'] == 'anneal':
         _logger.info(f"skipping setup and annealing...")
         trajectory_prefix = setup_options['trajectory_prefix']
-        trajectory_directory = setup_options['trajectory_directory']
-        out_trajectory_prefix = setup_options['out_trajectory_prefix']
+        trajectory_directory = AnyPath(setup_options['trajectory_directory'])
+        out_trajectory_prefix = AnyPath(setup_options['out_trajectory_prefix'])
         for phase in setup_options['phases']:
-            ne_fep_run = pickle.load(open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'rb'))
+            ne_fep_run = pickle.load(open(AnyPath(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase))), 'rb'))
             #implement the appropriate parallelism, otherwise the default from the previous incarnation of the ne_fep_run will be used.
             if setup_options['LSF']:
                 _internal_parallelism = {'library': ('dask', 'LSF'), 'num_processes': setup_options['processes']}
@@ -798,14 +809,14 @@ def run(yaml_filename=None, override_string=None):
 
             # try to write out the ne_fep object as a pickle
             try:
-                with open(os.path.join(trajectory_directory, "%s_%s_fep.neq.pkl" % (out_trajectory_prefix, phase)), 'wb') as f:
+                with open(AnyPath(os.path.join(trajectory_directory, "%s_%s_fep.neq.pkl" % (out_trajectory_prefix, phase))), 'wb') as f:
                     pickle.dump(ne_fep_run, f)
                     print("pickle save successful; terminating.")
 
             except Exception as e:
                 print(e)
                 print("Unable to save run object as a pickle; saving as npy")
-                np.savez(os.path.join(trajectory_directory, "%s_%s_fep.neq.npy" % (out_trajectory_prefix, phase)), ne_fep_run)
+                np.savez(AnyPath(os.path.join(trajectory_directory, "%s_%s_fep.neq.npy" % (out_trajectory_prefix, phase))), ne_fep_run)
 
     else:
         _logger.info(f"Running setup...")
@@ -817,12 +828,12 @@ def run(yaml_filename=None, override_string=None):
         #write out topology proposals
         try:
             _logger.info(f"Writing topology proposal {trajectory_prefix}-topology_proposals.pkl to {trajectory_directory}...")
-            with open(os.path.join(trajectory_directory, "%s-topology_proposals.pkl" % (trajectory_prefix)), 'wb') as f:
+            with open(AnyPath(os.path.join(trajectory_directory, "%s-topology_proposals.pkl" % (trajectory_prefix))), 'wb') as f:
                 pickle.dump(setup_dict['topology_proposals'], f)
         except Exception as e:
             print(e)
             _logger.info("Unable to save run object as a pickle; saving as npy")
-            np.savez(os.path.join(trajectory_directory, "%s_topology_proposals.npy" % (trajectory_prefix)), setup_dict['topology_proposals'])
+            np.savez(AnyPath(os.path.join(trajectory_directory, "%s_topology_proposals.npy" % (trajectory_prefix))), setup_dict['topology_proposals'])
 
         n_equilibration_iterations = setup_options['n_equilibration_iterations'] #set this to 1 for neq_fep
         _logger.info(f"Equilibration iterations: {n_equilibration_iterations}.")
@@ -841,7 +852,7 @@ def run(yaml_filename=None, override_string=None):
                 _reverse_subtracted_valence_energy = setup_dict['topology_proposals'][f"{phase}_subtracted_valence_energy"]
 
                 # TODO: Validation here should be done with the same _validate_endstate_energies_for_htf function.
-                zero_state_error, one_state_error = validate_endstate_energies(hybrid_factory._topology_proposal, hybrid_factory, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, trajectory_directory=f'{setup_options["trajectory_directory"]}/xml/{phase}')
+                zero_state_error, one_state_error = validate_endstate_energies(hybrid_factory._topology_proposal, hybrid_factory, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD, trajectory_directory=AnyPath(f'{setup_options["trajectory_directory"]}/xml/{phase}'))
                 _logger.info(f"\t\terror in zero state: {zero_state_error}")
                 _logger.info(f"\t\terror in one state: {one_state_error}")
 
@@ -867,7 +878,7 @@ def run(yaml_filename=None, override_string=None):
                                            timer = True,
                                            minimize = False)
                     #ne_fep_run.deactivate_client()
-                    with open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'wb') as f:
+                    with open(AnyPath(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase))), 'wb') as f:
                         pickle.dump(ne_fep_run, f)
 
 
@@ -884,7 +895,7 @@ def run(yaml_filename=None, override_string=None):
                             lambdas = setup_options['lambdas']
                     else:
                         lambdas = None
-                    ne_fep_run = pickle.load(open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'rb'))
+                    ne_fep_run = pickle.load(open(AnyPath(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase))), 'rb'))
                     ne_fep_run.AIS(num_particles = setup_options['n_particles'],
                                    protocols = lambdas,
                                    num_integration_steps = setup_options['ncmc_num_integration_steps'],
@@ -897,19 +908,19 @@ def run(yaml_filename=None, override_string=None):
 
                     # try to write out the ne_fep object as a pickle
                     try:
-                        with open(os.path.join(trajectory_directory, "%s_%s_fep.neq.pkl" % (trajectory_prefix, phase)), 'wb') as f:
+                        with open(AnyPath(os.path.join(trajectory_directory, "%s_%s_fep.neq.pkl" % (trajectory_prefix, phase))), 'wb') as f:
                             pickle.dump(ne_fep_run, f)
                             print("pickle save successful; terminating.")
 
                     except Exception as e:
                         print(e)
                         print("Unable to save run object as a pickle; saving as npy")
-                        np.savez(os.path.join(trajectory_directory, "%s_%s_fep.neq.npy" % (trajectory_prefix, phase)), ne_fep_run)
+                        np.savez(AnyPath(os.path.join(trajectory_directory, "%s_%s_fep.neq.npy" % (trajectory_prefix, phase))), ne_fep_run)
 
         elif setup_options['fe_type'] == 'sams':
             _logger.info(f"Detecting sams as fe_type...")
             _logger.info(f"Writing hybrid factory {trajectory_prefix}-hybrid_factory.npy to {trajectory_directory}...")
-            np.savez(os.path.join(trajectory_directory, trajectory_prefix + "-hybrid_factory.npy"),
+            np.savez(AnyPath(os.path.join(trajectory_directory, trajectory_prefix + "-hybrid_factory.npy")),
                     setup_dict['hybrid_topology_factories'])
 
             hss = setup_dict['hybrid_samplers']
@@ -943,7 +954,7 @@ def run(yaml_filename=None, override_string=None):
         elif setup_options['fe_type'] == 'repex':
             _logger.info(f"Detecting repex as fe_type...")
             _logger.info(f"Writing hybrid factory {trajectory_prefix}-hybrid_factory.npy to {trajectory_directory}...")
-            np.savez(os.path.join(trajectory_directory, trajectory_prefix + "-hybrid_factory.npy"),
+            np.savez(AnyPath(os.path.join(trajectory_directory, trajectory_prefix + "-hybrid_factory.npy")),
                     setup_dict['hybrid_topology_factories'])
 
             hss = setup_dict['hybrid_samplers']
@@ -985,7 +996,7 @@ def _resume_run(setup_options):
             trajectory_directory = setup_options['trajectory_directory']
             trajectory_prefix = setup_options['trajectory_prefix']
 
-            reporter_file = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
+            reporter_file = AnyPath(f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc")
             reporter = MultiStateReporter(reporter_file)
             simulation = HybridSAMSSampler.from_storage(reporter)
             total_steps = setup_options['n_cycles']
@@ -1009,7 +1020,7 @@ def _resume_run(setup_options):
             trajectory_directory = setup_options['trajectory_directory']
             trajectory_prefix = setup_options['trajectory_prefix']
 
-            reporter_file = f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc"
+            reporter_file = AnyPath(f"{trajectory_directory}/{trajectory_prefix}-{phase}.nc")
             reporter = MultiStateReporter(reporter_file)
             simulation = HybridRepexSampler.from_storage(reporter)
             total_steps = setup_options['n_cycles']
@@ -1148,7 +1159,7 @@ def _generate_parsed_yaml(setup_options, input_yaml_file_path):
     Parameters
     ----------
     setup_options: dict
-        Dictionary with perses setup options. Meant to be the returned dictionary from 
+        Dictionary with perses setup options. Meant to be the returned dictionary from
         ``perses.app.setup_relative_calculation.getSetupOptions``,
     input_yaml_file_path: str or Path object
         Path to input yaml file with perses parameters
@@ -1160,19 +1171,23 @@ def _generate_parsed_yaml(setup_options, input_yaml_file_path):
     """
     from openff.toolkit.topology import Molecule
     # The parsed yaml file will live in the experiment directory to avoid race conditions with other experiments
-    yaml_path = Path(setup_options['trajectory_directory'])
-    yaml_name = Path(input_yaml_file_path).name  # extract name from input/template yaml file.
+    yaml_path = AnyPath(setup_options['trajectory_directory'])
+    yaml_name = AnyPath(input_yaml_file_path).name  # extract name from input/template yaml file.
     time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
     yaml_parse_name = f"perses-{time}-{yaml_name}"
     # Add timestamp information
     setup_options["timestamp"] = time
     # Read input sdf file and save into list -- We don't check stereochemistry
-    ligands_list = Molecule.from_file(setup_options['ligand_file'], allow_undefined_stereo=True)
+    ligand_file_path = AnyPath(setup_options['ligand_file'])
+    # Get the file format by getting the suffix and removing the "."
+    ligand_file_format = ligand_file_path.suffix[1:]
+    with open(ligand_file_path, "r") as ligand_file_object:
+        ligands_list = Molecule.from_file(ligand_file_object, file_format=ligand_file_format, allow_undefined_stereo=True)
     # Get names according to indices in parsed setup options
     setup_options['old_ligand_name'] = ligands_list[setup_options['old_ligand_index']].name
     setup_options['new_ligand_name'] = ligands_list[setup_options['new_ligand_index']].name
     # Write parsed and added setup options into yaml file
-    out_file_path = Path.joinpath(yaml_path, yaml_parse_name)
+    out_file_path = yaml_path / yaml_parse_name
     with open(out_file_path, "w") as outfile:
         yaml.dump(setup_options, outfile)
 

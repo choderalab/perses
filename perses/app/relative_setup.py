@@ -10,6 +10,7 @@ from perses.rjmc.geometry import FFAllAngleGeometryEngine
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
 
 import pymbar
+from cloudpathlib import AnyPath
 import simtk.openmm as openmm
 import simtk.openmm.app as app
 import simtk.unit as unit
@@ -159,10 +160,46 @@ class RelativeFEPSetup(object):
         self._solvent_box_dimensions = solvent_box_dimensions
         self._use_given_geometries = use_given_geometries
         self._given_geometries_tolerance = given_geometries_tolerance
-        self._ligand_input = ligand_input
+        self.small_molecule_forcefield = small_molecule_forcefield
+        if ligand_input:
+            self._ligand_input = AnyPath(ligand_input)
+
+        if protein_pdb_filename:
+            self.protein_pdb_filename = AnyPath(protein_pdb_filename)
+        else:
+            self.protein_pdb_filename = protein_pdb_filename
+
+        if receptor_mol2_filename:
+            self.receptor_mol2_filename = AnyPath(receptor_mol2_filename)
+        else:
+            self.receptor_mol2_filename = receptor_mol2_filename
+
+        if small_molecule_parameters_cache:
+            self.small_molecule_parameters_cache = AnyPath(small_molecule_parameters_cache)
+        else:
+            self.small_molecule_parameters_cache = small_molecule_parameters_cache
+
+        if trajectory_prefix:
+            self._trajectory_prefix = AnyPath(trajectory_prefix)
+        else:
+            self._trajectory_prefix = trajectory_prefix
+
+        if trajectory_directory:
+            self._trajectory_directory = AnyPath(trajectory_directory)
+        else:
+            self._trajectory_directory = trajectory_directory
+
+        if forcefield_files:
+            if isinstance(forcefield_files, (list, set, tuple)):
+                self.forcefield_files = [AnyPath(forcefield_file) for forcefield_file in forcefield_files]
+            else:
+                self.forcefield_files = AnyPath(forcefield_files)
+        else:
+            self.forcefield_files = forcefield_files
+
 
         if self._use_given_geometries:
-            assert self._ligand_input[-3:] == 'sdf' or self._ligand_input[-4:] == 'mol2', f"cannot use deterministic atom placement if the ligand input files do not contain geometry information (e.g. in .sdf or .mol2 format)"
+            assert self._ligand_input.suffix == '.sdf' or self._ligand_input.suffix == '.mol2', f"cannot use deterministic atom placement if the ligand input files do not contain geometry information (e.g. in .sdf or .mol2 format)"
             assert 'complex' in phases, f"cannot use deterministic atom placement if complex is not in the specified phases to generate"
             # TODO: add deterministic geometry proposal to solvent and vacuum
 
@@ -193,15 +230,12 @@ class RelativeFEPSetup(object):
                 self._nonbonded_method = app.NoCutoff
 
 
-        self._trajectory_prefix = trajectory_prefix
-        self._trajectory_directory = trajectory_directory
 
         beta = 1.0 / (kB * temperature)
 
-        mol_list = []
+        self.mol_list = []
 
         #all legs need ligands so do this first
-        self._ligand_input = ligand_input
         self._old_ligand_index = old_ligand_index
         self._new_ligand_index = new_ligand_index
         _logger.info(f"Handling files for ligands and indices...")
@@ -209,7 +243,7 @@ class RelativeFEPSetup(object):
             # Make sure the input file exists
             if not os.path.isfile(self._ligand_input):
                 raise FileNotFoundError(f"Input file at {self._ligand_input} does not exist.")
-            if self._ligand_input[-3:] == 'smi': #
+            if self._ligand_input.suffix == '.smi': #
                 _logger.info(f"Detected .smi format.  Proceeding...")
                 _logger.info('  Note that SMILES does not contain geometry information for use in mapping')
                 self._ligand_smiles_old = load_smi(self._ligand_input,self._old_ligand_index)
@@ -226,8 +260,8 @@ class RelativeFEPSetup(object):
                 self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
                 _logger.info(f"\tsuccessfully created old and new systems from smiles")
 
-                mol_list.append(self._ligand_oemol_old)
-                mol_list.append(self._ligand_oemol_new)
+                self.mol_list.append(self._ligand_oemol_old)
+                self.mol_list.append(self._ligand_oemol_new)
 
                 # forcefield_generators needs to be able to distinguish between the two ligands
                 # while topology_proposal needs them to have the same residue name
@@ -239,15 +273,15 @@ class RelativeFEPSetup(object):
                 self._ligand_topology_new = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_new)
                 _logger.info(f"\tsuccessfully generated topologies for both oemols.")
 
-            elif self._ligand_input[-3:] == 'sdf' or self._ligand_input[-4:] == 'mol2': #
+            elif self._ligand_input.suffix == '.sdf' or self._ligand_input.suffix == '.mol2': #
                 _logger.info(f"Detected .sdf format.  Proceeding...") #TODO: write checkpoints for sdf format
                 self._ligand_oemol_old = createOEMolFromSDF(self._ligand_input, index=self._old_ligand_index, allow_undefined_stereo=True)
                 self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input, index=self._new_ligand_index, allow_undefined_stereo=True)
                 # self._ligand_oemol_old = generate_unique_atom_names(self._ligand_oemol_old)
                 # self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
 
-                mol_list.append(self._ligand_oemol_old)
-                mol_list.append(self._ligand_oemol_new)
+                self.mol_list.append(self._ligand_oemol_old)
+                self.mol_list.append(self._ligand_oemol_new)
 
                 self._ligand_positions_old = extractPositionsFromOEMol(self._ligand_oemol_old)
                 self._ligand_positions_new = extractPositionsFromOEMol(self._ligand_oemol_new)
@@ -276,8 +310,8 @@ class RelativeFEPSetup(object):
             self._ligand_oemol_old.SetTitle("OLD")
             self._ligand_oemol_new.SetTitle("NEW")
 
-            mol_list.append(self._ligand_oemol_old)
-            mol_list.append(self._ligand_oemol_new)
+            self.mol_list.append(self._ligand_oemol_old)
+            self.mol_list.append(self._ligand_oemol_new)
 
             # forcefield_generators needs to be able to distinguish between the two ligands
             # while topology_proposal needs them to have the same residue name
@@ -352,12 +386,12 @@ class RelativeFEPSetup(object):
         from openmmforcefields.generators import SystemGenerator
         _logger.info(f'PME tolerance: {self._pme_tol}')
         forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'constraints' : self._h_constraints, 'rigidWater': self._rigid_water, 'hydrogenMass' : self._hmass}
-        if small_molecule_forcefield is None or small_molecule_forcefield == 'None':
-            self._system_generator = SystemGenerator(forcefields=forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+        if self.small_molecule_forcefield is None or self.small_molecule_forcefield == 'None':
+            self._system_generator = SystemGenerator(forcefields=self.forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
                                       periodic_forcefield_kwargs = {'nonbondedMethod': self._nonbonded_method})
         else:
-            self._system_generator = SystemGenerator(forcefields=forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
-                                                     small_molecule_forcefield=small_molecule_forcefield, molecules=self._molecules, cache=small_molecule_parameters_cache, periodic_forcefield_kwargs = {'nonbondedMethod': self._nonbonded_method})
+            self._system_generator = SystemGenerator(forcefields=self.forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+                                                     small_molecule_forcefield=self.small_molecule_forcefield, molecules=molecules, cache=self.small_molecule_parameters_cache, periodic_forcefield_kwargs = {'nonbondedMethod': self._nonbonded_method})
         _logger.info("successfully created SystemGenerator to create ligand systems")
 
         _logger.info(f"executing SmallMoleculeSetProposalEngine...")
@@ -382,7 +416,7 @@ class RelativeFEPSetup(object):
         if 'complex' in phases:
             _logger.info('Generating the topology proposal from the complex leg')
             _logger.info(f"setting up complex phase...")
-            self._setup_complex_phase(protein_pdb_filename,receptor_mol2_filename,mol_list)
+            self._setup_complex_phase()
             self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(
             self._complex_topology_old, self._complex_positions_old,phase='complex',box_dimensions=self._complex_box_dimensions, ionic_strength=self._ionic_strength)
             _logger.info(f"successfully generated complex topology, positions, system")
@@ -557,32 +591,23 @@ class RelativeFEPSetup(object):
                 self._vacuum_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
             self._vacuum_geometry_engine = copy.deepcopy(self._geometry_engine)
 
-    def _setup_complex_phase(self,protein_pdb_filename,receptor_mol2_filename,mol_list):
+    def _setup_complex_phase(self):
         """
         Runs setup on the protein/receptor file for relative simulations
-
-        Parameters
-        ----------
-        protein_pdb_filename : str, default None
-            Protein pdb filename. If none, receptor_mol2_filename must be provided
-        receptor_mol2_filename : str, default None
-            Receptor mol2 filename. If none, protein_pdb_filename must be provided
         """
         # TODO: What if you get both protein pdb and receptor mol2?
         # It might be a better idea to have something to auto-detect the format or a kwarg to specify it.
-        if protein_pdb_filename:
-            self._protein_pdb_filename = protein_pdb_filename
-            protein_pdbfile = open(self._protein_pdb_filename, 'r')
+        if self.protein_pdb_filename:
+            protein_pdbfile = open(self.protein_pdb_filename, 'r')
             pdb_file = app.PDBFile(protein_pdbfile)
             protein_pdbfile.close()
             self._receptor_positions_old = pdb_file.positions
             self._receptor_topology_old = pdb_file.topology
             self._receptor_md_topology_old = md.Topology.from_openmm(self._receptor_topology_old)
 
-        elif receptor_mol2_filename:
-            self._receptor_mol2_filename = receptor_mol2_filename
-            self._receptor_mol = createOEMolFromSDF(self._receptor_mol2_filename)
-            mol_list.append(self._receptor_mol)
+        elif self.receptor_mol2_filename:
+            self._receptor_mol = createOEMolFromSDF(self.receptor_mol2_filename)
+            self.mol_list.append(self._receptor_mol)
             self._receptor_positions_old = extractPositionsFromOEMol(self._receptor_mol)
             self._receptor_topology_old = forcefield_generators.generateTopologyFromOEMol(self._receptor_mol)
             self._receptor_md_topology_old = md.Topology.from_openmm(self._receptor_topology_old)
@@ -861,7 +886,7 @@ class RelativeFEPSetup(object):
         _logger.info(f"\tSystem parameterized")
 
         if self._trajectory_directory is not None and self._trajectory_prefix is not None:
-            pdb_filename = f"{self._trajectory_directory}/{self._trajectory_prefix}-{phase}.pdb"
+            pdb_filename = AnyPath(f"{self._trajectory_directory}/{self._trajectory_prefix}-{phase}.pdb")
             with open(pdb_filename, 'w') as outfile:
                 PDBFile.writeFile(solvated_topology, solvated_positions, outfile)
         else:
@@ -1124,7 +1149,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
         self._hybrid_system = self._factory.hybrid_system
         self._initial_hybrid_positions = self._factory.hybrid_positions
         self._n_equil_steps = n_equilibrium_steps_per_iteration
-        self._trajectory_prefix = trajectory_prefix
+        self._trajectory_prefix = AnyPath(trajectory_prefix)
         self._trajectory_directory = trajectory_directory
         self._atom_selection = atom_selection
         self._current_iteration = 0
@@ -1134,9 +1159,9 @@ class NonequilibriumSwitchingFEP(DaskClient):
         _logger.info(f"instantiating trajectory filenames")
         if self._trajectory_directory and self._trajectory_prefix:
             self._write_traj = True
-            self._trajectory_filename = {lambda_state: os.path.join(os.getcwd(), self._trajectory_directory, f"{trajectory_prefix}.eq.lambda_{lambda_state}.h5") for lambda_state in [0,1]}
+            self._trajectory_filename = {lambda_state: os.path.join(self._trajectory_directory, f"{self._trajectory_prefix}.eq.lambda_{lambda_state}.h5") for lambda_state in [0,1]}
             _logger.debug(f"eq_traj_filenames: {self._trajectory_filename}")
-            self._neq_traj_filename = {direct: os.path.join(os.getcwd(), self._trajectory_directory, f"{trajectory_prefix}.neq.lambda_{direct}") for direct in ['forward', 'reverse']}
+            self._neq_traj_filename = {direct: os.path.join(self._trajectory_directory, f"{self._trajectory_prefix}.neq.lambda_{direct}") for direct in ['forward', 'reverse']}
             _logger.debug(f"neq_traj_filenames: {self._neq_traj_filename}")
         else:
             self._write_traj = False

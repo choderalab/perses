@@ -10,6 +10,7 @@ import parmed
 from collections import namedtuple, OrderedDict
 import copy
 from unittest import skipIf
+import pytest
 try:
     from urllib.request import urlopen
     from io import StringIO
@@ -908,9 +909,11 @@ def align_molecules(mol1, mol2):
         new_to_old_atom_mapping[new_index] = old_index
     return new_to_old_atom_mapping
 
+
+#@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 @attr('advanced')
 @nottest
-@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
+@pytest.mark.skip(reason="Skip advanced test on GH Actions")
 def test_mutate_from_all_to_all(): # TODO: fix protein mutations
     """
     Make sure mutations are successful between every possible pair of before-and-after residues
@@ -968,9 +971,11 @@ def test_mutate_from_all_to_all(): # TODO: fix protein mutations
             if np.isnan(potential_without_units):
                 raise Exception("Energy after proposal is NaN")
 
+
+#@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 @attr('advanced')
 @nottest
-@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
+@pytest.mark.skip(reason="Skip advanced test on GH Actions")
 def test_propose_lysozyme_ligands(): # TODO: fix protein mutations
     """
     Try proposing geometries for all T4 ligands from all T4 ligands
@@ -981,9 +986,11 @@ def test_propose_lysozyme_ligands(): # TODO: fix protein mutations
     proposals = make_geometry_proposal_array(smiles_list, forcefield=['data/T4-inhibitors.xml', 'data/gaff.xml'])
     run_proposals(proposals)
 
+
+#@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 @attr('advanced')
 @nottest
-@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
+@pytest.mark.skip(reason="Skip advanced test on GH Actions")
 def test_propose_kinase_inhibitors(): # TODO: fix protein mutations
     from perses.tests.testsystems import KinaseInhibitorsTestSystem
     testsystem = KinaseInhibitorsTestSystem()
@@ -1777,7 +1784,8 @@ class AnalyticalBeadSystems(object):
 
 
 #@nottest
-@skipIf(running_on_github_actions, "Skip deprecated test on GH Actions")
+#@skipIf(running_on_github_actions, "Skip deprecated test on GH Actions")
+@pytest.mark.skip(reason="Skip deprecated test on GH Actions")
 def test_AnalyticalBeadSystems(transformation=[[3,4], [4,5], [3,5]], num_iterations=100):
     """
     Function to assert that the forward and reverse works are equal and opposite, and that the variances of each work distribution is much less
