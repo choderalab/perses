@@ -78,7 +78,6 @@ jobs:
           df -h
           ulimit -a
           conda info -a
-          conda install -c conda-forge openssl
           conda list
           python -c "import openmm; print(openmm.Platform.getPluginLoadFailures())"
           python -m openmm.testInstallation
