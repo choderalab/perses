@@ -1,5 +1,8 @@
 name: self-hosted-gpu-test
 on:
+  pull_request:
+    branches:
+      - "main"
   push:
     branches:
       - master
@@ -75,6 +78,7 @@ jobs:
           df -h
           ulimit -a
           conda info -a
+          conda install -c conda-forge openssl
           conda list
           python -c "import openmm; print(openmm.Platform.getPluginLoadFailures())"
           python -m openmm.testInstallation
