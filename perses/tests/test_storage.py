@@ -17,6 +17,7 @@ from functools import partial
 from perses.storage import NetCDFStorage, NetCDFStorageView
 
 from unittest import skipIf
+import pytest
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
 ################################################################################
@@ -125,7 +126,8 @@ def test_write_object():
 def run_sampler(sampler, niterations):
     sampler.run(niterations)
 
-@skipIf(running_on_github_actions, "Skip slow test on GH Actions.")
+#@skipIf(running_on_github_actions, "Skip slow test on GH Actions.")
+@pytest.mark.skip(reason="Skip slow test on GH Actions.")
 def test_storage_with_samplers():
     """Test storage layer inside all samplers.
     """
