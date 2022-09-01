@@ -57,8 +57,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: mamba-org/provision-with-micromamba@main
         with:
-          extra-specs: 3.9
-          activate-environment: test
+          extra-specs: python=3.9
           channels: conda-forge,defaults,omnia-dev,openeye
           environment-file: devtools/conda-envs/test_env.yaml
 
