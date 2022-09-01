@@ -49,4 +49,4 @@ dependencies:
   - arsenic
   - click
   - rich
-  - cloudpathlib-all
+  - cloudpathlib-s3
