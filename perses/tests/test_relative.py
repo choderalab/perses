@@ -417,7 +417,7 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene",atom_express
     from perses.utils.openeye import generate_expression
     from openmmforcefields.generators import SystemGenerator
     from openmoltools.forcefield_generators import generateTopologyFromOEMol
-    from perses.tests.utils import validate_endstate_energies
+    from perses.dispersed.utils import validate_endstate_energies
     temperature = 300*unit.kelvin
     # Compute kT and inverse temperature.
     kT = kB * temperature
@@ -517,7 +517,8 @@ def HybridTopologyFactory_energies(current_mol = 'toluene', proposed_mol = '1,2-
     """
     Test whether the difference in the nonalchemical zero and alchemical zero states is the forward valence energy.  Also test for the one states.
     """
-    from perses.tests.utils import generate_solvated_hybrid_test_topology, generate_endpoint_thermodynamic_states
+    from perses.dispersed.utils import generate_endpoint_thermodynamic_states
+    from perses.tests.utils import generate_solvated_hybrid_test_topology
     import openmmtools.cache as cache
 
     # Just test the solvated system
@@ -662,7 +663,7 @@ def RepartitionedHybridTopologyFactory_energies(topology, chain, system, positio
 
     from perses.rjmc.topology_proposal import PointMutationEngine
     from perses.annihilation.relative import RepartitionedHybridTopologyFactory
-    from perses.tests.utils import validate_endstate_energies
+    from perses.dispersed.utils import validate_endstate_energies
 
     ENERGY_THRESHOLD = 1e-4
 
@@ -801,7 +802,7 @@ def flattenedHybridTopologyFactory_energies(topology, chain, system, positions, 
 
     from perses.rjmc.topology_proposal import PointMutationEngine
     from perses.annihilation.relative import RepartitionedHybridTopologyFactory
-    from perses.tests.utils import validate_endstate_energies
+    from perses.dispersed.utils import validate_endstate_energies
 
     ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS', 'HID', 'HIE', 'HIP']
     ENERGY_THRESHOLD = 1e-6 #kJ/mol
@@ -964,7 +965,8 @@ def run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_en
 
     from perses.tests.test_topology_proposal import generate_atp, generate_dipeptide_top_pos_sys
     from perses.app.relative_point_mutation_setup import PointMutationExecutor
-    from perses.tests.utils import validate_endstate_energies_point, validate_endstate_energies_md
+    from perses.dispersed.utils import validate_endstate_energies_point
+    from perses.tests.utils import validate_endstate_energies_md
 
     assert phase in ['vacuum', 'solvent', 'complex'], "Specified phase is invalid! Must be 'vacuum', 'solvent', or 'complex'"
 

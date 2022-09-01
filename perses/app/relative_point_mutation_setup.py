@@ -438,7 +438,7 @@ class PointMutationExecutor(object):
                 assert not flatten_torsions and not flatten_exceptions, "Cannot conduct endstate validation if flatten_torsions or flatten_exceptions is True"
 
                 if generate_unmodified_hybrid_topology_factory:
-                    from perses.tests.utils import validate_endstate_energies
+                    from perses.dispersed.utils import validate_endstate_energies
                     htf = self.get_complex_htf() if is_complex else self.get_apo_htf()
                     zero_state_error, one_state_error = validate_endstate_energies(htf._topology_proposal,
                                                                                    htf,
@@ -447,7 +447,7 @@ class PointMutationExecutor(object):
                                                                                    beta=beta,
                                                                                    ENERGY_THRESHOLD=ENERGY_THRESHOLD)
                 if generate_repartitioned_hybrid_topology_factory:
-                    from perses.tests.utils import validate_endstate_energies
+                    from perses.dispersed.utils import validate_endstate_energies
                     htf_0 = self.get_complex_rhtf_0() if is_complex else self.get_apo_rhtf_0()
                     htf_1 = self.get_complex_rhtf_1() if is_complex else self.get_apo_rhtf_1()
                     zero_state_error, _ = validate_endstate_energies(htf_0._topology_proposal,
@@ -465,7 +465,7 @@ class PointMutationExecutor(object):
                                                                     beta=beta,
                                                                     repartitioned_endstate=1)
                 if generate_rest_capable_hybrid_topology_factory:
-                    from perses.tests.utils import validate_endstate_energies_point
+                    from perses.dispersed.utils import validate_endstate_energies_point
                     for endstate in [0, 1]:
                         htf = self.get_complex_rest_htf() if is_complex else self.get_apo_rest_htf()
                         validate_endstate_energies_point(htf, endstate=endstate, minimize=True)
@@ -478,7 +478,7 @@ class PointMutationExecutor(object):
 
         Parameters
         ----------
-        factory : str
+        factory : Callable
             name of the hybrid factory of which to generate. allowed options: 'HybridTopologyFactory',
             'RepartitionedHybridTopologyFactory', 'RESTCapableHybridTopologyFactory'
         topology_proposal : perses.rjmc.topology_proposal.TopologyProposal

@@ -214,8 +214,6 @@ def generate_dipeptide_top_pos_sys(topology,
                                    validate_endstate_energy=True # Cannot validate endstate energies if flatten_torsions/exceptions is True
                                    ):
     """generate point mutation engine, geometry_engine, and conduct topology proposal, geometry propsal, and hybrid factory generation"""
-    from perses.tests.utils import validate_endstate_energies
-    import copy
 
     if conduct_htf_prop:
         assert conduct_geometry_prop, f"the htf prop can only be conducted if there is a geometry proposal"
@@ -302,11 +300,11 @@ def generate_dipeptide_top_pos_sys(topology,
             assert not flatten_torsions and not flatten_exceptions, "Cannot conduct endstate validation if flatten_torsions or flatten_exceptions is True"
 
             if generate_rest_capable_hybrid_topology_factory:
-                from perses.tests.utils import validate_endstate_energies_point
+                from perses.dispersed.utils import validate_endstate_energies_point
                 for endstate in [0, 1]:
                     validate_endstate_energies_point(forward_htf, endstate=endstate, minimize=True)
             else:
-                from perses.tests.utils import validate_endstate_energies
+                from perses.dispersed.utils import validate_endstate_energies
 
                 if not topology_proposal.unique_new_atoms:
                     assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {geometry_engine.forward_final_context_reduced_potential})"
