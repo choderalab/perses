@@ -38,7 +38,7 @@ dependencies:
   - pytest
   - pytest-cov
   - coverage
-  - openff-toolkit >=0.10.3|<=0.10.0
+  - openff-toolkit <0.11.0
   - sphinx
   - dicttoxml
   - openmmforcefields >=0.9.0
