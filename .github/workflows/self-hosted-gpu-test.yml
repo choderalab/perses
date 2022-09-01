@@ -60,7 +60,7 @@ jobs:
           extra-specs: python=3.9
           channels: conda-forge,defaults,omnia-dev,openeye
           environment-file: devtools/conda-envs/test_env.yaml
-          log-level: "debug"
+          environment-name: test
 
       - name: Refine test env
         shell: bash -l {0}
