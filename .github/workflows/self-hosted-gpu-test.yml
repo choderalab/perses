@@ -58,7 +58,7 @@ jobs:
       - uses: conda-incubator/setup-miniconda@v2
         with:
           python-version: 3.9
-          channels: conda-forge,defaults,omnia-dev,openeye
+          channels: conda-forge,omnia-dev,openeye
           environment-file: devtools/conda-envs/test_env.yaml
           show-channel-urls: true
           auto-activate-base: false
