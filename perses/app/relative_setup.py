@@ -79,7 +79,7 @@ class RelativeFEPSetup(object):
 
         Parameters
         ----------
-        ligand_input : str
+        ligand_input : str or list of str
             the name of the ligand file (any openeye supported format)
             this can either be an .sdf or list of .sdf files, or a list of SMILES strings
         forcefield_files : list of str
@@ -161,8 +161,11 @@ class RelativeFEPSetup(object):
         self._use_given_geometries = use_given_geometries
         self._given_geometries_tolerance = given_geometries_tolerance
         self.small_molecule_forcefield = small_molecule_forcefield
-        if ligand_input:
+        if isinstance(ligand_input, str):
             self._ligand_input = AnyPath(ligand_input)
+        else:
+            # Accept list of paths
+            self._ligand_input = [AnyPath(_) for _ in ligand_input]
 
         if protein_pdb_filename:
             self.protein_pdb_filename = AnyPath(protein_pdb_filename)
@@ -337,6 +340,12 @@ class RelativeFEPSetup(object):
         self._ligand_md_topology_new = md.Topology.from_openmm(self._ligand_topology_new)
         _logger.info(f"Created mdtraj topologies for both ligands.")
 
+        # We must generate the complex topology and positions before the SystemGenerator is created because if the
+        # receptor is a mol2, it must be added to mol_list, which is use to create self._molecules, which is fed to the SystemGenerator
+        if 'complex' in phases:
+            _logger.info(f"setting up complex phase...")
+            self._setup_complex_phase()
+
         # Select barostat
         NONPERIODIC_NONBONDED_METHODS = [app.NoCutoff, app.CutoffNonPeriodic]
         if pressure is not None:
@@ -352,7 +361,8 @@ class RelativeFEPSetup(object):
 
         # Create openforcefield Molecule objects for old and new molecules
         from openff.toolkit.topology import Molecule
-        molecules = [ Molecule.from_openeye(oemol,allow_undefined_stereo=True) for oemol in [self._ligand_oemol_old, self._ligand_oemol_new] ]
+        molecules = [Molecule.from_openeye(oemol, allow_undefined_stereo=True) for oemol in [self._ligand_oemol_old,
+                                                                                             self._ligand_oemol_new]]
 
         # Handle spectator molecules
         if self._spectator_filenames is not None:
