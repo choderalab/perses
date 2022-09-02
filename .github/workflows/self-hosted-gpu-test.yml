@@ -60,9 +60,9 @@ jobs:
           python-version: 3.9
           channels: conda-forge,defaults,omnia-dev,openeye
           environment-file: devtools/conda-envs/test_env.yaml
-          environment-name: test
           show-channel-urls: true
           auto-activate-base: false
+          activate-environment: test
 
       - name: Refine test env
         shell: bash -l {0}
