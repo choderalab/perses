@@ -63,6 +63,7 @@ jobs:
           show-channel-urls: true
           auto-activate-base: false
           activate-environment: test
+          miniforge-version: latest 
 
       - name: Refine test env
         shell: bash -l {0}
