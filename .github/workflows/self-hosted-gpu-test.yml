@@ -55,17 +55,19 @@ jobs:
         shell: bash -l {0}
     steps:
       - uses: actions/checkout@v2
-      - uses: mamba-org/provision-with-micromamba@main
+      - uses: conda-incubator/setup-miniconda@v2
         with:
-          extra-specs: python=3.9
+          python-version: 3.9
           channels: conda-forge,defaults,omnia-dev,openeye
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: test
+          show-channel-urls: true
+          auto-activate-base: false
 
       - name: Refine test env
         shell: bash -l {0}
         run: |
-          micromamba install -y cudatoolkit==11.0.3 openmm>=7.7
+          conda install -y cudatoolkit==11.0.3 openmm>=7.7
       
       - name: Additional info about the build
         shell: bash -l {0}
@@ -73,8 +75,8 @@ jobs:
           uname -a
           df -h
           ulimit -a
-          micromamba info -a
-          micromamba list
+          conda info -a
+          conda list
           python -c "import openmm; print(openmm.Platform.getPluginLoadFailures())"
           python -m openmm.testInstallation
 
@@ -86,8 +88,8 @@ jobs:
       - name: Environment Information
         shell: bash -l {0}
         run: |
-          micromamba info -a
-          micromamba list
+          conda info -a
+          conda list
 
       - name: Decrypt OpenEye license
         shell: bash -l {0}
@@ -101,7 +103,7 @@ jobs:
         shell: bash -l {0}
         run: |
           export TRAVIS=true
-          micromamba list --explicit
+          conda list --explicit
           pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -m "gpu_ci or gpu_needed" perses/tests
 
       - name: Codecov
