@@ -1,8 +1,5 @@
 name: self-hosted-gpu-test
 on:
-  pull_request:
-    branches:
-      - "main"
   push:
     branches:
       - master
