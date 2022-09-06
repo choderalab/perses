@@ -380,6 +380,7 @@ def test_relative_setup_list_ligand_input():
     # Generate topology proposal and positions
     guest_1_filename = resource_filename("perses", os.path.join("data", "host-guest", "a1.sybyl.mol2"))
     guest_2_filename = resource_filename("perses", os.path.join("data", "host-guest", "a2.sybyl.mol2"))
+    ligand_input_files = (guest_1_filename, guest_2_filename)
     # ligand indices
     ligand_A_index = 0
     ligand_B_index = 1
@@ -392,7 +393,7 @@ def test_relative_setup_list_ligand_input():
 
     # Build relative FE setup object
     fe_setup = RelativeFEPSetup(
-        ligand_input=[guest_1_filename, guest_2_filename],
+        ligand_input=ligand_input_files,
         receptor_mol2_filename=host_filename,
         old_ligand_index=ligand_A_index,
         new_ligand_index=ligand_B_index,
@@ -404,7 +405,9 @@ def test_relative_setup_list_ligand_input():
 
     # assert the ligand input private attribute is an iterable with the correct size
     ligand_input_size = len(fe_setup._ligand_input)
-    assert ligand_input_size == 2, f"There should be 2 ligand input files, getting {ligand_input_size}"
+    expected_input_size = len(ligand_input_files)
+    assert ligand_input_size == expected_input_size, f"There should be {expected_input_size} ligand input files, " \
+                                                     f"receiving {ligand_input_size} files."
 
 
 # if __name__=="__main__":
