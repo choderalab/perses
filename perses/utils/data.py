@@ -4,6 +4,8 @@ Tools for managing datafiles in perses
 
 """
 
+import os
+
 __author__ = 'John D. Chodera'
 
 
@@ -111,17 +113,23 @@ def serialize(item, filename):
     from cloudpathlib import AnyPath
     from simtk.openmm import XmlSerializer
     filename = AnyPath(filename)
-    if filename.suffix== '.gz':
+
+    # Create parent directory if it doesn't exist
+    filename_basedir = filename.parent
+    if not filename_basedir.exists():
+        os.makedirs(filename_basedir)
+
+    if filename.suffix == '.gz':
         import gzip
-        with gzip.open(filename, 'wb') as outfile:
+        with gzip.open(filename, mode='wb') as outfile:
             serialized_thing = XmlSerializer.serialize(item)
             outfile.write(serialized_thing.encode())
     if filename.suffix == '.bz2':
         import bz2
-        with bz2.open(filename, 'wb') as outfile:
+        with bz2.open(filename, mode='wb') as outfile:
             serialized_thing = XmlSerializer.serialize(item)
             outfile.write(serialized_thing.encode())
     else:
-        with open(filename, 'w') as outfile:
+        with open(filename, mode='w') as outfile:
             serialized_thing = XmlSerializer.serialize(item)
             outfile.write(serialized_thing)
