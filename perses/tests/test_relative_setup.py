@@ -399,7 +399,7 @@ def test_relative_setup_list_ligand_input():
         new_ligand_index=ligand_B_index,
         forcefield_files=["amber14/tip3p.xml"],
         small_molecule_forcefield="gaff-2.11",
-        small_molecule_parameters_cache=os.path.join("/home/ijpulidos/workdir/debugging/perses/perses-1093", "cache.json"),
+        small_molecule_parameters_cache=resource_filename("perses", os.path.join("data", "host-guest", "cache.json")),
         phases=phases,
         solvent_padding=1.1 * unit.nanometers)
 
