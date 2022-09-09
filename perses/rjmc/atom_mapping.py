@@ -284,6 +284,7 @@ class AtomMapping(object):
         opts.SetBondWidthScaling(True)
         opts.SetAtomPropertyFunctor(oedepict.OEDisplayAtomMapIdx())
         opts.SetAtomColorStyle(oedepict.OEAtomColorStyle_WhiteMonochrome)
+        opts.SetAromaticStyle(oedepict.OEAromaticStyle_Circle)
 
         # Depict reaction with component highlights
         oechem.OEGenerate2DCoordinates(rmol)
