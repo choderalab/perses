@@ -401,7 +401,7 @@ def test_relative_setup_list_ligand_input():
         small_molecule_forcefield="gaff-2.11",
         small_molecule_parameters_cache=resource_filename("perses", os.path.join("data", "host-guest", "cache.json")),
         phases=phases,
-        solvent_padding=1.1 * unit.nanometers)
+        solvent_padding=1.4 * unit.nanometers)
 
     # assert the ligand input private attribute is an iterable with the correct size
     ligand_input_size = len(fe_setup._ligand_input)
