@@ -310,7 +310,7 @@ def test_relative_setup_charge_change():
     import numpy as np
     # Setup directory
     ligand_sdf = resource_filename("perses", "data/bace-example/Bace_ligands_shifted.sdf")
-    host_pdb = resource_filename("perses", "data/bace-example/Bace_protein.pdb/receptor.pdb")
+    host_pdb = resource_filename("perses", "data/bace-example/Bace_protein.pdb")
 
     setup = RelativeFEPSetup(
                  ligand_input = ligand_sdf,
