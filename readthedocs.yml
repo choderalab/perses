@@ -4,6 +4,12 @@ version: 2
 
 conda:
   environment: docs/environment.yml
+  
+build:
+  image: latest
+  tools:
+    python: mambaforge-4.10
+
 
 python:
   version: 3.6
