@@ -79,7 +79,7 @@ class RelativeFEPSetup(object):
 
         Parameters
         ----------
-        ligand_input : str
+        ligand_input : str or list of str
             the name of the ligand file (any openeye supported format)
             this can either be an .sdf or list of .sdf files, or a list of SMILES strings
         forcefield_files : list of str
@@ -161,8 +161,11 @@ class RelativeFEPSetup(object):
         self._use_given_geometries = use_given_geometries
         self._given_geometries_tolerance = given_geometries_tolerance
         self.small_molecule_forcefield = small_molecule_forcefield
-        if ligand_input:
+        if isinstance(ligand_input, str):
             self._ligand_input = AnyPath(ligand_input)
+        else:
+            # Accept list of paths
+            self._ligand_input = [AnyPath(_) for _ in ligand_input]
 
         if protein_pdb_filename:
             self.protein_pdb_filename = AnyPath(protein_pdb_filename)
@@ -229,13 +232,9 @@ class RelativeFEPSetup(object):
                 _logger.info(f"Detected vacuum phase: setting noCutoff nonbonded method.")
                 self._nonbonded_method = app.NoCutoff
 
-
-
         beta = 1.0 / (kB * temperature)
 
-        self.mol_list = []
-
-        #all legs need ligands so do this first
+        # all legs need ligands so do this first
         self._old_ligand_index = old_ligand_index
         self._new_ligand_index = new_ligand_index
         _logger.info(f"Handling files for ligands and indices...")
@@ -260,9 +259,6 @@ class RelativeFEPSetup(object):
                 self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
                 _logger.info(f"\tsuccessfully created old and new systems from smiles")
 
-                self.mol_list.append(self._ligand_oemol_old)
-                self.mol_list.append(self._ligand_oemol_new)
-
                 # forcefield_generators needs to be able to distinguish between the two ligands
                 # while topology_proposal needs them to have the same residue name
                 self._ligand_oemol_old.SetTitle("MOL")
@@ -279,9 +275,6 @@ class RelativeFEPSetup(object):
                 self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input, index=self._new_ligand_index, allow_undefined_stereo=True)
                 # self._ligand_oemol_old = generate_unique_atom_names(self._ligand_oemol_old)
                 # self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
-
-                self.mol_list.append(self._ligand_oemol_old)
-                self.mol_list.append(self._ligand_oemol_new)
 
                 self._ligand_positions_old = extractPositionsFromOEMol(self._ligand_oemol_old)
                 self._ligand_positions_new = extractPositionsFromOEMol(self._ligand_oemol_new)
@@ -310,9 +303,6 @@ class RelativeFEPSetup(object):
             self._ligand_oemol_old.SetTitle("OLD")
             self._ligand_oemol_new.SetTitle("NEW")
 
-            self.mol_list.append(self._ligand_oemol_old)
-            self.mol_list.append(self._ligand_oemol_new)
-
             # forcefield_generators needs to be able to distinguish between the two ligands
             # while topology_proposal needs them to have the same residue name
             self._ligand_oemol_old.SetTitle("MOL")
@@ -337,6 +327,12 @@ class RelativeFEPSetup(object):
         self._ligand_md_topology_new = md.Topology.from_openmm(self._ligand_topology_new)
         _logger.info(f"Created mdtraj topologies for both ligands.")
 
+        # We must generate the complex topology and positions before the SystemGenerator is created because if the
+        # receptor is a mol2, it must be added to mol_list, which is use to create self._molecules, which is fed to the SystemGenerator
+        if 'complex' in phases:
+            _logger.info(f"setting up complex phase...")
+            self._setup_complex_phase()
+
         # Select barostat
         NONPERIODIC_NONBONDED_METHODS = [app.NoCutoff, app.CutoffNonPeriodic]
         if pressure is not None:
@@ -352,7 +348,8 @@ class RelativeFEPSetup(object):
 
         # Create openforcefield Molecule objects for old and new molecules
         from openff.toolkit.topology import Molecule
-        molecules = [ Molecule.from_openeye(oemol,allow_undefined_stereo=True) for oemol in [self._ligand_oemol_old, self._ligand_oemol_new] ]
+        molecules = [Molecule.from_openeye(oemol, allow_undefined_stereo=True) for oemol in [self._ligand_oemol_old,
+                                                                                             self._ligand_oemol_new]]
 
         # Handle spectator molecules
         if self._spectator_filenames is not None:
@@ -601,7 +598,6 @@ class RelativeFEPSetup(object):
 
         elif self.receptor_mol2_filename:
             self._receptor_mol = createOEMolFromSDF(self.receptor_mol2_filename)
-            self.mol_list.append(self._receptor_mol)
             self._receptor_positions_old = extractPositionsFromOEMol(self._receptor_mol)
             self._receptor_topology_old = forcefield_generators.generateTopologyFromOEMol(self._receptor_mol)
             self._receptor_md_topology_old = md.Topology.from_openmm(self._receptor_topology_old)

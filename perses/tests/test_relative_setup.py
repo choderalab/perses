@@ -371,5 +371,44 @@ def test_relative_setup_solvent_padding():
         solvent_padding=input_solvent_padding)
     assert input_solvent_padding == fe_setup._padding, f"Input solvent padding, {input_solvent_padding}, is different from setup object solvent padding, {fe_setup._padding}."
 
+
+def test_relative_setup_list_ligand_input():
+    """
+    Checks that the RelativeFEPSetup can handle list of filenames as input for the ligand_input parameter.
+    """
+    from perses.app.relative_setup import RelativeFEPSetup
+    # Generate topology proposal and positions
+    guest_1_filename = resource_filename("perses", os.path.join("data", "host-guest", "a1.sybyl.mol2"))
+    guest_2_filename = resource_filename("perses", os.path.join("data", "host-guest", "a2.sybyl.mol2"))
+    ligand_input_files = (guest_1_filename, guest_2_filename)
+    # ligand indices
+    ligand_A_index = 0
+    ligand_B_index = 1
+
+    # receptor file
+    host_filename = resource_filename("perses", os.path.join("data", "host-guest", "cb7.sybyl.mol2"))
+
+    # phases
+    phases = ["solvent", "complex"]
+
+    # Build relative FE setup object
+    fe_setup = RelativeFEPSetup(
+        ligand_input=ligand_input_files,
+        receptor_mol2_filename=host_filename,
+        old_ligand_index=ligand_A_index,
+        new_ligand_index=ligand_B_index,
+        forcefield_files=["amber14/tip3p.xml"],
+        small_molecule_forcefield="gaff-2.11",
+        small_molecule_parameters_cache=resource_filename("perses", os.path.join("data", "host-guest", "cache.json")),
+        phases=phases,
+        solvent_padding=1.4 * unit.nanometers)
+
+    # assert the ligand input private attribute is an iterable with the correct size
+    ligand_input_size = len(fe_setup._ligand_input)
+    expected_input_size = len(ligand_input_files)
+    assert ligand_input_size == expected_input_size, f"There should be {expected_input_size} ligand input files, " \
+                                                     f"receiving {ligand_input_size} files."
+
+
 # if __name__=="__main__":
 #     test_run_cdk2_iterations_repex()
