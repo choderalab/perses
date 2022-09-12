@@ -1,4 +1,4 @@
-from typing import Optional, Iterable, List, Dict, Any
+from typing import Optional, Iterable, List, Dict, Any, Union, Type
 
 import networkx as nx
 
@@ -17,8 +17,61 @@ from gufe.protocols import (
 
 #from gufe.protocols.settings import ...
 
+from perses.app.relative_setup import RelativeFEPSetup
+from perses.annihilation.relative import HybridTopologyFactory
 
-class GenerateHybridTopology(ProtocolUnit):
+
+class GenerateAlchemicalFactory(ProtocolUnit):
+    # NOT really intented to carry a lot of state data (having its own constructor is dangerous!)
+
+    @staticmethod
+    def setup_fep(protein_file: str, ligands_file: Union[str, List[str]], old_ligand_index: int, new_ligand_index: int,
+                  protein_forcefield_files: List[str], small_molecule_forcefield: str,
+                  phases: List[str]) -> RelativeFEPSetup:
+        # Setup Relative FEP simulation
+        # old_ligand_index = 0
+        # new_ligand_index = 1
+        # ligands_file = 'Tyk2_ligands_shifted.sdf'
+        # protein_file = 'Tyk2_protein.pdb'
+        # forcefield_files = [
+        #     "amber/ff14SB.xml",
+        #     "amber/tip3p_standard.xml",
+        #     "amber/tip3p_HFE_multivalent.xml",
+        #     "amber/phosaa10.xml",
+        # ]
+        # small_molecule_forcefield = 'openff-2.0.0'
+        # phases = ["complex", "solvent"]
+        fe_setup = RelativeFEPSetup(
+            ligand_input=ligands_file,
+            old_ligand_index=old_ligand_index,
+            new_ligand_index=new_ligand_index,
+            protein_pdb_filename=protein_file,
+            forcefield_files=protein_forcefield_files,
+            small_molecule_forcefield=small_molecule_forcefield,
+            phases=phases,
+        )
+        return fe_setup
+
+    @staticmethod
+    def generate_htf_object(fe_setup: RelativeFEPSetup, phase: str) -> HybridTopologyFactory:
+        topology_proposal = getattr(fe_setup, f"{phase}_topology_proposal")
+        current_positions = getattr(fe_setup, f"{phase}_old_positions")
+        new_positions = getattr(fe_setup, f"{phase}_new_positions")
+        forward_neglected_angle_terms = getattr(fe_setup, f"_{phase}_forward_neglected_angles")
+        reverse_neglected_angle_terms = getattr(fe_setup, f"_{phase}_reverse_neglected_angles")
+
+        htf = HybridTopologyFactory(
+            topology_proposal=topology_proposal,
+            current_positions=current_positions,
+            new_positions=new_positions,
+            neglected_new_angle_terms=forward_neglected_angle_terms,
+            neglected_old_angle_terms=reverse_neglected_angle_terms,
+            softcore_LJ_v2=True,
+            interpolate_old_and_new_14s=False,
+        )
+
+        return htf
+
     @staticmethod
     def _execute(ctx: Context, *, settings, stateA, stateB, mapping, start, **inputs):
 
