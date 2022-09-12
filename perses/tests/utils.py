@@ -672,8 +672,8 @@ def validate_endstate_energies_md(input_htf, T_max=300 * unit.kelvin, endstate=0
 
     # Run MD
     hybrid = list()
-    for _ in tqdm.tqdm(range(int(n_steps / 250))):
-        integrator.step(250)
+    for _ in tqdm.tqdm(range(int(n_steps / save_freq))):
+        integrator.step(save_freq)
         pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
         hybrid.append(pos)
 
