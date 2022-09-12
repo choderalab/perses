@@ -35,6 +35,7 @@ solvent_padding: 9.0 # angstroms
 pressure: 1 # atmsopheres
 temperature: 300 # kelvin
 timestep: 4 # femtoseconds
+ionic_strength: 0.15 # molar
 
 # Atom mapping specification
 atom_expression:
