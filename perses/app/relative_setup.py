@@ -23,16 +23,16 @@ import logging
 import os
 import dask.distributed as distributed
 from collections import namedtuple
-from collections import namedtuple
 import random
 from scipy.special import logsumexp
+from openeye import oechem
 
-logging.basicConfig(level = logging.NOTSET)
+LOGLEVEL = os.environ.get("LOGLEVEL", "INFO").upper()
+logging.basicConfig(level=logging.NOTSET)
 _logger = logging.getLogger("relative_setup")
-_logger.setLevel(logging.INFO)
+_logger.setLevel(LOGLEVEL)
 
- # define NamedTuples from feptasks
-# EquilibriumResult = namedtuple('EquilibriumResult', ['sampler_state', 'reduced_potentials', 'files', 'timers', 'nonalchemical_perturbations'])
+# define NamedTuples from feptasks
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
 NonequilibriumFEPTask = namedtuple('NonequilibriumFEPTask', ['particle', 'inputs'])
 
@@ -44,13 +44,12 @@ class RelativeFEPSetup(object):
     Importantly, it ensures that the atom maps in the solvent and complex phases match correctly.
     """
     def __init__(self,
-                 ligand_input,
-                 old_ligand_index,
-                 new_ligand_index,
-                 forcefield_files,
-                 phases,
-                 protein_pdb_filename=None,
-                 receptor_mol2_filename=None,
+                 receptor,
+                 old_ligand,
+                 new_ligand,
+                 forcefield_files=("amber/ff14SB.xml","amber/tip3p_standard.xml","amber/tip3p_HFE_multivalent.xml",
+                                   "amber/phosaa10.xml"),
+                 phases=("complex", "solvent"),
                  pressure=1.0 * unit.atmosphere,
                  temperature=300.0 * unit.kelvin,
                  solvent_padding=9.0 * unit.angstroms,
@@ -61,43 +60,44 @@ class RelativeFEPSetup(object):
                  atom_expr=None,
                  bond_expr=None,
                  anneal_14s=False,
-                 small_molecule_forcefield='gaff-2.11',
+                 small_molecule_forcefield='openff-2.0.0',
                  small_molecule_parameters_cache=None,
                  trajectory_directory=None,
                  trajectory_prefix=None,
                  spectator_filenames=None,
-                 nonbonded_method = 'PME',
+                 nonbonded_method='PME',
                  complex_box_dimensions=None,
                  solvent_box_dimensions=None,
                  remove_constraints=False,
-                 use_given_geometries = False,
+                 use_given_geometries=False,
                  given_geometries_tolerance=0.2*unit.angstroms,
                  transform_waters_into_ions_for_charge_changes=True,
+                 receptor_positions=None,
                  ):
         """
         Initialize a NonequilibriumFEPSetup object
 
         Parameters
         ----------
-        ligand_input : str
-            the name of the ligand file (any openeye supported format)
-            this can either be an .sdf or list of .sdf files, or a list of SMILES strings
-        forcefield_files : list of str
-            The list of ffxml files that contain the forcefields that will be used (excepting for small molecules)
-        phases : list of str
-            The phases to simulate
-        protein_pdb_filename : str, default None
-            Protein pdb filename. If none, receptor_mol2_filename must be provided
-        receptor_mol2_filename : str, default None
-            Receptor mol2 filename. If none, protein_pdb_filename must be provided
+        receptor : openmm.app.topology.Topology or openmm.app.pdbfile.PDBFile
+            Receptor or target. If `Topology` object is used, you must specify `receptor_positions` as well.
+        old_ligand : oechem.OEMol
+            old ligand
+        new_ligand : oechem.OEMol
+            new ligand
+        forcefield_files : str or List[str], optional, default=("amber/ff14SB.xml", "amber/tip3p_standard.xml",
+                           "amber/tip3p_HFE_multivalent.xml", "amber/phosaa10.xml")
+            The list of ffxml files that contain the forcefields that will be used for everything, except for small
+            molecules
+        phases : List[str], optional, default=("complex", "solvent")
+            The phases to simulate. Accepted values are "complex", "solvent", and "vacuum".
         pressure : Quantity, units of pressure
             Pressure to use in the barostat
         temperature : Quantity, units of temperature
             Temperature to use for the Langevin integrator
         solvent_padding : Quantity, units of length
             The amount of padding to use when adding solvent
-
-        : Quantity, units of concentration
+        ionic_strength : Quantity, units of concentration
             Concentration of solvent ions to be used when solvating the system
         neglect_angles : bool
             Whether to neglect certain angle terms for the purpose of minimizing work variance in the RJMC protocol.
@@ -135,9 +135,9 @@ class RelativeFEPSetup(object):
         transform_waters_into_ions_for_charge_changes : bool, default True
             whether to introduce a counterion by transforming water(s) into ion(s) for charge changing transformations
             if False, counterions will not be introduced.
+        receptor_positions : np.array
+            Positions for the receptor. Must be specified if the receptor argument is an OpenMM topology.
         """
-        from openeye import oechem
-
         # TODO: Refactor this class into initializer that configures options and factory methods that use them.
         # QUESTION: Why do we add these as private object attributes?
         #   If we want users to be able to modify them, they should not be private.
@@ -161,34 +161,46 @@ class RelativeFEPSetup(object):
         self._use_given_geometries = use_given_geometries
         self._given_geometries_tolerance = given_geometries_tolerance
         self.small_molecule_forcefield = small_molecule_forcefield
-        if ligand_input:
-            self._ligand_input = AnyPath(ligand_input)
 
-        if protein_pdb_filename:
-            self.protein_pdb_filename = AnyPath(protein_pdb_filename)
-        else:
-            self.protein_pdb_filename = protein_pdb_filename
-
-        if receptor_mol2_filename:
-            self.receptor_mol2_filename = AnyPath(receptor_mol2_filename)
-        else:
-            self.receptor_mol2_filename = receptor_mol2_filename
-
-        if small_molecule_parameters_cache:
-            self.small_molecule_parameters_cache = AnyPath(small_molecule_parameters_cache)
-        else:
-            self.small_molecule_parameters_cache = small_molecule_parameters_cache
-
+        # trajectory output
         if trajectory_prefix:
             self._trajectory_prefix = AnyPath(trajectory_prefix)
         else:
             self._trajectory_prefix = trajectory_prefix
-
         if trajectory_directory:
             self._trajectory_directory = AnyPath(trajectory_directory)
         else:
             self._trajectory_directory = trajectory_directory
 
+        # load receptor topology and positions
+        self._receptor_topology, self._receptor_positions = self._process_receptor(receptor, receptor_positions)
+        # TODO: make this a method that deals with loading ligands from OEmols/OFFmols
+        # load ligands
+        # TODO: Use openff toolkit molecules instead of OpenEye molecules
+        self._ligand_oemol_old = old_ligand
+        self._ligand_oemol_new = new_ligand
+        self._ligand_positions_old = extractPositionsFromOEMol(self._ligand_oemol_old)
+        # set ligand names  -- Topology proposal requires "MOL" as small molecule name
+        # forcefield_generators needs to be able to distinguish between the two ligands
+        # while topology_proposal needs them to have the same residue name
+        _logger.info(f"\tsetting both molecule oemol titles to 'MOL'.")
+        self._ligand_oemol_old.SetTitle("MOL")
+        self._ligand_oemol_new.SetTitle("MOL")
+        # small molecules parameters cache
+        if small_molecule_parameters_cache:
+            self.small_molecule_parameters_cache = AnyPath(small_molecule_parameters_cache)
+        else:
+            self.small_molecule_parameters_cache = small_molecule_parameters_cache
+
+        # Generate OpenMM topologies from ligands
+        self._ligand_topology_old = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_old)
+        self._ligand_topology_new = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_new)
+        # Generate mdtraj topologies
+        self._ligand_md_topology_old = md.Topology.from_openmm(self._ligand_topology_old)
+        self._ligand_md_topology_new = md.Topology.from_openmm(self._ligand_topology_new)
+        _logger.info(f"Created mdtraj topologies for both ligands.")
+
+        # Handle forcefield files
         if forcefield_files:
             if isinstance(forcefield_files, (list, set, tuple)):
                 self.forcefield_files = [AnyPath(forcefield_file) for forcefield_file in forcefield_files]
@@ -197,145 +209,16 @@ class RelativeFEPSetup(object):
         else:
             self.forcefield_files = forcefield_files
 
-
+        # FIXME: Create a method to handle all the geometry stuff, hopefully not needing to check extensions of files
         if self._use_given_geometries:
-            assert self._ligand_input.suffix == '.sdf' or self._ligand_input.suffix == '.mol2', f"cannot use deterministic atom placement if the ligand input files do not contain geometry information (e.g. in .sdf or .mol2 format)"
             assert 'complex' in phases, f"cannot use deterministic atom placement if complex is not in the specified phases to generate"
             # TODO: add deterministic geometry proposal to solvent and vacuum
 
-        if remove_constraints is False:
-            self._h_constraints = app.HBonds
-            self._rigid_water = True
-        elif remove_constraints == 'all':
-            _logger.info(f'Hydrogens will not be constrained. This may be problematic if using a larger timestep')
-            self._h_constraints = None
-            self._rigid_water = False
-        elif remove_constraints == 'not water':
-            _logger.info(f'Hydrogens will not be constrained for non-water molecules. This may be problematic if using a larger timestep')
-            self._h_constraints = None
-            self._rigid_water = True
-        else:
-            _logger.warning(f"remove_constraints value of {remove_constraints}. Allowed values are False 'all' or 'not water'")
+        # Handle constraints
+        self._handle_constraints(remove_constraints)
 
-        try:
-            self._nonbonded_method = getattr(app,nonbonded_method)
-            _logger.info(f'Setting non bonded method to {nonbonded_method}')
-        except AttributeError:
-            _logger.warning(f'Nonbonded method {nonbonded_method} not recognised')
-            if 'complex' in phases or 'solvent' in phases:
-                _logger.warning(f"Detected complex or solvent phases: setting PME nonbonded method.")
-                self._nonbonded_method = app.PME
-            else:
-                _logger.info(f"Detected vacuum phase: setting noCutoff nonbonded method.")
-                self._nonbonded_method = app.NoCutoff
-
-
-
-        beta = 1.0 / (kB * temperature)
-
-        self.mol_list = []
-
-        #all legs need ligands so do this first
-        self._old_ligand_index = old_ligand_index
-        self._new_ligand_index = new_ligand_index
-        _logger.info(f"Handling files for ligands and indices...")
-        if type(self._ligand_input) is not list: # the ligand has been provided as a single file
-            # Make sure the input file exists
-            if not os.path.isfile(self._ligand_input):
-                raise FileNotFoundError(f"Input file at {self._ligand_input} does not exist.")
-            if self._ligand_input.suffix == '.smi': #
-                _logger.info(f"Detected .smi format.  Proceeding...")
-                _logger.info('  Note that SMILES does not contain geometry information for use in mapping')
-                self._ligand_smiles_old = load_smi(self._ligand_input,self._old_ligand_index)
-                self._ligand_smiles_new = load_smi(self._ligand_input,self._new_ligand_index)
-                _logger.info(f"\told smiles: {self._ligand_smiles_old}")
-                _logger.info(f"\tnew smiles: {self._ligand_smiles_new}")
-
-                all_old_mol = createSystemFromSMILES(self._ligand_smiles_old, title='MOL') # should be stereospecific
-                self._ligand_oemol_old, self._ligand_system_old, self._ligand_positions_old, self._ligand_topology_old = all_old_mol
-                self._ligand_oemol_old = generate_unique_atom_names(self._ligand_oemol_old)
-
-                all_new_mol = createSystemFromSMILES(self._ligand_smiles_new, title='NEW')
-                self._ligand_oemol_new, self._ligand_system_new, self._ligand_positions_new, self._ligand_topology_new = all_new_mol
-                self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
-                _logger.info(f"\tsuccessfully created old and new systems from smiles")
-
-                self.mol_list.append(self._ligand_oemol_old)
-                self.mol_list.append(self._ligand_oemol_new)
-
-                # forcefield_generators needs to be able to distinguish between the two ligands
-                # while topology_proposal needs them to have the same residue name
-                self._ligand_oemol_old.SetTitle("MOL")
-                self._ligand_oemol_new.SetTitle("MOL")
-                _logger.info(f"\tsetting both molecule oemol titles to 'MOL'.")
-
-                self._ligand_topology_old = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_old)
-                self._ligand_topology_new = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_new)
-                _logger.info(f"\tsuccessfully generated topologies for both oemols.")
-
-            elif self._ligand_input.suffix == '.sdf' or self._ligand_input.suffix == '.mol2': #
-                _logger.info(f"Detected .sdf format.  Proceeding...") #TODO: write checkpoints for sdf format
-                self._ligand_oemol_old = createOEMolFromSDF(self._ligand_input, index=self._old_ligand_index, allow_undefined_stereo=True)
-                self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input, index=self._new_ligand_index, allow_undefined_stereo=True)
-                # self._ligand_oemol_old = generate_unique_atom_names(self._ligand_oemol_old)
-                # self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
-
-                self.mol_list.append(self._ligand_oemol_old)
-                self.mol_list.append(self._ligand_oemol_new)
-
-                self._ligand_positions_old = extractPositionsFromOEMol(self._ligand_oemol_old)
-                self._ligand_positions_new = extractPositionsFromOEMol(self._ligand_oemol_new)
-                _logger.info(f"\tsuccessfully extracted positions from OEMOL.")
-
-                self._ligand_oemol_old.SetTitle("MOL")
-                self._ligand_oemol_new.SetTitle("MOL")
-                _logger.info(f"\tsetting both molecule oemol titles to 'MOL'.")
-
-                self._ligand_smiles_old = oechem.OECreateSmiString(self._ligand_oemol_old,
-                            oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
-                self._ligand_smiles_new = oechem.OECreateSmiString(self._ligand_oemol_new,
-                            oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
-                _logger.info(f"\tsuccessfully created SMILES for both ligand OEMOLs.")
-
-                # replace this with function that will generate the system etc. so that vacuum can be performed
-                self._ligand_topology_old = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_old)
-                self._ligand_topology_new = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_new)
-                _logger.info(f"\tsuccessfully generated topologies for both OEMOLs.")
-        else:
-            self._ligand_oemol_old = createOEMolFromSDF(self._ligand_input[self._old_ligand_index])
-            self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input[self._new_ligand_index])
-            self._ligand_oemol_old = generate_unique_atom_names(self._ligand_oemol_old)
-            self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
-
-            self._ligand_oemol_old.SetTitle("OLD")
-            self._ligand_oemol_new.SetTitle("NEW")
-
-            self.mol_list.append(self._ligand_oemol_old)
-            self.mol_list.append(self._ligand_oemol_new)
-
-            # forcefield_generators needs to be able to distinguish between the two ligands
-            # while topology_proposal needs them to have the same residue name
-            self._ligand_oemol_old.SetTitle("MOL")
-            self._ligand_oemol_new.SetTitle("MOL")
-
-            self._ligand_positions_old = extractPositionsFromOEMol(self._ligand_oemol_old)
-            _logger.info(f"\tsuccessfully extracted positions from OEMOL.")
-
-            self._ligand_oemol_old.SetTitle("MOL")
-            self._ligand_oemol_new.SetTitle("MOL")
-            _logger.info(f"\tsetting both molecule oemol titles to 'MOL'.")
-
-            self._ligand_smiles_old = oechem.OECreateSmiString(self._ligand_oemol_old,
-                        oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
-            self._ligand_smiles_new = oechem.OECreateSmiString(self._ligand_oemol_new,
-                        oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
-            _logger.info(f"\tsuccessfully created SMILES for both ligand OEMOLs.")
-            self._ligand_topology_old = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_old)
-            self._ligand_topology_new = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_new)
-
-        self._ligand_md_topology_old = md.Topology.from_openmm(self._ligand_topology_old)
-        self._ligand_md_topology_new = md.Topology.from_openmm(self._ligand_topology_new)
-        _logger.info(f"Created mdtraj topologies for both ligands.")
+        # Handle nonbonded method
+        self._handle_nonbonded_method(nonbonded_method, phases)
 
         # Select barostat
         NONPERIODIC_NONBONDED_METHODS = [app.NoCutoff, app.CutoffNonPeriodic]
@@ -378,19 +261,41 @@ class RelativeFEPSetup(object):
 
         # Create SystemGenerator
         from openmmforcefields.generators import SystemGenerator
-        _logger.info(f'PME tolerance: {self._pme_tol}')
-        forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'constraints' : self._h_constraints, 'rigidWater': self._rigid_water, 'hydrogenMass' : self._hmass}
-        if self.small_molecule_forcefield is None or self.small_molecule_forcefield == 'None':
-            self._system_generator = SystemGenerator(forcefields=self.forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
-                                      periodic_forcefield_kwargs = {'nonbondedMethod': self._nonbonded_method})
+
+        _logger.info(f"PME tolerance: {self._pme_tol}")
+        forcefield_kwargs = {
+            "removeCMMotion": False,
+            "ewaldErrorTolerance": self._pme_tol,
+            "constraints": self._h_constraints,
+            "rigidWater": self._rigid_water,
+            "hydrogenMass": self._hmass,
+        }
+        if self.small_molecule_forcefield is None or self.small_molecule_forcefield == "None":
+            self._system_generator = SystemGenerator(
+                forcefields=self.forcefield_files,
+                barostat=barostat,
+                forcefield_kwargs=forcefield_kwargs,
+                periodic_forcefield_kwargs={"nonbondedMethod": self._nonbonded_method},
+            )
         else:
-            self._system_generator = SystemGenerator(forcefields=self.forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
-                                                     small_molecule_forcefield=self.small_molecule_forcefield, molecules=molecules, cache=self.small_molecule_parameters_cache, periodic_forcefield_kwargs = {'nonbondedMethod': self._nonbonded_method})
+            self._system_generator = SystemGenerator(
+                forcefields=self.forcefield_files,
+                barostat=barostat,
+                forcefield_kwargs=forcefield_kwargs,
+                small_molecule_forcefield=self.small_molecule_forcefield,
+                molecules=molecules,
+                cache=self.small_molecule_parameters_cache,
+                periodic_forcefield_kwargs={"nonbondedMethod": self._nonbonded_method},
+            )
         _logger.info("successfully created SystemGenerator to create ligand systems")
 
         _logger.info(f"executing SmallMoleculeSetProposalEngine...")
         # Create proposal engine
-        proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_oemol_old, self._ligand_oemol_new], self._system_generator, residue_name='MOL')
+        proposal_engine = SmallMoleculeSetProposalEngine(
+            [self._ligand_oemol_old, self._ligand_oemol_new],
+            self._system_generator,
+            residue_name="MOL",
+        )
         proposal_engine.map_strength = self._map_strength
         proposal_engine.atom_expr = self._atom_expr
         proposal_engine.bond_expr = self._bond_expr
@@ -403,24 +308,193 @@ class RelativeFEPSetup(object):
             self._geometry_engine = None
         else:
             # NOTE: we are conducting the geometry proposal without any neglected angles
-            self._geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = neglect_angles, use_14_nonbondeds = (not self._anneal_14s))
+            self._geometry_engine = FFAllAngleGeometryEngine(
+                metadata=None,
+                use_sterics=False,
+                n_bond_divisions=100,
+                n_angle_divisions=180,
+                n_torsion_divisions=360,
+                verbose=True,
+                storage=None,
+                bond_softening_constant=1.0,
+                angle_softening_constant=1.0,
+                neglect_angles=neglect_angles,
+                use_14_nonbondeds=(not self._anneal_14s),
+            )
 
+        # Phases setup
+        self._setup_phases(
+            phases,
+            transform_waters_into_ions_for_charge_changes=transform_waters_into_ions_for_charge_changes,
+        )
+
+    @classmethod
+    def from_files(cls, receptor_input, ligand_input, old_ligand_index, new_ligand_index, **kwargs):
+        """
+        Generates a relative free energy setup from files.
+
+        Parameters
+        ----------
+        receptor_input : str or file-like object
+            The path to the file or file-like object to stream the receptor from. PDB or MOL2 formats are supported.
+        ligand_input : str or file-like object
+            The path to the file or file-like object to stream ligands from. SDF, MOL2 or plain-text SMILES formats are
+            supported.
+        old_ligand_index : int
+            Index for the old ligand (origin ligand) in the forward transformation.
+        new_ligand_index : int
+            Index for the new ligand (destination ligand) in the forward transformation.
+
+        Returns
+        -------
+        fep_setup : RelativeFEPSetup
+            Instance of `RelativeFEPSetup` class.
+        """
+        from openmm.app import PDBFile
+        # make sure input files are converted to path objects
+        ligands_file_path = AnyPath(ligand_input)
+        receptor_path = AnyPath(receptor_input)
+
+        # Load receptor
+        receptor = PDBFile(str(receptor_path))
+
+        # Load ligands
+        old_ligand, new_ligand = cls._read_ligands_from_file(ligands_file_path, old_ligand_index, new_ligand_index)
+
+        return cls(receptor, old_ligand, new_ligand, **kwargs)
+
+    @staticmethod
+    def _process_receptor(receptor, positions=None):
+        """
+        Function that handles the receptor format to match the expected one for perses.
+
+        Parameters
+        ----------
+        receptor : openmm.topology.Topology or openmm.app.pdbfile.PDBFile
+            Receptor in OpenMM format. Accepts both `Topology` or `PDBFile` objects. If `Topology` object is used,
+            positions must be specified using the `positions` keyword argument.
+        positions : np.array, optional, default=None
+            Positions to be used for the receptor. Must specify it if the receptor object is a `Topology`.
+
+        Returns
+        -------
+        omm_topology : openmm.topology.Topology
+            Openmm topology for the receptor
+        positions : np.array
+            Positions for the receptor atoms
+        """
+        try:
+            omm_topology = receptor.topology
+            positions = receptor.positions
+        except AttributeError:
+            omm_topology = receptor
+            positions = positions
+        return omm_topology, positions
+
+    @classmethod
+    def _read_ligands_from_file(cls, ligands_input, old_ligand_index, new_ligand_index):
+        """
+        Reads ligands from the specified input file(s) path.
+
+        Parameters
+        ----------
+        ligands_input: path-like object or AnyPath or List[AnyPath]
+
+        Returns
+        -------
+        ligands: tuple[OEMol]
+            Pair/tuple of old ligand and new ligand as OEMol objects. (old_ligand, new_ligand).
+        """
+        # Handle both list of paths or single file path
+        if type(ligands_input) is not list:
+            # Input is either a mol2 or an sdf file
+            if ligands_input.suffix in (".mol2", ".sdf"):
+                ligand_oemol_old = createOEMolFromSDF(ligands_input, index=old_ligand_index,
+                                                      allow_undefined_stereo=True)
+                ligand_oemol_new = createOEMolFromSDF(ligands_input, index=new_ligand_index,
+                                                      allow_undefined_stereo=True)
+            # Assume input is then a plain text file with SMILES as lines
+            else:
+                ligand_oemol_old = createOEMolFromSDF(ligands_input[old_ligand_index])
+                ligand_oemol_new = createOEMolFromSDF(ligands_input[new_ligand_index])
+        else:
+            ligand_oemol_old, ligand_oemol_new = cls._read_ligands_from_files_list(ligands_input, old_ligand_index,
+                                                                                   new_ligand_index)
+
+        return ligand_oemol_old, ligand_oemol_new
+
+    @staticmethod
+    def _read_ligands_from_smiles_file(smiles_file, old_ligand_index, new_ligand_index):
+        """Reads ligands from plain-text file with SMILES as lines."""
+        _logger.info(f"Detected .smi format.  Proceeding...")
+        _logger.info('  Note that SMILES does not contain geometry information for use in mapping')
+        # Load smiles
+        ligand_smiles_old = load_smi(smiles_file, old_ligand_index)
+        ligand_smiles_new = load_smi(smiles_file, new_ligand_index)
+        _logger.info(f"\told smiles: {ligand_smiles_old}")
+        _logger.info(f"\tnew smiles: {ligand_smiles_new}")
+        # Create old OEmol from smiles
+        all_old_mol = createSystemFromSMILES(ligand_smiles_old, title='MOL')  # should be stereospecific
+        ligand_oemol_old, ligand_system_old, ligand_positions_old, ligand_topology_old = all_old_mol
+        ligand_oemol_old = generate_unique_atom_names(ligand_oemol_old)
+        # Create new OEmol from smiles
+        all_new_mol = createSystemFromSMILES(ligand_smiles_new, title='NEW')
+        ligand_oemol_new, ligand_system_new, ligand_positions_new, ligand_topology_new = all_new_mol
+        ligand_oemol_new = generate_unique_atom_names(ligand_oemol_new)
+        _logger.info(f"\tsuccessfully created old and new systems from smiles")
+
+        return ligand_oemol_old, ligand_oemol_new
+
+    def _handle_constraints(self, remove_constraints):
+        if remove_constraints is False:
+            self._h_constraints = app.HBonds
+            self._rigid_water = True
+        elif remove_constraints == 'all':
+            _logger.info(f'Hydrogens will not be constrained. This may be problematic if using a larger timestep')
+            self._h_constraints = None
+            self._rigid_water = False
+        elif remove_constraints == 'not water':
+            _logger.info(
+                f'Hydrogens will not be constrained for non-water molecules. This may be problematic if using a larger timestep')
+            self._h_constraints = None
+            self._rigid_water = True
+        else:
+            _logger.warning(
+                f"remove_constraints value of {remove_constraints}. Allowed values are False 'all' or 'not water'")
+
+    def _handle_nonbonded_method(self, nonbonded_method, phases):
+        try:
+            self._nonbonded_method = getattr(app, nonbonded_method)
+            _logger.info(f'Setting non bonded method to {nonbonded_method}')
+        except AttributeError:
+            _logger.warning(f'Nonbonded method {nonbonded_method} not recognised')
+            if 'complex' in phases or 'solvent' in phases:
+                _logger.warning(f"Detected complex or solvent phases: setting PME nonbonded method.")
+                self._nonbonded_method = app.PME
+            else:
+                _logger.info(f"Detected vacuum phase: setting noCutoff nonbonded method.")
+                self._nonbonded_method = app.NoCutoff
+
+    def _setup_phases(self, phases, transform_waters_into_ions_for_charge_changes=True,):
+        """Generates a single topology proposal and sets attributes for the different specified phases."""
         # if we are running multiple phases, we only want to generate one topology proposal, and use the same one for the other legs
         # this is tracked using _proposal_phase
+        beta = 1.0 / (kB * self._temperature)
         if 'complex' in phases:
             _logger.info('Generating the topology proposal from the complex leg')
             _logger.info(f"setting up complex phase...")
             self._setup_complex_phase()
             self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(
-            self._complex_topology_old, self._complex_positions_old,phase='complex',box_dimensions=self._complex_box_dimensions, ionic_strength=self._ionic_strength)
+                self._complex_topology_old, self._complex_positions_old, phase='complex',
+                box_dimensions=self._complex_box_dimensions, ionic_strength=self._ionic_strength)
             _logger.info(f"successfully generated complex topology, positions, system")
 
             self._complex_md_topology_old_solvated = md.Topology.from_openmm(self._complex_topology_old_solvated)
 
             _logger.info(f"creating TopologyProposal...")
             self._complex_topology_proposal = self._proposal_engine.propose(self._complex_system_old_solvated,
-                                          self._complex_topology_old_solvated,
-                                          current_mol_id=0, proposed_mol_id=1)
+                                                                            self._complex_topology_old_solvated,
+                                                                            current_mol_id=0, proposed_mol_id=1)
 
             self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
 
@@ -428,27 +502,32 @@ class RelativeFEPSetup(object):
 
             _logger.info(f"conducting geometry proposal...")
             if self._use_given_geometries:
-                self._complex_positions_new_solvated, self._complex_logp_proposal = self._make_new_deterministic_positions('complex'), 0.
+                self._complex_positions_new_solvated, self._complex_logp_proposal = self._make_new_deterministic_positions(
+                    'complex'), 0.
             else:
-                self._complex_positions_new_solvated, self._complex_logp_proposal = self._geometry_engine.propose(self._complex_topology_proposal,
-                                                                                    self._complex_positions_old_solvated,
-                                                                                    beta, validate_energy_bookkeeping=False)
+                self._complex_positions_new_solvated, self._complex_logp_proposal = self._geometry_engine.propose(
+                    self._complex_topology_proposal,
+                    self._complex_positions_old_solvated,
+                    beta, validate_energy_bookkeeping=False)
             if self._use_given_geometries:
                 self._complex_logp_reverse = 0.
                 self._complex_added_valence_energy, self._complex_subtracted_valence_energy = None, None
                 self._complex_forward_neglected_angles, self._complex_reverse_neglected_angles = None, None
             else:
-                self._complex_logp_reverse = self._geometry_engine.logp_reverse(self._complex_topology_proposal, self._complex_positions_new_solvated, self._complex_positions_old_solvated, beta, validate_energy_bookkeeping=False)
+                self._complex_logp_reverse = self._geometry_engine.logp_reverse(self._complex_topology_proposal,
+                                                                                self._complex_positions_new_solvated,
+                                                                                self._complex_positions_old_solvated,
+                                                                                beta, validate_energy_bookkeeping=False)
                 if not self._complex_topology_proposal.unique_new_atoms:
                     assert self._geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
-                    assert self._geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
+                    assert self._geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. {self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
                     self._complex_added_valence_energy = 0.0
                 else:
                     self._complex_added_valence_energy = self._geometry_engine.forward_final_context_reduced_potential - self._geometry_engine.forward_atoms_with_positions_reduced_potential
 
                 if not self._complex_topology_proposal.unique_old_atoms:
                     assert self._geometry_engine.reverse_final_context_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.reverse_final_context_reduced_potential})"
-                    assert self._geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
+                    assert self._geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. {self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
                     self._complex_subtracted_valence_energy = 0.0
                 else:
                     self._complex_subtracted_valence_energy = self._geometry_engine.reverse_final_context_reduced_potential - self._geometry_engine.reverse_atoms_with_positions_reduced_potential
@@ -462,15 +541,14 @@ class RelativeFEPSetup(object):
                                             new_positions=self._complex_positions_new_solvated)
             else:
                 _logger.info("Skipping counterion")
-
-
         if 'solvent' in phases:
             _logger.info(f"Detected solvent...")
             if self._proposal_phase is None:
                 _logger.info(f"no complex detected in phases...generating unique topology/geometry proposals...")
                 _logger.info(f"solvating ligand...")
                 self._ligand_topology_old_solvated, self._ligand_positions_old_solvated, self._ligand_system_old_solvated = self._solvate_system(
-                self._ligand_topology_old, self._ligand_positions_old,phase='solvent',box_dimensions=self._solvent_box_dimensions,ionic_strength=self._ionic_strength)
+                    self._ligand_topology_old, self._ligand_positions_old, phase='solvent',
+                    box_dimensions=self._solvent_box_dimensions, ionic_strength=self._ionic_strength)
                 self._ligand_md_topology_old_solvated = md.Topology.from_openmm(self._ligand_topology_old_solvated)
 
                 _logger.info(f"creating TopologyProposal")
@@ -487,26 +565,31 @@ class RelativeFEPSetup(object):
 
             _logger.info(f"conducting geometry proposal...")
             if self._use_given_geometries:
-                self._ligand_positions_new_solvated, self._solvent_logp_proposal = self._make_new_deterministic_positions('solvent'), 0.
+                self._ligand_positions_new_solvated, self._solvent_logp_proposal = self._make_new_deterministic_positions(
+                    'solvent'), 0.
             else:
-                self._ligand_positions_new_solvated, self._solvent_logp_proposal = self._geometry_engine.propose(self._solvent_topology_proposal,
-                                                                                        self._ligand_positions_old_solvated, beta, validate_energy_bookkeeping=False)
+                self._ligand_positions_new_solvated, self._solvent_logp_proposal = self._geometry_engine.propose(
+                    self._solvent_topology_proposal,
+                    self._ligand_positions_old_solvated, beta, validate_energy_bookkeeping=False)
             if self._use_given_geometries:
                 self._solvent_logp_reverse = 0.
                 self._solvent_added_valence_energy, self._solvent_subtracted_valence_energy = None, None
                 self._solvent_forward_neglected_angles, self._solvent_reverse_neglected_angles = None, None
             else:
-                self._solvent_logp_reverse = self._geometry_engine.logp_reverse(self._solvent_topology_proposal, self._ligand_positions_new_solvated, self._ligand_positions_old_solvated, beta, validate_energy_bookkeeping=False)
+                self._solvent_logp_reverse = self._geometry_engine.logp_reverse(self._solvent_topology_proposal,
+                                                                                self._ligand_positions_new_solvated,
+                                                                                self._ligand_positions_old_solvated,
+                                                                                beta, validate_energy_bookkeeping=False)
                 if not self._solvent_topology_proposal.unique_new_atoms:
                     assert self._geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
-                    assert self._geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
+                    assert self._geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. {self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
                     self._solvent_added_valence_energy = 0.0
                 else:
                     self._solvent_added_valence_energy = self._geometry_engine.forward_final_context_reduced_potential - self._geometry_engine.forward_atoms_with_positions_reduced_potential
 
                 if not self._solvent_topology_proposal.unique_old_atoms:
                     assert self._geometry_engine.reverse_final_context_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.reverse_final_context_reduced_potential})"
-                    assert self._geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
+                    assert self._geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. {self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
                     self._solvent_subtracted_valence_energy = 0.0
                 else:
                     self._solvent_subtracted_valence_energy = self._geometry_engine.reverse_final_context_reduced_potential - self._geometry_engine.reverse_atoms_with_positions_reduced_potential
@@ -520,7 +603,6 @@ class RelativeFEPSetup(object):
                                             new_positions=self._ligand_positions_new_solvated)
             else:
                 _logger.info("Skipping counterion")
-
         if 'vacuum' in phases:
             _logger.info(f"Detected solvent...")
             # need to change nonbonded cutoff and remove barostat for vacuum leg
@@ -536,8 +618,9 @@ class RelativeFEPSetup(object):
 
             if self._proposal_phase is None:
                 _logger.info('No complex or solvent leg, so performing topology proposal for vacuum leg')
-                self._vacuum_topology_old, self._vacuum_positions_old, self._vacuum_system_old = self._solvate_system(self._ligand_topology_old,
-                                                                                                         self._ligand_positions_old,phase='vacuum')
+                self._vacuum_topology_old, self._vacuum_positions_old, self._vacuum_system_old = self._solvate_system(
+                    self._ligand_topology_old,
+                    self._ligand_positions_old, phase='vacuum')
                 self._vacuum_topology_proposal = self._proposal_engine.propose(self._vacuum_system_old,
                                                                                self._vacuum_topology_old,
                                                                                current_mol_id=0, proposed_mol_id=1)
@@ -555,28 +638,33 @@ class RelativeFEPSetup(object):
 
             _logger.info(f"conducting geometry proposal...")
             if self._use_given_geometries:
-                self._vacuum_positions_new, self._vacuum_logp_proposal = self._make_new_deterministic_positions('vacuum'), 0.
+                self._vacuum_positions_new, self._vacuum_logp_proposal = self._make_new_deterministic_positions(
+                    'vacuum'), 0.
             else:
-                self._vacuum_positions_new, self._vacuum_logp_proposal = self._geometry_engine.propose(self._vacuum_topology_proposal,
-                                                                              self._vacuum_positions_old,
-                                                                              beta, validate_energy_bookkeeping=False)
+                self._vacuum_positions_new, self._vacuum_logp_proposal = self._geometry_engine.propose(
+                    self._vacuum_topology_proposal,
+                    self._vacuum_positions_old,
+                    beta, validate_energy_bookkeeping=False)
             if self._use_given_geometries:
                 if self._use_given_geometries:
                     self._vacuum_logp_reverse = 0.
                     self._vacuum_added_valence_energy, self._vacuum_subtracted_valence_energy = None, None
                     self._vacuum_forward_neglected_angles, self._vacuum_reverse_neglected_angles = None, None
             else:
-                self._vacuum_logp_reverse = self._geometry_engine.logp_reverse(self._vacuum_topology_proposal, self._vacuum_positions_new, self._vacuum_positions_old, beta, validate_energy_bookkeeping=False)
+                self._vacuum_logp_reverse = self._geometry_engine.logp_reverse(self._vacuum_topology_proposal,
+                                                                               self._vacuum_positions_new,
+                                                                               self._vacuum_positions_old, beta,
+                                                                               validate_energy_bookkeeping=False)
                 if not self._vacuum_topology_proposal.unique_new_atoms:
                     assert self._geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
-                    assert self._geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
+                    assert self._geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. {self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
                     self._vacuum_added_valence_energy = 0.0
                 else:
                     self._vacuum_added_valence_energy = self._geometry_engine.forward_final_context_reduced_potential - self._geometry_engine.forward_atoms_with_positions_reduced_potential
 
                 if not self._vacuum_topology_proposal.unique_old_atoms:
                     assert self._geometry_engine.reverse_final_context_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.reverse_final_context_reduced_potential})"
-                    assert self._geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
+                    assert self._geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. {self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
                     self._vacuum_subtracted_valence_energy = 0.0
                 else:
                     self._vacuum_subtracted_valence_energy = self._geometry_engine.reverse_final_context_reduced_potential - self._geometry_engine.reverse_atoms_with_positions_reduced_potential
@@ -589,24 +677,7 @@ class RelativeFEPSetup(object):
         """
         Runs setup on the protein/receptor file for relative simulations
         """
-        # TODO: What if you get both protein pdb and receptor mol2?
-        # It might be a better idea to have something to auto-detect the format or a kwarg to specify it.
-        if self.protein_pdb_filename:
-            protein_pdbfile = open(self.protein_pdb_filename, 'r')
-            pdb_file = app.PDBFile(protein_pdbfile)
-            protein_pdbfile.close()
-            self._receptor_positions_old = pdb_file.positions
-            self._receptor_topology_old = pdb_file.topology
-            self._receptor_md_topology_old = md.Topology.from_openmm(self._receptor_topology_old)
-
-        elif self.receptor_mol2_filename:
-            self._receptor_mol = createOEMolFromSDF(self.receptor_mol2_filename)
-            self.mol_list.append(self._receptor_mol)
-            self._receptor_positions_old = extractPositionsFromOEMol(self._receptor_mol)
-            self._receptor_topology_old = forcefield_generators.generateTopologyFromOEMol(self._receptor_mol)
-            self._receptor_md_topology_old = md.Topology.from_openmm(self._receptor_topology_old)
-        else:
-            raise ValueError("You need to provide either a protein pdb or a receptor mol2 to run a complex simulation.")
+        self._receptor_md_topology_old = md.Topology.from_openmm(self._receptor_topology)
 
         self._complex_md_topology_old = self._receptor_md_topology_old.join(self._ligand_md_topology_old)
 
@@ -619,11 +690,11 @@ class RelativeFEPSetup(object):
         self._complex_topology_old = self._complex_md_topology_old.to_openmm()
 
         n_atoms_total_old = self._complex_topology_old.getNumAtoms()
-        n_atoms_protein_old = self._receptor_topology_old.getNumAtoms()
+        n_atoms_protein_old = self._receptor_topology.getNumAtoms()
         n_atoms_ligand_old = n_atoms_total_old - n_atoms_protein_old - n_atoms_spectators
 
         self._complex_positions_old = unit.Quantity(np.zeros([n_atoms_total_old, 3]), unit=unit.nanometers)
-        self._complex_positions_old[:n_atoms_protein_old, :] = self._receptor_positions_old
+        self._complex_positions_old[:n_atoms_protein_old, :] = self._receptor_positions
         self._complex_positions_old[n_atoms_protein_old:n_atoms_protein_old+n_atoms_ligand_old, :] = self._ligand_positions_old
 
         if self._spectator_filenames:
@@ -1247,82 +1318,6 @@ class NonequilibriumSwitchingFEP(DaskClient):
         self.allowable_resampling_methods = {'multinomial': NonequilibriumSwitchingFEP.multinomial_resample}
         self.allowable_observables = {'ESS': NonequilibriumSwitchingFEP.ESS, 'CESS': NonequilibriumSwitchingFEP.CESS}
         _logger.info(f"constructed")
-
-    def compute_nonalchemical_perturbations(self, start, end, sampler_state, geometry_engine):
-        """
-        In order to correct for the artifacts associated with CustomNonbondedForces, we need to compute the potential difference between the alchemical endstates and the
-        valence energy-corrected nonalchemical endstates.
-
-        Parameters
-        ----------
-        start : int (0 or 1)
-            the starting lambda value which the equilibrium sampler state corresponds to
-        end : int (0 or 1)
-            the alternate lambda value which the equilibrium sampler state will be annealed to
-        sampler_state : openmmtools.states.SamplerState
-            the equilibrium sampler state of the current lambda (start)
-        geometry_engine : perses.rjmc.geometry.FFAllAngleGeometryEngine
-            geometry engine used to create and compute the RJMCMC; we use this to compute the importance weight from the old/new system to the hybrid system (neglecting added valence terms)
-        """
-        if not hasattr(NonequilibriumSwitchingFEP, 'geometry_engine'):
-            self.geometry_engine = geometry_engine
-            # Create thermodynamic states for the nonalchemical endpoints
-            topology_proposal = self._factory.topology_proposal
-            self._nonalchemical_thermodynamic_states = {
-                0: ThermodynamicState(topology_proposal.old_system, temperature=self._temperature),
-                1: ThermodynamicState(topology_proposal.new_system, temperature=self._temperature)}
-
-            #instantiate growth system thermodynamic and samplerstates
-            assert not self.geometry_engine.use_sterics, f"The geometry engine has use_sterics...this is not currently supported."
-            if self.geometry_engine.forward_final_growth_system: # if it exists, we have to create a thermodynamic state and set alchemical parameters
-                self._endpoint_growth_thermostates[1] = ThermodynamicState(self.geometry_engine.forward_final_growth_system, temperature=temperature) #sampler state is compatible with new system
-            else:
-                self._endpoint_growth_thermostates[1] = None
-
-            if self.geometry_engine.reverse_final_growth_system: # if it exists, we have to create a thermodynamic state and set alchemical parameters
-                self._endpoint_growth_thermostates[0] = ThermodynamicState(self.geometry_engine.reverse_final_growth_system, temperature=temperature) #sampler state is compatible with old system
-            else:
-                self._endpoint_growth_thermostates[0] = None
-
-        #define the nonalchemical_perturbation_args for endstate perturbations before running nonequilibrium switching
-        _lambda, _lambda_rev = start, end
-        nonalchemical_perturbation_args = {'hybrid_thermodynamic_states': [self._hybrid_thermodynamic_states[_lambda], self._hybrid_thermodynamic_states[_lambda_rev]],
-                                            '_endpoint_growth_thermostates': [self._endpoint_growth_thermostates[_lambda_rev], self._endpoint_growth_thermostates[_lambda]],
-                                            'factory': self._factory,
-                                            'nonalchemical_thermostates': [self._nonalchemical_thermodynamic_states[_lambda], self._nonalchemical_thermodynamic_states[_lambda_rev]],
-                                            'lambdas': [_lambda, _lambda_rev]}
-        _logger.debug(f"\tnonalchemical_perturbation_args for lambda_start = {_lambda}, lambda_end = {_lambda_rev}: {nonalchemical_perturbation_args}")
-
-        #then we will conduct a perturbation on the given sampler state with the appropriate arguments
-        valence_energy, nonalchemical_reduced_potential, hybrid_reduced_potential = feptasks.compute_nonalchemical_perturbation(nonalchemical_perturbation_args['hybrid_thermodynamic_states'][0],
-                                                                                                                       nonalchemical_perturbation_args['_endpoint_growth_thermostates'][0],
-                                                                                                                       sampler_state,
-                                                                                                                       nonalchemical_perturbation_args['factory'],
-                                                                                                                       nonalchemical_perturbation_args['nonalchemical_thermostates'][0],
-                                                                                                                       nonalchemical_perturbation_args['lambdas'][0])
-        alt_valence_energy, alt_nonalchemical_reduced_potential, alt_hybrid_reduced_potential = feptasks.compute_nonalchemical_perturbation(nonalchemical_perturbation_args['hybrid_thermodynamic_states'][1],
-                                                                                                                       nonalchemical_perturbation_args['_endpoint_growth_thermostates'][1],
-                                                                                                                       sampler_state,
-                                                                                                                       nonalchemical_perturbation_args['factory'],
-                                                                                                                       nonalchemical_perturbation_args['nonalchemical_thermostates'][1],
-                                                                                                                       nonalchemical_perturbation_args['lambdas'][1])
-        nonalch_perturbations = {'valence_energies': (valence_energy, alt_valence_energy),
-                                 'nonalchemical_reduced_potentials': (nonalchemical_reduced_potential, alt_nonalchemical_reduced_potential),
-                                 'hybrid_reduced_potentials': (hybrid_reduced_potential, alt_hybrid_reduced_potential)}
-
-        #now to write the results to the logger attributes
-        nonalchemical_reduced_potentials = nonalchemical_perturbation_dict['nonalchemical_reduced_potentials']
-        self._nonalchemical_reduced_potentials[f"from_{_lambda}"].append(nonalchemical_reduced_potentials[0])
-        self._nonalchemical_reduced_potentials[f"to_{_lambda_rev}"].append(nonalchemical_reduced_potentials[1])
-
-        valence_energies = nonalchemical_perturbation_dict['valence_energies']
-        self._added_valence_reduced_potentials[f"from_{_lambda}"].append(valence_energies[0])
-        self._added_valence_reduced_potentials[f"to_{_lambda_rev}"].append(valence_energies[1])
-
-        hybrid_reduced_potentials = nonalchemical_perturbation_dict['hybrid_reduced_potentials']
-        self._alchemical_reduced_potentials[f"from_{_lambda}"].append(hybrid_reduced_potentials[0])
-        self._alchemical_reduced_potentials[f"to_{_lambda_rev}"].append(hybrid_reduced_potentials[1])
-
 
     def instantiate_particles(self,
                               n_lambdas = None,

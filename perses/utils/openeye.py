@@ -329,7 +329,7 @@ def createOEMolFromSDF(sdf_filename, index=0, add_hydrogens=True, allow_undefine
 
     Parameters
     ----------
-    sdf_filename : str
+    sdf_filename : str or path-like object
         The name of the SDF file
     index : int, default 0
         The index of the molecule in the SDF file
@@ -413,8 +413,6 @@ def generate_unique_atom_names(molecule):
         oemol, either unchanged if atom names are
         already unique, or newly generated atom names
     """
-    from openeye import oechem
-
     atom_names = []
 
     atom_count = 0
