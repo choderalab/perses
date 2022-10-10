@@ -371,5 +371,51 @@ def test_relative_setup_solvent_padding():
         solvent_padding=input_solvent_padding)
     assert input_solvent_padding == fe_setup._padding, f"Input solvent padding, {input_solvent_padding}, is different from setup object solvent padding, {fe_setup._padding}."
 
-# if __name__=="__main__":
-#     test_run_cdk2_iterations_repex()
+
+# TODO: parametrize test to load ligands from list of files as well
+def test_relative_fep_setup_from_files():
+    """Test Relative Free Energy Perturbation setup from files"""
+    from perses.app.relative_setup import RelativeFEPSetup
+    receptor_file = ""
+    ligands_file = ""
+    old_ligand_index = ""
+    new_ligand_index = ""
+    forcefield_files = ""
+    phases = ""
+
+    fep_setup = RelativeFEPSetup.from_files(
+        receptor_file,
+        ligands_file,
+        old_ligand_index,
+        new_ligand_index,
+        forcefield_files=forcefield_files,
+        phases=phases,
+    )
+
+    # Check that the receptor and ligands are as expected
+    assert fep_setup._receptor == omm_receptor
+    assert fep_setup._ligand_offmol_old == off_old_ligand
+    assert fep_setup._ligand_offmol_new == off_new_ligand
+
+    return NotImplementedError
+
+
+def test_relative_fep_setup_init():
+    """Test initialization of RelativeFEPSetup object from openff molecules and openmm receptor."""
+    from openmm.app import PDBFile
+    from perses.app.relative_setup import RelativeFEPSetup
+    from perses.utils.openeye import createOEMolFromSDF
+    # Load receptor from PDB
+    pdb_file = resource_filename("perses", os.path.join("data", "Tyk2_ligands_example", "Tyk2_protein.pdb"))
+    omm_pdb = PDBFile(pdb_file)
+    omm_top = omm_pdb.topology
+    omm_pos = omm_pdb.positions
+    # Load sdf file with ligands
+    sdf_file = resource_filename("perses", os.path.join("data", "Tyk2_ligands_example", "Tyk2_ligands_shifted.sdf"))
+    # Load old ligand from sdf -- first molecule in sdf file
+    old_ligand = createOEMolFromSDF(sdf_file, index=0)
+    # Load new ligand from sdf -- second molecule in sdf file
+    old_ligand = createOEMolFromSDF(sdf_file, index=0)
+    # Feed receptor and ligands to RelativeFEPSetup
+    fe_setup = RelativeFEPSetup(omm_top, old_ligand, new_ligand, receptor_positions=omm_pos)
+    return NotImplementedError

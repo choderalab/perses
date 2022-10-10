@@ -1,113 +1,230 @@
 from typing import Optional, Iterable, List, Dict, Any, Union, Type
 
+import os
+import pathlib
+
 import networkx as nx
 
 from gufe.chemicalsystem import ChemicalSystem
 from gufe.mapping import Mapping
 from gufe.protocols import (
     Protocol,
-    ProtocolDAG,
     ProtocolUnit,
     ProtocolResult,
     ProtocolDAGResult,
-    ProtocolUnitResult,
     Context,
     execute
 )
 
-#from gufe.protocols.settings import ...
+from openmmtools.utils import get_fastest_platform
 
 from perses.app.relative_setup import RelativeFEPSetup
 from perses.annihilation.relative import HybridTopologyFactory
 
 
-class GenerateAlchemicalFactory(ProtocolUnit):
-    # NOT really intented to carry a lot of state data (having its own constructor is dangerous!)
+# Global parameters for simulation
+# TODO: Should we encode these in a ProtocolSettings object?
+platform_name = get_fastest_platform().getName()
+save_freq_eq = 1
+save_freq_neq = 2
+outdir_path = 'output/'
 
-    @staticmethod
-    def setup_fep(protein_file: str, ligands_file: Union[str, List[str]], old_ligand_index: int, new_ligand_index: int,
-                  protein_forcefield_files: List[str], small_molecule_forcefield: str,
-                  phases: List[str]) -> RelativeFEPSetup:
-        # Setup Relative FEP simulation
-        # old_ligand_index = 0
-        # new_ligand_index = 1
-        # ligands_file = 'Tyk2_ligands_shifted.sdf'
-        # protein_file = 'Tyk2_protein.pdb'
-        # forcefield_files = [
-        #     "amber/ff14SB.xml",
-        #     "amber/tip3p_standard.xml",
-        #     "amber/tip3p_HFE_multivalent.xml",
-        #     "amber/phosaa10.xml",
-        # ]
-        # small_molecule_forcefield = 'openff-2.0.0'
-        # phases = ["complex", "solvent"]
-        fe_setup = RelativeFEPSetup(
-            ligand_input=ligands_file,
-            old_ligand_index=old_ligand_index,
-            new_ligand_index=new_ligand_index,
-            protein_pdb_filename=protein_file,
-            forcefield_files=protein_forcefield_files,
-            small_molecule_forcefield=small_molecule_forcefield,
-            phases=phases,
-        )
-        return fe_setup
-
-    @staticmethod
-    def generate_htf_object(fe_setup: RelativeFEPSetup, phase: str) -> HybridTopologyFactory:
-        topology_proposal = getattr(fe_setup, f"{phase}_topology_proposal")
-        current_positions = getattr(fe_setup, f"{phase}_old_positions")
-        new_positions = getattr(fe_setup, f"{phase}_new_positions")
-        forward_neglected_angle_terms = getattr(fe_setup, f"_{phase}_forward_neglected_angles")
-        reverse_neglected_angle_terms = getattr(fe_setup, f"_{phase}_reverse_neglected_angles")
-
-        htf = HybridTopologyFactory(
-            topology_proposal=topology_proposal,
-            current_positions=current_positions,
-            new_positions=new_positions,
-            neglected_new_angle_terms=forward_neglected_angle_terms,
-            neglected_old_angle_terms=reverse_neglected_angle_terms,
-            softcore_LJ_v2=True,
-            interpolate_old_and_new_14s=False,
-        )
-
-        return htf
-
-    @staticmethod
-    def _execute(ctx: Context, *, settings, stateA, stateB, mapping, start, **inputs):
-
-        # generate an OpenMM Topology
-        openmmtop: "OpenMMTopology" = perses_generate_topology_lol()
-
-        # serialize openmmtop to disk
-        hybrid_top_path = ctx.dag_scratch / 'hybrid-topology.pkl'
-        openmmtop.serialize(hybrid_top_path)
-
-        # the return dict should be JSON-serializable
-        return {'hybrid-topology-path': hybrid_top_path}
-
-        #return dict(
-        #    data="initialized",
-        #)
-
+# TIER IV Settings - Specific for Relative FE in perses and Openmm
+# Define lambda functions - for HTF
+x = 'lambda'
+DEFAULT_ALCHEMICAL_FUNCTIONS = {
+    'lambda_sterics_core': x,
+    'lambda_electrostatics_core': x,
+    'lambda_sterics_insert': f"select(step({x} - 0.5), 1.0, 2.0 * {x})",
+    'lambda_sterics_delete': f"select(step({x} - 0.5), 2.0 * ({x} - 0.5), 0.0)",
+    'lambda_electrostatics_insert': f"select(step({x} - 0.5), 2.0 * ({x} - 0.5), 0.0)",
+    'lambda_electrostatics_delete': f"select(step({x} - 0.5), 1.0, 2.0 * {x})",
+    'lambda_bonds': x,
+    'lambda_angles': x,
+    'lambda_torsions': x
+}
 
 class SimulationUnit(ProtocolUnit):
     @staticmethod
-    def _execute(ctx, *, initialization, **inputs):
+    def _execute(ctx, *, state_a, state_b, simulation_parameters, **inputs):
+        # needed imports
+        import numpy as np
+        import openmm
+        from openmm import unit
+        from openmmtools.integrators import PeriodicNonequilibriumIntegrator
 
-        hybrid_top_path = initialization['hybrid-topology-path']
+        # Get receptor and ligands from states
+        # TODO: Assuming here both states have same receptor
+        #  and/or that state_a is the one with the receptor we need
+        # TODO: Check state_a protein and state_b protein are the same. Maybe in the Protocol._create method (as early as possible)
+        # TODO: We also need to check if there is a protein because it can be just the solvent phase (check Richard's PR https://github.com/OpenFreeEnergy/openfe/pull/142/files)
+        receptor = state_a.components['protein']
+        ligand_a = state_a.components['ligand']
+        ligand_b = state_b.components['ligand']
 
-        # deserialize hybrid topology
+        # Setting up forcefields and phases
+        # TODO: These should be extracted from the ProtocolSettings information
+        forcefield_files = [
+            "amber/ff14SB.xml",
+            "amber/tip3p_standard.xml",
+            "amber/tip3p_HFE_multivalent.xml",
+            "amber/phosaa10.xml",
+        ]
+        small_molecule_forcefield = 'openff-2.0.0'
+        phases = ["complex", "solvent"]
+
+        # Setup relative FE calculation
+        # FIXME: We need to be able to setup an FEP simulation with just a single phase. Think about SolventFEPSetup or ComplexFEPSetup, etc.
+        fe_setup = RelativeFEPSetup(
+            receptor=receptor.to_openmm_topology(),
+            receptor_positions=receptor.to_openmm_positions(),
+            old_ligand=ligand_a.to_openeye(),
+            new_ligand=ligand_b.to_openeye(),
+            forcefield_files=forcefield_files,
+            small_molecule_forcefield=small_molecule_forcefield,
+            phases=phases,
+        )
+
+        # Manually extracting objects for different phases - TODO: This could be done in a better way
+        topology_proposals = {'complex': fe_setup.complex_topology_proposal,
+                              'solvent': fe_setup.solvent_topology_proposal}
+        old_positions = {'complex': fe_setup.complex_old_positions, 'solvent': fe_setup.solvent_old_positions}
+        new_positions = {'complex': fe_setup.complex_new_positions, 'solvent': fe_setup.solvent_new_positions}
+        forward_neglected_angle_terms = {'complex': fe_setup._complex_forward_neglected_angles,
+                                         'solvent': fe_setup._solvent_forward_neglected_angles}
+        reverse_neglected_angle_terms = {'complex': fe_setup._complex_reverse_neglected_angles,
+                                         'solvent': fe_setup._solvent_reverse_neglected_angles}
+
+        for phase in phases:
+            # Generate Hybrid Topology Factory - Vanilla HTF
+            htf = HybridTopologyFactory(
+                topology_proposal=topology_proposals[phase],
+                current_positions=old_positions[phase],
+                new_positions=new_positions[phase],
+                # TODO: I think the following should be extracted from the ProtocolSettings
+                neglected_new_angle_terms=forward_neglected_angle_terms[phase],
+                neglected_old_angle_terms=reverse_neglected_angle_terms[phase],
+                softcore_LJ_v2=True,
+                interpolate_old_and_new_14s=False,
+            )
+
+            system = htf.hybrid_system
+            positions = htf.hybrid_positions
+
+            # Set up integrator
+            timestep = 4.0 * unit.femtosecond
+            temperature = 300 * unit.kelvin
+            neq_splitting = 'V R H O R V'
+            nsteps_eq = 2
+            nsteps_neq = 32
+            integrator = PeriodicNonequilibriumIntegrator(DEFAULT_ALCHEMICAL_FUNCTIONS,
+                                                          nsteps_eq,
+                                                          nsteps_neq,
+                                                          neq_splitting,
+                                                          timestep=timestep,
+                                                          temperature=temperature)
+
+            # Set up context
+            platform = openmm.Platform.getPlatformByName(platform_name)
+            if platform_name in ['CUDA', 'OpenCL']:
+                platform.setPropertyDefaultValue('Precision', 'mixed')
+            if platform_name in ['CUDA']:
+                platform.setPropertyDefaultValue('DeterministicForces', 'true')
+            context = openmm.Context(system, integrator, platform)
+            context.setPeriodicBoxVectors(*system.getDefaultPeriodicBoxVectors())
+            context.setPositions(positions)
+
+            # Minimize
+            openmm.LocalEnergyMinimizer.minimize(context)
+
+            # Equilibrate
+            context.setVelocitiesToTemperature(temperature)
+
+            # Prepare objects to store data
+            forward_works_master, reverse_works_master = list(), list()
+            forward_eq_old, forward_eq_new, forward_neq_old, forward_neq_new = list(), list(), list(), list()
+            reverse_eq_new, reverse_eq_old, reverse_neq_old, reverse_neq_new = list(), list(), list(), list()
+
+            # Equilibrium (lambda = 0)
+            for step in range(nsteps_eq):
+                integrator.step(1)
+                # Store positions and works
+                if step % save_freq_eq == 0:
+                    pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
+                    old_pos = np.asarray(htf.old_positions(pos))
+                    new_pos = np.asarray(htf.new_positions(pos))
+                    forward_eq_old.append(old_pos)
+                    forward_eq_new.append(new_pos)
+
+            # Run neq
+            # TODO: We can just run the required steps before saving the output, without having to check EVERY step.
+            # Forward (0 -> 1)
+            forward_works = [integrator.get_protocol_work(dimensionless=True)]
+            for fwd_step in range(nsteps_neq):
+                integrator.step(1)
+                forward_works.append(integrator.get_protocol_work(dimensionless=True))
+                if fwd_step % save_freq_neq == 0:
+                    pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
+                    old_pos = np.asarray(htf.old_positions(pos))
+                    new_pos = np.asarray(htf.new_positions(pos))
+                    forward_neq_old.append(old_pos)
+                    forward_neq_new.append(new_pos)
+            forward_works_master.append(forward_works)
+
+            # Equilibrium (lambda = 1)
+            for step in range(nsteps_eq):
+                integrator.step(1)
+                if step % save_freq_eq == 0:
+                    pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
+                    old_pos = np.asarray(htf.old_positions(pos))
+                    new_pos = np.asarray(htf.new_positions(pos))
+                    reverse_eq_new.append(new_pos)
+                    reverse_eq_old.append(old_pos)
+
+            # Reverse work (1 -> 0)
+            reverse_works = [integrator.get_protocol_work(dimensionless=True)]
+            for rev_step in range(nsteps_neq):
+                integrator.step(1)
+                reverse_works.append(integrator.get_protocol_work(dimensionless=True))
+                if rev_step % save_freq_neq == 0:
+                    pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
+                    old_pos = np.asarray(htf.old_positions(pos))
+                    new_pos = np.asarray(htf.new_positions(pos))
+                    reverse_neq_old.append(old_pos)
+                    reverse_neq_new.append(new_pos)
+            reverse_works_master.append(reverse_works)
+
+            # Save output
+            # TODO: Assume initially we want the trajectories to understand when something wrong/weird happens.
+            # TODO: We need a single API point where the analysis is performed to get DDG values for the NEQ works.
+            # create output directory if it does not exist
+            out_path = pathlib.Path(outdir_path)
+            out_path.mkdir(parents=True, exist_ok=True)
+            # Save works
+            with open(os.path.join(out_path, f"forward_{phase}.npy"), 'wb') as out_file:
+                np.save(out_file, forward_works_master)
+            with open(os.path.join(out_path, f"reverse_{phase}.npy"), 'wb') as out_file:
+                np.save(out_file, reverse_works_master)
+
+            # Save trajs
+            with open(os.path.join(out_path, f"forward_eq_old_{phase}.npy"), 'wb') as out_file:
+                np.save(out_file, np.array(forward_eq_old))
+            with open(os.path.join(out_path, f"forward_eq_new_{phase}.npy"), 'wb') as out_file:
+                np.save(out_file, np.array(forward_eq_new))
+            with open(os.path.join(out_path, f"reverse_eq_new_{phase}.npy"), 'wb') as out_file:
+                np.save(out_file, np.array(reverse_eq_new))
+            with open(os.path.join(out_path, f"reverse_eq_old_{phase}.npy"), 'wb') as out_file:
+                np.save(out_file, np.array(reverse_eq_old))
+            with open(os.path.join(out_path, f"forward_neq_old_{phase}.npy"), 'wb') as out_file:
+                np.save(out_file, np.array(forward_neq_old))
+            with open(os.path.join(out_path, f"forward_neq_new_{phase}.npy"), 'wb') as out_file:
+                np.save(out_file, np.array(forward_neq_new))
+            with open(os.path.join(out_path, f"reverse_neq_old_{phase}.npy"), 'wb') as out_file:
+                np.save(out_file, np.array(reverse_neq_old))
+            with open(os.path.join(out_path, f"reverse_neq_new_{phase}.npy"), 'wb') as out_file:
+                np.save(out_file, np.array(reverse_neq_new))
 
         return dict()
-
-
-        #output = [r.data for r in dependency_results]
-        #output.append("running_md_{}".format(self._kwargs["window"]))
-
-        #return dict(
-        #    data=output,
-        #    window=self._kwargs["window"],  # extra attributes allowed
-        #)
 
 
 class GatherUnit(ProtocolUnit):
