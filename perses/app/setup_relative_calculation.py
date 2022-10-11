@@ -1116,6 +1116,14 @@ def _generate_htf(phase: str, topology_proposal_dictionary: dict, setup_options:
                   topology_proposal_dictionary[f'{phase}_new_positions'],
                   **htf_setup_dict
                   )
+    # FIXME: Hardcoding splitting for MTS move. Need to find a better way to do this
+    # If "vanilla" HTF, set up nonbonded reciprocal force groups for MTS
+    if isinstance(htf, HybridTopologyFactory):
+        # TODO: reciprocal force group is hardcoded to 1. Need to make it a kwarg/dynamic parameter.
+        # Change reciprocal nonbonded forces group to 1
+        for force in htf.hybrid_system.getForces():
+            if force.getName() == "NonbondedForce":
+                force.setReciprocalSpaceForceGroup(1)
     return htf
 
 
