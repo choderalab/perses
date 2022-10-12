@@ -28,17 +28,24 @@ _logger.setLevel(LOGLEVEL)
 
 # global variables
 base_repo_url = "https://github.com/openforcefield/protein-ligand-benchmark"
+# TODO: Hardcoding branch (plan of making it an cli argument in the future)
+branch = "main"
 
 
 def concatenate_files(input_files, output_file):
     """
     Concatenate files given in input_files iterator into output_file.
+
+    It only generates the file if it doesn't exist.
     """
-    with open(output_file, 'w') as outfile:
-        for filename in input_files:
-            with open(filename) as infile:
-                for line in infile:
-                    outfile.write(line)
+    if not os.path.isfile(output_file):
+        with open(output_file, 'w') as outfile:
+            for filename in input_files:
+                with open(filename) as infile:
+                    for line in infile:
+                        outfile.write(line)
+    else:
+        _logger.info(f"File {output_file} already exists. Not overwriting.")
 
 
 def run_relative_perturbation(lig_a_idx, lig_b_idx, reverse=False, tidy=True):
@@ -100,7 +107,7 @@ def run_relative_perturbation(lig_a_idx, lig_b_idx, reverse=False, tidy=True):
 # Defining command line arguments
 # fetching targets from github repo
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-targets_url = f"{base_repo_url}/raw/main/data/targets.yml"
+targets_url = f"{base_repo_url}/raw/{branch}/data/targets.yml"
 with fetch_url_contents(targets_url) as response:
     targets_dict = yaml.safe_load(response.read())
 # get the possible choices from targets yaml file
@@ -132,34 +139,34 @@ is_reversed = args.reversed
 # Fetch protein pdb file
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
 target_dir = targets_dict[target]['dir']
-pdb_url = f"{base_repo_url}/raw/main/data/{target_dir}/01_protein/crd/protein.pdb"
+pdb_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/01_protein/crd/protein.pdb"
 pdb_file = retrieve_file_url(pdb_url)
 
 # Fetch cofactors crystalwater pdb file
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-cofactors_url = f"{base_repo_url}/raw/main/data/{target_dir}/01_protein/crd/cofactors_crystalwater.pdb"
-cofactors_file = retrieve_file_url(cofactors_url)
+# TODO: No cofactors now in fix_data branch
+#cofactors_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/01_protein/crd/cofactors_crystalwater.pdb"
+#cofactors_file = retrieve_file_url(cofactors_url)
 
 # Concatenate protein with cofactors pdbs
-concatenate_files((pdb_file, cofactors_file), 'target.pdb')
+# TODO: No need to concatenate now that there are no cofactors
+concatenate_files((pdb_file,), 'target.pdb')
 
 # Fetch ligands sdf files and concatenate them in one
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-ligands_url = f"{base_repo_url}/raw/main/data/{target_dir}/00_data/ligands.yml"
+ligands_file_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/02_ligands/ligands.sdf"
+ligands_file = retrieve_file_url(ligands_file_url)
+# TODO: Just retrieve the ligands file to the working directory without need to concatenate
+concatenate_files((ligands_file,), 'ligands.sdf')
+# Build ligands dictionary
+ligands_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/00_data/ligands.yml"
 with fetch_url_contents(ligands_url) as response:
     ligands_dict = yaml.safe_load(response.read())
-ligand_files = []
-for ligand in ligands_dict.keys():
-    ligand_url = f"{base_repo_url}/raw/main/data/{target_dir}/02_ligands/{ligand}/crd/{ligand}.sdf"
-    ligand_file = retrieve_file_url(ligand_url)
-    ligand_files.append(ligand_file)
-# concatenate sdfs
-concatenate_files(ligand_files, 'ligands.sdf')
 
 # run simulation
 # fetch edges information
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-edges_url = f"{base_repo_url}/raw/main/data/{target_dir}/00_data/edges.yml"
+edges_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/00_data/edges.yml"
 with fetch_url_contents(edges_url) as response:
     edges_dict = yaml.safe_load(response.read())
 edges_list = list(edges_dict.values())  # suscriptable edges object - note dicts are ordered for py>=3.7
