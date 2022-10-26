@@ -42,7 +42,7 @@ def concatenate_files(input_files, output_file):
                     outfile.write(line)
 
 
-def get_target_dir(target_name):
+def get_target_dir(target_name, branch="0.2.1"):
     """
     Retrieves the target subdirectory in upstream repo structure given the target name.
     """
@@ -54,19 +54,19 @@ def get_target_dir(target_name):
     return target_dir
 
 
-def get_ligands_information(target, branch="main"):
+def get_ligands_information(target, branch="0.2.1"):
     """
     Retrieves the ligands information in a dictionary given the target name,
     """
     # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-    target_dir = get_target_dir(target)
+    target_dir = get_target_dir(target, branch=branch)
     ligands_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/00_data/ligands.yml"
     with fetch_url_contents(ligands_url) as response:
         ligands_dict = yaml.safe_load(response.read())
     return ligands_dict
 
 
-def generate_ligands_sdf(ligands_dict, target, branch='main'):
+def generate_ligands_sdf(ligands_dict, target, branch='0.2.1'):
     """
     Generates input ligands.sdf file for running the simulation given a dictionary
     with the ligands information.
@@ -75,21 +75,23 @@ def generate_ligands_sdf(ligands_dict, target, branch='main'):
     """
     from urllib.error import HTTPError
     # Get target dir where to get ligands sdf files
-    target_dir = get_target_dir(target)
+    target_dir = get_target_dir(target, branch=branch)
     # Fetch ligands sdf files and concatenate them in one
     # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
     try:
-        ligands_file_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/02_ligands/ligands.sdf"
-        ligand_files = retrieve_file_url(ligands_file_url)
-        new_repo = True
-    except HTTPError:
-        _logger.info(f'Must be previous old repository structure. Trying downloading individual ligand files.')
+        # _logger.info(f'Must be previous old repository structure. Trying downloading individual ligand files.')
         ligand_files = []
         for ligand in ligands_dict.keys():
             ligand_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/02_ligands/{ligand}/crd/{ligand}.sdf"
             ligand_file = retrieve_file_url(ligand_url)
             ligand_files.append(ligand_file)
         new_repo = False
+    except HTTPError:
+        _logger.info(f'Must be a newer revision and repository structure. Trying to download single ligands file.')
+        ligands_file_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/02_ligands/ligands.sdf"
+        ligand_files = retrieve_file_url(ligands_file_url)
+        new_repo = True
+
     # concatenate sdf files as needed
     if new_repo:
         # TODO: Just retrieve the ligands file to the working directory without need to concatenate
@@ -97,7 +99,7 @@ def generate_ligands_sdf(ligands_dict, target, branch='main'):
     else:
         concatenate_files(ligand_files, 'ligands.sdf')  # concatenate multiple files
 
-def get_ligand_indices_from_edge(edge_index, target_name, branch="main"):
+def get_ligand_indices_from_edge(edge_index, target_name, branch="0.2.1"):
     """
     Returns the ligand indices from the edge index according to edges.yaml file in repo.
 
@@ -105,7 +107,7 @@ def get_ligand_indices_from_edge(edge_index, target_name, branch="main"):
     """
     # fetch edges information
     # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-    target_dir = get_target_dir(target_name)
+    target_dir = get_target_dir(target_name, branch=branch)
     ligands_dict = get_ligands_information(target, branch=branch)
     edges_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/00_data/edges.yml"
     with fetch_url_contents(edges_url) as response:
@@ -235,7 +237,7 @@ if local_run:
     run_relative_perturbation(lig_a_index, lig_b_index, reverse=is_reversed)
 else:
     # get target information
-    target_dir = get_target_dir(target)
+    target_dir = get_target_dir(target, branch=branch)
     pdb_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/01_protein/crd/protein.pdb"
     pdb_file = retrieve_file_url(pdb_url)
 
