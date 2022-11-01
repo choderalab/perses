@@ -325,7 +325,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         pdbfile.flush()
         pdbfile.write('ENDMDL\n')
 
-    def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward', validate_energy_bookkeeping = True):
+    def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward',
+                      validate_energy_bookkeeping=True, platform_name='CPU'):
         """
         This is an INTERNAL function that handles both the proposal and the logp calculation,
         to reduce code duplication. Whether it proposes or just calculates a logp is based on
@@ -370,7 +371,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         _logger.info("Conducting forward proposal...")
         import copy
-        from perses.tests.utils import compute_potential_components
+        from perses.dispersed.utils import compute_potential_components
         # Ensure all parameters have the expected units
         check_dimensionality(old_positions, unit.angstroms)
         if new_positions is not None:
@@ -450,8 +451,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         if self._storage:
             self._storage.write_object("{}_proposal_order".format(direction), proposal_order_tool, iteration=self.nproposed)
 
-        platform_name = 'CUDA'
-
         # Create an OpenMM context
         from simtk import openmm
         from perses.dispersed.utils import configure_platform
@@ -484,7 +483,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         #Print the energy of the system before unique_new/old atoms are placed...
         state = atoms_with_positions_context.getState(getEnergy=True)
         atoms_with_positions_reduced_potential = beta*state.getPotentialEnergy()
-        atoms_with_positions_reduced_potential_components = compute_potential_components(atoms_with_positions_context)
+        atoms_with_positions_reduced_potential_components = compute_potential_components(atoms_with_positions_context,
+                                                                                         platform=platform)
         _logger.debug(f'atoms_with_positions_reduced_potential_components:')
         for f, e in atoms_with_positions_reduced_potential_components.items():
             _logger.debug(f'\t{f} : {e}')
@@ -648,9 +648,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         state = final_context.getState(getEnergy=True)
         final_context_reduced_potential = beta*state.getPotentialEnergy()
         final_context_components = [(force, energy*beta) for force, energy in
-                                    compute_potential_components(final_context).items()]
+                                    compute_potential_components(final_context, platform=platform).items()]
         atoms_with_positions_reduced_potential_components = [
-            (force, energy*beta) for force, energy in compute_potential_components(atoms_with_positions_context).items()
+            (force, energy*beta) for force, energy in compute_potential_components(atoms_with_positions_context,
+                                                                                   platform=platform).items()
         ]
         _logger.debug(f"reduced potential components before atom placement:")
         for item in atoms_with_positions_reduced_potential_components:
@@ -659,7 +660,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         _logger.debug(f"potential components added from growth system:")
         added_energy_components = [(force, energy*beta) for force, energy in
-                                   compute_potential_components(context).items()]
+                                   compute_potential_components(context, platform=platform).items()]
         for item in added_energy_components:
             _logger.debug(f"\t\t{item[0]}: {item[1]}")
 
@@ -710,7 +711,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         import copy
         from simtk import openmm
-        from perses.tests.utils import compute_potential_components
+        from perses.dispersed.utils import compute_potential_components
         _integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
         growth_system = copy.deepcopy(growth_system_generator.get_modified_system())
         #the last thing to do for bookkeeping is to delete the torsion force associated with the extra ring-closing and chirality restraints
@@ -730,8 +731,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         mod_state = mod_context.getState(getEnergy=True)
         modified_reduced_potential_energy = beta * mod_state.getPotentialEnergy()
 
-        added_energy_components = compute_potential_components(mod_context)
+        added_energy_components = compute_potential_components(mod_context, platform=platform)
         print(f"added energy components: {added_energy_components}")
+
+        # Explicitly clean up context memory allocation
+        del mod_context
 
         return modified_reduced_potential_energy
 

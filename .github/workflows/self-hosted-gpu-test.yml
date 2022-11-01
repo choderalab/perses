@@ -28,7 +28,7 @@ jobs:
         with:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          ec2-image-id: ami-096d499d418f88d88
+          ec2-image-id: ami-034abd52dd90b8023
           ec2-instance-type: p2.xlarge
           subnet-id: subnet-0e82552b8c708a999
           security-group-id: sg-0589e74ec03965add
@@ -54,19 +54,18 @@ jobs:
       - uses: actions/checkout@v2
       - uses: conda-incubator/setup-miniconda@v2
         with:
-          installer-url: https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh
-          python-version: 3.8
-          activate-environment: test
-          channels: conda-forge,defaults,omnia-dev,openeye
+          python-version: 3.9
+          channels: conda-forge,omnia-dev,openeye
           environment-file: devtools/conda-envs/test_env.yaml
-          auto-activate-base: false
-          auto-update-conda: true
           show-channel-urls: true
+          auto-activate-base: false
+          activate-environment: test
+          miniforge-version: latest 
 
       - name: Refine test env
         shell: bash -l {0}
         run: |
-          mamba install -y cudatoolkit==11.0.3 openmm>=7.7
+          conda install -y cudatoolkit==11.0.3 openmm>=7.7
       
       - name: Additional info about the build
         shell: bash -l {0}
@@ -102,6 +101,7 @@ jobs:
         shell: bash -l {0}
         run: |
           export TRAVIS=true
+          conda list --explicit
           pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -m "gpu_ci or gpu_needed" perses/tests
 
       - name: Codecov

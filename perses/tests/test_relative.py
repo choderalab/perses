@@ -208,8 +208,10 @@ def test_simple_overlap_pairs(pairs=None):
         print('{} -> {}'.format(pair[1],pair[0]))
         test_simple_overlap(pair[1],pair[0])
 
+
+#@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
 @nottest # This is, in fact, a helper function that is called in other working tests
-@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+@pytest.mark.skip(reason="Skip helper function on GH Actions")
 def test_simple_overlap(name1='pentane', name2='butane', forcefield_kwargs=None, system_generator_kwargs=None):
     """Test that the variance of the hybrid -> real perturbation in vacuum is sufficiently small.
 
@@ -238,7 +240,8 @@ def test_simple_overlap(name1='pentane', name2='butane', forcefield_kwargs=None,
             message += str(e)
             raise Exception(message)
 
-@skipIf(running_on_github_actions, "Skip expensive test on GH Actions")
+#@skipIf(running_on_github_actions, "Skip expensive test on GH Actions")
+@pytest.mark.skip(reason="Skip expensive test on GH Actions")
 def test_hostguest_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for host-guest system in vacuum"""
     topology_proposal, current_positions, new_positions = utils.generate_vacuum_hostguest_proposal()
@@ -252,8 +255,9 @@ def test_hostguest_overlap():
             message += str(e)
             raise Exception(message)
 
-@skipIf(running_on_github_actions, "Skip broken test on GH Actions")
+#@skipIf(running_on_github_actions, "Skip broken test on GH Actions")
 @nottest # At the moment, the mapping between imatinib and nilotinib is faulty
+@pytest.mark.skip(reason="Skip broken test on GH Actions")
 def test_difficult_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for imatinib->nilotinib in solvent"""
     name1 = 'imatinib'
@@ -413,7 +417,7 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene",atom_express
     from perses.utils.openeye import generate_expression
     from openmmforcefields.generators import SystemGenerator
     from openmoltools.forcefield_generators import generateTopologyFromOEMol
-    from perses.tests.utils import validate_endstate_energies
+    from perses.dispersed.utils import validate_endstate_energies
     temperature = 300*unit.kelvin
     # Compute kT and inverse temperature.
     kT = kB * temperature
@@ -513,7 +517,8 @@ def HybridTopologyFactory_energies(current_mol = 'toluene', proposed_mol = '1,2-
     """
     Test whether the difference in the nonalchemical zero and alchemical zero states is the forward valence energy.  Also test for the one states.
     """
-    from perses.tests.utils import generate_solvated_hybrid_test_topology, generate_endpoint_thermodynamic_states
+    from perses.dispersed.utils import generate_endpoint_thermodynamic_states
+    from perses.tests.utils import generate_solvated_hybrid_test_topology
     import openmmtools.cache as cache
 
     # Just test the solvated system
@@ -658,7 +663,7 @@ def RepartitionedHybridTopologyFactory_energies(topology, chain, system, positio
 
     from perses.rjmc.topology_proposal import PointMutationEngine
     from perses.annihilation.relative import RepartitionedHybridTopologyFactory
-    from perses.tests.utils import validate_endstate_energies
+    from perses.dispersed.utils import validate_endstate_energies
 
     ENERGY_THRESHOLD = 1e-4
 
@@ -797,7 +802,7 @@ def flattenedHybridTopologyFactory_energies(topology, chain, system, positions, 
 
     from perses.rjmc.topology_proposal import PointMutationEngine
     from perses.annihilation.relative import RepartitionedHybridTopologyFactory
-    from perses.tests.utils import validate_endstate_energies
+    from perses.dispersed.utils import validate_endstate_energies
 
     ring_amino_acids = ['TYR', 'PHE', 'TRP', 'PRO', 'HIS', 'HID', 'HIE', 'HIP']
     ENERGY_THRESHOLD = 1e-6 #kJ/mol
@@ -960,7 +965,8 @@ def run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_en
 
     from perses.tests.test_topology_proposal import generate_atp, generate_dipeptide_top_pos_sys
     from perses.app.relative_point_mutation_setup import PointMutationExecutor
-    from perses.tests.utils import validate_endstate_energies_point, validate_endstate_energies_md
+    from perses.dispersed.utils import validate_endstate_energies_point
+    from perses.tests.utils import validate_endstate_energies_md
 
     assert phase in ['vacuum', 'solvent', 'complex'], "Specified phase is invalid! Must be 'vacuum', 'solvent', or 'complex'"
 
@@ -1201,7 +1207,7 @@ def test_unsampled_endstate_energies_GPU():
    RESTCapableHybridTopologyFactory and HybridTopologyFactory.
 
    Test systems: alanine dipeptide in solvent and barstar in solvent
-   
+
    Only run this on a GPU as the CPU is too slow.
    """
 

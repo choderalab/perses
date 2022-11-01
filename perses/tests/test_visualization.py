@@ -2,10 +2,12 @@ from perses.analysis.visualization import Visualization
 from pkg_resources import resource_filename
 import os
 from unittest import skipIf
+import pytest
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
-@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+#@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+@pytest.mark.skip(reason="Skip helper function on GH Actions")
 def test_protein_mutation():
     input_directory = resource_filename("perses", "data/visualization/protein-mutation/")
 
@@ -24,7 +26,8 @@ def test_protein_mutation():
         os.remove(os.path.join(input_directory, "frame-%05d.png" % (i)))
     os.remove(os.path.join(input_directory, "movie.mp4"))
 
-@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+#@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+@pytest.mark.skip(reason="Skip helper function on GH Actions")
 def test_small_molecule():
     input_directory = resource_filename("perses", "data/visualization/small-molecule")
 

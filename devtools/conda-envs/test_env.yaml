@@ -2,7 +2,6 @@ name: test
 channels:
   - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
-  - defaults
   - omnia-dev
   - omnia
   - openeye
@@ -38,7 +37,7 @@ dependencies:
   - pytest
   - pytest-cov
   - coverage
-  - openff-toolkit
+  - openff-toolkit <0.11.0
   - sphinx
   - dicttoxml
   - openmmforcefields >=0.9.0
@@ -49,4 +48,4 @@ dependencies:
   - arsenic
   - click
   - rich
-  - cloudpathlib-all
+  - cloudpathlib-s3
