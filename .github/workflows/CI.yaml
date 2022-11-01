@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: [3.8, 3.9, "3.10"]
-        openmm: ["nightly", "7.6", "7.7"]
+        openmm: ["nightly", "7.6", "7.7", "beta"]
         exclude:
           - python-version: "3.10"
             openmm: "7.6"
@@ -65,6 +65,11 @@ jobs:
               conda install -y -c omnia-dev openmm --override-channels --force-reinstall
               echo "Using beta build of openeye toolkit"
               conda install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
+            beta)
+              echo "Using beta build of OpenMM."
+              conda install -c conda-forge/label/openmm_rc -c conda-forge openmm
+              echo "Using beta build of openeye toolkit"
+              conda install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;
             *)
               echo "installing OpenMM version ${{ matrix.openmm }}"
               mamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
