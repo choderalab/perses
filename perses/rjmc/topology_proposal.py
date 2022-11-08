@@ -2348,13 +2348,32 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     @staticmethod
     def _constraint_repairs(atom_map, old_system, new_system, old_topology, new_topology):
         """
-        Given an adjusted atom map (corresponding to the true indices of the new: old atoms in their respective systems), iterate through all of the
-        atoms in the map that are hydrogen and check if the constraint length changes; if so, we do not map.
+        Given an adjusted atom map (corresponding to the true indices of the new: old atoms in their respective
+        systems), iterate through all of the atoms in the map that are hydrogen and check if their constrained status
+        or length changes; if so, we do not map.
 
-        Returns the new atom map and also the deleted atom indices.
+        Parameters:
+        ------------
+        atom_map : dict of int : int
+            The atom mapping to repair; will not be modified.
+            atom_map[new_index] refers to the old index of the corresponding atom in the new system
+        old_system : openmm.System
+            The old OpenMM System containing parameters
+        new_system : openmm.System
+            The old OpenMM System containing parameters
+        old_topology : openmm.app.Topology
+            Old Topology
+        new_topology : openmm.app.Topology
+            New Topology
+
+        Returns
+        --------
+        atom_map : dict of int : int
+            New atom map where some mapped atoms have been removed
+        deleted_new_atoms : list of int
+            List of new_system atoms that were removed from the mapping
         """
-        # TODO : Generalize this to handle any atoms involved in constraints that change
-
+        # TODO: We probably want this method to handle AtomMap objects as input and outputs, rather than dicts.
         old_hydrogens = list(atom.index for atom in old_topology.atoms() if atom.element == app.Element.getByAtomicNumber(1))
         new_hydrogens = list(atom.index for atom in new_topology.atoms() if atom.element == app.Element.getByAtomicNumber(1))
 
