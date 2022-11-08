@@ -102,15 +102,6 @@ class AtomMapping(object):
         self.old_mol = Molecule(old_mol, allow_undefined_stereo=True)
         self.new_mol = Molecule(new_mol, allow_undefined_stereo=True)
 
-        # Fix atom name retrieval from OEMol objects
-        # TODO: When https://github.com/openforcefield/openff-toolkit/issues/1026 is fixed, remove this
-        if hasattr(old_mol, 'GetAtoms'):
-            for index, atom in enumerate(old_mol.GetAtoms()):
-                self.old_mol.atoms[index].name = atom.GetName()
-        if hasattr(new_mol, 'GetAtoms'):
-            for index, atom in enumerate(new_mol.GetAtoms()):
-                self.new_mol.atoms[index].name = atom.GetName()
-
         # Store atom maps
         if (old_to_new_atom_map is not None) and (new_to_old_atom_map is not None):
             raise ValueError('Only one of old_to_new_atom_map or new_to_old_atom_map can be specified')
