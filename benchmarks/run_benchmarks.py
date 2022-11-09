@@ -50,16 +50,16 @@ def get_target_dir(target_name, branch="0.2.1"):
     targets_url = f"{base_repo_url}/raw/{branch}/data/targets.yml"
     with fetch_url_contents(targets_url) as response:
         targets_dict = yaml.safe_load(response.read())
-    target_dir = targets_dict[target]['dir']
+    target_dir = targets_dict[target_name]['dir']
     return target_dir
 
 
-def get_ligands_information(target, branch="0.2.1"):
+def get_ligands_information(target_name, branch="0.2.1"):
     """
     Retrieves the ligands information in a dictionary given the target name,
     """
     # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-    target_dir = get_target_dir(target, branch=branch)
+    target_dir = get_target_dir(target_name, branch=branch)
     ligands_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/00_data/ligands.yml"
     with fetch_url_contents(ligands_url) as response:
         ligands_dict = yaml.safe_load(response.read())
