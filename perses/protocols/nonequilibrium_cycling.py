@@ -268,17 +268,19 @@ class ResultUnit(ProtocolUnit):
     """
 
     @staticmethod
-    def _execute(ctx, *, phase, **inputs):
+    def _execute(ctx, *, phase, simulations, **inputs):
         import numpy as np
         import pymbar
+        # TODO: This can take the settings and process a debug flag, and populate all the paths for trajectories as needed
         # Load the works from shared serialized objects
+        simulations[0]['forward_work']  # We could also do it this way (convenience)
         forward_work_path = os.path.join(ctx.shared, f"forward_{phase}.npy")
         reverse_work_path = os.path.join(ctx.shared, f"reverse_{phase}.npy")
         forward_work = np.load(forward_work_path)
         reverse_work = np.load(reverse_work_path)
         free_energy, error = pymbar.bar.BAR(forward_work, reverse_work)
 
-        return {"DDG": free_energy, "dDDG": error}
+        return {"DDG": free_energy, "dDDG": error, "paths": works_paths}
 
 
 class NonEquilibriumCyclingResult(ProtocolResult):
@@ -321,9 +323,9 @@ class NonEquilibriumCycling(Protocol):
 
         # inputs to `ProtocolUnit.__init__` should either be `Gufe` objects
         # or JSON-serializable objects
-        sim = SimulationUnit(state_a=stateA, state_b=stateB, mapping=mapping, simulation_parameters=None)
+        sim = SimulationUnit(state_a=stateA, state_b=stateB, mapping=mapping, simulation_parameters=self.settings)
 
-        end = ResultUnit(phase="solvent", name="result", simulations=[sim])
+        end = ResultUnit(phase="solvent", name="result", simulations=[sim], settings=self.settings)
 
         return [sim, end]
 
