@@ -280,10 +280,11 @@ class AtomMapping(object):
         # Setup depiction options
         oedepict.OEConfigure2DMolDisplayOptions(itf, oedepict.OE2DMolDisplaySetup_AromaticStyle)
         opts = oedepict.OE2DMolDisplayOptions(width, height, oedepict.OEScale_AutoScale)
-        oedepict.OESetup2DMolDisplayOptions(opts, itf)
         opts.SetBondWidthScaling(True)
         opts.SetAtomPropertyFunctor(oedepict.OEDisplayAtomMapIdx())
         opts.SetAtomColorStyle(oedepict.OEAtomColorStyle_WhiteMonochrome)
+        opts.SetAromaticStyle(oedepict.OEAromaticStyle_Circle)
+        oedepict.OESetup2DMolDisplayOptions(opts, itf)
 
         # Depict reaction with component highlights
         oechem.OEGenerate2DCoordinates(rmol)
