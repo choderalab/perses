@@ -12,32 +12,9 @@ from gufe.protocols import (
     execute
 )
 
-from openmmtools.utils import get_fastest_platform
-
 from perses.app.relative_setup import RelativeFEPSetup
+from perses.app.setup_relative_calculation import get_openmm_platform
 from perses.annihilation.relative import HybridTopologyFactory
-
-
-# Global parameters for simulation
-# TODO: Should we encode these in a ProtocolSettings object?
-platform_name = get_fastest_platform().getName()
-save_freq_eq = 1
-save_freq_neq = 2
-
-# TIER IV Settings - Specific for Relative FE in perses and Openmm
-# Define lambda functions - for HTF
-x = 'lambda'
-DEFAULT_ALCHEMICAL_FUNCTIONS = {
-    'lambda_sterics_core': x,
-    'lambda_electrostatics_core': x,
-    'lambda_sterics_insert': f"select(step({x} - 0.5), 1.0, 2.0 * {x})",
-    'lambda_sterics_delete': f"select(step({x} - 0.5), 2.0 * ({x} - 0.5), 0.0)",
-    'lambda_electrostatics_insert': f"select(step({x} - 0.5), 2.0 * ({x} - 0.5), 0.0)",
-    'lambda_electrostatics_delete': f"select(step({x} - 0.5), 1.0, 2.0 * {x})",
-    'lambda_bonds': x,
-    'lambda_angles': x,
-    'lambda_torsions': x
-}
 
 
 class SimulationUnit(ProtocolUnit):
@@ -62,7 +39,7 @@ class SimulationUnit(ProtocolUnit):
             receptor_pos = receptor_component.to_openmm_positions()
         return receptor_top, receptor_pos
 
-    def _execute(self, ctx, *, state_a, state_b, mapping, simulation_parameters, **inputs):
+    def _execute(self, ctx, *, state_a, state_b, mapping, settings, **inputs):
         """
         Execute the simulation part of the Nonequilibrium switching protocol using GUFE objects.
 
@@ -73,7 +50,6 @@ class SimulationUnit(ProtocolUnit):
         # needed imports
         import numpy as np
         import openmm
-        from openmm import unit
         from openmmtools.integrators import PeriodicNonequilibriumIntegrator
         from perses.utils.openeye import generate_unique_atom_names
 
@@ -95,17 +71,15 @@ class SimulationUnit(ProtocolUnit):
         ligand_a = generate_unique_atom_names(ligand_a)
         ligand_b = generate_unique_atom_names(ligand_b)
 
-        # Setting up forcefields and phases
-        # TODO: These should be extracted from the ProtocolSettings information
-        forcefield_files = [
-            "amber/ff14SB.xml",
-            "amber/tip3p_standard.xml",
-            "amber/tip3p_HFE_multivalent.xml",
-            "amber/phosaa10.xml",
-        ]
-        small_molecule_forcefield = 'openff-2.0.0'
 
-        phase = "vacuum"  # This is probably taken from the ChemicalSystem or ProtocolSettings
+        # Get settings
+        forcefield_settings = settings.forcefield_settings
+        alchemical_settings = settings.alchemical_settings
+        integrator_settings = settings.integrator_settings
+        thermodynamic_settings = settings.thermodynamic_settings
+        miscellaneous_settings = settings.miscellaneous_settings
+        phase = miscellaneous_settings.phase
+        save_frequency = miscellaneous_settings.save_frequency
 
         # TODO: What do we actually expect from the mapping? Index using what reference?
         # Get the ligand mapping from ComponentMapping object
@@ -120,48 +94,41 @@ class SimulationUnit(ProtocolUnit):
             new_ligand=ligand_b,
             receptor=receptor_top,
             receptor_positions=receptor_pos,
-            forcefield_files=forcefield_files,
-            small_molecule_forcefield=small_molecule_forcefield,
-            phases=phase,
-            # transformation_atom_map=ligand_mapping,  # Handle atom mapping between systems
+            forcefield_files=forcefield_settings.forcefield_files,
+            small_molecule_forcefield=forcefield_settings.small_molecule_forcefield,
+            phases=[phase],
+            transformation_atom_map=ligand_mapping,  # Handle atom mapping between systems
         )
 
         topology_proposals = fe_setup.topology_proposals
         old_positions = fe_setup.old_positions
         new_positions = fe_setup.new_positions
 
-        # Generate Hybrid Topology Factory - Vanilla HTF
+        # Generate Hybrid Topology Factory - Generic HTF
         htf = HybridTopologyFactory(
             topology_proposal=topology_proposals[phase],
             current_positions=old_positions[phase],
             new_positions=new_positions[phase],
-            # TODO: I think the following should be extracted from the ProtocolSettings
-            softcore_LJ_v2=True,
-            interpolate_old_and_new_14s=False,
+            softcore_LJ_v2=alchemical_settings.softcore_LJ_v2,
+            interpolate_old_and_new_14s=alchemical_settings.interpolate_old_and_new_14s,
         )
 
         system = htf.hybrid_system
         positions = htf.hybrid_positions
 
         # Set up integrator
-        timestep = 4.0 * unit.femtosecond
-        temperature = 300 * unit.kelvin
-        neq_splitting = 'V R H O R V'
-        nsteps_eq = 2
-        nsteps_neq = 32
-        integrator = PeriodicNonequilibriumIntegrator(DEFAULT_ALCHEMICAL_FUNCTIONS,
-                                                      nsteps_eq,
-                                                      nsteps_neq,
-                                                      neq_splitting,
-                                                      timestep=timestep,
-                                                      temperature=temperature)
+        temperature = thermodynamic_settings.temperature
+        neq_steps = integrator_settings.eq_steps
+        eq_steps = integrator_settings.neq_steps
+        integrator = PeriodicNonequilibriumIntegrator(alchemical_functions=alchemical_settings.lambda_functions,
+                                                      nsteps_neq=neq_steps,
+                                                      nsteps_eq=eq_steps,
+                                                      splitting=settings["neq_splitting"],
+                                                      timestep=settings["timestep"],
+                                                      temperature=temperature, )
 
         # Set up context
-        platform = openmm.Platform.getPlatformByName(platform_name)
-        if platform_name in ['CUDA', 'OpenCL']:
-            platform.setPropertyDefaultValue('Precision', 'mixed')
-        if platform_name in ['CUDA']:
-            platform.setPropertyDefaultValue('DeterministicForces', 'true')
+        platform = get_openmm_platform(miscellaneous_settings.platform)
         context = openmm.Context(system, integrator, platform)
         context.setPeriodicBoxVectors(*system.getDefaultPeriodicBoxVectors())
         context.setPositions(positions)
@@ -172,16 +139,16 @@ class SimulationUnit(ProtocolUnit):
         # Equilibrate
         context.setVelocitiesToTemperature(temperature)
 
-        # Prepare objects to store data
+        # Prepare objects to store data -- empty lists so far
         forward_works_main, reverse_works_main = list(), list()
         forward_eq_old, forward_eq_new, forward_neq_old, forward_neq_new = list(), list(), list(), list()
         reverse_eq_new, reverse_eq_old, reverse_neq_old, reverse_neq_new = list(), list(), list(), list()
 
         # Equilibrium (lambda = 0)
-        for step in range(nsteps_eq):
+        for step in range(neq_steps):
             integrator.step(1)
             # Store positions and works
-            if step % save_freq_eq == 0:
+            if step % save_frequency == 0:
                 pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
                 old_pos = np.asarray(htf.old_positions(pos))
                 new_pos = np.asarray(htf.new_positions(pos))
@@ -191,10 +158,10 @@ class SimulationUnit(ProtocolUnit):
         # Run neq
         # Forward (0 -> 1)
         forward_works = [integrator.get_protocol_work(dimensionless=True)]
-        for fwd_step in range(nsteps_neq):
+        for fwd_step in range(eq_steps):
             integrator.step(1)
             forward_works.append(integrator.get_protocol_work(dimensionless=True))
-            if fwd_step % save_freq_neq == 0:
+            if fwd_step % save_frequency == 0:
                 pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
                 old_pos = np.asarray(htf.old_positions(pos))
                 new_pos = np.asarray(htf.new_positions(pos))
@@ -203,9 +170,9 @@ class SimulationUnit(ProtocolUnit):
         forward_works_main.append(forward_works)
 
         # Equilibrium (lambda = 1)
-        for step in range(nsteps_eq):
+        for step in range(neq_steps):
             integrator.step(1)
-            if step % save_freq_eq == 0:
+            if step % save_frequency == 0:
                 pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
                 old_pos = np.asarray(htf.old_positions(pos))
                 new_pos = np.asarray(htf.new_positions(pos))
@@ -214,10 +181,10 @@ class SimulationUnit(ProtocolUnit):
 
         # Reverse work (1 -> 0)
         reverse_works = [integrator.get_protocol_work(dimensionless=True)]
-        for rev_step in range(nsteps_neq):
+        for rev_step in range(eq_steps):
             integrator.step(1)
             reverse_works.append(integrator.get_protocol_work(dimensionless=True))
-            if rev_step % save_freq_neq == 0:
+            if rev_step % save_frequency == 0:
                 pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
                 old_pos = np.asarray(htf.old_positions(pos))
                 new_pos = np.asarray(htf.new_positions(pos))
@@ -273,14 +240,15 @@ class ResultUnit(ProtocolUnit):
         import pymbar
         # TODO: This can take the settings and process a debug flag, and populate all the paths for trajectories as needed
         # Load the works from shared serialized objects
-        simulations[0]['forward_work']  # We could also do it this way (convenience)
-        forward_work_path = os.path.join(ctx.shared, f"forward_{phase}.npy")
-        reverse_work_path = os.path.join(ctx.shared, f"reverse_{phase}.npy")
-        forward_work = np.load(forward_work_path)
-        reverse_work = np.load(reverse_work_path)
+        forward_work = np.load(simulations[0]['forward_work'])
+        reverse_work = np.load(simulations[0]['reverse_work'])
         free_energy, error = pymbar.bar.BAR(forward_work, reverse_work)
 
-        return {"DDG": free_energy, "dDDG": error, "paths": works_paths}
+        return {"DDG": free_energy,
+                "dDDG": error,
+                "paths": {"forward_work": simulations[0]['forward_work'],
+                          "reverse_work": simulations[0]['reverse_work']},
+                }
 
 
 class NonEquilibriumCyclingResult(ProtocolResult):
