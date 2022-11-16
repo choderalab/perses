@@ -146,3 +146,6 @@ class NonEqCyclingSettings(ProtocolSettings):
     integrator_settings = IntegratorSettings()
     thermodynamic_settings = ThermodynamicSettings()
     miscellaneous_settings = MiscellaneousSettings()
+
+    def _gufe_tokenize(self):
+        return _serialize_pydantic(self)
