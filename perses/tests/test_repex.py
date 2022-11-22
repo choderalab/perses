@@ -211,7 +211,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
     platform = configure_platform(utils.get_fastest_platform().getName())
 
     data = {}
-    n_iterations = 3000
+    n_iterations = 1000
     n_states = 12
     transformations = [(0, 1), (1, 0)]  # Ligand indices in perses/data/test.smi
 
@@ -256,7 +256,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
                 mcmc_moves=mcmc.LangevinDynamicsMove(
                     timestep=4.0 * unit.femtoseconds,
                     collision_rate=1.0 / unit.picosecond,
-                    n_steps=50,
+                    n_steps=250,
                     reassign_velocities=False,
                     n_restart_attempts=20,
                     constraint_tolerance=1e-06),
