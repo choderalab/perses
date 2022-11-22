@@ -2028,7 +2028,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         current_topology : app.Topology object
             the topology of the current state
         atom_map : dict, default None
-            dict of atom indices
+            dict of atom indices. Requires atom_map[new_index] = old_index.
         current_mol_id : int, optional, default=0
             Index of starting oemol, default is first in list
         proposed_mol_id : int, optional, default=None
@@ -2129,6 +2129,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             mol_atom_map = atom_map
 
         # Adjust atom mapping indices for the presence of the receptor
+        # Uses/requires map[new_mol_index] = old_mol_index
         adjusted_atom_map = {}
         for (key, value) in mol_atom_map.items():
             adjusted_atom_map[key+new_mol_start_index] = value + old_mol_start_index

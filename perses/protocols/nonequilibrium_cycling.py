@@ -27,6 +27,20 @@ class SimulationUnit(ProtocolUnit):
     def _check_state_receptor(self, state):
         """
         Check receptor is found in the state, returning its topology and positions if found.
+
+        Assumes the receptor is under the 'protein' key for the state components.
+
+        Parameters
+        ----------
+        state : gufe.state.State
+            The state to check for the receptor.
+
+        Returns
+        -------
+        receptor_topology : openmm.app.Topology
+            The topology of the receptor. None if not found.
+        receptor_positions : openmm.unit.Quantity of dimension (natoms, 3) with units compatible with angstroms
+            The positions of the receptor. None if not found.
         """
         try:
             receptor_component = state.components['protein']
@@ -54,14 +68,13 @@ class SimulationUnit(ProtocolUnit):
         from perses.utils.openeye import generate_unique_atom_names
 
         # Get receptor and ligands from states
-        # NOTE: This assumes both states have same receptor
-        # TODO: Check state_a protein and state_b protein are the same. Maybe in the Protocol._create method (as early as possible)
+        # NOTE: This assumes both states have/want same receptor
         # Check first state for receptor if not get receptor from second one
         receptor_top, receptor_pos = self._check_state_receptor(state_a)
         if not receptor_top:
             receptor_top, receptor_pos = self._check_state_receptor(state_b)
 
-        # Get ligands
+        # Get ligands -- using hardcoded keys for now
         ligand_a_component = state_a.components['ligand']
         ligand_b_component = state_b.components['ligand']
         ligand_a = ligand_a_component.to_openeye()
@@ -81,9 +94,8 @@ class SimulationUnit(ProtocolUnit):
         phase = miscellaneous_settings.phase
         save_frequency = miscellaneous_settings.save_frequency
 
-        # TODO: What do we actually expect from the mapping? Index using what reference?
         # Get the ligand mapping from ComponentMapping object
-        # ligand_mapping = mapping['ligand']
+        ligand_mapping = mapping.componentA_to_componentB
 
         # Interactive debugging
         # import pdb
@@ -194,7 +206,6 @@ class SimulationUnit(ProtocolUnit):
 
         # Save output
         # TODO: Assume initially we want the trajectories to understand when something wrong/weird happens.
-        # TODO: We need a single API point where the analysis is performed to get DDG values for the NEQ works.
         # Save works
         forward_work_path = os.path.join(ctx.shared, f"forward_{phase}.npy")
         reverse_work_path = os.path.join(ctx.shared, f"reverse_{phase}.npy")
@@ -205,26 +216,44 @@ class SimulationUnit(ProtocolUnit):
 
         # TODO: Do we need to save the trajectories?
         # Save trajs
-        with open(os.path.join(ctx.shared, f"forward_eq_old_{phase}.npy"), 'wb') as out_file:
+        # trajectory paths
+        forward_eq_old_path = os.path.join(ctx.shared, f"forward_eq_old_{phase}.npy")
+        forward_eq_new_path = os.path.join(ctx.shared, f"forward_eq_new_{phase}.npy")
+        forward_neq_old_path = os.path.join(ctx.shared, f"forward_neq_old_{phase}.npy")
+        forward_neq_new_path = os.path.join(ctx.shared, f"forward_neq_new_{phase}.npy")
+        reverse_eq_new_path = os.path.join(ctx.shared, f"reverse_eq_new_{phase}.npy")
+        reverse_eq_old_path = os.path.join(ctx.shared, f"reverse_eq_old_{phase}.npy")
+        reverse_neq_old_path = os.path.join(ctx.shared, f"reverse_neq_old_{phase}.npy")
+        reverse_neq_new_path = os.path.join(ctx.shared, f"reverse_neq_new_{phase}.npy")
+
+        with open(forward_eq_old_path, 'wb') as out_file:
             np.save(out_file, np.array(forward_eq_old))
-        with open(os.path.join(ctx.shared, f"forward_eq_new_{phase}.npy"), 'wb') as out_file:
+        with open(forward_eq_new_path, 'wb') as out_file:
             np.save(out_file, np.array(forward_eq_new))
-        with open(os.path.join(ctx.shared, f"reverse_eq_new_{phase}.npy"), 'wb') as out_file:
-            np.save(out_file, np.array(reverse_eq_new))
-        with open(os.path.join(ctx.shared, f"reverse_eq_old_{phase}.npy"), 'wb') as out_file:
+        with open(reverse_eq_old_path, 'wb') as out_file:
             np.save(out_file, np.array(reverse_eq_old))
-        with open(os.path.join(ctx.shared, f"forward_neq_old_{phase}.npy"), 'wb') as out_file:
+        with open(reverse_eq_new_path, 'wb') as out_file:
+            np.save(out_file, np.array(reverse_eq_new))
+        with open(forward_neq_old_path, 'wb') as out_file:
             np.save(out_file, np.array(forward_neq_old))
-        with open(os.path.join(ctx.shared, f"forward_neq_new_{phase}.npy"), 'wb') as out_file:
+        with open(forward_neq_new_path, 'wb') as out_file:
             np.save(out_file, np.array(forward_neq_new))
-        with open(os.path.join(ctx.shared, f"reverse_neq_old_{phase}.npy"), 'wb') as out_file:
+        with open(reverse_neq_old_path, 'wb') as out_file:
             np.save(out_file, np.array(reverse_neq_old))
-        with open(os.path.join(ctx.shared, f"reverse_neq_new_{phase}.npy"), 'wb') as out_file:
+        with open(reverse_neq_new_path, 'wb') as out_file:
             np.save(out_file, np.array(reverse_neq_new))
 
         return {
             'forward_work': forward_work_path,
             'reverse_work': reverse_work_path,
+            'forward_eq_old': forward_eq_old_path,
+            'forward_eq_new': forward_eq_new_path,
+            'forward_neq_old': forward_neq_old_path,
+            'forward_neq_new': forward_neq_new_path,
+            'reverse_eq_old': reverse_eq_old_path,
+            'reverse_eq_new': reverse_eq_new_path,
+            'reverse_neq_old': reverse_neq_old_path,
+            'reverse_neq_new': reverse_neq_new_path,
         }
 
 
