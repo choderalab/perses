@@ -660,7 +660,7 @@ class PolymerProposalEngine(ProposalEngine):
             new_system = self._system_generator.build_system(new_topology)
 
         # Explicitly de-map any atoms involved in constraints that change length
-        atom_map = SmallMoleculeSetProposalEngine._constraint_repairs(atom_map, old_system, new_system, old_topology, new_topology)
+        atom_map, _ = SmallMoleculeSetProposalEngine._constraint_repairs(atom_map, old_system, new_system, old_topology, new_topology)
         _logger.debug(f"\tafter constraint repairs, the atom map is as such: {atom_map}")
 
         _logger.debug(f"\tadding all env atoms to the atom map...")
@@ -1963,8 +1963,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         Parameters
         ----------
-        list_of_smiles : list of string
-            list of smiles that will be sampled
+        list_of_oemols : list of openeye.oechem.OEMol
+            List of cheminformatics molecule objects
         system_generator : SystemGenerator
             The SystemGenerator initialized with appropriate force fields used to produce System objects from Topology objects
         residue_name : str
@@ -2144,12 +2144,18 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         # Explicitly de-map any atoms involved in constrained bonds that undergo length changes
         _logger.debug(f"mapped {len(adjusted_atom_map)} before constraint repairs")
-        adjusted_atom_map = SmallMoleculeSetProposalEngine._constraint_repairs(adjusted_atom_map, current_system, new_system, current_topology, new_topology)
+        adjusted_atom_map, deleted_indices = SmallMoleculeSetProposalEngine._constraint_repairs(adjusted_atom_map, current_system, new_system, current_topology, new_topology)
         _logger.debug(f"mapped {len(adjusted_atom_map)} after constraint repairs")
+        # Also adjust small molecule atom map accordingly to deleted indices
+        for atom_idx in deleted_indices:
+            non_offset_index = atom_idx - new_mol_start_index
+            mol_atom_map.pop(non_offset_index)  # Remove demapped atoms from small molecule atom map as well
+        # TODO: public attribute should be initialized in the constructor.
+        self.non_offset_new_to_old_atom_map = mol_atom_map  # useful attribute to render mapping with contraints repair
         non_offset_new_to_old_atom_map = copy.deepcopy(adjusted_atom_map)
         # TODO is the following line needed? It doesn't seem to be used
         min_keys, min_values = min(non_offset_new_to_old_atom_map.keys()), min(non_offset_new_to_old_atom_map.values())
-        self.non_offset_new_to_old_atom_map = mol_atom_map
+
 
         # Create NetworkXMolecule for each molecule and add this to the OpenMM Topology object for later retrieval
         current_residue = [res for res in current_topology.residues() if res.name == self._residue_name][0]
@@ -2342,11 +2348,32 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     @staticmethod
     def _constraint_repairs(atom_map, old_system, new_system, old_topology, new_topology):
         """
-        Given an adjusted atom map (corresponding to the true indices of the new: old atoms in their respective systems), iterate through all of the
-        atoms in the map that are hydrogen and check if the constraint length changes; if so, we do not map.
-        """
-        # TODO : Generalize this to handle any atoms involved in constraints that change
+        Given an adjusted atom map (corresponding to the true indices of the new: old atoms in their respective
+        systems), iterate through all of the atoms in the map that are hydrogen and check if their constrained status
+        or length changes; if so, we do not map.
 
+        Parameters:
+        ------------
+        atom_map : dict of int : int
+            The atom mapping to repair; will not be modified.
+            atom_map[new_index] refers to the old index of the corresponding atom in the new system
+        old_system : openmm.System
+            The old OpenMM System containing parameters
+        new_system : openmm.System
+            The old OpenMM System containing parameters
+        old_topology : openmm.app.Topology
+            Old Topology
+        new_topology : openmm.app.Topology
+            New Topology
+
+        Returns
+        --------
+        atom_map : dict of int : int
+            New atom map where some mapped atoms have been removed
+        deleted_new_atoms : list of int
+            List of new_system atoms that were removed from the mapping
+        """
+        # TODO: We probably want this method to handle AtomMap objects as input and outputs, rather than dicts.
         old_hydrogens = list(atom.index for atom in old_topology.atoms() if atom.element == app.Element.getByAtomicNumber(1))
         new_hydrogens = list(atom.index for atom in new_topology.atoms() if atom.element == app.Element.getByAtomicNumber(1))
 
@@ -2366,18 +2393,23 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             elif atom2 in new_hydrogens:
                 new_constraints[atom2] = length
 
-         #iterate through the atom indices in the new_to_old map, check bonds for pairs, and remove appropriate matches
+        # iterate through the atom indices in the new_to_old map, check bonds for pairs, and remove appropriate matches
         to_delete = []
         for new_index, old_index in atom_map.items():
-            if new_index in new_constraints.keys() and old_index in old_constraints.keys(): # both atom indices are hydrogens
+            if new_index in new_constraints.keys() and old_index in old_constraints.keys():  # both atoms in constraints
                 old_length, new_length = old_constraints[old_index], new_constraints[new_index]
-                if not old_length == new_length: #then we have to remove it from
+                if not old_length == new_length:  # then we have to remove it from
                     to_delete.append(new_index)
+            # demap atoms that were constrained and now are in an unconstrained edge, and vice versa
+            elif old_index in old_constraints.keys() and new_index not in new_constraints.keys():
+                to_delete.append(new_index)
+            elif old_index not in old_constraints.keys() and new_index in new_constraints.keys():
+                to_delete.append(new_index)
 
         for idx in to_delete:
             del atom_map[idx]
 
-        return atom_map
+        return atom_map, to_delete
 
     def _propose_molecule(self, system, topology, current_mol_id, exclude_self=False):
         """
