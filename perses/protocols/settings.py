@@ -86,13 +86,16 @@ class IntegratorSettings(ProtocolSettings):
     timestep : float
         The timestep to use in the integrator. Default 4.0 * unit.femtoseconds.
     """
+    class Config:
+        arbitrary_types_allowed = True
     timestep = 4.0 * unit.femtoseconds
     neq_splitting = "V R H O R V"
     eq_steps = 1000
     neq_steps = 100
 
 
-class ThermodynamicSettings(ThermoSettings):
+# class ThermodynamicSettings(ThermoSettings):
+class ThermodynamicSettings(ProtocolSettings):
     """Settings for the thermodynamic state.
 
     This describes the thermodynamic state to use for the simulation.
@@ -102,6 +105,8 @@ class ThermodynamicSettings(ThermoSettings):
     temperature : float
         The temperature to use in the thermodynamic state. Default 300.0 * unit.kelvin.
     """
+    class Config:
+        arbitrary_types_allowed = True
     temperature = 300.0 * unit.kelvin
 
 
@@ -119,6 +124,7 @@ class MiscellaneousSettings(ProtocolSettings):
     """
     platform = 'CUDA'
     save_frequency = 100
+    phase = 'vacuum'
 
 
 class NonEqCyclingSettings(ProtocolSettings):

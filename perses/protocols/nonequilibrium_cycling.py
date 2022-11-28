@@ -16,6 +16,8 @@ from perses.app.relative_setup import RelativeFEPSetup
 from perses.app.setup_relative_calculation import get_openmm_platform
 from perses.annihilation.relative import HybridTopologyFactory
 
+from openff.units.openmm import to_openmm
+
 
 class SimulationUnit(ProtocolUnit):
     """
@@ -60,6 +62,19 @@ class SimulationUnit(ProtocolUnit):
         Parameters
         ----------
         ctx: gufe.protocols.protocolunit.Context
+            The gufe context for the unit.
+
+        state_a : gufe.ChemicalSystem
+            The initial chemical system.
+
+        state_b : gufe.ChemicalSystem
+            The objective chemical system.
+
+        mapping : gufe.mapping.ComponentMapping
+            The mapping between the two chemical systems.
+
+        settings : gufe.settings.model.ProtocolSettings
+            The settings for the protocol.
         """
         # needed imports
         import numpy as np
@@ -129,14 +144,16 @@ class SimulationUnit(ProtocolUnit):
         positions = htf.hybrid_positions
 
         # Set up integrator
-        temperature = thermodynamic_settings.temperature
+        temperature = to_openmm(thermodynamic_settings.temperature)
         neq_steps = integrator_settings.eq_steps
         eq_steps = integrator_settings.neq_steps
+        timestep = to_openmm(integrator_settings.timestep)
+        splitting = integrator_settings.neq_splitting
         integrator = PeriodicNonequilibriumIntegrator(alchemical_functions=alchemical_settings.lambda_functions,
                                                       nsteps_neq=neq_steps,
                                                       nsteps_eq=eq_steps,
-                                                      splitting=settings["neq_splitting"],
-                                                      timestep=settings["timestep"],
+                                                      splitting=splitting,
+                                                      timestep=timestep,
                                                       temperature=temperature, )
 
         # Set up context
@@ -311,16 +328,16 @@ class NonEquilibriumCycling(Protocol):
     ) -> List[ProtocolUnit]:
 
         # Handle parameters
-        if mapping is None:
-            raise ValueError("`mapping` is required for this Protocol")
-        if 'ligand' not in mapping:
-            raise ValueError("'ligand' must be specified in `mapping` dict")
-        if extend_from:
-            raise NotImplementedError("Can't extend simulations yet")
+        # if mapping is None:
+        #     raise ValueError("`mapping` is required for this Protocol")
+        # if 'ligand' not in mapping:
+        #     raise ValueError("'ligand' must be specified in `mapping` dict")
+        # if extend_from:
+        #     raise NotImplementedError("Can't extend simulations yet")
 
         # inputs to `ProtocolUnit.__init__` should either be `Gufe` objects
         # or JSON-serializable objects
-        sim = SimulationUnit(state_a=stateA, state_b=stateB, mapping=mapping, simulation_parameters=self.settings)
+        sim = SimulationUnit(state_a=stateA, state_b=stateB, mapping=mapping, settings=self.settings)
 
         end = ResultUnit(phase="solvent", name="result", simulations=[sim], settings=self.settings)
 
