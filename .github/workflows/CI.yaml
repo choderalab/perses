@@ -67,7 +67,7 @@ jobs:
               conda install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
             beta)
               echo "Using beta build of OpenMM."
-              conda install -c conda-forge/label/openmm_rc -c conda-forge openmm
+              conda install -c conda-forge/label/openmm_dev -c conda-forge openmm
               echo "Using beta build of openeye toolkit"
               conda install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
             *)
