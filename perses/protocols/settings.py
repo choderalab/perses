@@ -68,12 +68,12 @@ class ForceFieldSettings(ProtocolSettings):
         The name of the force field to use for small molecules. Default 'openff-2.0.0'
     """
     forcefield_files = [
-            "amber/ff14SB.xml",
-            "amber/tip3p_standard.xml",
-            "amber/tip3p_HFE_multivalent.xml",
-            "amber/phosaa10.xml",
-        ]
-    small_molecule_forcefield = 'openff-1.0.0'
+        "amber/ff14SB.xml",
+        "amber/tip3p_standard.xml",
+        "amber/tip3p_HFE_multivalent.xml",
+        "amber/phosaa10.xml",
+    ]
+    small_molecule_forcefield = 'openff-2.0.0'
 
 
 class IntegratorSettings(ProtocolSettings):
@@ -92,22 +92,6 @@ class IntegratorSettings(ProtocolSettings):
     neq_splitting = "V R H O R V"
     eq_steps = 1000
     neq_steps = 100
-
-
-# class ThermodynamicSettings(ThermoSettings):
-class ThermodynamicSettings(ProtocolSettings):
-    """Settings for the thermodynamic state.
-
-    This describes the thermodynamic state to use for the simulation.
-
-    Attributes
-    ----------
-    temperature : float
-        The temperature to use in the thermodynamic state. Default 300.0 * unit.kelvin.
-    """
-    class Config:
-        arbitrary_types_allowed = True
-    temperature = 300.0 * unit.kelvin
 
 
 class MiscellaneousSettings(ProtocolSettings):
@@ -150,7 +134,7 @@ class NonEqCyclingSettings(ProtocolSettings):
     alchemical_settings = AlchemicalSettings()
     forcefield_settings = ForceFieldSettings()
     integrator_settings = IntegratorSettings()
-    thermodynamic_settings = ThermodynamicSettings()
+    thermodynamic_settings = ThermoSettings(temperature=300.0 * unit.kelvin)
     miscellaneous_settings = MiscellaneousSettings()
 
     def _gufe_tokenize(self):
