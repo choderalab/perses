@@ -2,6 +2,7 @@ from typing import Optional, Iterable, List, Dict, Any
 
 import os
 
+from gufe.settings.models import ProtocolSettings
 from gufe.chemicalsystem import ChemicalSystem
 from gufe.mapping import ComponentMapping
 from gufe.protocols import (
@@ -314,17 +315,22 @@ class NonEquilibriumCycling(Protocol):
     _results_cls = NonEquilibriumCyclingResult
     _supported_engines = ['openmm']
 
+    def __init__(self, settings: ProtocolSettings):
+        super().__init__(settings)
+
     @classmethod
-    def _default_settings(cls):
-        return {}
+    def _default_settings(cls) -> ProtocolSettings:
+        from perses.protocols import settings
+        non_eq_settings = settings.NonEqCyclingSettings()
+        return non_eq_settings
 
     # NOTE: create method should be really fast, since it would be running in the work units not the clients!!
     def _create(
-        self,
-        stateA: ChemicalSystem,
-        stateB: ChemicalSystem,
-        mapping: Optional[ComponentMapping] = None,
-        extend_from: Optional[ProtocolDAGResult] = None,
+            self,
+            stateA: ChemicalSystem,
+            stateB: ChemicalSystem,
+            mapping: Optional[ComponentMapping] = None,
+            extend_from: Optional[ProtocolDAGResult] = None,
     ) -> List[ProtocolUnit]:
 
         # Handle parameters
@@ -339,7 +345,7 @@ class NonEquilibriumCycling(Protocol):
         # or JSON-serializable objects
         sim = SimulationUnit(state_a=stateA, state_b=stateB, mapping=mapping, settings=self.settings)
 
-        end = ResultUnit(phase="solvent", name="result", simulations=[sim], settings=self.settings)
+        end = ResultUnit(phase=self.settings.miscellaneous_settings.phase, name="result", simulations=[sim])
 
         return [sim, end]
 
