@@ -256,6 +256,7 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     opts.SetBondWidthScaling(True)
     opts.SetAtomPropertyFunctor(oedepict.OEDisplayAtomMapIdx())
     opts.SetAtomColorStyle(oedepict.OEAtomColorStyle_WhiteMonochrome)
+    opts.SetAromaticStyle(oedepict.OEAromaticStyle_Circle)
 
     # Depict reaction with component highlights
     oechem.OEGenerate2DCoordinates(rmol)
