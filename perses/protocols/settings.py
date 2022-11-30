@@ -5,7 +5,7 @@ This module implements the objects that will be needed to run relative binding f
 energy calculations using perses.
 """
 
-from gufe.settings.models import ProtocolSettings, ThermoSettings
+from gufe.settings.models import ProtocolSettings
 from openff.units import unit
 from perses.protocols.utils import _serialize_pydantic
 
@@ -22,94 +22,6 @@ DEFAULT_ALCHEMICAL_FUNCTIONS = {
     'lambda_angles': x,
     'lambda_torsions': x
 }
-
-
-class AlchemicalSettings(ProtocolSettings):
-    """Settings for the alchemical protocol
-
-    This describes the lambda schedule and the creation of the
-    hybrid system.
-
-    Attributes
-    ----------
-    lambda_functions : dict of strings, optional
-      key: value pairs such as "global_parameter" : function_of_lambda where function_of_lambda is a Lepton-compatible
-      string that depends on the variable "lambda".
-      If not specified, default alchemical functions will be used specified in DEFAULT_ALCHEMICAL_FUNCTIONS.
-    softcore_LJ_v2 : bool
-      Whether to use the LJ softcore function as defined by
-      Gapsys et al. JCTC 2012 Default True.
-    interpolate_old_and_new_14s : bool
-      Whether to turn off interactions for new exceptions (not just 1,4s)
-      at lambda 0 and old exceptions at lambda 1. If False they are present
-      in the nonbonded force. Default False.
-    phase : str
-      The phase of the calculation. Default 'vacuum'.
-    """
-    # Lambda settings
-    lambda_functions = DEFAULT_ALCHEMICAL_FUNCTIONS
-    # lambda_windows = 11
-    # alchemical settings
-    softcore_LJ_v2 = True
-    interpolate_old_and_new_14s = False
-    phase = 'vacuum'
-
-
-class ForceFieldSettings(ProtocolSettings):
-    """Settings for the force field
-
-    This describes the force field to use for the system.
-
-    Attributes
-    ----------
-    forcefield_files : list of strings
-        List of force field files to use.
-    small_molecule_forcefield : str
-        The name of the force field to use for small molecules. Default 'openff-2.0.0'
-    """
-    forcefield_files = [
-        "amber/ff14SB.xml",
-        "amber/tip3p_standard.xml",
-        "amber/tip3p_HFE_multivalent.xml",
-        "amber/phosaa10.xml",
-    ]
-    small_molecule_forcefield = 'openff-2.0.0'
-
-
-class IntegratorSettings(ProtocolSettings):
-    """Settings for the integrator.
-
-    This describes the integrator parameters to use for the simulation.
-
-    Attributes
-    ----------
-    timestep : float
-        The timestep to use in the integrator. Default 4.0 * unit.femtoseconds.
-    """
-    class Config:
-        arbitrary_types_allowed = True
-    timestep = 4.0 * unit.femtoseconds
-    neq_splitting = "V R H O R V"
-    eq_steps = 1000
-    neq_steps = 100
-
-
-class MiscellaneousSettings(ProtocolSettings):
-    """Settings for the miscelaneous parameters.
-
-    This describes the miscelaneous parameters to use for the simulation.
-
-    Attributes
-    ----------
-    platform : str
-        The name of the platform to use. Default 'CUDA'.
-    save_frequency : int
-        The frequency at which to save the simulation data. Default 100.
-    """
-    platform = 'CUDA'
-    save_frequency = 100
-    phase = 'vacuum'
-
 
 class NonEqCyclingSettings(ProtocolSettings):
     """
@@ -131,11 +43,30 @@ class NonEqCyclingSettings(ProtocolSettings):
     class Config:
         arbitrary_types_allowed = True
 
-    alchemical_settings = AlchemicalSettings()
-    forcefield_settings = ForceFieldSettings()
-    integrator_settings = IntegratorSettings()
-    thermodynamic_settings = ThermoSettings(temperature=300.0 * unit.kelvin)
-    miscellaneous_settings = MiscellaneousSettings()
+    # Lambda settings
+    lambda_functions = DEFAULT_ALCHEMICAL_FUNCTIONS
+    # lambda_windows = 11
+    # alchemical settings
+    softcore_LJ_v2 = True
+    interpolate_old_and_new_14s = False
+    phase = 'vacuum'
+
+    forcefield_files = [
+        "amber/ff14SB.xml",
+        "amber/tip3p_standard.xml",
+        "amber/tip3p_HFE_multivalent.xml",
+        "amber/phosaa10.xml",
+    ]
+    small_molecule_forcefield = 'openff-2.0.0'
+
+    timestep = 4.0 * unit.femtoseconds
+    neq_splitting = "V R H O R V"
+    eq_steps = 1000
+    neq_steps = 100
+
+    platform = 'CUDA'
+    save_frequency = 100
+    phase = 'vacuum'
 
     def _gufe_tokenize(self):
         return _serialize_pydantic(self)

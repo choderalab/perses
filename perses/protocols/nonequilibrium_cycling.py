@@ -102,13 +102,10 @@ class SimulationUnit(ProtocolUnit):
 
 
         # Get settings
-        forcefield_settings = settings.forcefield_settings
-        alchemical_settings = settings.alchemical_settings
-        integrator_settings = settings.integrator_settings
-        thermodynamic_settings = settings.thermodynamic_settings
-        miscellaneous_settings = settings.miscellaneous_settings
-        phase = miscellaneous_settings.phase
-        save_frequency = miscellaneous_settings.save_frequency
+        protocol_settings = settings.protocol_settings
+        thermodynamic_settings = settings.thermo_settings
+        phase = protocol_settings.phase
+        save_frequency = protocol_settings.save_frequency
 
         # Get the ligand mapping from ComponentMapping object
         ligand_mapping = mapping.componentA_to_componentB
@@ -122,8 +119,8 @@ class SimulationUnit(ProtocolUnit):
             new_ligand=ligand_b,
             receptor=receptor_top,
             receptor_positions=receptor_pos,
-            forcefield_files=forcefield_settings.forcefield_files,
-            small_molecule_forcefield=forcefield_settings.small_molecule_forcefield,
+            forcefield_files=protocol_settings.forcefield_files,
+            small_molecule_forcefield=protocol_settings.small_molecule_forcefield,
             phases=[phase],
             transformation_atom_map=ligand_mapping,  # Handle atom mapping between systems
         )
@@ -137,8 +134,8 @@ class SimulationUnit(ProtocolUnit):
             topology_proposal=topology_proposals[phase],
             current_positions=old_positions[phase],
             new_positions=new_positions[phase],
-            softcore_LJ_v2=alchemical_settings.softcore_LJ_v2,
-            interpolate_old_and_new_14s=alchemical_settings.interpolate_old_and_new_14s,
+            softcore_LJ_v2=protocol_settings.softcore_LJ_v2,
+            interpolate_old_and_new_14s=protocol_settings.interpolate_old_and_new_14s,
         )
 
         system = htf.hybrid_system
@@ -146,11 +143,11 @@ class SimulationUnit(ProtocolUnit):
 
         # Set up integrator
         temperature = to_openmm(thermodynamic_settings.temperature)
-        neq_steps = integrator_settings.eq_steps
-        eq_steps = integrator_settings.neq_steps
-        timestep = to_openmm(integrator_settings.timestep)
-        splitting = integrator_settings.neq_splitting
-        integrator = PeriodicNonequilibriumIntegrator(alchemical_functions=alchemical_settings.lambda_functions,
+        neq_steps = protocol_settings.eq_steps
+        eq_steps = protocol_settings.neq_steps
+        timestep = to_openmm(protocol_settings.timestep)
+        splitting = protocol_settings.neq_splitting
+        integrator = PeriodicNonequilibriumIntegrator(alchemical_functions=protocol_settings.lambda_functions,
                                                       nsteps_neq=neq_steps,
                                                       nsteps_eq=eq_steps,
                                                       splitting=splitting,
@@ -158,7 +155,7 @@ class SimulationUnit(ProtocolUnit):
                                                       temperature=temperature, )
 
         # Set up context
-        platform = get_openmm_platform(miscellaneous_settings.platform)
+        platform = get_openmm_platform(protocol_settings.platform)
         context = openmm.Context(system, integrator, platform)
         context.setPeriodicBoxVectors(*system.getDefaultPeriodicBoxVectors())
         context.setPositions(positions)
@@ -287,18 +284,23 @@ class ResultUnit(ProtocolUnit):
         import pymbar
         # TODO: This can take the settings and process a debug flag, and populate all the paths for trajectories as needed
         # Load the works from shared serialized objects
-        forward_work = np.load(simulations[0]['forward_work'])
-        reverse_work = np.load(simulations[0]['reverse_work'])
+        # import pdb
+        # pdb.set_trace()
+        forward_work = np.load(simulations[0].outputs['forward_work'])
+        reverse_work = np.load(simulations[0].outputs['reverse_work'])
         free_energy, error = pymbar.bar.BAR(forward_work, reverse_work)
 
         return {"DDG": free_energy,
                 "dDDG": error,
-                "paths": {"forward_work": simulations[0]['forward_work'],
-                          "reverse_work": simulations[0]['reverse_work']},
+                "paths": {"forward_work": simulations[0].outputs['forward_work'],
+                          "reverse_work": simulations[0].outputs['reverse_work']},
                 }
 
 
 class NonEquilibriumCyclingResult(ProtocolResult):
+    """
+
+    """
 
     def get_estimate(self):
         ...
@@ -345,7 +347,7 @@ class NonEquilibriumCycling(Protocol):
         # or JSON-serializable objects
         sim = SimulationUnit(state_a=stateA, state_b=stateB, mapping=mapping, settings=self.settings)
 
-        end = ResultUnit(phase=self.settings.miscellaneous_settings.phase, name="result", simulations=[sim])
+        end = ResultUnit(phase=self.settings.protocol_settings.phase, name="result", simulations=[sim])
 
         return [sim, end]
 
