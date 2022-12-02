@@ -79,6 +79,7 @@ setup(
         "perses.dispersed",
         "perses.app",
         "perses.utils",
+        "perses.protocols",
     ],
     # package_data={'perses' : find_package_data('perses','examples') + find_package_data('perses','data')}, # I don't think this works
     package_data={
