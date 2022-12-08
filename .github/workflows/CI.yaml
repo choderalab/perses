@@ -43,11 +43,11 @@ jobs:
           df -h
           ulimit -a
 
-      # More info on options: https://github.com/conda-incubator/setup-miniconda
-      - uses: conda-incubator/setup-miniconda@v2
+      # More info on options: https://github.com/mamba-org/provision-with-micromamba
+      - uses: mamba-org/provision-with-micromamba@main
         with:
           python-version: ${{ matrix.python-version }}
-          mamba-version: "*"
+          micromamba-version: "*"
           environment-file: devtools/conda-envs/test_env.yaml
           channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge,defaults,omnia-dev,openeye
           activate-environment: test
@@ -62,17 +62,17 @@ jobs:
           case ${{ matrix.openmm }} in
             nightly)
               echo "Using nightly dev build of OpenMM."
-              conda install -y -c omnia-dev openmm --override-channels --force-reinstall
+              micromamba install -y -c omnia-dev openmm --override-channels --force-reinstall
               echo "Using beta build of openeye toolkit"
-              conda install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
+              micromamba install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
             beta)
               echo "Using beta build of OpenMM."
-              conda install -c conda-forge/label/openmm_dev -c conda-forge openmm
+              micromamba install -c conda-forge/label/openmm_dev -c conda-forge openmm
               echo "Using beta build of openeye toolkit"
-              conda install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
+              micromamba install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
             *)
               echo "installing OpenMM version ${{ matrix.openmm }}"
-              mamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
+              micromamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
           esac
 
       - name: Install package
@@ -83,8 +83,8 @@ jobs:
       - name: Environment Information
         shell: bash -l {0}
         run: |
-          mamba info -a
-          mamba list
+          micromamba info -a
+          micromamba list
 
       - name: Decrypt OpenEye license
         shell: bash -l {0}
