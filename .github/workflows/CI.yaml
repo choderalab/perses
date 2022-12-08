@@ -64,12 +64,12 @@ jobs:
               echo "Using nightly dev build of OpenMM."
               micromamba install -y -c omnia-dev openmm --override-channels --force-reinstall
               echo "Using beta build of openeye toolkit"
-              micromamba install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
+              micromamba install -y -c openeye/label/beta -c conda-forge openeye-toolkits --override-channels --force-reinstall;;
             beta)
               echo "Using beta build of OpenMM."
               micromamba install -c conda-forge/label/openmm_dev -c conda-forge openmm
               echo "Using beta build of openeye toolkit"
-              micromamba install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
+              micromamba install -y -c openeye/label/beta -c conda-forge openeye-toolkits --override-channels --force-reinstall;;
             *)
               echo "installing OpenMM version ${{ matrix.openmm }}"
               micromamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
