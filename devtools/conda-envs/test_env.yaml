@@ -56,4 +56,4 @@ dependencies:
   - openff-units
   - typing-extensions
   - pip:
-    - git+https://github.com/OpenFreeEnergy/gufe.git@dag-rework
+    - git+https://github.com/OpenFreeEnergy/gufe.git
