@@ -47,7 +47,7 @@ jobs:
       - uses: mamba-org/provision-with-micromamba@main
         with:
           python-version: ${{ matrix.python-version }}
-          micromamba-version: "*"
+          micromamba-version: "latest"
           environment-file: devtools/conda-envs/test_env.yaml
           channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge,defaults,omnia-dev,openeye
           activate-environment: test
