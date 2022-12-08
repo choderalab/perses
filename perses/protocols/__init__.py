@@ -1,1 +1,1 @@
-from .nonequilibrium_cycling import NonEquilibriumCycling, NonEquilibriumCyclingResult
+from .nonequilibrium_cycling import NonEquilibriumCyclingProtocol, NonEquilibriumCyclingProtocolResult

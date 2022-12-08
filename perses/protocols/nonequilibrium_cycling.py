@@ -10,7 +10,7 @@ from gufe.protocols import (
     ProtocolUnit,
     ProtocolResult,
     ProtocolDAGResult,
-    execute
+    execute_DAG
 )
 
 from perses.app.relative_setup import RelativeFEPSetup
@@ -297,7 +297,7 @@ class ResultUnit(ProtocolUnit):
                 }
 
 
-class NonEquilibriumCyclingResult(ProtocolResult):
+class NonEquilibriumCyclingProtocolResult(ProtocolResult):
     """
 
     """
@@ -312,9 +312,9 @@ class NonEquilibriumCyclingResult(ProtocolResult):
         ...
 
 
-class NonEquilibriumCycling(Protocol):
+class NonEquilibriumCyclingProtocol(Protocol):
 
-    _results_cls = NonEquilibriumCyclingResult
+    _results_cls = NonEquilibriumCyclingProtocolResult
     _supported_engines = ['openmm']
 
     def __init__(self, settings: ProtocolSettings):
@@ -374,4 +374,4 @@ def protocol_dag(self, solvated_ligand, vacuum_ligand):
     )
     
     # execute DAG locally, in-process
-    dagresult: ProtocolDAGResult = execute(dag)
+    dagresult: ProtocolDAGResult = execute_DAG(dag)
