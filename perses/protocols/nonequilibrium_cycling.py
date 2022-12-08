@@ -290,8 +290,8 @@ class ResultUnit(ProtocolUnit):
         reverse_work = np.load(simulations[0].outputs['reverse_work'])
         free_energy, error = pymbar.bar.BAR(forward_work, reverse_work)
 
-        return {"DDG": free_energy,
-                "dDDG": error,
+        return {"DG": free_energy,
+                "dDG": error,
                 "paths": {"forward_work": simulations[0].outputs['forward_work'],
                           "reverse_work": simulations[0].outputs['reverse_work']},
                 }
@@ -368,7 +368,7 @@ class NonEquilibriumCyclingProtocol(Protocol):
 # for informational purposes
 # probably use this to develop tests in perses.tests.protocols.test_nonequilibrium_cycling.py
 def protocol_dag(self, solvated_ligand, vacuum_ligand):
-    protocol = NonEquilibriumCycling(settings=None)
+    protocol = NonEquilibriumCyclingProtocol(settings=None)
     dag = protocol.create(
         stateA=solvated_ligand, stateB=vacuum_ligand, name="a dummy run"
     )
