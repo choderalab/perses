@@ -10,6 +10,7 @@ Analyze perses calculations for a benchmark set of ligands annotated with experi
 
 import argparse
 import numpy as np
+import os
 
 
 def get_perses_realtime_statistics(basepath, trajectory_prefix='out'):
@@ -164,7 +165,7 @@ def get_perses_network_results(basepath, trajectory_prefix='out'):
         # Extract names of molecules from the input SDF file used to launch simulations
         # NOTE: This requires the ligand SDF file to be present and have the same path name
         # TODO: We don't need to do this over and over again if the ligand file is the same
-        ligand_titles = get_molecule_titles(perses_input['ligand_file'])
+        ligand_titles = get_molecule_titles(os.path.join(basepath, perses_input['ligand_file']))
         old_ligand_title = ligand_titles[old_ligand_index]
         new_ligand_title = ligand_titles[new_ligand_index]
 
@@ -225,7 +226,7 @@ def generate_arsenic_plots(experimental_data_graph, perses_graph, arsenic_csv_fi
            'g_dij' : standard error uncertainty estimate for g_ij (also in units of kT)
     arsenic_csv_filename : str, optional, default='arsenic.csv'
         Path to arsenic CSV input file to be generated
-    target : str, optional, default='target'
+    target : str, optional, default='benchmark'
         Target name to use in plots
     relative_plot_filename : str, optional, default='relative.pdf'
         Relative free energy comparison with experiment plot
@@ -288,6 +289,13 @@ def generate_arsenic_plots(experimental_data_graph, perses_graph, arsenic_csv_fi
 def display_predictions(graph):
     """
     Display the predicted free energies in a table.
+
+    It outputs the data in a CSV file.
+
+    Parameters
+    ----------
+    graph : networkx.DiGraph()
+        NetworkX graph containing the estimated free energies.
     """
     from rich.console import Console
     from rich.table import Table
@@ -305,7 +313,31 @@ def display_predictions(graph):
         table.add_row(ligand_name, f"{data['mle_g_i']:6.1f} ± {data['mle_dg_i']:5.1f}")
 
     console = Console()
-    console.print(table)
+    console.print(table)  # print to console
+
+
+def output_csv_with_predictions(graph, output_filename="perses_abfe_predictions.csv", display=True):
+    """
+    Output the predicted free energies in a CSV file.
+
+    Parameters
+    ----------
+    graph : networkx.DiGraph()
+        NetworkX graph containing the estimated free energies.
+
+    output_filename : str, optional, default="perses_abfe_predictions.csv"
+        Path to CSV file to be generated.
+
+    display : bool, optional, default=True
+        If True, display the table of predictions to the console.
+    """
+    with open(output_filename, 'w') as outfile:
+        outfile.write("ligand,perses_DG/kT,perses_dDG/kT\n")
+        for ligand_name, data in graph.nodes(data=True):
+            outfile.write(f"{ligand_name},{data['mle_g_i']},{data['mle_dg_i']}\n")
+    if display:
+        display_predictions(graph)
+
 
 if __name__ == '__main__':
 
@@ -314,6 +346,8 @@ if __name__ == '__main__':
     arg_parser.add_argument("--base-directory", type=str, help="Base directory where results live", default='.')
     arg_parser.add_argument("--ligands-file", type=str, help="Name of the ligands sdf file in the base directory.",
                             default='ligands.sdf')
+    arg_parser.add_argument("--traj-prefix", type=str, help="Prefix of the trajectory files in the base directory.",
+                             default='out')
     args = arg_parser.parse_args()
     basepath = args.base_directory
     ligands_file = args.ligands_file
@@ -321,14 +355,14 @@ if __name__ == '__main__':
     experimental_data_graph = get_molecule_experimental_data(ligands_file)
 
     # Get perses free energy estimates and MLE estimates
-    perses_graph = get_perses_network_results(basepath)
+    perses_graph = get_perses_network_results(basepath, trajectory_prefix=args.traj_prefix)
 
     # Check that we have sufficient data to analyze the graph
     if len(perses_graph.nodes) == 0:
         raise Exception('No edges have generated sufficient data to compare with experiment yet. Both solvent and complex phases must have provided data to analyze.')
 
     # Show the predictions
-    display_predictions(perses_graph)
+    output_csv_with_predictions(perses_graph)
 
     # Generate arsenic plots comparing experimental and calculated
     arsenic_csv_filename = 'arsenic.csv' # CSV file to generate containing experimental absolute free energies and raw edge computed free energies from perses    
