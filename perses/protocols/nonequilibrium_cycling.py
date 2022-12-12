@@ -222,8 +222,8 @@ class SimulationUnit(ProtocolUnit):
         # Save output
         # TODO: Assume initially we want the trajectories to understand when something wrong/weird happens.
         # Save works
-        forward_work_path = os.path.join(ctx.shared, f"forward_{phase}.npy")
-        reverse_work_path = os.path.join(ctx.shared, f"reverse_{phase}.npy")
+        forward_work_path = ctx.shared / f"forward_{phase}.npy"
+        reverse_work_path = ctx.shared / f"reverse_{phase}.npy"
         with open(forward_work_path, 'wb') as out_file:
             np.save(out_file, forward_works_main)
         with open(reverse_work_path, 'wb') as out_file:
@@ -232,14 +232,14 @@ class SimulationUnit(ProtocolUnit):
         # TODO: Do we need to save the trajectories?
         # Save trajs
         # trajectory paths
-        forward_eq_old_path = os.path.join(ctx.shared, f"forward_eq_old_{phase}.npy")
-        forward_eq_new_path = os.path.join(ctx.shared, f"forward_eq_new_{phase}.npy")
-        forward_neq_old_path = os.path.join(ctx.shared, f"forward_neq_old_{phase}.npy")
-        forward_neq_new_path = os.path.join(ctx.shared, f"forward_neq_new_{phase}.npy")
-        reverse_eq_new_path = os.path.join(ctx.shared, f"reverse_eq_new_{phase}.npy")
-        reverse_eq_old_path = os.path.join(ctx.shared, f"reverse_eq_old_{phase}.npy")
-        reverse_neq_old_path = os.path.join(ctx.shared, f"reverse_neq_old_{phase}.npy")
-        reverse_neq_new_path = os.path.join(ctx.shared, f"reverse_neq_new_{phase}.npy")
+        forward_eq_old_path = ctx.shared / f"forward_eq_old_{phase}.npy"
+        forward_eq_new_path = ctx.shared / f"forward_eq_new_{phase}.npy"
+        forward_neq_old_path = ctx.shared / f"forward_neq_old_{phase}.npy"
+        forward_neq_new_path = ctx.shared / f"forward_neq_new_{phase}.npy"
+        reverse_eq_new_path = ctx.shared / f"reverse_eq_new_{phase}.npy"
+        reverse_eq_old_path = ctx.shared / f"reverse_eq_old_{phase}.npy"
+        reverse_neq_old_path = ctx.shared / f"reverse_neq_old_{phase}.npy"
+        reverse_neq_new_path = ctx.shared / f"reverse_neq_new_{phase}.npy"
 
         with open(forward_eq_old_path, 'wb') as out_file:
             np.save(out_file, np.array(forward_eq_old))
@@ -281,17 +281,16 @@ class ResultUnit(ProtocolUnit):
     @staticmethod
     def _execute(ctx, *, phase, simulations, **inputs):
         import numpy as np
-        import pymbar
         # TODO: This can take the settings and process a debug flag, and populate all the paths for trajectories as needed
         # Load the works from shared serialized objects
         # import pdb
         # pdb.set_trace()
-        forward_work = np.load(simulations[0].outputs['forward_work'])
-        reverse_work = np.load(simulations[0].outputs['reverse_work'])
-        free_energy, error = pymbar.bar.BAR(forward_work, reverse_work)
+        # TODO: We need to make sure the array is the CUMULATIVE work and that we just want the last value
+        forward_work = np.load(simulations[0].outputs['forward_work'])[-1]
+        reverse_work = np.load(simulations[0].outputs['reverse_work'])[-1]
 
-        return {"DG": free_energy,
-                "dDG": error,
+        return {"forward_work": forward_work,
+                "reverse_work": reverse_work,
                 "paths": {"forward_work": simulations[0].outputs['forward_work'],
                           "reverse_work": simulations[0].outputs['reverse_work']},
                 }
@@ -303,7 +302,9 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
     """
 
     def get_estimate(self):
-        ...
+        # import pymbar
+        # free_energy, error = pymbar.bar.BAR(forward_work, reverse_work)
+        self.data  # this has the returned object form _gather
 
     def get_uncertainty(self):
         ...
@@ -314,8 +315,7 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
 
 class NonEquilibriumCyclingProtocol(Protocol):
 
-    _results_cls = NonEquilibriumCyclingProtocolResult
-    _supported_engines = ['openmm']
+    result_cls = NonEquilibriumCyclingProtocolResult
 
     def __init__(self, settings: ProtocolSettings):
         super().__init__(settings)
@@ -355,13 +355,17 @@ class NonEquilibriumCyclingProtocol(Protocol):
         self, protocol_dag_results: Iterable[ProtocolDAGResult]
     ) -> Dict[str, Any]:
 
-        outputs = []
+        from collections import defaultdict
+        outputs = defaultdict(list)
         for pdr in protocol_dag_results:
             for pur in pdr.protocol_unit_results:
-                if pur.name == "gather":
-                    outputs.append(pur.data)
+                if pur.name == "result":
+                    outputs["DG"].append(pur.outputs["DG"])
+                    outputs["dDG"].append(pur.outputs["dDG"])
+                    outputs["paths"].append(pur.outputs["paths"])
 
-        return dict(data=outputs)
+        # This can be populated however we want
+        return outputs
 
 
 # testing example
