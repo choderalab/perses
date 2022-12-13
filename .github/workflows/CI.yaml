@@ -62,17 +62,17 @@ jobs:
           case ${{ matrix.openmm }} in
             nightly)
               echo "Using nightly dev build of OpenMM."
-              micromamba install -y -c omnia-dev openmm --override-channels --force-reinstall
+              conda install -y -c omnia-dev openmm --override-channels --force-reinstall
               echo "Using beta build of openeye toolkit"
-              micromamba install -y -c openeye/label/beta -c conda-forge openeye-toolkits --override-channels --force-reinstall;;
+              conda install -y -c openeye/label/beta -c conda-forge openeye-toolkits --override-channels --force-reinstall;;
             beta)
               echo "Using beta build of OpenMM."
-              micromamba install -c conda-forge/label/openmm_dev -c conda-forge openmm
+              conda install -c conda-forge/label/openmm_dev -c conda-forge openmm
               echo "Using beta build of openeye toolkit"
-              micromamba install -y -c openeye/label/beta -c conda-forge openeye-toolkits --override-channels --force-reinstall;;
+              conda install -y -c openeye/label/beta -c conda-forge openeye-toolkits --override-channels --force-reinstall;;
             *)
               echo "installing OpenMM version ${{ matrix.openmm }}"
-              micromamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
+              mamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
           esac
 
       - name: Install package
@@ -83,8 +83,8 @@ jobs:
       - name: Environment Information
         shell: bash -l {0}
         run: |
-          micromamba info
-          micromamba list
+          mamba info
+          mamba list
 
       - name: Decrypt OpenEye license
         shell: bash -l {0}
