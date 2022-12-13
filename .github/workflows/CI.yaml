@@ -43,11 +43,11 @@ jobs:
           df -h
           ulimit -a
 
-      # More info on options: https://github.com/mamba-org/provision-with-micromamba
-      - uses: mamba-org/provision-with-micromamba@main
+      # More info on options: https://github.com/conda-incubator/setup-miniconda
+      - uses: conda-incubator/setup-miniconda@v2
         with:
           python-version: ${{ matrix.python-version }}
-          micromamba-version: "latest"
+          mamba-version: "*"
           environment-file: devtools/conda-envs/test_env.yaml
           channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge,defaults,omnia-dev,openeye
           activate-environment: test
@@ -64,12 +64,12 @@ jobs:
               echo "Using nightly dev build of OpenMM."
               conda install -y -c omnia-dev openmm --override-channels --force-reinstall
               echo "Using beta build of openeye toolkit"
-              conda install -y -c openeye/label/beta -c conda-forge openeye-toolkits --override-channels --force-reinstall;;
+              conda install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
             beta)
               echo "Using beta build of OpenMM."
               conda install -c conda-forge/label/openmm_dev -c conda-forge openmm
               echo "Using beta build of openeye toolkit"
-              conda install -y -c openeye/label/beta -c conda-forge openeye-toolkits --override-channels --force-reinstall;;
+              conda install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
             *)
               echo "installing OpenMM version ${{ matrix.openmm }}"
               mamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
@@ -83,7 +83,7 @@ jobs:
       - name: Environment Information
         shell: bash -l {0}
         run: |
-          mamba info
+          mamba info -a
           mamba list
 
       - name: Decrypt OpenEye license
