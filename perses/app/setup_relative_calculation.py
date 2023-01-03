@@ -690,7 +690,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                 sampler_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
 
                 if setup_options['fe_type'] == 'sams':
-                    hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
+                    hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinDynamicsMove(
                         timestep=timestep,
                         collision_rate=1.0 / unit.picosecond,
                         n_steps=n_steps_per_move_application,
@@ -706,7 +706,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                     hss[phase].energy_context_cache = energy_context_cache
                     hss[phase].sampler_context_cache = sampler_context_cache
                 elif setup_options['fe_type'] == 'repex':
-                    hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
+                    hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinDynamicsMove(
                         timestep=timestep,
                         collision_rate=1.0 / unit.picosecond,
                         n_steps=n_steps_per_move_application,
