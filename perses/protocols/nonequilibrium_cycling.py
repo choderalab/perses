@@ -304,7 +304,7 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
     def get_estimate(self):
         # import pymbar
         # free_energy, error = pymbar.bar.BAR(forward_work, reverse_work)
-        self.data  # this has the returned object form _gather
+        self.data  # this has the returned object from _gather
 
     def get_uncertainty(self):
         ...
