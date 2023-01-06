@@ -127,7 +127,7 @@ def test_resume_small_molecule():
             checkpoint_interval=checkpoint_interval,
         )
         hss = HybridRepexSampler(
-            mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
+            mcmc_moves=mcmc.LangevinDynamicsMove(
                 timestep=4.0 * unit.femtoseconds,
                 collision_rate=5.0 / unit.picosecond,
                 n_steps=250,
@@ -197,7 +197,7 @@ def test_resume_protein_mutation_with_checkpoint(tmp_path):
             checkpoint_interval=checkpoint_interval,
         )
         hss = HybridRepexSampler(
-            mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
+            mcmc_moves=mcmc.LangevinDynamicsMove(
                 timestep=4.0 * unit.femtoseconds,
                 collision_rate=5.0 / unit.picosecond,
                 n_steps=250,
@@ -268,7 +268,7 @@ def test_resume_protein_mutation_no_checkpoint(tmp_path):
             checkpoint_interval=checkpoint_interval,
         )
         hss = HybridRepexSampler(
-            mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
+            mcmc_moves=mcmc.LangevinDynamicsMove(
                 timestep=4.0 * unit.femtoseconds,
                 collision_rate=5.0 / unit.picosecond,
                 n_steps=250,
