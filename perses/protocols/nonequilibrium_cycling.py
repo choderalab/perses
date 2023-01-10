@@ -1,6 +1,6 @@
 from typing import Optional, Iterable, List, Dict, Any
 
-import os
+from functools import lru_cache
 
 from gufe.settings.models import ProtocolSettings
 from gufe.chemicalsystem import ChemicalSystem
@@ -301,17 +301,79 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
 
     """
 
-    def get_estimate(self):
-        # import pymbar
-        # free_energy, error = pymbar.bar.BAR(forward_work, reverse_work)
-        self.data  # this has the returned object from _gather
+    def get_estimate(self, n_bootstraps=1000):
+        """
+        Getting free energy estimates using bootstrapping and MBAR.
 
-    def get_uncertainty(self):
-        ...
+        Parameters
+        ----------
+        n_bootstraps
+
+        Returns
+        -------
+
+        """
+        # free_energy, error = pymbar.bar.BAR(forward_work, reverse_work)
+        # self.data  # this has the returned object from _gather
+        import numpy as np
+
+        forward: List[float] = self.data["forward_work"]
+        reverse: List[float] = self.data["reverse_work"]
+
+        all_dgs = self._do_bootstrap(forward, reverse, n_bootstraps=n_bootstraps)
+
+        return np.mean(all_dgs)
+
+    def get_uncertainty(self, n_bootstraps=1000):
+        """
+        Estimate uncertainty using standard deviation of the distribution of bootstrapped
+        free energy (dg) samples.
+
+        Parameters
+        ----------
+        n_bootstraps
+
+        Returns
+        -------
+
+        """
+        import numpy as np
+
+        forward: List[float] = self.data["forward_work"]
+        reverse: List[float] = self.data["reverse_work"]
+
+        all_dgs = self._do_bootstrap(forward, reverse, n_bootstraps=n_bootstraps)
+
+        # TODO: Check if standard deviation is a good uncertainty estimator
+        return np.std(all_dgs)
 
     def get_rate_of_convergence(self):
         ...
 
+    @lru_cache()
+    def _do_bootstrap(self, forward, reverse, n_bootstraps=1000):
+        """
+
+        Returns
+        -------
+
+        """
+        import pymbar
+        import numpy as np
+
+        all_dgs = []
+        all_ddgs = []
+
+        for i in range(n_bootstraps):
+            subsample_indices_forward = np.random.choice(len(forward), forward)
+            subsample_indices_reverse = np.random.choice(len(reverse), reverse)
+            forward_chosen = forward[subsample_indices_forward]
+            reverse_chosen = reverse[subsample_indices_reverse]
+            dg, ddg = pymbar.bar.BAR(forward_chosen, reverse_chosen)
+            all_dgs.append(dg)
+            # all_ddgs.append(ddg)
+
+        return all_dgs
 
 class NonEquilibriumCyclingProtocol(Protocol):
 
@@ -360,9 +422,9 @@ class NonEquilibriumCyclingProtocol(Protocol):
         for pdr in protocol_dag_results:
             for pur in pdr.protocol_unit_results:
                 if pur.name == "result":
-                    outputs["DG"].append(pur.outputs["DG"])
-                    outputs["dDG"].append(pur.outputs["dDG"])
-                    outputs["paths"].append(pur.outputs["paths"])
+                    outputs["forward_work"].append(pur.outputs["forward_work"])
+                    outputs["reverse_work"].append(pur.outputs["reverse_work"])
+                    outputs["work_file_paths"].append(pur.outputs["paths"])
 
         # This can be populated however we want
         return outputs
