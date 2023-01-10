@@ -286,11 +286,13 @@ class ResultUnit(ProtocolUnit):
         # import pdb
         # pdb.set_trace()
         # TODO: We need to make sure the array is the CUMULATIVE work and that we just want the last value
-        forward_work = np.load(simulations[0].outputs['forward_work'])[-1]
-        reverse_work = np.load(simulations[0].outputs['reverse_work'])[-1]
+        forward_work = np.load(simulations[0].outputs['forward_work'])
+        cumulated_forward_work = forward_work[-1] - forward_work[0]
+        reverse_work = np.load(simulations[0].outputs['reverse_work'])
+        cumulated_reverse_work = reverse_work[-1] - reverse_work[0]
 
-        return {"forward_work": forward_work,
-                "reverse_work": reverse_work,
+        return {"forward_work": cumulated_forward_work,
+                "reverse_work": cumulated_reverse_work,
                 "paths": {"forward_work": simulations[0].outputs['forward_work'],
                           "reverse_work": simulations[0].outputs['reverse_work']},
                 }
@@ -303,14 +305,17 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
 
     def get_estimate(self, n_bootstraps=1000):
         """
-        Getting free energy estimates using bootstrapping and MBAR.
+        Get a free energy estimate using bootstrap and BAR.
 
         Parameters
         ----------
-        n_bootstraps
+        n_bootstraps: int
+            Number of bootstrapped samples to use.
 
         Returns
         -------
+        free_energy: float
+            Free energy estimate in units of kT.
 
         """
         # free_energy, error = pymbar.bar.BAR(forward_work, reverse_work)
@@ -335,6 +340,8 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
 
         Returns
         -------
+        free_energy_uncertainty: float
+            Uncertainty on the free energy estimate in units of kT.
 
         """
         import numpy as np
@@ -353,16 +360,18 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
     @lru_cache()
     def _do_bootstrap(self, forward, reverse, n_bootstraps=1000):
         """
+        Performs bootstrapping from forward and reverse cumulated works.
 
         Returns
         -------
-
+        free_energies: List[Float]
+            List of bootstrapped free energies in units of kT.
         """
         import pymbar
         import numpy as np
 
         all_dgs = []
-        all_ddgs = []
+        # all_ddgs = []
 
         for i in range(n_bootstraps):
             subsample_indices_forward = np.random.choice(len(forward), forward)
