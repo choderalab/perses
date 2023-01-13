@@ -84,7 +84,7 @@ class HybridCompatibilityMixin(object):
         sampler_state = SamplerState(positions, box_vectors=hybrid_system.getDefaultPeriodicBoxVectors())
 
         for lambda_val in lambda_schedule:
-           # Create a compound thermodynamic for lambda_val and set alchemical parameters
+            # Create a compound thermodynamic for lambda_val and set alchemical parameters
             compound_thermodynamic_state_copy = copy.deepcopy(compound_thermodynamic_state)
             if factory_name == 'HybridTopologyFactory':
                 compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val,lambda_protocol)
@@ -93,7 +93,8 @@ class HybridCompatibilityMixin(object):
             thermodynamic_state_list.append(compound_thermodynamic_state_copy)
 
             # Generate a sampler_state for each thermodynamic state
-            feptasks.minimize(compound_thermodynamic_state_copy, sampler_state, max_iterations=minimisation_steps)
+            if minimisation_steps != 0:  # only minimize if there are specified steps != 0
+                feptasks.minimize(compound_thermodynamic_state_copy, sampler_state, max_iterations=minimisation_steps)
             sampler_state_list.append(copy.deepcopy(sampler_state))
 
         reporter = storage_file
