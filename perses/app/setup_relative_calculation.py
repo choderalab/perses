@@ -694,7 +694,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                         timestep=timestep,
                         collision_rate=1.0 / unit.picosecond,
                         n_steps=n_steps_per_move_application,
-                        reassign_velocities=True,
+                        reassign_velocities=False,
                         n_restart_attempts=20, constraint_tolerance=1e-06),
                         hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                         online_analysis_minimum_iterations=10, flatness_criteria=setup_options['flatness-criteria'],
@@ -706,11 +706,11 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                     hss[phase].energy_context_cache = energy_context_cache
                     hss[phase].sampler_context_cache = sampler_context_cache
                 elif setup_options['fe_type'] == 'repex':
-                    hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
+                    hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinDynamicsMove(
                         timestep=timestep,
                         collision_rate=1.0 / unit.picosecond,
                         n_steps=n_steps_per_move_application,
-                        reassign_velocities=True,
+                        reassign_velocities=False,
                         n_restart_attempts=20, constraint_tolerance=1e-06),
                         hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                     )
