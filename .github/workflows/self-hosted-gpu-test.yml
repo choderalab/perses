@@ -64,6 +64,7 @@ jobs:
           auto-activate-base: false
           activate-environment: test
           miniforge-version: latest 
+          miniforge-variant: Mambaforge
 
       - name: Refine test env
         shell: bash -l {0}
