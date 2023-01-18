@@ -1,6 +1,6 @@
 #!/bin/bash
 #BSUB -P "asap"
-#BSUB -J "mainseries[1-132]"
+#BSUB -J "mainseries[1-33]"
 #BSUB -n 1
 #BSUB -R rusage[mem=8]
 #BSUB -R span[hosts=1]
