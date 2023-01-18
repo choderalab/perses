@@ -63,6 +63,8 @@ class RelativeFEPSetup(object):
                  temperature=300.0 * unit.kelvin,
                  solvent_padding=9.0 * unit.angstroms,
                  ionic_strength=0.15 * unit.molar,
+                 positive_ion="Na+",
+                 negative_ion="Cl-",
                  hmass=3*unit.amus,
                  neglect_angles=False,
                  map_strength='default',
@@ -161,6 +163,8 @@ class RelativeFEPSetup(object):
         self._pme_tol = 2.5e-04
         self._padding = solvent_padding
         self._ionic_strength = ionic_strength
+        self._positive_ion = positive_ion
+        self._negative_ion = negative_ion
         self._hmass = hmass
         _logger.info(f"\t\t\t_hmass: {hmass}.\n")
         self._proposal_phase = None
@@ -551,7 +555,8 @@ class RelativeFEPSetup(object):
         solvated_complex_tuple = self._solvate_system(complex_topology_old, self._complex_positions_old,
                                                       phase='complex',
                                                       box_dimensions=self._complex_box_dimensions,
-                                                      ionic_strength=self._ionic_strength)
+                                                      ionic_strength=self._ionic_strength,
+                                                      positive_ion=self._positive_ion, negative_ion=self._negative_ion)
         # Extract topology, positions and system
         self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated \
             = solvated_complex_tuple
@@ -647,7 +652,8 @@ class RelativeFEPSetup(object):
             _logger.info(f"solvating ligand...")
             self._ligand_topology_old_solvated, self._ligand_positions_old_solvated, self._ligand_system_old_solvated \
                 = self._solvate_system(self._ligand_topology_old, self._ligand_positions_old, phase='solvent',
-                                       box_dimensions=self._solvent_box_dimensions, ionic_strength=self._ionic_strength)
+                                       box_dimensions=self._solvent_box_dimensions, ionic_strength=self._ionic_strength,
+                                       positive_ion=self._positive_ion, negative_ion=self._negative_ion)
             self._ligand_md_topology_old_solvated = md.Topology.from_openmm(self._ligand_topology_old_solvated)
 
             _logger.info(f"creating TopologyProposal")
@@ -855,7 +861,9 @@ class RelativeFEPSetup(object):
 
         # solvate the old ligand topology:
         old_solvated_topology, old_solvated_positions, old_solvated_system = self._solvate_system(
-            old_ligand_topology.to_openmm(), old_ligand_positions,phase='solvent', box_dimensions=self._solvent_box_dimensions)
+            old_ligand_topology.to_openmm(), old_ligand_positions, phase='solvent',
+            box_dimensions=self._solvent_box_dimensions, positive_ion=self._positive_ion,
+            negative_ion=self._negative_ion)
 
         old_solvated_md_topology = md.Topology.from_openmm(old_solvated_topology)
 
@@ -1001,14 +1009,15 @@ class RelativeFEPSetup(object):
             pass
         return new_positions * unit.nanometers
 
-    def _solvate_system(self, topology, positions, model='tip3p',phase='complex', box_dimensions=None,ionic_strength=0.15 * unit.molar):
+    def _solvate_system(self, topology, positions, model='tip3p', phase='complex', box_dimensions=None,
+                        ionic_strength=0.15 * unit.molar, positive_ion="Na+", negative_ion="Cl-"):
         """
         Generate a solvated topology, positions, and system for a given input topology and positions.
         For generating the system, the forcefield files provided in the constructor will be used.
 
         Parameters
         ----------
-        topology : app.Topology
+        topology : openmm.app.Topology
             Topology of the system to solvate
         positions : [n, 3] ndarray of Quantity nm
             the positions of the unsolvated system
@@ -1018,10 +1027,16 @@ class RelativeFEPSetup(object):
             solvent model to use for solvation
         box_dimensions : tuple of Vec3, default None
             if not None, padding distance will be omitted in favor of a pre-specified set of box dimensions
+        positive_ion : str, optional
+            String to specify the positive ion for solvation. Allowed values are 'Cs+', 'K+', 'Li+', 'Na+', and 'Rb+'.
+            Defaults to "Na+".
+        negative_ion : str, optional
+            String to specify the negative ion for solvation. Allowed values are 'Cl-', 'Br-', 'F-', and 'I-'.
+            Defaults to "Cl-".
 
         Returns
         -------
-        solvated_topology : app.Topology
+        solvated_topology : openmm.app.Topology
             Topology of the system with added waters
         solvated_positions : [n + 3(n_waters), 3] ndarray of Quantity nm
             Solvated positions
@@ -1045,12 +1060,23 @@ class RelativeFEPSetup(object):
             _logger.info(f"\tSkipping solvation as solvent padding set to zero")
         if run_solvate:
             _logger.info(f"\tpreparing to add solvent")
-            if box_dimensions is None:
-                _logger.info(f'solvent padding: {self._padding}')
-                modeller.addSolvent(self._system_generator.forcefield, model=model, padding=self._padding, ionicStrength=ionic_strength)
-            else:
+            # Storing parameters in dict for dynamic usage
+            add_solvent_params = {"forcefield": self._system_generator.forcefield,
+                                  "model": model,
+                                  "ionicStrength": ionic_strength,
+                                  "positiveIon": positive_ion,
+                                  "negativeIon": negative_ion}
+            if box_dimensions:
                 _logger.info(f'box_dimensions: {box_dimensions}')
-                modeller.addSolvent(self._system_generator.forcefield, model=model, ionicStrength=ionic_strength, boxSize=box_dimensions)
+                # Use specified box dimensions
+                add_solvent_params.update({"boxSize": box_dimensions})
+            else:
+                _logger.info(f'solvent padding: {self._padding}')
+                # Add padding to solvent parameters
+                add_solvent_params.update({"padding": self._padding})
+            # Solvate -- unpack parameters in dict
+            modeller.addSolvent(**add_solvent_params)
+
         solvated_topology = modeller.getTopology()
         if phase == 'complex' and self._padding == 0. and box_dimensions is not None:
             _logger.info(f'Complex phase, where padding is set to 0. and box dimensions are provided so setting unit cell dimensions')
