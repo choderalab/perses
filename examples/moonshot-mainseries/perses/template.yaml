@@ -31,7 +31,7 @@ small_molecule_forcefield: openff-1.3.1
 #
 
 # Simulation setup options
-solvent_padding: 9.0 # angstroms
+solvent_padding: 12.0 # angstroms
 pressure: 1 # atmsopheres
 temperature: 300 # kelvin
 timestep: 2.0 # femtoseconds
