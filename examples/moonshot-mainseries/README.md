@@ -51,7 +51,15 @@ python run-perses.py --count
 
 ## Analyze the free energy calculations
 
-Run the analysis script:
+Run the analysis script to analyze the neutral charge state:
 ```bash
-python analyze-pka
+python analyze-benchmark-pKa.py --basepath "step1-His41(0)-Cys145(0)-His163(0)-*" --docked "../docked/step1-x2646_0A-dimer-His41(0)-Cys145(0)-His163(0).sdf" --expdata "../molecules/step1.csv"
+python analyze-benchmark-pKa.py --basepath "step2-His41(0)-Cys145(0)-His163(0)-*" --docked "../docked/step2-x10959_0A-dimer-His41(0)-Cys145(0)-His163(0).sdf" --expdata "../molecules/step2.csv"
+python analyze-benchmark-pKa.py --basepath "step3-His41(0)-Cys145(0)-His163(0)-*" --docked "../docked/step3-x11612_0A-dimer-His41(0)-Cys145(0)-His163(0).sdf" --expdata "../molecules/step3.csv"
+python analyze-benchmark-pKa.py --basepath "step4-His41(0)-Cys145(0)-His163(0)-*" --docked "../docked/step4-P0744_0A-dimer-His41(0)-Cys145(0)-His163(0).sdf" --expdata "../molecules/step4.csv"
 ```
+
+# Things to fix/improve
+
+- [ ] The docking output should generate microstates with unique microstate names, rather than microstaes with parent compound names; this would simplify our workflow.
+- [ ] Standardize naming convention (`parent_molecule`, `compound`)

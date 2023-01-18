@@ -38,9 +38,9 @@ retain_water: true
 # Mpro receptor protonation states to generate
 receptor_protonation_states:
   - His41(0)-Cys145(0)-His163(0)
-  - His41(+)-Cys145(-)-His163(0)
-  - His41(0)-Cys145(0)-His163(+)
-  - His41(+)-Cys145(-)-His163(+)
+#  - His41(+)-Cys145(-)-His163(0)
+#  - His41(0)-Cys145(0)-His163(+)
+#  - His41(+)-Cys145(-)-His163(+)
 
 # Molecules to dock
 expand_protonation_states: true # expand protonation and tautomeric states prior to docking
