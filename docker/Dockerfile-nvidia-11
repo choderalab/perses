@@ -1,5 +1,11 @@
 FROM nvidia/cuda:11.2.2-runtime-ubuntu20.04
 
+# metainformation
+LABEL org.opencontainers.image.version = "0.10.1"
+LABEL org.opencontainers.image.authors = "John D. Chodera"
+LABEL org.opencontainers.image.source = "https://github.com/choderalab/perses"
+LABEL org.opencontainers.image.licenses = "MIT"
+
 # Use bash for all RUN directives
 SHELL ["/bin/bash", "-c"]
 
