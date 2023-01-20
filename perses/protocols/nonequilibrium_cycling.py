@@ -25,36 +25,69 @@ class SimulationUnit(ProtocolUnit):
     Monolithic unit for simulation. It runs NEQ switching simulation from chemical systems and stores the
     work computed in numpy-formatted files, to be analyzed by another unit.
     """
-
-    # TODO: This is not the best way to check for this, maybe we just want a couple of ifs instead of catching exceptions
-    def _check_state_receptor(self, state):
+    @staticmethod
+    def _check_states_compatibility(state_a, state_b):
         """
-        Check receptor is found in the state, returning its topology and positions if found.
-
-        Assumes the receptor is under the 'protein' key for the state components.
+        Checks that both states have the same solvent parameters and receptor.
 
         Parameters
         ----------
-        state : gufe.state.State
-            The state to check for the receptor.
+        state_a : gufe.state.State
+            Origin state for the alchemical transformation.
+        state_b :
+            Destination state for the alchemical transformation.
+        """
+        # If any of them has a solvent, check the parameters are the same
+        if any(["solvent" in state.components for state in (state_a, state_b)]):
+            assert state_a.get("solvent") == state_b.get("solvent"), "Solvent parameters differ between solvent components."
+        # check protein component is the same in both states if protein component is found
+        if any(["protein" in state.components for state in (state_a, state_b)]):
+            assert state_a.get("protein") == state_b.get("protein"), "Receptors in states are not compatible."
+
+    @staticmethod
+    def _detect_phase(state_a, state_b):
+        """
+        Detect phase according to the components in the input chemical state.
+
+        Complex state is assumed if both states have ligands and protein components.
+
+        Solvent state is assumed
+
+        Vacuum state is assumed if only either a ligand or a protein is present
+        in each of the states.
+
+        Parameters
+        ----------
+        state_a : gufe.state.State
+            Source state for the alchemical transformation.
+        state_b : gufe.state.State
+            Destination state for the alchemical transformation.
 
         Returns
         -------
-        receptor_topology : openmm.app.Topology
-            The topology of the receptor. None if not found.
-        receptor_positions : openmm.unit.Quantity of dimension (natoms, 3) with units compatible with angstroms
-            The positions of the receptor. None if not found.
+        phase : str
+            Phase name. "vacuum", "solvent" or "complex".
+        component_keys : list[str]
+            List of component keys to extract from states.
         """
-        try:
-            receptor_component = state.components['protein']
-        except KeyError:
-            print("Receptor not found in chemical system. Assuming non-complex phase for system.")
-            receptor_top = None
-            receptor_pos = None
+        states = (state_a, state_b)
+        # where to store the data to be returned
+
+        # Order of phases is important! We have to check complex first and solvent second.
+        key_options = {
+            "complex": ["ligand", "protein", "solvent"],
+            "solvent": ["ligand", "solvent"],
+            "vacuum": ["ligand"]
+        }
+        for phase, keys in key_options.items():
+            if all([key in state for state in states for key in keys]):
+                detected_phase = phase
+                break
         else:
-            receptor_top = receptor_component.to_openmm_topology()
-            receptor_pos = receptor_component.to_openmm_positions()
-        return receptor_top, receptor_pos
+            raise ValueError(
+                "Could not detect phase from system states. Make sure the component in both systems match.")
+
+        return detected_phase
 
     def _execute(self, ctx, *, state_a, state_b, mapping, settings, **inputs):
         """
@@ -83,28 +116,45 @@ class SimulationUnit(ProtocolUnit):
         from openmmtools.integrators import PeriodicNonequilibriumIntegrator
         from perses.utils.openeye import generate_unique_atom_names
 
-        # Get receptor and ligands from states
-        # NOTE: This assumes both states have/want same receptor
+        # Check compatibility between states (same receptor and solvent)
+        self._check_states_compatibility(state_a, state_b)
+        phase = self._detect_phase(state_a, state_b)
+
+        # Get components from systems if found (None otherwise) -- NOTE: Uses hardcoded keys!
+        receptor_a = state_a.components.get("protein")
+        # receptor_b = state_b.components.get("protein")  # Should not be needed
+        ligand_a = state_a.components.get("ligand")
+        ligand_b = state_b.components.get("ligand")
+        solvent_a = state_a.components.get("solvent")
+        # solvent_b = state_b.components.get("solvent")  # Should not be needed
+
+
         # Check first state for receptor if not get receptor from second one
-        receptor_top, receptor_pos = self._check_state_receptor(state_a)
-        if not receptor_top:
-            receptor_top, receptor_pos = self._check_state_receptor(state_b)
+        if receptor_a:
+            receptor_top = receptor_a.to_openmm_topology()
+            receptor_pos = receptor_a.to_openmm_positions()
+        else:
+            receptor_top, receptor_pos = None, None
 
-        # Get ligands -- using hardcoded keys for now
-        ligand_a_component = state_a.components['ligand']
-        ligand_b_component = state_b.components['ligand']
-        ligand_a = ligand_a_component.to_openeye()
-        ligand_b = ligand_b_component.to_openeye()
-
+        # Get ligands cheminformatics molecules
+        ligand_a = ligand_a.to_openeye()
+        ligand_b = ligand_b.to_openeye()
         # Generating unique atom names for ligands -- openmmforcefields needs them
         ligand_a = generate_unique_atom_names(ligand_a)
         ligand_b = generate_unique_atom_names(ligand_b)
 
+        # Get solvent parameters from component
+        if solvent_a:
+            ion_concentration = solvent_a.ion_concentration.to_openmm()
+            positive_ion = solvent_a.positive_ion
+            negative_ion = solvent_a.negative_ion
+        else:
+            ion_concentration, positive_ion, negative_ion = None, None, None
 
         # Get settings
         protocol_settings = settings.protocol_settings
         thermodynamic_settings = settings.thermo_settings
-        phase = protocol_settings.phase
+        phase = self._detect_phase(state_a, state_b)
         save_frequency = protocol_settings.save_frequency
 
         # Get the ligand mapping from ComponentMapping object
@@ -119,10 +169,13 @@ class SimulationUnit(ProtocolUnit):
             new_ligand=ligand_b,
             receptor=receptor_top,
             receptor_positions=receptor_pos,
-            forcefield_files=protocol_settings.forcefield_files,
-            small_molecule_forcefield=protocol_settings.small_molecule_forcefield,
+            forcefield_files=settings.forcefield_settings.forcefields,
+            small_molecule_forcefield=settings.forcefield_settings.small_molecule_forcefield,
             phases=[phase],
             transformation_atom_map=ligand_mapping,  # Handle atom mapping between systems
+            ionic_strength=ion_concentration,
+            positive_ion=positive_ion,
+            negative_ion=negative_ion,
         )
 
         topology_proposals = fe_setup.topology_proposals
@@ -274,12 +327,11 @@ class SimulationUnit(ProtocolUnit):
 
 class ResultUnit(ProtocolUnit):
     """
-    The idea here is to get the results from the SimulationUnit and analyze/process them using an adaptation of
-    what's in https://github.com/zhang-ivy/perses_protein_mutations/blob/master/code/31_rest_over_protocol/17_analyze_neq_switching_for_sukrit.ipynb
+    Returns cumulated work and paths for output files.
     """
 
     @staticmethod
-    def _execute(ctx, *, phase, simulations, **inputs):
+    def _execute(ctx, *, simulations, **inputs):
         import numpy as np
         # TODO: This can take the settings and process a debug flag, and populate all the paths for trajectories as needed
         # Load the works from shared serialized objects
@@ -300,7 +352,8 @@ class ResultUnit(ProtocolUnit):
 
 class NonEquilibriumCyclingProtocolResult(ProtocolResult):
     """
-
+    Gathers results from different runs and computes the free energy estimates using BAR and its errors using
+    bootstrapping.
     """
 
     def get_estimate(self, n_bootstraps=1000):
@@ -384,7 +437,14 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
 
         return all_dgs
 
+
 class NonEquilibriumCyclingProtocol(Protocol):
+    """
+    Run RBFE calculations between two chemical states using alchemical NEQ cycling and `gufe` objects.
+
+    Chemical states are assumed to have the same component keys, as in, stateA should be composed
+    of the same type of components as components in stateB.
+    """
 
     result_cls = NonEquilibriumCyclingProtocolResult
 
@@ -418,7 +478,7 @@ class NonEquilibriumCyclingProtocol(Protocol):
         # or JSON-serializable objects
         sim = SimulationUnit(state_a=stateA, state_b=stateB, mapping=mapping, settings=self.settings)
 
-        end = ResultUnit(phase=self.settings.protocol_settings.phase, name="result", simulations=[sim])
+        end = ResultUnit(name="result", simulations=[sim])
 
         return [sim, end]
 

@@ -49,15 +49,6 @@ class NonEqCyclingSettings(ProtocolSettings):
     # alchemical settings
     softcore_LJ_v2 = True
     interpolate_old_and_new_14s = False
-    phase = 'vacuum'
-
-    forcefield_files = [
-        "amber/ff14SB.xml",
-        "amber/tip3p_standard.xml",
-        "amber/tip3p_HFE_multivalent.xml",
-        "amber/phosaa10.xml",
-    ]
-    small_molecule_forcefield = 'openff-2.0.0'
 
     timestep = 4.0 * unit.femtoseconds
     neq_splitting = "V R H O R V"
@@ -66,7 +57,6 @@ class NonEqCyclingSettings(ProtocolSettings):
 
     platform = 'CUDA'
     save_frequency = 100
-    phase = 'vacuum'
 
     def _gufe_tokenize(self):
         return _serialize_pydantic(self)
