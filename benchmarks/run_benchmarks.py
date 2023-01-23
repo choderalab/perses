@@ -99,16 +99,16 @@ def generate_ligands_sdf(ligands_dict, target, branch='0.2.1'):
     else:
         concatenate_files(ligand_files, 'ligands.sdf')  # concatenate multiple files
 
-def get_ligand_indices_from_edge(edge_index, target_name, branch="0.2.1"):
+
+def get_ligand_names_from_edge(edge_index, target_name, branch="0.2.1"):
     """
-    Returns the ligand indices from the edge index according to edges.yaml file in repo.
+    Returns the ligand names from the edge index according to edges.yaml file in repo.
 
     Allows specifying a branch/revision in repo.
     """
     # fetch edges information
     # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
     target_dir = get_target_dir(target_name, branch=branch)
-    ligands_dict = get_ligands_information(target, branch=branch)
     edges_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/00_data/edges.yml"
     with fetch_url_contents(edges_url) as response:
         edges_dict = yaml.safe_load(response.read())
@@ -117,11 +117,39 @@ def get_ligand_indices_from_edge(edge_index, target_name, branch="0.2.1"):
     edge = edges_list[edge_index]
     ligand_a_name = edge['ligand_a']
     ligand_b_name = edge['ligand_b']
-    # ligands list to get indices -- preserving same order as upstream yaml file
-    ligands_list = list(ligands_dict.keys())
-    lig_a_index = ligands_list.index(ligand_a_name)
-    lig_b_index = ligands_list.index(ligand_b_name)
-    return lig_a_index, lig_b_index
+
+    return ligand_a_name, ligand_b_name
+
+
+def get_ligand_index_from_file(sdf_file, ligand_name):
+    """
+    Extract index for ligand in an sdf file given its name.
+
+    Parameters
+    ----------
+    sdf_file : str
+        Path to sdf file with ligands information.
+    ligand_name : str
+        Name of the ligand.
+
+    Returns
+    -------
+    index : int
+        Index of the ligand in the sdf file
+    """
+    from openff.toolkit.topology import Molecule
+
+    # Reading with off-toolkit should preserve the order
+    molecule_objects = Molecule.from_file(sdf_file)
+    names = []
+    try:
+        for molecule in molecule_objects:
+            names.append(molecule.name)
+        index = names.index(ligand_name)
+    except TypeError:  # assuming it must be a single molecule sdf file
+        index = 0
+
+    return index
 
 
 def run_relative_perturbation(lig_a_idx, lig_b_idx, reverse=False, tidy=True):
@@ -232,8 +260,11 @@ branch = args.revision
 local_run = args.local
 
 if local_run:
-    get_ligand_indices_from_edge(edge_index, target, branch=branch)
-    lig_a_index, lig_b_index = get_ligand_indices_from_edge(edge_index, target, branch=branch)
+    # FIXME: This isn't working we need something that takes a local edges.yaml file
+    lig_a_name, lig_b_name = get_ligand_names_from_edge(edge_index, target, branch=branch)
+    # get ligand indices from names -- expects ligands.sdf file in the same dir
+    lig_a_index = get_ligand_index_from_file("ligands.sdf", lig_a_name)
+    lig_b_index = get_ligand_index_from_file("ligands.sdf", lig_b_name)
     run_relative_perturbation(lig_a_index, lig_b_index, reverse=is_reversed)
 else:
     # get target information
@@ -255,8 +286,11 @@ else:
     ligands_dict = get_ligands_information(target, branch=branch)
     generate_ligands_sdf(ligands_dict, target, branch=branch)
 
-    # get ligand indices
-    lig_a_index, lig_b_index = get_ligand_indices_from_edge(edge_index, target, branch=branch)
+    # get ligand names
+    lig_a_name, lig_b_name = get_ligand_names_from_edge(edge_index, target, branch=branch)
+    # get ligand indices from names -- expects ligands.sdf file in the same dir
+    lig_a_index = get_ligand_index_from_file("ligands.sdf", lig_a_name)
+    lig_b_index = get_ligand_index_from_file("ligands.sdf", lig_b_name)
 
     # run simulation
     run_relative_perturbation(lig_a_index, lig_b_index, reverse=is_reversed)
