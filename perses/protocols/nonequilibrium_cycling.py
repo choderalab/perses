@@ -371,16 +371,14 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
             Free energy estimate in units of kT.
 
         """
-        # free_energy, error = pymbar.bar.BAR(forward_work, reverse_work)
-        # self.data  # this has the returned object from _gather
-        import numpy as np
+        import numpy.typing as npt
+        import pymbar
 
-        forward: List[float] = self.data["forward_work"]
-        reverse: List[float] = self.data["reverse_work"]
+        forward_work: npt.NDArray[float] = self.data["forward_work"]
+        reverse_work: npt.NDArray[float] = self.data["reverse_work"]
+        free_energy, error = pymbar.bar.BAR(forward_work, reverse_work)
 
-        all_dgs = self._do_bootstrap(forward, reverse, n_bootstraps=n_bootstraps)
-
-        return np.mean(all_dgs)
+        return free_energy
 
     def get_uncertainty(self, n_bootstraps=1000):
         """
@@ -417,23 +415,24 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
 
         Returns
         -------
-        free_energies: List[Float]
+        free_energies: np.ndarray[Float]
             List of bootstrapped free energies in units of kT.
         """
         import pymbar
         import numpy as np
+        import numpy.typing as npt
 
-        all_dgs = []
-        # all_ddgs = []
+        # Check to make sure forward and reverse work values match in length
+        assert len(forward) == len(reverse), "Forward and reverse work values are not paired"
 
+        all_dgs: npt.NDArray[float] = np.zeros(n_bootstraps)  # initialize dgs array
+
+        traj_size = len(forward)
         for i in range(n_bootstraps):
-            subsample_indices_forward = np.random.choice(len(forward), forward)
-            subsample_indices_reverse = np.random.choice(len(reverse), reverse)
-            forward_chosen = forward[subsample_indices_forward]
-            reverse_chosen = reverse[subsample_indices_reverse]
-            dg, ddg = pymbar.bar.BAR(forward_chosen, reverse_chosen)
-            all_dgs.append(dg)
-            # all_ddgs.append(ddg)
+            # Sample trajectory indices with replacement
+            indices = np.random.choice(np.arange(traj_size), size=[traj_size], replace=True)
+            dg, ddg = pymbar.bar.BAR(forward[indices], reverse[indices])
+            all_dgs[i] = dg
 
         return all_dgs
 
