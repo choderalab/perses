@@ -8,7 +8,7 @@ import click
 import openmmtools.utils
 
 # Setting logging level config
-LOGLEVEL = os.environ.get("LOGLEVEL", "DEBUG").upper()
+LOGLEVEL = os.environ.get("LOGLEVEL", "WARNING").upper()
 _logger = logging.getLogger()
 _logger.setLevel(LOGLEVEL)
 

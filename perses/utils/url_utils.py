@@ -9,7 +9,7 @@ import urllib.request
 from http.client import RemoteDisconnected
 
 # Setting logging level config
-LOGLEVEL = os.environ.get("LOGLEVEL", "DEBUG").upper()
+LOGLEVEL = os.environ.get("LOGLEVEL", "WARNING").upper()
 # logging.basicConfig(
 #     format='%(asctime)s %(levelname)-8s %(message)s',
 #     level=LOGLEVEL,
