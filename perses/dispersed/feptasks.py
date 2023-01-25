@@ -20,7 +20,6 @@ from collections import namedtuple
 from perses.annihilation.lambda_protocol import LambdaProtocol
 
 # Instantiate logger
-logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("feptasks")
 _logger.setLevel(logging.INFO)
 

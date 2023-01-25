@@ -11,7 +11,6 @@ from perses.annihilation.relative import HybridTopologyFactory
 
 #######LOGGING#############################
 import logging
-logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("REST")
 _logger.setLevel(logging.INFO)
 ###########################################
