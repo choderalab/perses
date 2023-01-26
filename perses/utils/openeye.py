@@ -13,7 +13,6 @@ import simtk.unit as unit
 import numpy as np
 import logging
 
-logging.basicConfig(level=logging.NOTSET)
 _logger = logging.getLogger("utils.openeye")
 _logger.setLevel(logging.INFO)
 

@@ -21,7 +21,7 @@ from perses.annihilation.relative import HybridTopologyFactory
 from openff.units.openmm import to_openmm
 
 # Specific instance of logger for this module
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 
 class SimulationUnit(ProtocolUnit):
@@ -180,16 +180,16 @@ class SimulationUnit(ProtocolUnit):
         from perses.utils.openeye import generate_unique_atom_names
 
         # Setting up logging to file in shared filesystem
+        file_logger = logging.getLogger("neq-cycling")
         output_log_path = ctx.shared / "perses-neq-cycling.log"
         file_handler = logging.FileHandler(output_log_path, mode="w")
         file_handler.setLevel(logging.DEBUG)  # TODO: Set to INFO in production
         log_formatter = logging.Formatter(fmt='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
         file_handler.setFormatter(log_formatter)
-        logger.addHandler(file_handler)
+        file_logger.addHandler(file_handler)
 
         # Check compatibility between states (same receptor and solvent)
         self._check_states_compatibility(state_a, state_b)
-        phase = self._detect_phase(state_a, state_b)
 
         # Get components from systems if found (None otherwise) -- NOTE: Uses hardcoded keys!
         receptor_a = state_a.components.get("protein")
@@ -304,16 +304,16 @@ class SimulationUnit(ProtocolUnit):
         start_time = time.perf_counter()
         for step in range(coarse_eq_steps):
             integrator.step(work_save_frequency)
-            logger.debug(f"coarse step: {step}: saving work (freq {work_save_frequency})")
+            file_logger.debug(f"coarse step: {step}: saving work (freq {work_save_frequency})")
             # Save positions
             if step % traj_save_frequency == 0:
-                logger.info(f"coarse step: {step}: saving trajectory (freq {traj_save_frequency})")
+                file_logger.debug(f"coarse step: {step}: saving trajectory (freq {traj_save_frequency})")
                 initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
                                                                             atom_selection_exp=selection_expression)
                 forward_eq_old.append(initial_positions)
                 forward_eq_new.append(final_positions)
         # Make sure trajectories are stored at the end of the eq loop
-        logger.debug(f"coarse step: {step}: saving trajectory (freq {traj_save_frequency})")
+        file_logger.debug(f"coarse step: {step}: saving trajectory (freq {traj_save_frequency})")
         initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
                                                                     atom_selection_exp=selection_expression)
         forward_eq_old.append(initial_positions)
@@ -321,7 +321,7 @@ class SimulationUnit(ProtocolUnit):
 
         eq_forward_time = time.perf_counter()
         eq_forward_walltime = datetime.timedelta(seconds=eq_forward_time - start_time)
-        logger.info(f"replicate_{self.name} Forward (lamba = 0) equilibration time : {eq_forward_walltime}")
+        file_logger.info(f"replicate_{self.name} Forward (lamba = 0) equilibration time : {eq_forward_walltime}")
 
         # Run neq
         # Forward (0 -> 1)
@@ -343,7 +343,7 @@ class SimulationUnit(ProtocolUnit):
 
         neq_forward_time = time.perf_counter()
         neq_forward_walltime = datetime.timedelta(seconds=neq_forward_time - eq_forward_time)
-        logger.info(f"replicate_{self.name} Forward nonequilibrium time (lambda 0 -> 1): {neq_forward_walltime}")
+        file_logger.info(f"replicate_{self.name} Forward nonequilibrium time (lambda 0 -> 1): {neq_forward_walltime}")
 
         # Equilibrium (lambda = 1)
         for step in range(coarse_eq_steps):
@@ -361,7 +361,7 @@ class SimulationUnit(ProtocolUnit):
 
         eq_reverse_time = time.perf_counter()
         eq_reverse_walltime = datetime.timedelta(seconds=eq_reverse_time - neq_forward_time)
-        logger.info(f"replicate_{self.name} Reverse (lambda 1) time: {eq_reverse_walltime}")
+        file_logger.info(f"replicate_{self.name} Reverse (lambda 1) time: {eq_reverse_walltime}")
 
         # Reverse work (1 -> 0)
         reverse_works = [integrator.get_protocol_work(dimensionless=True)]
@@ -381,17 +381,17 @@ class SimulationUnit(ProtocolUnit):
 
         neq_reverse_time = time.perf_counter()
         neq_reverse_walltime = datetime.timedelta(seconds=neq_reverse_time - eq_reverse_time)
-        logger.info(f"replicate_{self.name} Reverse nonequilibrium time (lambda 1 -> 0): {neq_reverse_walltime}")
+        file_logger.info(f"replicate_{self.name} Reverse nonequilibrium time (lambda 1 -> 0): {neq_reverse_walltime}")
         # Elapsed time for the whole cycle
         cycle_walltime = datetime.timedelta(seconds=neq_reverse_time - start_time)
-        logger.info(f"replicate_{self.name} Nonequilibrium cycle total walltime: {cycle_walltime}")
+        file_logger.info(f"replicate_{self.name} Nonequilibrium cycle total walltime: {cycle_walltime}")
 
         # Computing performance in ns/day
         simulation_time = 2*(eq_steps + neq_steps)*timestep
         walltime_in_seconds = cycle_walltime.total_seconds() * openmm_unit.seconds
         estimated_performance = simulation_time.value_in_unit(
             openmm_unit.nanosecond) / walltime_in_seconds.value_in_unit(openmm_unit.days)  # in ns/day
-        logger.info(f"replicate_{self.name} Estimated performance: {estimated_performance} ns/day")
+        file_logger.info(f"replicate_{self.name} Estimated performance: {estimated_performance} ns/day")
 
         # Serialize works
         forward_work_path = ctx.shared / f"forward_{phase}_{self.name}.npy"

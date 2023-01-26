@@ -27,10 +27,8 @@ import random
 from scipy.special import logsumexp
 from openeye import oechem
 
-LOGLEVEL = os.environ.get("LOGLEVEL", "INFO").upper()
-logging.basicConfig(level=logging.NOTSET)
 _logger = logging.getLogger("relative_setup")
-_logger.setLevel(LOGLEVEL)
+_logger.setLevel(logging.INFO)
 
 # define NamedTuples from feptasks
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])

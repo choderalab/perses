@@ -25,7 +25,6 @@ except ImportError:
 ################################################################################
 
 import logging
-logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("proposal_generator")
 _logger.setLevel(logging.INFO)
 

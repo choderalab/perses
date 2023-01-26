@@ -19,7 +19,6 @@ import numpy as np
 ################################################################################
 
 import logging
-logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("atom_mapping")
 _logger.setLevel(logging.INFO)
 
