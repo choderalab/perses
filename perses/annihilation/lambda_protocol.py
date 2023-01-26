@@ -4,7 +4,6 @@ import logging
 import copy
 from openmmtools.alchemy import AlchemicalState
 
-logging.basicConfig(level=logging.NOTSET)
 _logger = logging.getLogger("lambda_protocol")
 _logger.setLevel(logging.INFO)
 

@@ -13,7 +13,6 @@ import random
 import pymbar
 from perses.dispersed.parallel import Parallelism
 # Instantiate logger
-logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("sMC")
 _logger.setLevel(logging.INFO)
 

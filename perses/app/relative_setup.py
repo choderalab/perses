@@ -27,7 +27,6 @@ from collections import namedtuple
 import random
 from scipy.special import logsumexp
 
-logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("relative_setup")
 _logger.setLevel(logging.INFO)
 
