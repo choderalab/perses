@@ -21,6 +21,16 @@ class TestNonEquilibriumCycling:
 
         return protocol_short, dag, dagresult
 
+    @pytest.fixture
+    def protocol_dag_broken(self, protocol_short, benzene_vacuum_system, toluene_vacuum_system, broken_mapping):
+        dag = protocol_short.create(
+            stateA=benzene_vacuum_system, stateB=toluene_vacuum_system, name="Short vacuum transformation",
+            mapping=broken_mapping
+        )
+        dagresult: ProtocolDAGResult = execute_DAG(dag)
+
+        return protocol_short, dag, dagresult
+
     def test_dag_execute(self, protocol_dag):
         protocol, dag, dagresult = protocol_dag
 
@@ -65,7 +75,7 @@ class TestNonEquilibriumCycling:
         dag = protocol_short.create(
             stateA=benzene_vacuum_system, stateB=toluene_vacuum_system, name="a broken dummy run",
             mapping=broken_mapping
-        )
+         )
 
         with pytest.raises(AssertionError):
             execute_DAG(dag, raise_error=True)

@@ -104,4 +104,11 @@ def mapping_benzene_toluene(benzene, toluene):
 @pytest.fixture
 def broken_mapping(benzene, toluene):
     """Broken mapping"""
-    ...
+    # Mapping that doesn't make sense for benzene and toluene
+    broken_mapping = {40: 20, 5: 1, 6: 2, 7: 3, 38: 4, 9: 5, 10: 6, 191: 7, 12: 8, 13: 99, 14: 11}
+    broken_mapping_obj = LigandAtomMapping(
+        componentA=benzene,
+        componentB=toluene,
+        componentA_to_componentB=broken_mapping,
+    )
+    return broken_mapping_obj
