@@ -54,7 +54,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
             # Set up repex simulation
             reporter_file = os.path.join(temp_dir, f"{wt_name}-{mutant_name}.nc")
             reporter = MultiStateReporter(reporter_file, checkpoint_interval=10)
-            hss = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=4.0 * unit.femtoseconds,
+            hss = HybridRepexSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=4.0 * unit.femtoseconds,
                                                                                    collision_rate=1.0 / unit.picosecond,
                                                                                    n_steps=50,
                                                                                    reassign_velocities=False,
@@ -157,7 +157,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
                 # Set up repex simulation
                 reporter_file = os.path.join(temp_dir, f"{wt_name}-{mutant_name}.nc")
                 reporter = MultiStateReporter(reporter_file, checkpoint_interval=10)
-                hss = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=4.0 * unit.femtoseconds,
+                hss = HybridRepexSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=4.0 * unit.femtoseconds,
                                                                                        collision_rate=1.0 / unit.picosecond,
                                                                                        n_steps=50,
                                                                                        reassign_velocities=False,

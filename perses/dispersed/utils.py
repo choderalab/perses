@@ -26,7 +26,6 @@ kT = kB * temperature
 beta = 1.0/kT
 
 # Instantiate logger
-logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("sMC_utils")
 _logger.setLevel(logging.INFO)
 DISTRIBUTED_ERROR_TOLERANCE = 1e-6
