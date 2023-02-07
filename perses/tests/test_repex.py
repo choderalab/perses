@@ -26,7 +26,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
     platform = configure_platform(utils.get_fastest_platform().getName())
 
     data = {}
-    n_iterations = 3000
+    n_iterations = 1000
     mutations = [('ala', 'thr'), ('thr', 'ala')]
     with enter_temp_directory() as temp_dir:
         for wt_name, mutant_name in mutations:
@@ -57,7 +57,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
             reporter = MultiStateReporter(reporter_file, checkpoint_interval=100)
             hss = HybridRepexSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=4.0 * unit.femtoseconds,
                                                                           collision_rate=1.0 / unit.picosecond,
-                                                                          n_steps=50,
+                                                                          n_steps=250,
                                                                           reassign_velocities=False,
                                                                           n_restart_attempts=20,
                                                                           constraint_tolerance=1e-06),
@@ -160,7 +160,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
                 reporter = MultiStateReporter(reporter_file, checkpoint_interval=100)
                 hss = HybridRepexSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=4.0 * unit.femtoseconds,
                                                                               collision_rate=1.0 / unit.picosecond,
-                                                                              n_steps=50,
+                                                                              n_steps=250,
                                                                               reassign_velocities=False,
                                                                               n_restart_attempts=20,
                                                                               constraint_tolerance=1e-06),
@@ -217,14 +217,24 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
     data = {}
     n_iterations = 1000
     n_states = 12
-    transformations = [(0, 1), (1, 0)]  # Ligand indices in perses/data/test.smi
+    transformations = [(0, 1), (1, 0)]  # Ligand indices to use for transformation
 
     with enter_temp_directory() as temp_dir:
         for ligand_A_index, ligand_B_index in transformations:
             # Generate topology proposal and positions
-            smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
+            # smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
+            # Define molecules smiles for transformation
+            phenol_smiles = "Oc1ccccc1"
+            paracetamol_smiles = "CC(=O)Nc1ccc(O)cc1"
+            # Write a temporary file with smiles
+            # TODO: Make RelativeFEPSetup work with passing the smiles directly instead of using a file
+            test_file_name = "test_small_mol.smi"
+            with open(test_file_name, "w") as test_file:
+                for smile_str in (phenol_smiles, paracetamol_smiles):
+                    test_file.write(smile_str)
+                    test_file.write("\n")  # write line jump
             fe_setup = RelativeFEPSetup(
-                ligand_input=smiles_filename,
+                ligand_input=test_file_name,
                 old_ligand_index=ligand_A_index,
                 new_ligand_index=ligand_B_index,
                 forcefield_files=["amber14/tip3p.xml"],
@@ -316,7 +326,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
     platform = configure_platform(utils.get_fastest_platform().getName())
 
     data = {}
-    n_iterations = 1000
+    n_iterations = 2000
     n_states = 12
     transformations = [(0, 1), (1, 0)] # A1 is at ligand index 0 and A2 is at ligand index 1
     phases = ["solvent", "complex"]
@@ -370,7 +380,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
                     mcmc_moves=mcmc.LangevinDynamicsMove(
                         timestep=4.0 * unit.femtoseconds,
                         collision_rate=1.0 / unit.picosecond,
-                        n_steps=50,
+                        n_steps=250,
                         reassign_velocities=False,
                         n_restart_attempts=20,
                         constraint_tolerance=1e-06),
