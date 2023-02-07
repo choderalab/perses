@@ -293,14 +293,21 @@ class RelativeFEPSetup(object):
                 self._ligand_topology_old = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_old)
                 self._ligand_topology_new = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_new)
                 _logger.info(f"\tsuccessfully generated topologies for both OEMOLs.")
-        else:
-            self._ligand_oemol_old = createOEMolFromSDF(self._ligand_input[self._old_ligand_index])
-            self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input[self._new_ligand_index])
+        else:  # Input is a list of files or smiles
+            # Try reading the string as smiles
+            from openff.toolkit.topology import Molecule
+            from openff.toolkit.utils.exceptions import SMILESParseError
+            try:
+                off_old_mol = Molecule.from_smiles(str(self._ligand_input[self._old_ligand_index]))
+                off_new_mol = Molecule.from_smiles(str(self._ligand_input[self._new_ligand_index]))
+                self._ligand_oemol_old = off_old_mol.to_openeye()
+                self._ligand_oemol_new = off_new_mol.to_openeye()
+            except SMILESParseError:
+                # Assume the input is a list of sdf file paths
+                self._ligand_oemol_old = createOEMolFromSDF(self._ligand_input[self._old_ligand_index])
+                self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input[self._new_ligand_index])
             self._ligand_oemol_old = generate_unique_atom_names(self._ligand_oemol_old)
             self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
-
-            self._ligand_oemol_old.SetTitle("OLD")
-            self._ligand_oemol_new.SetTitle("NEW")
 
             # forcefield_generators needs to be able to distinguish between the two ligands
             # while topology_proposal needs them to have the same residue name

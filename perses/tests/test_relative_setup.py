@@ -7,7 +7,7 @@ from perses.dispersed import feptasks
 from perses.app import setup_relative_calculation
 import mdtraj as md
 from openmmtools import states, alchemy, testsystems, cache
-from unittest import skipIf
+
 import pytest
 
 from perses.tests.utils import enter_temp_directory
@@ -409,6 +409,35 @@ def test_relative_setup_list_ligand_input():
     assert ligand_input_size == expected_input_size, f"There should be {expected_input_size} ligand input files, " \
                                                      f"receiving {ligand_input_size} files."
 
+
+def test_relative_setup_list_smiles_input():
+    """Test RelativeFEPSetup can handle a list of smiles strings as input ligands
+    """
+    from perses.app.relative_setup import RelativeFEPSetup
+    from openff.toolkit.topology import Molecule
+    from openmm import unit
+
+    benzene_smiles = "c1ccccc1"
+    phenol_smiles = "Oc1ccccc1"
+    input_smiles = [benzene_smiles, phenol_smiles]
+
+    fe_setup = RelativeFEPSetup(
+        ligand_input=input_smiles,
+        old_ligand_index=0,
+        new_ligand_index=1,
+        forcefield_files=["amber14/tip3p.xml"],
+        small_molecule_forcefield="gaff-2.11",
+        phases=["solvent"],
+        solvent_padding=1.1 * unit.nanometers)
+
+    assert isinstance(fe_setup._ligand_input, list)
+    # Assert the molecules are the expected one
+    original_mol_a = Molecule.from_smiles(benzene_smiles)
+    original_mol_b = Molecule.from_smiles(phenol_smiles)
+    fe_setup_old = Molecule.from_openeye(fe_setup._ligand_oemol_old)
+    fe_setup_new = Molecule.from_openeye(fe_setup._ligand_oemol_new)
+    assert original_mol_a == fe_setup_old, "Old input ligand is not the same after FE setup."
+    assert original_mol_b == fe_setup_new, "New input ligand is not the same after FE setup."
 
 # if __name__=="__main__":
 #     test_run_cdk2_iterations_repex()
