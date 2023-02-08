@@ -12,7 +12,12 @@ class TestNonEquilibriumCycling:
         return NonEquilibriumCyclingProtocol(settings=short_settings)
 
     @pytest.fixture
-    def protocol_dag(self, protocol_short, benzene_vacuum_system, toluene_vacuum_system, mapping_benzene_toluene):
+    def protocol_short_multiple_cycles(self, short_settings_multiple_cycles):
+        return NonEquilibriumCyclingProtocol(settings=short_settings_multiple_cycles)
+
+    @pytest.fixture
+    def protocol_dag_result(self, protocol_short, benzene_vacuum_system, toluene_vacuum_system,
+                            mapping_benzene_toluene):
         dag = protocol_short.create(
             stateA=benzene_vacuum_system, stateB=toluene_vacuum_system, name="Short vacuum transformation",
             mapping=mapping_benzene_toluene
@@ -20,6 +25,16 @@ class TestNonEquilibriumCycling:
         dagresult: ProtocolDAGResult = execute_DAG(dag)
 
         return protocol_short, dag, dagresult
+
+    @pytest.fixture
+    def protocol_dag(self, protocol_short_multiple_cycles, benzene_vacuum_system, toluene_vacuum_system,
+                     mapping_benzene_toluene):
+        dag = protocol_short_multiple_cycles.create(
+            stateA=benzene_vacuum_system, stateB=toluene_vacuum_system, name="Short vacuum transformation",
+            mapping=mapping_benzene_toluene
+        )
+
+        return protocol_short_multiple_cycles, dag
 
     @pytest.fixture
     def protocol_dag_broken(self, protocol_short, benzene_vacuum_system, toluene_vacuum_system, broken_mapping):
@@ -32,8 +47,8 @@ class TestNonEquilibriumCycling:
 
         return protocol_short, dag, dagresult
 
-    def test_dag_execute(self, protocol_dag):
-        protocol, dag, dagresult = protocol_dag
+    def test_dag_execute(self, protocol_dag_result):
+        protocol, dag, dagresult = protocol_dag_result
 
         assert dagresult.ok()
 
@@ -41,8 +56,8 @@ class TestNonEquilibriumCycling:
         finishresult = dagresult.protocol_unit_results[-1]
         assert finishresult.name == "result"
 
-    def test_terminal_units(self, protocol_dag):
-        prot, dag, res = protocol_dag
+    def test_terminal_units(self, protocol_dag_result):
+        prot, dag, res = protocol_dag_result
 
         finals = res.terminal_protocol_unit_results
 
@@ -75,16 +90,31 @@ class TestNonEquilibriumCycling:
 
     def test_create_execute_gather(self, protocol_dag):
         """
-        Perform 20 independent simulations of the NEQ cycling protocol and gather the results
+        Perform 20 independent simulations of the NEQ cycling protocol and gather the results.
+
+        This is done by using 4 replicates of the protocol with 5 simulation units each.
         """
 
-        n_simulations = 20
         results = []
-        for i in range(n_simulations):
-            protocol, dag, dagresult = protocol_dag
+        n_replicates = 4
+        for _ in range(n_replicates):
+            protocol, dag = protocol_dag
+            dagresult = execute_DAG(dag)
             results.append(dagresult)
         # gather aggregated results of interest
         protocolresult = protocol.gather(results)
+        fe_estimate = protocolresult.get_estimate()
+        fe_error = protocolresult.get_uncertainty(1000)
+        print(f"Free energy = {fe_estimate} +/- {fe_error}")
 
         # TODO: use the convergence criteria we've been using in perses (DDG < 6*dDDG)
+
+        # 1. Run without errors nan
+        # 2. Can we get an estimate that is not NAN
+        # 3. Do toluene to toluene with turning it in another carbon and it should result in 0 FE estimate
+        #     - We can use the same mapping of benzene to toluene but use it in toluene to toluene
+        # 4. We could also generate a plot with the forward and reverse works and visually check the results.
         raise NotImplementedError
+
+    # TODO: Potentially setup (not run) a protein-ligand system
+

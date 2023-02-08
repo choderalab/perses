@@ -79,6 +79,22 @@ def short_settings():
 
 
 @pytest.fixture
+def short_settings_multiple_cycles():
+    from openff.units import unit
+    # Build Settings gufe object
+    from gufe.settings.models import (
+        Settings,
+    )
+    from perses.protocols.settings import NonEqCyclingSettings
+
+    settings = Settings.get_defaults()
+    settings.thermo_settings.temperature = 300 * unit.kelvin
+    settings.protocol_settings = NonEqCyclingSettings(eq_steps=25000, neq_steps=25000, save_frequency=200,
+                                                      num_replicates=5)
+
+    return settings
+
+@pytest.fixture
 def production_settings(short_settings):
     from perses.protocols.settings import NonEqCyclingSettings
     settings = short_settings

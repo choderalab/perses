@@ -109,6 +109,12 @@ class SimulationUnit(ProtocolUnit):
 
         settings : gufe.settings.model.ProtocolSettings
             The settings for the protocol.
+
+        Returns
+        -------
+        dict : dict[str, str]
+            Dictionary with paths to work arrays, both forward and reverse, and trajectory coordinates for systems
+            A and B.
         """
         # needed imports
         import numpy as np
@@ -220,7 +226,6 @@ class SimulationUnit(ProtocolUnit):
         context.setVelocitiesToTemperature(temperature)
 
         # Prepare objects to store data -- empty lists so far
-        forward_works_main, reverse_works_main = list(), list()
         forward_eq_old, forward_eq_new, forward_neq_old, forward_neq_new = list(), list(), list(), list()
         reverse_eq_new, reverse_eq_old, reverse_neq_old, reverse_neq_new = list(), list(), list(), list()
 
@@ -247,7 +252,6 @@ class SimulationUnit(ProtocolUnit):
                 new_pos = np.asarray(htf.new_positions(pos))
                 forward_neq_old.append(old_pos)
                 forward_neq_new.append(new_pos)
-        forward_works_main.append(forward_works)
 
         # Equilibrium (lambda = 1)
         for step in range(neq_steps):
@@ -270,29 +274,28 @@ class SimulationUnit(ProtocolUnit):
                 new_pos = np.asarray(htf.new_positions(pos))
                 reverse_neq_old.append(old_pos)
                 reverse_neq_new.append(new_pos)
-        reverse_works_main.append(reverse_works)
 
         # Save output
         # TODO: Assume initially we want the trajectories to understand when something wrong/weird happens.
         # Save works
-        forward_work_path = ctx.shared / f"forward_{phase}.npy"
-        reverse_work_path = ctx.shared / f"reverse_{phase}.npy"
+        forward_work_path = ctx.shared / f"forward_{phase}_{self.name}.npy"
+        reverse_work_path = ctx.shared / f"reverse_{phase}_{self.name}.npy"
         with open(forward_work_path, 'wb') as out_file:
-            np.save(out_file, forward_works_main)
+            np.save(out_file, forward_works)
         with open(reverse_work_path, 'wb') as out_file:
-            np.save(out_file, reverse_works_main)
+            np.save(out_file, reverse_works)
 
         # TODO: Do we need to save the trajectories?
         # Save trajs
         # trajectory paths
-        forward_eq_old_path = ctx.shared / f"forward_eq_old_{phase}.npy"
-        forward_eq_new_path = ctx.shared / f"forward_eq_new_{phase}.npy"
-        forward_neq_old_path = ctx.shared / f"forward_neq_old_{phase}.npy"
-        forward_neq_new_path = ctx.shared / f"forward_neq_new_{phase}.npy"
-        reverse_eq_new_path = ctx.shared / f"reverse_eq_new_{phase}.npy"
-        reverse_eq_old_path = ctx.shared / f"reverse_eq_old_{phase}.npy"
-        reverse_neq_old_path = ctx.shared / f"reverse_neq_old_{phase}.npy"
-        reverse_neq_new_path = ctx.shared / f"reverse_neq_new_{phase}.npy"
+        forward_eq_old_path = ctx.shared / f"forward_eq_old_{phase}_{self.name}.npy"
+        forward_eq_new_path = ctx.shared / f"forward_eq_new_{phase}_{self.name}.npy"
+        forward_neq_old_path = ctx.shared / f"forward_neq_old_{phase}_{self.name}.npy"
+        forward_neq_new_path = ctx.shared / f"forward_neq_new_{phase}_{self.name}.npy"
+        reverse_eq_new_path = ctx.shared / f"reverse_eq_new_{phase}_{self.name}.npy"
+        reverse_eq_old_path = ctx.shared / f"reverse_eq_old_{phase}_{self.name}.npy"
+        reverse_neq_old_path = ctx.shared / f"reverse_neq_old_{phase}_{self.name}.npy"
+        reverse_neq_new_path = ctx.shared / f"reverse_neq_new_{phase}_{self.name}.npy"
 
         with open(forward_eq_old_path, 'wb') as out_file:
             np.save(out_file, np.array(forward_eq_old))
@@ -338,15 +341,23 @@ class ResultUnit(ProtocolUnit):
         # import pdb
         # pdb.set_trace()
         # TODO: We need to make sure the array is the CUMULATIVE work and that we just want the last value
-        forward_work = np.load(simulations[0].outputs['forward_work'])
-        cumulated_forward_work = forward_work[-1] - forward_work[0]
-        reverse_work = np.load(simulations[0].outputs['reverse_work'])
-        cumulated_reverse_work = reverse_work[-1] - reverse_work[0]
+        cumulated_forward_works = []
+        cumulated_reverse_works = []
+        for simulation in simulations:
+            forward_work = np.load(simulation.outputs['forward_work'])
+            cumulated_forward = forward_work[-1] - forward_work[0]
+            reverse_work = np.load(simulation.outputs['reverse_work'])
+            cumulated_reverse = reverse_work[-1] - reverse_work[0]
+            cumulated_forward_works.append(cumulated_forward)
+            cumulated_reverse_works.append(cumulated_reverse)
 
-        return {"forward_work": cumulated_forward_work,
-                "reverse_work": cumulated_reverse_work,
-                "paths": {"forward_work": simulations[0].outputs['forward_work'],
-                          "reverse_work": simulations[0].outputs['reverse_work']},
+        # Path dictionary
+        paths_dict = {"forward_work": [simulation.outputs["forward_work"] for simulation in simulations],
+                      "reverse_work": [simulation.outputs["reverse_work"] for simulation in simulations]}
+
+        return {"forward_work": cumulated_forward_works,
+                "reverse_work": cumulated_reverse_works,
+                "paths": paths_dict,
                 }
 
 
@@ -356,7 +367,7 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
     bootstrapping.
     """
 
-    def get_estimate(self, n_bootstraps=1000):
+    def get_estimate(self):
         """
         Get a free energy estimate using bootstrap and BAR.
 
@@ -371,11 +382,12 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
             Free energy estimate in units of kT.
 
         """
+        import numpy as np
         import numpy.typing as npt
         import pymbar
 
-        forward_work: npt.NDArray[float] = self.data["forward_work"]
-        reverse_work: npt.NDArray[float] = self.data["reverse_work"]
+        forward_work: npt.NDArray[float] = np.array(self.data["forward_work"])
+        reverse_work: npt.NDArray[float] = np.array(self.data["reverse_work"])
         free_energy, error = pymbar.bar.BAR(forward_work, reverse_work)
 
         return free_energy
@@ -396,9 +408,10 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
 
         """
         import numpy as np
+        import numpy.typing as npt
 
-        forward: List[float] = self.data["forward_work"]
-        reverse: List[float] = self.data["reverse_work"]
+        forward: npt.NDArray[float] = np.array(self.data["forward_work"])
+        reverse: npt.NDArray[float] = np.array(self.data["reverse_work"])
 
         all_dgs = self._do_bootstrap(forward, reverse, n_bootstraps=n_bootstraps)
 
@@ -408,10 +421,18 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
     def get_rate_of_convergence(self):
         ...
 
-    @lru_cache()
+    # @lru_cache()
     def _do_bootstrap(self, forward, reverse, n_bootstraps=1000):
         """
         Performs bootstrapping from forward and reverse cumulated works.
+
+        Parameters
+        ----------
+        forward: np.ndarray[float]
+            Array of cumulated works for the forward transformation
+        reverse: np.ndarray[float]
+            Array of cumulated works for the reverse transformation
+
 
         Returns
         -------
@@ -475,37 +496,29 @@ class NonEquilibriumCyclingProtocol(Protocol):
 
         # inputs to `ProtocolUnit.__init__` should either be `Gufe` objects
         # or JSON-serializable objects
-        sim = SimulationUnit(state_a=stateA, state_b=stateB, mapping=mapping, settings=self.settings)
+        num_replicates = self.settings.protocol_settings.num_replicates
 
-        end = ResultUnit(name="result", simulations=[sim])
+        simulations = [
+            SimulationUnit(state_a=stateA, state_b=stateB, mapping=mapping, settings=self.settings, name=f"{replicate}")
+            for replicate in range(num_replicates)]
 
-        return [sim, end]
+        end = ResultUnit(name="result", simulations=simulations)
+
+        return [*simulations, end]
 
     def _gather(
         self, protocol_dag_results: Iterable[ProtocolDAGResult]
     ) -> Dict[str, Any]:
 
         from collections import defaultdict
+        import numpy as np
         outputs = defaultdict(list)
         for pdr in protocol_dag_results:
             for pur in pdr.protocol_unit_results:
                 if pur.name == "result":
-                    outputs["forward_work"].append(pur.outputs["forward_work"])
-                    outputs["reverse_work"].append(pur.outputs["reverse_work"])
-                    outputs["work_file_paths"].append(pur.outputs["paths"])
+                    outputs["forward_work"].extend(pur.outputs["forward_work"])
+                    outputs["reverse_work"].extend(pur.outputs["reverse_work"])
+                    outputs["work_file_paths"].extend(pur.outputs["paths"])
 
         # This can be populated however we want
         return outputs
-
-
-# testing example
-# for informational purposes
-# probably use this to develop tests in perses.tests.protocols.test_nonequilibrium_cycling.py
-def protocol_dag(self, solvated_ligand, vacuum_ligand):
-    protocol = NonEquilibriumCyclingProtocol(settings=None)
-    dag = protocol.create(
-        stateA=solvated_ligand, stateB=vacuum_ligand, name="a dummy run"
-    )
-    
-    # execute DAG locally, in-process
-    dagresult: ProtocolDAGResult = execute_DAG(dag)

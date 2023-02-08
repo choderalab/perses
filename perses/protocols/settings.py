@@ -40,23 +40,29 @@ class NonEqCyclingSettings(ProtocolSettings):
     alchemical : AlchemicalSettings
         The alchemical settings to use.
     """
+    # TODO: Add type hints
     class Config:
         arbitrary_types_allowed = True
 
     # Lambda settings
     lambda_functions = DEFAULT_ALCHEMICAL_FUNCTIONS
-    # lambda_windows = 11
+
     # alchemical settings
     softcore_LJ_v2 = True
     interpolate_old_and_new_14s = False
 
+    # NEQ integration settings
     timestep = 4.0 * unit.femtoseconds
     neq_splitting = "V R H O R V"
     eq_steps = 1000
     neq_steps = 100
 
+    # platform and serialization
     platform = 'CUDA'
     save_frequency = 100
+
+    # Number of cycles to run
+    num_replicates: int = 1
 
     def _gufe_tokenize(self):
         return _serialize_pydantic(self)
