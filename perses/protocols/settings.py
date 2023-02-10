@@ -59,6 +59,10 @@ class NonEqCyclingSettings(ProtocolSettings):
 
     # platform and serialization
     platform = 'CUDA'
+    # TODO: We have different settings
+    #  - which atoms should we save (mdtraj selection ex: "not water")
+    #  - How often we want to store positions (set that 100 for example)
+    #  - works store/save frequency. It's not much more data so can be more frequent.
     save_frequency = 100
 
     # Number of cycles to run

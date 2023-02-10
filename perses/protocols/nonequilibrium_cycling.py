@@ -228,9 +228,14 @@ class SimulationUnit(ProtocolUnit):
         forward_eq_old, forward_eq_new, forward_neq_old, forward_neq_new = list(), list(), list(), list()
         reverse_eq_new, reverse_eq_old, reverse_neq_old, reverse_neq_new = list(), list(), list(), list()
 
+        # TODO: Instrumentation for some logging and timestamps for each of these steps
+        #  The path to this file/log can be returned in the shared filesystem
+        #  Compute the ns/day for a whole cycle --> return that in the file
+        #  Also get the GPU information (plain try-except with nvidia-smi)
+
         # Equilibrium (lambda = 0)
         for step in range(neq_steps):
-            integrator.step(1)
+            integrator.step(1)  # TODO: Avoid overhead to have to check everytime of save_frequency. Use greatest common denominator also handle save_freq=0
             # Store positions and works
             if step % save_frequency == 0:
                 pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
@@ -243,8 +248,8 @@ class SimulationUnit(ProtocolUnit):
         # Forward (0 -> 1)
         forward_works = [integrator.get_protocol_work(dimensionless=True)]
         for fwd_step in range(eq_steps):
-            integrator.step(1)
-            forward_works.append(integrator.get_protocol_work(dimensionless=True))
+            integrator.step(1)  # TODO: step for a certain number and then retrieve work
+            forward_works.append(integrator.get_protocol_work(dimensionless=True))  # TODO: we want to call this less frequently
             if fwd_step % save_frequency == 0:
                 pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
                 old_pos = np.asarray(htf.old_positions(pos))
@@ -253,16 +258,18 @@ class SimulationUnit(ProtocolUnit):
                 forward_neq_new.append(new_pos)
 
         # Equilibrium (lambda = 1)
+        # TODO: Same thing as before
         for step in range(neq_steps):
             integrator.step(1)
             if step % save_frequency == 0:
                 pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
                 old_pos = np.asarray(htf.old_positions(pos))
                 new_pos = np.asarray(htf.new_positions(pos))
-                reverse_eq_new.append(new_pos)
+                reverse_eq_new.append(new_pos)  # TODO: Maybe better naming not old/new initial/final
                 reverse_eq_old.append(old_pos)
 
         # Reverse work (1 -> 0)
+        # TODO: Same thing as before
         reverse_works = [integrator.get_protocol_work(dimensionless=True)]
         for rev_step in range(eq_steps):
             integrator.step(1)
