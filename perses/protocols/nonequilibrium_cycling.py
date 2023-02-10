@@ -10,7 +10,6 @@ from gufe.protocols import (
     ProtocolUnit,
     ProtocolResult,
     ProtocolDAGResult,
-    execute_DAG
 )
 
 from perses.app.relative_setup import RelativeFEPSetup
@@ -313,6 +312,9 @@ class SimulationUnit(ProtocolUnit):
             np.save(out_file, np.array(reverse_neq_old))
         with open(reverse_neq_new_path, 'wb') as out_file:
             np.save(out_file, np.array(reverse_neq_new))
+
+        # Explicitly cleanup for GPU resources
+        del context, integrator
 
         return {
             'forward_work': forward_work_path,
