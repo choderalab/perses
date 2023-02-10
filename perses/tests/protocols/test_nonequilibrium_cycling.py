@@ -37,6 +37,17 @@ class TestNonEquilibriumCycling:
         return protocol_short_multiple_cycles, dag
 
     @pytest.fixture
+    def protocol_dag_toluene_to_toluene(self, protocol_short_multiple_cycles, benzene_vacuum_system,
+                                        toluene_vacuum_system, mapping_benzene_toluene):
+        """Fixture to test toluene-to-toluene transformation using benzene-to-toluene mapping"""
+        dag = protocol_short_multiple_cycles.create(
+            stateA=toluene_vacuum_system, stateB=toluene_vacuum_system, name="Toluene vacuum transformation",
+            mapping=mapping_benzene_toluene
+        )
+
+        return protocol_short_multiple_cycles, dag
+
+    @pytest.fixture
     def protocol_dag_broken(self, protocol_short, benzene_vacuum_system, toluene_vacuum_system, broken_mapping):
         dag = protocol_short.create(
             stateA=benzene_vacuum_system, stateB=toluene_vacuum_system, name="Broken vacuum transformation",
@@ -90,10 +101,12 @@ class TestNonEquilibriumCycling:
 
     def test_create_execute_gather(self, protocol_dag):
         """
-        Perform 20 independent simulations of the NEQ cycling protocol and gather the results.
+        Perform 20 independent simulations of the NEQ cycling protocol for the benzene to toluene
+        transformation and gather the results.
 
         This is done by using 4 replicates of the protocol with 5 simulation units each.
         """
+        import numpy as np
 
         results = []
         n_replicates = 4
@@ -103,18 +116,53 @@ class TestNonEquilibriumCycling:
             results.append(dagresult)
         # gather aggregated results of interest
         protocolresult = protocol.gather(results)
+
+        # Check that it runs without failures
+        for dag_result in results:
+            failed_units = dag_result.protocol_unit_failures
+            assert len(failed_units) == 0, "Unit failure in protocol dag result."
+
+        # Get an estimate that is not NaN
         fe_estimate = protocolresult.get_estimate()
-        fe_error = protocolresult.get_uncertainty(1000)
-        print(f"Free energy = {fe_estimate} +/- {fe_error}")
+        fe_error = protocolresult.get_uncertainty()
+        assert not np.isnan(fe_estimate), "Free energy estimate is NaN."
+        assert not np.isnan(fe_error), "Free energy error estimate is NaN."
+        # print(f"Free energy = {fe_estimate} +/- {fe_error}") # DEBUG
 
-        # TODO: use the convergence criteria we've been using in perses (DDG < 6*dDDG)
+    def test_create_execute_gather_toluene_to_toluene(self, protocol_dag_toluene_to_toluene):
+        """
+        Perform 20 independent simulations of the NEQ cycling protocol for the toluene to toluene
+        transformation and gather the results.
 
-        # 1. Run without errors nan
-        # 2. Can we get an estimate that is not NAN
-        # 3. Do toluene to toluene with turning it in another carbon and it should result in 0 FE estimate
-        #     - We can use the same mapping of benzene to toluene but use it in toluene to toluene
-        # 4. We could also generate a plot with the forward and reverse works and visually check the results.
-        raise NotImplementedError
+        This sets up a toluene to toluene transformation using the benzene to toluene mapping
+        and check that the free energy estimates are around 0, within 6*dDG.
 
+        This is done by using 4 replicates of the protocol with 5 simulation units each.
+        """
+        import numpy as np
+
+        results = []
+        n_replicates = 4
+        for _ in range(n_replicates):
+            protocol, dag = protocol_dag_toluene_to_toluene
+            dagresult = execute_DAG(dag)
+            results.append(dagresult)
+        # gather aggregated results of interest
+        protocolresult = protocol.gather(results)
+
+        # Check that it runs without failures
+        for dag_result in results:
+            failed_units = dag_result.protocol_unit_failures
+            assert len(failed_units) == 0, "Unit failure in protocol dag result."
+
+        # Get an estimate that is not NaN
+        fe_estimate = protocolresult.get_estimate()
+        fe_error = protocolresult.get_uncertainty()
+        assert not np.isnan(fe_estimate), "Free energy estimate is NaN."
+        assert not np.isnan(fe_error), "Free energy error estimate is NaN."
+
+        # Test that estimate is around 0 within tolerance
+        assert fe_estimate <= 6*fe_error, f"FE estimate of {fe_estimate} not within tolerance (tol={6*fe_error})."
+
+    # TODO: We could also generate a plot with the forward and reverse works and visually check the results.
     # TODO: Potentially setup (not run) a protein-ligand system
-
