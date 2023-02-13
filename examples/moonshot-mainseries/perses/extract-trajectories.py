@@ -100,12 +100,14 @@ def read_htfs(htf_filename):
     htfs = np.load(htf_filename, allow_pickle=True)['arr_0'].item(0) 
     return htfs
 
-#@click.command()
-#@click.option('--path', required=True, help='path to perses trajectories')
-#@click.option('--prefix', default='out', help='prefix for perses output filenames')
-#@click.option('--extract', default='replicas', type=click.Choice(['replicas', 'states'], case_sensitive=False))
-#@click.option('--outpath', required=True, help='output path for replica trajectories, written as PDB + XTC pairs')
-def extract_trajectories(path, prefix, extract, outpath):
+@click.command()
+@click.option('--path', required=True, help='path to perses trajectories')
+@click.option('--prefix', default='out', help='prefix for perses output filenames')
+@click.option('--extract', default='replicas', type=click.Choice(['replicas', 'states'], case_sensitive=False))
+@click.option('--outpath', required=True, help='output path for replica trajectories, written as PDB + XTC pairs')
+@click.option('--phase', default=None, help='If specified, write only this phase')
+@click.option('--index', default=None, help='If specified, write only these replica or state index')
+def extract_trajectories(path, prefix, extract, outpath, phase, index):
     """Extract replica trajectories from a perses simulation into PDB/XTC pairs.
     """
     # Read hybrid topology file (HTF) containing information about the transformation
@@ -121,8 +123,13 @@ def extract_trajectories(path, prefix, extract, outpath):
     if not os.path.exists(outpath):
         os.makedirs(outpath, exist_ok=True)
 
-    PHASES = ['solvent', 'complex']
+    if phase is None:        
+        PHASES = ['solvent', 'complex']
+    else:
+        PHASES = [phase]
+
     for phase in PHASES:
+        log.info(f':clock: Extracting {phase} phase...')
         htf = htfs[phase]
 
         # Extract MDTraj topology
@@ -137,37 +144,60 @@ def extract_trajectories(path, prefix, extract, outpath):
         from perses.analysis.utils import open_netcdf
         nc = open_netcdf(os.path.join(path, f"{prefix}-{phase}.nc"))
         positions = nc.variables['positions']
-        n_iter, n_replicas, n_atoms, n_dim = np.shape(positions)
+        n_iterations, n_replicas, n_atoms, n_dim = np.shape(positions)
         hybrid_atom_indices = np.array(nc.variables['analysis_particle_indices'])
+        mdtop = htf._hybrid_topology
+        solute_mdtop = mdtop.subset(hybrid_atom_indices)
+
+        if index is None:
+            indices = np.arange(n_replicas)
+        else:
+            indices = [int(index)]
+
         #nc_checkpoint = open_netcdf(os.path.join(out_dir, f"{i}_{phase}_checkpoint.nc"))
         #checkpoint_interval = nc_checkpoint.CheckpointInterval
         #all_positions = nc_checkpoint.variables['positions']
         #box_vectors = np.array(nc_checkpoint['box_vectors'])    
 
-        for replica_index in range(n_replicas):
-            for projection in ['old', 'new']:
-                # Determine which atoms from the real system appear in the solute-only trajectory file
-                real_to_hybrid_map = getattr(htf, f'_{projection}_to_hybrid_map') # hybrid_from_real_indices[real_index] is the hybrid index corresponding to real_index
-                stored_atom_indices = np.array([hybrid_atom_indices.index(hybrid_atom_index) for old_atom_index, hybrid_atom_index in real_to_hybrid_map if hybrid_atom_index in hybrid_atom_indices ])
-                traj = md.Trajectory(np.array(nc.variables['positions'][:,replica_index,real_atom_indices,:]), mdtop.subset(atom_indices))
+        log.info(f':clock: Writing {extract}...')
+        if extract == 'replicas':
+            for replica_index in indices:
+                log.info(f':clock: Writing {extract} : {replica_index} / {n_replicas}...')
+                # Create MDTraj trajectory
+                trajectory = md.Trajectory(positions[:,replica_index,:,:], solute_mdtop)
+                output_prefix = os.path.join(outpath, f'{phase}-{extract}-{replica_index:03d}')
 
-        # Write trajectories
-        for projection in ['old', 'new']:        
-            trajectory = trajs[projection]
+                # Write first frame in PDB, subsequent frames in XTC
+                trajectory[0].save(output_prefix + '.pdb')
+                trajectory[1:].save(output_prefix + '.xtc')
+        elif extract == 'states':
+            states = np.array(nc.variables['states'])
+            state_positions = np.zeros([n_iterations, n_atoms, n_dim], np.float32)
+            for state_index in indices:
+                log.info(f':clock: Writing {extract} : {state_index} / {n_replicas}...')
+                # Extract positions
+                for iteration in range(n_iterations):
+                    replica_index = np.where(states[iteration,:] == state_index)[0][0]
+                    state_positions[iteration,:,:] = positions[iteration,replica_index,:,:]
 
-            output_prefix = os.path.join(outpath, f"{phase}-state{index:03d}-{molecule}")
+                trajectory = md.Trajectory(state_positions, solute_mdtop)
+                output_prefix = os.path.join(outpath, f'{phase}-{extract}-{state_index:03d}')
 
-            # Write first frame in PDB, subsequent frames in XTC
-            trajectory[0].save(output_prefix + '.pdb')
-            trajectory[1:].save(output_prefix + '.xtc')
+                # Write first frame in PDB, subsequent frames in XTC
+                trajectory[0].save(output_prefix + '.pdb')
+                trajectory[1:].save(output_prefix + '.xtc')
+        else:
+            raise ParameterError(f'extract must be one of [replica, state]')
+
+
+    
+
 
 if __name__ == '__main__':
-    #extract_trajectories()
-    #stop
+    extract_trajectories()
+    stop
 
-    print('Reading HTF')
-
-    # Read hybrid topology file (HTF) containing information about the transformation
+    # DEBUG
     import numpy as np
     from openeye import oechem
     import os
@@ -189,3 +219,11 @@ if __name__ == '__main__':
     traj = md.Trajectory(positions[:,0,:,:], solute_mdtop)
     traj[0].save('test.pdb')
     traj[1:].save('test.xtc')
+
+    # Project onto old and new
+    #for projection in ['old', 'new']:
+    #    # Determine which atoms from the real system appear in the solute-only trajectory file
+    #    real_to_hybrid_map = getattr(htf, f'_{projection}_to_hybrid_map') # hybrid_from_real_indices[real_index] is the hybrid index corresponding to real_index
+    #    stored_atom_indices = np.array([hybrid_atom_indices.index(hybrid_atom_index) for old_atom_index, hybrid_atom_index in real_to_hybrid_map if hybrid_atom_index in hybrid_atom_indices ])
+    #    traj = md.Trajectory(np.array(nc.variables['positions'][:,replica_index,real_atom_indices,:]), mdtop.subset(atom_indices))
+    #output_prefix = os.path.join(outpath, f"{phase}-state{index:03d}-{molecule}")
