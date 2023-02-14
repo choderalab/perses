@@ -33,7 +33,7 @@ jobs:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           ec2-image-id: ami-034abd52dd90b8023
-          ec2-instance-type: p2.xlarge
+          ec2-instance-type: g4dn.xlarge
           subnet-id: subnet-07ba75eac26656080 # us-east-1a
           security-group-id: sg-0589e74ec03965add
           # iam-role-name: self-hosted-runner # optional, requires additional permissions
@@ -51,7 +51,7 @@ jobs:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           ec2-image-id: ami-034abd52dd90b8023
-          ec2-instance-type: p2.xlarge
+          ec2-instance-type: g4dn.xlarge
           subnet-id: subnet-0f75c34cf29bf0612 # us-east-1b
           security-group-id: sg-0589e74ec03965add
           # iam-role-name: self-hosted-runner # optional, requires additional permissions
@@ -69,7 +69,7 @@ jobs:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           ec2-image-id: ami-034abd52dd90b8023
-          ec2-instance-type: p2.xlarge
+          ec2-instance-type: g4dn.xlarge
           subnet-id: subnet-0965da20d48e6c4fb # us-east-1c
           security-group-id: sg-0589e74ec03965add
           # iam-role-name: self-hosted-runner # optional, requires additional permissions
@@ -88,7 +88,7 @@ jobs:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           ec2-image-id: ami-034abd52dd90b8023
-          ec2-instance-type: p2.xlarge
+          ec2-instance-type: g4dn.xlarge
           subnet-id: subnet-0e82552b8c708a999 # us-east-1d
           security-group-id: sg-0589e74ec03965add
           # iam-role-name: self-hosted-runner # optional, requires additional permissions
@@ -106,7 +106,7 @@ jobs:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           ec2-image-id: ami-034abd52dd90b8023
-          ec2-instance-type: p2.xlarge
+          ec2-instance-type: g4dn.xlarge
           subnet-id: subnet-0e6dc143f8d11cb20 # us-east-1e
           security-group-id: sg-0589e74ec03965add
           # iam-role-name: self-hosted-runner # optional, requires additional permissions
@@ -124,7 +124,7 @@ jobs:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           ec2-image-id: ami-034abd52dd90b8023
-          ec2-instance-type: p2.xlarge
+          ec2-instance-type: g4dn.xlarge
           subnet-id: subnet-0c81ebaea04d729a1 # us-east-1f
           security-group-id: sg-0589e74ec03965add
           # iam-role-name: self-hosted-runner # optional, requires additional permissions
