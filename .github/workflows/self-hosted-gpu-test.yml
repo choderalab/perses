@@ -83,6 +83,7 @@ jobs:
         id: try-us-east-1d
         uses: machulav/ec2-github-runner@main
         if: steps.try-us-east-1c.outcome == 'failure'
+        continue-on-error: true
         with:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
@@ -96,6 +97,24 @@ jobs:
               {"Key": "Name", "Value": "ec2-github-runner"},
               {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
             ]
+      - name: Start EC2 runner (e)
+        id: try-us-east-1e
+        uses: machulav/ec2-github-runner@main
+        if: steps.try-us-east-1d.outcome == 'failure'
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ami-034abd52dd90b8023
+          ec2-instance-type: p2.xlarge
+          subnet-id: subnet-0e6dc143f8d11cb20 # us-east-1e
+          security-group-id: sg-0589e74ec03965add
+          # iam-role-name: self-hosted-runner # optional, requires additional permissions
+          aws-resource-tags: > # optional, requires additional permissions
+            [
+              {"Key": "Name", "Value": "ec2-github-runner"},
+              {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
+            ]
+
       - name: See if any of xxx sub-regions had the resource
         id: start-ec2-runner
         run: |
@@ -114,6 +133,10 @@ jobs:
           if [ "${{ steps.try-us-east-1d.outcome }}" = "success" ]; then
             echo "::set-output name=label::${{ steps.try-us-east-1d.outputs.label }}"
             echo "::set-output name=ec2-instance-id::${{ steps.try-us-east-1d.outputs.ec2-instance-id }}"
+          fi
+          if [ "${{ steps.try-us-east-1e.outcome }}" = "success" ]; then
+            echo "::set-output name=label::${{ steps.try-us-east-1e.outputs.label }}"
+            echo "::set-output name=ec2-instance-id::${{ steps.try-us-east-1e.outputs.ec2-instance-id }}"
           fi
 
 
