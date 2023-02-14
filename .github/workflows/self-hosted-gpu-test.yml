@@ -27,7 +27,7 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
       - name: Try to start EC2 runner (a)
         id: try-us-east-1a
-        uses: machulav/ec2-github-runner@maina
+        uses: machulav/ec2-github-runner@main
         continue-on-error: true
         with:
           mode: start
