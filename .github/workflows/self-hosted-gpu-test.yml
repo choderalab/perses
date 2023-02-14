@@ -25,15 +25,16 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-      - name: Start EC2 runner
-        id: start-ec2-runner
-        uses: machulav/ec2-github-runner@main
+      - name: Try to start EC2 runner (a)
+        id: try-us-east-1a
+        uses: machulav/ec2-github-runner@maina
+        continue-on-error: true
         with:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           ec2-image-id: ami-034abd52dd90b8023
-          ec2-instance-type: g4dn.xlarge
-          subnet-id: subnet-0e82552b8c708a999
+          ec2-instance-type: p2.xlarge
+          subnet-id: subnet-0b450e349fb9e5a38 # us-east-1a
           security-group-id: sg-0589e74ec03965add
           # iam-role-name: self-hosted-runner # optional, requires additional permissions
           aws-resource-tags: > # optional, requires additional permissions
@@ -41,6 +42,36 @@ jobs:
               {"Key": "Name", "Value": "ec2-github-runner"},
               {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
             ]
+      - name: Start EC2 runner (d)
+        id: try-us-east-1d
+        uses: machulav/ec2-github-runner@main
+        if: steps.try-us-east-1a.outcome == 'failure'
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ami-034abd52dd90b8023
+          ec2-instance-type: g4dn.xlarge
+          subnet-id: subnet-0e82552b8c708a999 # us-east-1d
+          security-group-id: sg-0589e74ec03965add
+          # iam-role-name: self-hosted-runner # optional, requires additional permissions
+          aws-resource-tags: > # optional, requires additional permissions
+            [
+              {"Key": "Name", "Value": "ec2-github-runner"},
+              {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
+            ]
+      - name: See if any of 2 sub-regions had the resource
+        id: start-ec2-runner
+        run: |
+          if [ "${{ steps.try-us-east-1a.outcome }}" = "success" ]; then
+            echo "::set-output name=label::${{ steps.try-us-east-1a.outputs.label }}"
+            echo "::set-output name=ec2-instance-id::${{ steps.try-us-east-1a.outputs.ec2-instance-id }}"
+          fi
+          if [ "${{ steps.try-us-east-1d.outcome }}" = "success" ]; then
+            echo "::set-output name=label::${{ steps.try-us-east-1d.outputs.label }}"
+            echo "::set-output name=ec2-instance-id::${{ steps.try-us-east-1d.outputs.ec2-instance-id }}"
+          fi
+
+
   do-the-job:
     name: Do the job on the runner
     needs: start-runner # required to start the main job when the runner is ready
