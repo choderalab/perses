@@ -26,7 +26,8 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
       - name: Try to start EC2 runner (a)
-        id: try-us-east-1a
+#       id: try-us-east-1a
+        id: start-ec2-runner
         uses: machulav/ec2-github-runner@main
 #       continue-on-error: true
         with:
@@ -134,13 +135,13 @@ jobs:
 #              {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
 #            ]
 
-      - name: See if any of 6 sub-regions had the resource
-        id: start-ec2-runner
-        run: |
-          if [ "${{ steps.try-us-east-1a.outcome }}" = "success" ]; then
-            echo "::set-output name=label::${{ steps.try-us-east-1a.outputs.label }}"
-            echo "::set-output name=ec2-instance-id::${{ steps.try-us-east-1a.outputs.ec2-instance-id }}"
-          fi
+#      - name: See if any of 6 sub-regions had the resource
+#        id: start-ec2-runner
+#        run: |
+#          if [ "${{ steps.try-us-east-1a.outcome }}" = "success" ]; then
+#            echo "::set-output name=label::${{ steps.try-us-east-1a.outputs.label }}"
+#            echo "::set-output name=ec2-instance-id::${{ steps.try-us-east-1a.outputs.ec2-instance-id }}"
+#          fi
 #          if [ "${{ steps.try-us-east-1b.outcome }}" = "success" ]; then
 #            echo "::set-output name=label::${{ steps.try-us-east-1b.outputs.label }}"
 #            echo "::set-output name=ec2-instance-id::${{ steps.try-us-east-1b.outputs.ec2-instance-id }}"
