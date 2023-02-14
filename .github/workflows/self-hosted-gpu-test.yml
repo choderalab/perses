@@ -34,7 +34,7 @@ jobs:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           ec2-image-id: ami-034abd52dd90b8023
           ec2-instance-type: p2.xlarge
-          subnet-id: subnet-0b450e349fb9e5a38 # us-east-1a
+          subnet-id: subnet-07ba75eac26656080 # us-east-1a
           security-group-id: sg-0589e74ec03965add
           # iam-role-name: self-hosted-runner # optional, requires additional permissions
           aws-resource-tags: > # optional, requires additional permissions
@@ -42,10 +42,29 @@ jobs:
               {"Key": "Name", "Value": "ec2-github-runner"},
               {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
             ]
+      - name: Try to start EC2 runner (b)
+        id: try-us-east-1b
+        uses: machulav/ec2-github-runner@main
+        if: steps.try-us-east-1a.outcome == 'failure'
+        continue-on-error: true
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ami-034abd52dd90b8023
+          ec2-instance-type: p2.xlarge
+          subnet-id: subnet-0f75c34cf29bf0612 # us-east-1b
+          security-group-id: sg-0589e74ec03965add
+          # iam-role-name: self-hosted-runner # optional, requires additional permissions
+          aws-resource-tags: > # optional, requires additional permissions
+            [
+              {"Key": "Name", "Value": "ec2-github-runner"},
+              {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
+            ]
+
       - name: Start EC2 runner (d)
         id: try-us-east-1d
         uses: machulav/ec2-github-runner@main
-        if: steps.try-us-east-1a.outcome == 'failure'
+        if: steps.try-us-east-1b.outcome == 'failure'
         with:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
@@ -65,6 +84,10 @@ jobs:
           if [ "${{ steps.try-us-east-1a.outcome }}" = "success" ]; then
             echo "::set-output name=label::${{ steps.try-us-east-1a.outputs.label }}"
             echo "::set-output name=ec2-instance-id::${{ steps.try-us-east-1a.outputs.ec2-instance-id }}"
+          fi
+          if [ "${{ steps.try-us-east-1b.outcome }}" = "success" ]; then
+            echo "::set-output name=label::${{ steps.try-us-east-1b.outputs.label }}"
+            echo "::set-output name=ec2-instance-id::${{ steps.try-us-east-1b.outputs.ec2-instance-id }}"
           fi
           if [ "${{ steps.try-us-east-1d.outcome }}" = "success" ]; then
             echo "::set-output name=label::${{ steps.try-us-east-1d.outputs.label }}"
