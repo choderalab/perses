@@ -119,6 +119,7 @@ jobs:
         id: try-us-east-1f
         uses: machulav/ec2-github-runner@main
         if: steps.try-us-east-1e.outcome == 'failure'
+        continue-on-error: true
         with:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
