@@ -177,18 +177,20 @@ jobs:
         shell: bash -l {0}
     steps:
       - uses: actions/checkout@v2
-      - uses: mamba-org/provision-with-micromamba@main
+      - uses: conda-incubator/setup-miniconda@v2
         with:
-          channels: conda-forge,openeye
+          python-version: "3.10"
           environment-file: devtools/conda-envs/test_env.yaml
-          environment-name: test
-          micromamba-version: latest
-          extra-specs: |
-            python=3.10
-
+          channels: conda-forge,openeye
+          activate-environment: test
+          auto-update-conda: true
+          auto-activate-base: false
+          show-channel-urls: true
+          channel-priority: true
+          miniforge-variant: Mambaforge
       - name: Refine test env
         run: |
-          micromamba install -y cudatoolkit==11.8 openmm>=8.0
+          mamba install -y cudatoolkit==11.8 openmm>=8.0
       
       - name: Additional info about the build
         run: |
