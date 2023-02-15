@@ -177,21 +177,17 @@ jobs:
         shell: bash -l {0}
     steps:
       - uses: actions/checkout@v2
-      - uses: conda-incubator/setup-miniconda@v2
+      - uses: mamba-org/provision-with-micromamba@main
         with:
-          python-version: 3.9
           channels: conda-forge,omnia-dev,openeye
           environment-file: devtools/conda-envs/test_env.yaml
-          show-channel-urls: true
-          auto-activate-base: false
-          activate-environment: test
-          miniforge-version: latest 
-          miniforge-variant: Mambaforge
+          extra-specs: |
+            python=3.9
 
       - name: Refine test env
         shell: bash -l {0}
         run: |
-          conda install -y cudatoolkit==11.0.3 openmm>=7.7
+          micromamba install -y cudatoolkit==11.8 openmm>=8.0
       
       - name: Additional info about the build
         shell: bash -l {0}
