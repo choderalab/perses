@@ -35,8 +35,8 @@ jobs:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           ec2-image-id: ami-04d16a12bbc76ff0b
           ec2-instance-type: g4dn.xlarge
-          subnet-id: subnet-07ba75eac26656080 # us-east-1a
-          security-group-id: sg-0589e74ec03965add
+          subnet-id: subnet-0dee8543e12afe0cd # us-east-1a
+          security-group-id: sg-0f9809618550edb98
           # iam-role-name: self-hosted-runner # optional, requires additional permissions
           aws-resource-tags: > # optional, requires additional permissions
             [
