@@ -181,9 +181,8 @@ jobs:
         with:
           channels: conda-forge,openeye
           environment-file: devtools/conda-envs/test_env.yaml
-          log-level: debug
           extra-specs: |
-            python=3.9
+            python=3.10
 
       - name: Refine test env
         shell: bash -l {0}
