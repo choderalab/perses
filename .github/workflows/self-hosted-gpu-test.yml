@@ -171,6 +171,7 @@ jobs:
       TEST_MODE: GPU
       OPENMM: ${{ matrix.cfg.openmm }}
       OE_LICENSE: ${{ github.workspace }}/oe_license.txt
+      HOME: /home/ec2-user
 
     defaults:
       run:
