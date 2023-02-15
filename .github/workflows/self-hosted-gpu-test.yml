@@ -181,6 +181,7 @@ jobs:
         with:
           channels: conda-forge,openeye
           environment-file: devtools/conda-envs/test_env.yaml
+          log-level: debug
           extra-specs: |
             python=3.9
 
