@@ -48,7 +48,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           environment-file: devtools/conda-envs/test_env.yaml
-          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge,defaults,omnia-dev,openeye
+          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge,openeye
           activate-environment: test
           auto-update-conda: true
           auto-activate-base: false

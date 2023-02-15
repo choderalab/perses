@@ -1,9 +1,6 @@
 name: test
 channels:
-  - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
-  - defaults
-  - omnia-dev
   - openeye
 dependencies:
   - arsenic

@@ -179,7 +179,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: mamba-org/provision-with-micromamba@main
         with:
-          channels: conda-forge,omnia-dev,openeye
+          channels: conda-forge,openeye
           environment-file: devtools/conda-envs/test_env.yaml
           extra-specs: |
             python=3.9
