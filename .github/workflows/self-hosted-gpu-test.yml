@@ -230,7 +230,7 @@ jobs:
         run: |
           export TRAVIS=true
           conda list --explicit
-          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -m "gpu_ci or gpu_needed" -k "test_gpu_platforms" perses/tests
+          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -m "gpu_ci or gpu_needed" perses/tests
 
       - name: Codecov
         if: ${{ github.repository == 'choderalab/perses'
