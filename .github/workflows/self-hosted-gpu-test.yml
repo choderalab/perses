@@ -198,7 +198,7 @@ jobs:
           miniforge-variant: Mambaforge
       - name: Refine test env
         run: |
-          mamba install -y cudatoolkit==11.8 openmm>=8.0
+          mamba install -y cudatoolkit==11.7 openmm>=8.0
       
       - name: Additional info about the build
         run: |
