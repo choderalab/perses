@@ -485,7 +485,7 @@ class NonEquilibriumCyclingProtocol(Protocol):
             stateA: ChemicalSystem,
             stateB: ChemicalSystem,
             mapping: Optional[ComponentMapping] = None,
-            extend_from: Optional[ProtocolDAGResult] = None,
+            extends: Optional[ProtocolDAGResult] = None,
     ) -> List[ProtocolUnit]:
 
         # Handle parameters
@@ -493,7 +493,7 @@ class NonEquilibriumCyclingProtocol(Protocol):
         #     raise ValueError("`mapping` is required for this Protocol")
         # if 'ligand' not in mapping:
         #     raise ValueError("'ligand' must be specified in `mapping` dict")
-        # if extend_from:
+        # if extends:
         #     raise NotImplementedError("Can't extend simulations yet")
 
         # inputs to `ProtocolUnit.__init__` should either be `Gufe` objects
