@@ -35,12 +35,7 @@ class TimeFilter(logging.Filter):
 from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
 
 fmt = logging.Formatter(fmt="%(asctime)s:(%(relative)ss):%(name)s:%(message)s")
-#logging.basicConfig(level = logging.NOTSET)
 LOGLEVEL = os.environ.get("LOGLEVEL", "INFO").upper()
-logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    level=LOGLEVEL,
-    datefmt='%Y-%m-%d %H:%M:%S')
 _logger = logging.getLogger()
 _logger.setLevel(LOGLEVEL)
 [hndl.addFilter(TimeFilter()) for hndl in _logger.handlers]
@@ -1196,4 +1191,9 @@ def _generate_parsed_yaml(setup_options, input_yaml_file_path):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        format='%(asctime)s %(levelname)-8s %(message)s',
+        level=LOGLEVEL,
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
     run()
