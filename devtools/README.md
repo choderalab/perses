@@ -5,14 +5,14 @@ Assorted notes for developers.
 
 How to do a release
 -------------------
-- Update the whatsnew.rst document. Use the github view that shows all the commits to master since the last release to write it.
-- Update the version number in `setup.py`, change `ISRELEASED` to `True`
-- Commit to master, and [tag](https://github.com/rmcgibbo/mdtraj/releases) the release on github
-- To push the source to PyPI, use `python setup.py sdist --formats=gztar,zip upload`
-- Conda binaries need to built separately on each platform (`conda build mdtraj; binstar upload <path to .tar.bz2>`)
-- Make an annoucement on github / email
-- After tagging the release, make a NEW commit that changes `ISRELEASED` back to `False` in `setup.py`
 
+First make sure everything is working:
 
-It's important that the version which is tagged on github for the release be
-the one with the ISRELEASED flag in setup.py set to true.
+- Make sure CI is passing
+- Run GPU tests manually on HPC or the self-hosted EC2 runner on AWS
+- Run the PLB (https://github.com/openforcefield/protein-ligand-benchmark)
+
+Then create a new release on github: https://github.com/choderalab/perses/releases/new
+Either make a new tag and push it, or select the create a new tag on release option.
+Make sure that the change log is detailed and communicates Bugfixes, Enhancements, and New features.
+Also attach plots from the PLB in a "Benchmark data" section.
