@@ -18,7 +18,7 @@ from perses.utils.url_utils import retrieve_file_url
 from perses.utils.url_utils import fetch_url_contents
 
 # Setting logging level config
-LOGLEVEL = os.environ.get("LOGLEVEL", "DEBUG").upper()
+LOGLEVEL = os.environ.get("LOGLEVEL", "WARNING").upper()
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(message)s',
     level=LOGLEVEL,

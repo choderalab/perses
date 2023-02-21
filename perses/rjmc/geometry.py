@@ -14,7 +14,6 @@ from perses.storage import NetCDFStorageView
 ################################################################################
 
 import logging
-logging.basicConfig(level=logging.NOTSET)
 _logger = logging.getLogger("geometry")
 _logger.setLevel(logging.INFO)
 

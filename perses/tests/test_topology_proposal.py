@@ -1,3 +1,4 @@
+import pytest
 import simtk.openmm.app as app
 import simtk.openmm as openmm
 import simtk.unit as unit
@@ -38,6 +39,7 @@ PROHIBITED_RESIDUES = ['CYS']
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
+
 def test_small_molecule_proposals():
     """
     Make sure the small molecule proposal engine generates molecules
@@ -71,6 +73,57 @@ def test_small_molecule_proposals():
         smiles = SmallMoleculeSetProposalEngine.canonicalize_smiles(oechem.OEMolToSmiles(oemol))
         assert smiles == proposal.new_chemical_state_key
         proposal = new_proposal
+
+
+def test_small_molecule_constraint_repair_mapping():
+    """
+    Tests that a constrained edge is demapped after transformed to an unconstrained one.
+
+    This is done by checking that the new_to_old atom map doesn't have the atom that otherwise would be included.
+
+    For the ligands in the test this atom is the ONLY Fluorine atom involved in the transformation.
+    """
+    # TODO: we could try testing a pyridine to a fluoropyridine transformation with using the given geometries
+    from perses.utils.openeye import createOEMolFromSDF
+    # Get sdfs paths
+    sdf_path = resource_filename(
+        "perses",
+        os.path.join("data", "constrained-to-unconstrained", "ligands_constraint_test.sdf"),
+    )
+    # Using troublesome molecules in SDF data
+    ligand_a = createOEMolFromSDF(
+        sdf_path,
+        index=0)
+    ligand_b = createOEMolFromSDF(
+        sdf_path,
+        index=1)
+    # Set title to 'MOL'
+    ligand_a.SetTitle('MOL')
+    ligand_b.SetTitle('MOL')
+    # Create system
+    molecules = [ligand_a, ligand_b]
+    off_molecules = [Molecule.from_openeye(molecule) for molecule in molecules]
+
+    system_generator = SystemGenerator(forcefields=forcefield_files, barostat=barostat,
+                                       forcefield_kwargs=forcefield_kwargs,
+                                       nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
+                                       small_molecule_forcefield=small_molecule_forcefield, molecules=off_molecules,
+                                       cache=None)
+    # Propose topology
+    proposal_engine = SmallMoleculeSetProposalEngine(molecules, system_generator)
+    proposal_engine.use_given_geometries = True  # Force to use the given geometries in the propose
+    proposal_engine.given_geometries_tolerance = 0.4 * unit.angstrom
+    initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(molecules[0], system_generator)
+    # NOTE: We need to run the propose method for constraints repairs to happen
+    proposal = proposal_engine.propose(initial_system, initial_topology)
+    # Find index for the fluorine atom is in the new molecule
+    for atom_idx, oe_atom in enumerate(list(ligand_b.GetAtoms())):
+        if oe_atom.GetName() == "F1":  # Fluorine atom
+            fluorine_index = atom_idx
+    # Assert fluorine does NOT get mapped
+    with pytest.raises(KeyError):
+        _ = proposal_engine.non_offset_new_to_old_atom_map[fluorine_index]
+
 
 def load_pdbid_to_openmm(pdbid):
     """
