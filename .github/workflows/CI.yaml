@@ -23,11 +23,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.8, 3.9, "3.10"]
-        openmm: ["nightly", "7.7", "beta"]
-        exclude:
-          - python-version: "3.10"
-            openmm: "7.6"
+        python-version: [3.8, 3.9 "3.10", "3.11"]
+        openmm: ["dev", "8.0", "7.7"]
 
     env:
       OPENMM: ${{ matrix.openmm }}
@@ -48,7 +45,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           environment-file: devtools/conda-envs/test_env.yaml
-          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge,defaults,omnia-dev,openeye
+          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge,openeye
           activate-environment: test
           auto-update-conda: true
           auto-activate-base: false
@@ -60,13 +57,8 @@ jobs:
         shell: bash -l {0}
         run: |
           case ${{ matrix.openmm }} in
-            nightly)
-              echo "Using nightly dev build of OpenMM."
-              conda install -y -c omnia-dev openmm --override-channels --force-reinstall
-              echo "Using beta build of openeye toolkit"
-              conda install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
-            beta)
-              echo "Using beta build of OpenMM."
+            dev)
+              echo "Using dev build of OpenMM"
               conda install -c conda-forge/label/openmm_dev -c conda-forge openmm
               echo "Using beta build of openeye toolkit"
               conda install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
