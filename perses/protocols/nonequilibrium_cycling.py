@@ -1,6 +1,8 @@
 from typing import Optional, Iterable, List, Dict, Any
 
-from functools import lru_cache
+import datetime
+import logging
+import time
 
 from gufe.settings.models import ProtocolSettings
 from gufe.chemicalsystem import ChemicalSystem
@@ -17,6 +19,9 @@ from perses.app.setup_relative_calculation import get_openmm_platform
 from perses.annihilation.relative import HybridTopologyFactory
 
 from openff.units.openmm import to_openmm
+
+# Specific instance of logger for this module
+logger = logging.getLogger(__name__)
 
 
 class SimulationUnit(ProtocolUnit):
@@ -118,8 +123,17 @@ class SimulationUnit(ProtocolUnit):
         # needed imports
         import numpy as np
         import openmm
+        import openmm.unit as openmm_unit
         from openmmtools.integrators import PeriodicNonequilibriumIntegrator
         from perses.utils.openeye import generate_unique_atom_names
+
+        # Setting up logging to file in shared filesystem
+        output_log_path = ctx.shared / "perses-neq-cycling.log"
+        file_handler = logging.FileHandler(output_log_path)
+        file_handler.setLevel(logging.DEBUG)  # TODO: Set to INFO in production
+        log_formatter = logging.Formatter(fmt='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+        file_handler.setFormatter(log_formatter)
+        logger.addHandler(file_handler)
 
         # Check compatibility between states (same receptor and solvent)
         self._check_states_compatibility(state_a, state_b)
@@ -165,9 +179,6 @@ class SimulationUnit(ProtocolUnit):
         # Get the ligand mapping from ComponentMapping object
         ligand_mapping = mapping.componentA_to_componentB
 
-        # Interactive debugging
-        # import pdb
-        # pdb.set_trace()
         # Setup relative FE calculation
         fe_setup = RelativeFEPSetup(
             old_ligand=ligand_a,
@@ -228,12 +239,11 @@ class SimulationUnit(ProtocolUnit):
         forward_eq_old, forward_eq_new, forward_neq_old, forward_neq_new = list(), list(), list(), list()
         reverse_eq_new, reverse_eq_old, reverse_neq_old, reverse_neq_new = list(), list(), list(), list()
 
-        # TODO: Instrumentation for some logging and timestamps for each of these steps
-        #  The path to this file/log can be returned in the shared filesystem
-        #  Compute the ns/day for a whole cycle --> return that in the file
         #  Also get the GPU information (plain try-except with nvidia-smi)
 
         # Equilibrium (lambda = 0)
+        # start timer
+        start_time = time.perf_counter()
         for step in range(neq_steps):
             integrator.step(1)  # TODO: Avoid overhead to have to check everytime of save_frequency. Use greatest common denominator also handle save_freq=0
             # Store positions and works
@@ -243,6 +253,9 @@ class SimulationUnit(ProtocolUnit):
                 new_pos = np.asarray(htf.new_positions(pos))
                 forward_eq_old.append(old_pos)
                 forward_eq_new.append(new_pos)
+        eq_forward_time = time.perf_counter()
+        eq_forward_walltime = datetime.timedelta(seconds=eq_forward_time - start_time)
+        logger.info(f"replicate_{self.name} Forward (lamba = 0) equilibration time : {eq_forward_walltime}")
 
         # Run neq
         # Forward (0 -> 1)
@@ -256,6 +269,9 @@ class SimulationUnit(ProtocolUnit):
                 new_pos = np.asarray(htf.new_positions(pos))
                 forward_neq_old.append(old_pos)
                 forward_neq_new.append(new_pos)
+        neq_forward_time = time.perf_counter()
+        neq_forward_walltime = datetime.timedelta(seconds=neq_forward_time - eq_forward_time)
+        logger.info(f"replicate_{self.name} Forward nonequilibrium time (lambda 0 -> 1): {neq_forward_walltime}")
 
         # Equilibrium (lambda = 1)
         # TODO: Same thing as before
@@ -267,6 +283,9 @@ class SimulationUnit(ProtocolUnit):
                 new_pos = np.asarray(htf.new_positions(pos))
                 reverse_eq_new.append(new_pos)  # TODO: Maybe better naming not old/new initial/final
                 reverse_eq_old.append(old_pos)
+        eq_reverse_time = time.perf_counter()
+        eq_reverse_walltime = datetime.timedelta(seconds=eq_reverse_time - neq_forward_time)
+        logger.info(f"replicate_{self.name} Reverse (lambda 1) time: {eq_reverse_walltime}")
 
         # Reverse work (1 -> 0)
         # TODO: Same thing as before
@@ -280,6 +299,19 @@ class SimulationUnit(ProtocolUnit):
                 new_pos = np.asarray(htf.new_positions(pos))
                 reverse_neq_old.append(old_pos)
                 reverse_neq_new.append(new_pos)
+        neq_reverse_time = time.perf_counter()
+        neq_reverse_walltime = datetime.timedelta(seconds=neq_reverse_time - eq_reverse_time)
+        logger.info(f"replicate_{self.name} Reverse nonequilibrium time (lambda 1 -> 0): {neq_reverse_walltime}")
+        # Elapsed time for the whole cycle
+        cycle_walltime = datetime.timedelta(seconds=neq_reverse_time - start_time)
+        logger.info(f"replicate_{self.name} Nonequilibrium cycle total walltime: {cycle_walltime}")
+
+        # Computing performance in ns/day
+        simulation_time = 2*(eq_steps + neq_steps)*timestep
+        walltime_in_seconds = cycle_walltime.total_seconds() * openmm_unit.seconds
+        estimated_performance = simulation_time.in_units_of(openmm_unit.nanosecond) / walltime_in_seconds.in_units_of(
+            openmm_unit.days)  # Note: ends up unit-less
+        logger.info(f"replicate_{self.name} Estimated performance: {estimated_performance} ns/day")
 
         # Save output
         # TODO: Assume initially we want the trajectories to understand when something wrong/weird happens.
@@ -334,6 +366,7 @@ class SimulationUnit(ProtocolUnit):
             'reverse_eq_new': reverse_eq_new_path,
             'reverse_neq_old': reverse_neq_old_path,
             'reverse_neq_new': reverse_neq_new_path,
+            'log': output_log_path,
         }
 
 
