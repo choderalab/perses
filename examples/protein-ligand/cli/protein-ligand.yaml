@@ -65,9 +65,9 @@ atom_selection: not water
 
 #which phases do we want to run. Any combination or number of complex, solvent or vacuum will be accepted 
 phases:
-    - complex
-    - solvent
     - vacuum
+    - solvent
+    - complex
 
 #timestep in fs
 timestep: 4.

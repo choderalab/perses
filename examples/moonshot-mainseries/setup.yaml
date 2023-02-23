@@ -1,0 +1,80 @@
+---
+# Parameters for manual COVID Moonshot setup scripts
+
+name: mainseries-retrospective
+
+# Path to fragalysis source structures
+structures_path: ./structures
+
+# Path for Spruce-prepared receptors to create
+receptors_path: ./receptors
+
+# Spruce loop database
+# Created with loopdb_builder: https://docs.eyesopen.com/applications/spruce/loopdb_builder/loopdb_builder_example.html
+# Must download OpenEye applications package 
+#spruce_loop_database: ./fragalysis_spruce.loop_db
+spruce_loop_database: ./mainseries_spruce.loop_db
+
+# Source structures to model, with corresponding PostEra compound IDs of bound ligands
+source_structures:
+  - fragalysis_id: x2646_0A
+    postera_id: TRY-UNI-714a760b-6
+  - fragalysis_id: x10959_0A
+    postera_id: ADA-UCB-6c2cb422-1
+  - fragalysis_id: x11612_0A
+    postera_id: MAT-POS-b3e365b9-1 
+  - fragalysis_id: P0744_0A
+    postera_id: MAT-POS-3ccb8ef6-1
+  - fragalysis_id: P1788_0A
+    postera_id: MAT-POS-e194df51-1
+
+# Which assembly states to use ['monomer', 'dimer']
+assembly_states:
+  - dimer
+
+# Retain X-ray waters in receptor
+retain_water: true
+
+# Mpro receptor protonation states to generate
+receptor_protonation_states:
+  - His41(0)-Cys145(0)-His163(0)
+#  - His41(+)-Cys145(-)-His163(0)
+#  - His41(0)-Cys145(0)-His163(+)
+#  - His41(+)-Cys145(-)-His163(+)
+
+# Molecules to dock
+expand_protonation_states: true # expand protonation and tautomeric states prior to docking
+molecules_path: ./molecules
+molecule_sets_to_dock:
+  - step1
+  - step2
+  - step3
+  - step4
+
+# Core SMARTS matches for docking
+# This accepts a hierarchy, starting with most specific
+core_smarts:   
+  - "A2Aa3aaaaa3C(C(=O)Nc3cncc4ccccc34)A2" # bicycle-linker-isoquinoline
+  - "c1ccncc1NC(=O)Cc1cccc(Cl)c1" # chlorobenzene-linker-methylpyridine
+  - "C(=O)Nc3cncc4ccccc34" # linker-isoquinoline
+  - "CNc3cncc4ccccc34" # linker-isoquinoline
+  - "NC(=O)Cc1cccc(Cl)c1" # chlorobenzene-linker
+  - "C(=O)N" # linker
+
+# Free energy calculations to run
+perses_yaml_template: template.yaml
+transformation_groups:
+  step1:
+    fragalysis_id: x2646_0A
+    molecule_set: step1
+  step2:
+    fragalysis_id: x10959_0A
+    molecule_set: step2
+  step3:
+    fragalysis_id: x11612_0A
+    molecule_set: step3
+  step4:
+    fragalysis_id: P0744_0A
+    molecule_set: step4
+    
+    

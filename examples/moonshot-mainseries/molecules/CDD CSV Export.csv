@@ -1,0 +1,11 @@
+Molecule Name,Canonical PostEra ID,suspected_SMILES,ProteaseAssay_Fluorescence_Dose-Response_Weizmann: IC50 (µM),ProteaseAssay_Fluorescence_Dose-Response_Weizmann: IC50 CI (Lower) (µM),ProteaseAssay_Fluorescence_Dose-Response_Weizmann: IC50 CI (Upper) (µM),ProteaseAssay_Fluorescence_Dose-Response_Weizmann: Hill slope,ProteaseAssay_Fluorescence_Dose-Response_Weizmann: Curve class
+CVD-0018692,MAT-POS-e194df51-1,[H][C@@]1(C(=O)Nc2cncc3ccccc23)CN(S(=O)(=O)CC2(C#N)CC2)Cc2ccc(Cl)cc21,0.0368,0.0343,0.0395,1.19,1.1
+CVD-0018692,MAT-POS-e194df51-1,[H][C@@]1(C(=O)Nc2cncc3ccccc23)CN(S(=O)(=O)CC2(C#N)CC2)Cc2ccc(Cl)cc21,< 0.0500,"","",1.05,2.1
+CVD-0016619,MAT-POS-3ccb8ef6-1,Cl.Cl.[H][C@@]1(C(=O)Nc2cncc3ccccc23)CNCc2ccc(Cl)cc21,0.288,0.273,0.304,1.02,1.1
+CVD-0013192,MAT-POS-b3e365b9-1,[H][C@@]1(C(=O)Nc2cncc3ccccc23)CCOc2ccc(Cl)cc21,0.232,0.171,0.316,0.872,2.1
+CVD-0013192,MAT-POS-b3e365b9-1,[H][C@@]1(C(=O)Nc2cncc3ccccc23)CCOc2ccc(Cl)cc21,0.255,0.240,0.270,1.13,1.1
+CVD-0013192,MAT-POS-b3e365b9-1,[H][C@@]1(C(=O)Nc2cncc3ccccc23)CCOc2ccc(Cl)cc21,0.141,0.124,0.160,0.950,2.1
+CVD-0007756,ADA-UCB-6c2cb422-1,O=C(Cc1cccc(Cl)c1)Nc1cncc2ccccc12,0.732,0.685,0.781,1.03,2.1
+CVD-0007756,ADA-UCB-6c2cb422-1,O=C(Cc1cccc(Cl)c1)Nc1cncc2ccccc12,0.721,0.647,0.804,1.14,1.1
+CVD-0003631,TRY-UNI-714a760b-6,Cc1ccncc1NC(=O)Cc1cccc(Cl)c1,23.7,19.5,28.9,1.02,2.1
+CVD-0003631,TRY-UNI-714a760b-6,Cc1ccncc1NC(=O)Cc1cccc(Cl)c1,25.4,22.4,28.9,1.16,2.1
