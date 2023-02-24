@@ -55,7 +55,7 @@ class NonEqCyclingSettings(ProtocolSettings):
     timestep = 4.0 * unit.femtoseconds
     neq_splitting = "V R H O R V"
     eq_steps = 1000
-    neq_steps = 100
+    neq_steps = 1000
 
     # platform and serialization
     platform = 'CUDA'
@@ -64,6 +64,8 @@ class NonEqCyclingSettings(ProtocolSettings):
     #  - How often we want to store positions (set that 100 for example)
     #  - works store/save frequency. It's not much more data so can be more frequent.
     save_frequency = 100
+    traj_save_frequency = 100
+    work_save_frequency = 25
 
     # Number of cycles to run
     num_replicates: int = 1
