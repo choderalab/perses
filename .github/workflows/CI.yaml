@@ -55,9 +55,7 @@ jobs:
           case ${{ matrix.openmm }} in
             dev)
               echo "Using dev build of OpenMM"
-              micromamba install -c conda-forge/label/openmm_dev -c conda-forge openmm
-              echo "Using beta build of openeye toolkit"
-              micromamba install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
+              micromamba install -c conda-forge/label/openmm_dev -c conda-forge openmm;;
             *)
               echo "installing OpenMM version ${{ matrix.openmm }}"
               micromamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
