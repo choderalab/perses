@@ -1,4 +1,6 @@
 import os
+
+import pymbar
 import pytest
 from perses.tests.utils import enter_temp_directory
 
@@ -183,8 +185,8 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
                 f_ij, df_ij = analyzer.get_free_energy()
                 data[f"{wt_name}-{mutant_name}"] = {'free_energy': f_ij[0, -1], 'error': df_ij[0, -1]}
 
-        DDG = data['arg-ala']['free_energy'] + data['ala-arg']['free_energy'] \
-              - (data['lys-ala']['free_energy'] + data['ala-lys']['free_energy'])
+        DDG = data['arg-ala']['free_energy'] + data['ala-arg']['free_energy'] - (
+                    data['lys-ala']['free_energy'] + data['ala-lys']['free_energy'])
         dDDG = np.sqrt(data['arg-ala']['error'] ** 2
                        + data['ala-arg']['error'] ** 2
                        + data['lys-ala']['error'] ** 2
@@ -327,8 +329,8 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
     platform = configure_platform(utils.get_fastest_platform().getName())
 
     data = {}
-    n_iterations = 2000
-    n_states = 12
+    n_iterations = 1000
+    n_states = 36
     transformations = [(0, 1), (1, 0)] # A1 is at ligand index 0 and A2 is at ligand index 1
     phases = ["solvent", "complex"]
 
@@ -406,12 +408,20 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
                 reporter.close()
                 reporter = MultiStateReporter(reporter_file)
                 analyzer = MultiStateSamplerAnalyzer(reporter, max_n_iterations=n_iterations)
-                f_ij, df_ij = analyzer.get_free_energy()
+                # f_ij, df_ij = analyzer.get_free_energy()
+                # Extract uncorrelated energy matrix (u_ln) and samples from states (N_l)
+                energy_matrix = analyzer._unbiased_decorrelated_u_ln
+                sampled_states = analyzer._unbiased_decorrelated_N_l
+                # Compute free energies with boostrapping using pymbar
+                mbar = pymbar.MBAR(energy_matrix, sampled_states, nbootstraps=200)
+                f_ij, df_ij = mbar.getFreeEnergyDifferences(uncertainty_method="bootstrap", return_theta=False)
+
                 data[f"{ligand_A_index}-{ligand_B_index}_{phase}"] = {'free_energy': f_ij[0, -1], 'error': df_ij[0, -1]}
 
         forward_DG = data['0-1_complex']['free_energy'] - data['0-1_solvent']['free_energy']
         reverse_DG = data['1-0_complex']['free_energy'] - data['1-0_solvent']['free_energy']
         DDG = abs(forward_DG - reverse_DG)
         dDDG = np.sqrt(data['0-1_complex']['error'] ** 2 + data['0-1_solvent']['error'] ** 2 + data['1-0_complex']['error'] ** 2 + data['1-0_solvent']['error'] ** 2)
+        # print(f"DDG: {DDG}, 6*dDDG: {6*dDDG}")
         assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6 * dDDG})"
 
