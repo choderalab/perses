@@ -126,12 +126,13 @@ class SimulationUnit(ProtocolUnit):
         import openmm.unit as openmm_unit
         from openmmtools.integrators import PeriodicNonequilibriumIntegrator
         from perses.utils.openeye import generate_unique_atom_names
+        from perses.utils.logging_utils import YAMLFormatter
 
         # Setting up logging to file in shared filesystem
-        output_log_path = ctx.shared / "perses-neq-cycling.log"
+        output_log_path = ctx.shared / "perses_neq_cycling_log.yaml"
         file_handler = logging.FileHandler(output_log_path)
         file_handler.setLevel(logging.DEBUG)  # TODO: Set to INFO in production
-        log_formatter = logging.Formatter(fmt='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+        log_formatter = YAMLFormatter(datefmt='%Y-%m-%d %H:%M:%S')
         file_handler.setFormatter(log_formatter)
         logger.addHandler(file_handler)
 
@@ -367,6 +368,10 @@ class SimulationUnit(ProtocolUnit):
             'reverse_neq_old': reverse_neq_old_path,
             'reverse_neq_new': reverse_neq_new_path,
             'log': output_log_path,
+            'eq_forward_time': str(eq_forward_walltime),
+            'neq_forward_time': str(neq_forward_walltime),
+            'eq_reverse_time': str(eq_reverse_walltime),
+            'neq_reverse_time': str(neq_reverse_walltime),
         }
 
 
