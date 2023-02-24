@@ -71,7 +71,7 @@ jobs:
       - name: Environment Information
         shell: bash -l {0}
         run: |
-          micromamba info -a
+          micromamba info
           micromamba list
 
       - name: Decrypt OpenEye license
