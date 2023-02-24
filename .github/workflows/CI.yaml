@@ -60,7 +60,7 @@ jobs:
               micromamba install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
             *)
               echo "installing OpenMM version ${{ matrix.openmm }}"
-              mamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
+              micromamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
           esac
 
       - name: Install package
