@@ -26,7 +26,7 @@ jobs:
         python-version: [3.8, 3.9, "3.10"]
         openmm: ["8.0", "7.7"]
         include:
-          - openmm: "8.0.0dev3"
+          - openmm: "dev"
             python-version: "3.10"
 
     env:
@@ -43,7 +43,19 @@ jobs:
           df -h
           ulimit -a
 
-      - name: Setup micromamba
+      - name: Setup micromamba dev
+        if: ${{ matrix.openmm == 'dev' }}
+        uses: mamba-org/provision-with-micromamba@main
+        with:
+          environment-file: devtools/conda-envs/test_env.yaml
+          environment-name: test
+          chennels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmm_dev/linux-64,conda-forge,openeye
+          extra-specs: |
+            python==${{ matrix.python-version }}
+            openmm>=8.0.0dev3
+
+      - name: Setup micromamba dev
+        if: ${{ matrix.openmm != 'dev' }}
         uses: mamba-org/provision-with-micromamba@main
         with:
           environment-file: devtools/conda-envs/test_env.yaml
