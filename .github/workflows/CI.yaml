@@ -54,7 +54,7 @@ jobs:
             python==${{ matrix.python-version }}
             openmm>=8.0.0dev3
 
-      - name: Setup micromamba dev
+      - name: Setup micromamba
         if: ${{ matrix.openmm != 'dev' }}
         uses: mamba-org/provision-with-micromamba@main
         with:
