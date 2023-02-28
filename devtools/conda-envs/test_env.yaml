@@ -1,6 +1,7 @@
 name: test
 channels:
   - jaimergp/label/unsupported-cudatoolkit-shim
+  - conda-forge/label/openmm_dev
   - conda-forge
   - openeye
 dependencies:

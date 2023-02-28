@@ -48,7 +48,6 @@ jobs:
         with:
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: test
-          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmm_dev,conda-forge,openeye
           extra-specs: |
             python=${{ matrix.python-version }}
             openmm=${{ matrix.openmm }}
