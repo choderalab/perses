@@ -24,10 +24,10 @@ jobs:
       fail-fast: false
       matrix:
         python-version: [3.8, 3.9, "3.10",]
-        openmm: ["dev", "8.0", "7.7"]
-        exclude:
-          openmm: ["dev"]
-          python-version: ["3.8", "3.9"]
+        openmm: ["8.0", "7.7"]
+        include:
+          - openmm: "dev"
+          - python-version: "3.10"
 
     env:
       OPENMM: ${{ matrix.openmm }}
