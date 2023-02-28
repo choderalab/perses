@@ -242,7 +242,7 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     # Set up image options
     itf = oechem.OEInterface()
     oedepict.OEConfigureImageOptions(itf)
-    ext = oechem.OEGetFileExtension(filename)
+    ext = oechem.OEGetFileExtension(str(filename))
     if not oedepict.OEIsRegisteredImageFile(ext):
         raise Exception('Unknown image type for filename %s' % filename)
     ofs = oechem.oeofstream()
@@ -256,6 +256,7 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     opts.SetBondWidthScaling(True)
     opts.SetAtomPropertyFunctor(oedepict.OEDisplayAtomMapIdx())
     opts.SetAtomColorStyle(oedepict.OEAtomColorStyle_WhiteMonochrome)
+    opts.SetAromaticStyle(oedepict.OEAromaticStyle_Circle)
 
     # Depict reaction with component highlights
     oechem.OEGenerate2DCoordinates(rmol)
@@ -284,7 +285,7 @@ def render_protein_residue_atom_mapping(topology_proposal, filename, width = 120
         width : int
             width of image
         height : int
-            height of image 
+            height of image
     """
     from perses.utils.smallmolecules import render_atom_mapping
     oe_res_maps = {}

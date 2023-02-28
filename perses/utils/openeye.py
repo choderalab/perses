@@ -13,14 +13,13 @@ import simtk.unit as unit
 import numpy as np
 import logging
 
-logging.basicConfig(level=logging.NOTSET)
 _logger = logging.getLogger("utils.openeye")
 _logger.setLevel(logging.INFO)
 
 def system_generator_wrapper(oemols,
                             barostat = None,
                             forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
-                            forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus},
+                            forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus},
                             nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff},
                             small_molecule_forcefield = 'gaff-2.11',
                             **kwargs
@@ -345,7 +344,7 @@ def createOEMolFromSDF(sdf_filename, index=0, add_hydrogens=True, allow_undefine
 
     # TODO this needs a test
     ifs = oechem.oemolistream()
-    ifs.open(sdf_filename)
+    ifs.open(str(sdf_filename))
     # get the list of molecules
     mol_list = [oechem.OEMol(mol) for mol in ifs.GetOEMols()]
     # we'll always take the first for now
@@ -536,6 +535,9 @@ def get_scaffold(molecule, adjustHcount=False):
         scaffold oemol of the input mol. New oemol.
     """
     from openeye import oechem
+
+    # Make a copy so as not to modify original molecule
+    molecule = oechem.OEMol(molecule)
 
     def TraverseForRing(visited, atom):
         visited.add(atom.GetIdx())

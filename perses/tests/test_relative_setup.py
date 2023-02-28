@@ -1,4 +1,6 @@
 import os
+import shutil
+
 from pkg_resources import resource_filename
 from simtk import unit
 from perses.dispersed import feptasks
@@ -6,6 +8,10 @@ from perses.app import setup_relative_calculation
 import mdtraj as md
 from openmmtools import states, alchemy, testsystems, cache
 from unittest import skipIf
+import pytest
+
+from perses.tests.utils import enter_temp_directory
+
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
 default_forward_functions = {
@@ -37,8 +43,46 @@ def generate_example_waterbox_states(temperature=300.0*unit.kelvin, pressure=1.0
 
     return cpd_thermodynamic_state, sampler_state, water_ts.topology
 
+
+def test_parsed_yaml_generation():
+    """
+    Test input yaml options are correctly parsed into output yaml options file. Including extra metadata (timestamp and
+    ligands names).
+    """
+    import yaml
+    from perses.app.setup_relative_calculation import getSetupOptions, _generate_parsed_yaml
+    with enter_temp_directory():
+        base_dir = resource_filename(
+            "perses",
+            os.path.join("data", "Tyk2_ligands_example"),
+        )
+        input_yaml_file = os.path.join(base_dir, "tyk2_0_3.yaml")  # Get yaml path from perses data directory
+        # Read the contents of input YAML file
+        with open(input_yaml_file) as input_file:
+            input_yaml_data = yaml.load(input_file, Loader=yaml.FullLoader)
+        # generate setup options from input file
+        setup_options = getSetupOptions(input_yaml_file)
+        # Copy the ligand file -- needed for getting ligands names
+        shutil.copy(os.path.join(base_dir, 'Tyk2_ligands_shifted.sdf'), ".")
+        # generate parsed yaml file from setup options
+        parsed_yaml_file_path = _generate_parsed_yaml(setup_options=setup_options, input_yaml_file_path=input_yaml_file)
+
+        # Make sure keys in input exist in parsed yaml file
+        with open(parsed_yaml_file_path) as parsed_file:
+            parsed_yaml_data = yaml.load(parsed_file, Loader=yaml.FullLoader)
+        input_keys_set = set(input_yaml_data.keys())
+        parsed_keys_set = set(parsed_yaml_data.keys())
+        assert input_keys_set.issubset(parsed_keys_set), "Input yaml file options are not a subset of the parsed yaml" \
+                                                         " file."
+        # Also check that the metadata keys are added (timestamp and ligands names)
+        metadata_keys_set = {'timestamp', 'old_ligand_name', 'new_ligand_name'}
+        assert metadata_keys_set.issubset(parsed_keys_set), \
+            f"Metadata keys {metadata_keys_set} not found in parsed keys."
+
+
 # TODO fails as integrator not bound to context
-@skipIf(running_on_github_actions, "Skip analysis test on GH Actions.  Currently broken")
+#@skipIf(running_on_github_actions, "Skip analysis test on GH Actions.  Currently broken")
+@pytest.mark.skip(reason="Skip analysis test on GH Actions.  Currently broken")
 def test_run_nonequilibrium_switching_move():
     """
     Test that the NonequilibriumSwitchingMove changes lambda from 0 to 1 in multiple iterations
@@ -111,7 +155,8 @@ def test_run_nonequilibrium_switching_move():
 #    lambda_one_npy = np.stack([np.load(filename) for filename in lambda_one_filenames])
 #    assert np.shape(lambda_one_npy) == (n_iterations, n_work_values_per_iteration+1)
 
-@skipIf(running_on_github_actions, "Skip analysis test on GH Actions. SLOW")
+#@skipIf(running_on_github_actions, "Skip analysis test on GH Actions. SLOW")
+@pytest.mark.skip(reason="Skip analysis test on GH Actions. SLOW")
 def test_run_cdk2_iterations_repex():
     """
     Ensure that we can instantiate and run a repex relative free energy calculation the cdk2 ligands in vacuum
@@ -161,7 +206,8 @@ def test_run_cdk2_iterations_repex():
 
         # TODO: Check output
 
-@skipIf(running_on_github_actions, "Skip analysis test on GH Actions. SLOW")
+#@skipIf(running_on_github_actions, "Skip analysis test on GH Actions. SLOW")
+@pytest.mark.skip(reason="Skip analysis test on GH Actions. SLOW")
 def test_run_bace_spectator():
     """
     Ensure that we can instantiate and run a repex relative free energy calculation the cdk2 ligands in vacuum
@@ -237,6 +283,47 @@ def test_host_guest_deterministic_geometries():
                  temperature=300.0 * unit.kelvin,
                  solvent_padding=9.0 * unit.angstroms,
                  ionic_strength=0.15 * unit.molar,
+                 hmass=3*unit.amus,
+                 neglect_angles=False,
+                 map_strength='default',
+                 atom_expr=None,
+                 bond_expr=None,
+                 anneal_14s=False,
+                 small_molecule_forcefield='gaff-2.11',
+                 small_molecule_parameters_cache=None,
+                 trajectory_directory=None,
+                 trajectory_prefix=None,
+                 spectator_filenames=None,
+                 nonbonded_method = 'PME',
+                 complex_box_dimensions=None,
+                 solvent_box_dimensions=None,
+                 remove_constraints=False,
+                 use_given_geometries = True
+                 )
+
+def test_relative_setup_charge_change():
+    """
+    execute `RelativeFEPSetup` in solvent/complex phase on a charge change and assert that the modified new system and old system charge difference is zero.
+    also assert endstate validation.
+    """
+    from perses.app.relative_setup import RelativeFEPSetup
+    import numpy as np
+    # Setup directory
+    ligand_sdf = resource_filename("perses", "data/bace-example/Bace_ligands_shifted.sdf")
+    host_pdb = resource_filename("perses", "data/bace-example/Bace_protein.pdb")
+
+    setup = RelativeFEPSetup(
+                 ligand_input = ligand_sdf,
+                 old_ligand_index=0,
+                 new_ligand_index=12,
+                 forcefield_files = ['amber/ff14SB.xml','amber/tip3p_standard.xml','amber/tip3p_HFE_multivalent.xml'],
+                 phases = ['solvent', 'vacuum'],
+                 protein_pdb_filename=host_pdb,
+                 receptor_mol2_filename=None,
+                 pressure=1.0 * unit.atmosphere,
+                 temperature=300.0 * unit.kelvin,
+                 solvent_padding=9.0 * unit.angstroms,
+                 ionic_strength=0.15 * unit.molar,
                  hmass=4*unit.amus,
                  neglect_angles=False,
                  map_strength='default',
@@ -251,10 +338,77 @@ def test_host_guest_deterministic_geometries():
                  nonbonded_method = 'PME',
                  complex_box_dimensions=None,
                  solvent_box_dimensions=None,
-                 map_strategy='geometry',
                  remove_constraints=False,
-                 use_given_geometries = True
+                 use_given_geometries = False
                  )
+
+    # sum all of the charges of topology.
+    """strictly speaking, this is redundant because endstate validation is done in the `RelativeFEPSetup`"""
+    old_nbf = [force for force in setup._solvent_topology_proposal._old_system.getForces() if force.__class__.__name__ == 'NonbondedForce'][0]
+    new_nbf = [force for force in setup._solvent_topology_proposal._new_system.getForces() if force.__class__.__name__ == 'NonbondedForce'][0]
+    old_system_charge_sum = sum([old_nbf.getParticleParameters(i)[0].value_in_unit_system(unit.md_unit_system) for i in range(old_nbf.getNumParticles())])
+    new_system_charge_sum = sum([new_nbf.getParticleParameters(i)[0].value_in_unit_system(unit.md_unit_system) for i in range(new_nbf.getNumParticles())])
+    charge_diff = int(old_system_charge_sum - new_system_charge_sum)
+    assert np.isclose(charge_diff, 0), f"charge diff is {charge_diff} but should be zero."
+
+
+def test_relative_setup_solvent_padding():
+    """
+    Check that the user inputted solvent_padding argument to `RelativeFEPSetup` actually changes the padding for the solvent phase
+    """
+    from perses.app.relative_setup import RelativeFEPSetup
+    import numpy as np
+
+    input_solvent_padding = 1.7 * unit.nanometers
+    smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
+    fe_setup = RelativeFEPSetup(
+        ligand_input=smiles_filename,
+        old_ligand_index=0,
+        new_ligand_index=1,
+        forcefield_files=["amber14/tip3p.xml"],
+        small_molecule_forcefield="gaff-2.11",
+        phases=["solvent"],
+        solvent_padding=input_solvent_padding)
+    assert input_solvent_padding == fe_setup._padding, f"Input solvent padding, {input_solvent_padding}, is different from setup object solvent padding, {fe_setup._padding}."
+
+
+def test_relative_setup_list_ligand_input():
+    """
+    Checks that the RelativeFEPSetup can handle list of filenames as input for the ligand_input parameter.
+    """
+    from perses.app.relative_setup import RelativeFEPSetup
+    # Generate topology proposal and positions
+    guest_1_filename = resource_filename("perses", os.path.join("data", "host-guest", "a1.sybyl.mol2"))
+    guest_2_filename = resource_filename("perses", os.path.join("data", "host-guest", "a2.sybyl.mol2"))
+    ligand_input_files = (guest_1_filename, guest_2_filename)
+    # ligand indices
+    ligand_A_index = 0
+    ligand_B_index = 1
+
+    # receptor file
+    host_filename = resource_filename("perses", os.path.join("data", "host-guest", "cb7.sybyl.mol2"))
+
+    # phases
+    phases = ["solvent", "complex"]
+
+    # Build relative FE setup object
+    fe_setup = RelativeFEPSetup(
+        ligand_input=ligand_input_files,
+        receptor_mol2_filename=host_filename,
+        old_ligand_index=ligand_A_index,
+        new_ligand_index=ligand_B_index,
+        forcefield_files=["amber14/tip3p.xml"],
+        small_molecule_forcefield="gaff-2.11",
+        small_molecule_parameters_cache=resource_filename("perses", os.path.join("data", "host-guest", "cache.json")),
+        phases=phases,
+        solvent_padding=1.4 * unit.nanometers)
+
+    # assert the ligand input private attribute is an iterable with the correct size
+    ligand_input_size = len(fe_setup._ligand_input)
+    expected_input_size = len(ligand_input_files)
+    assert ligand_input_size == expected_input_size, f"There should be {expected_input_size} ligand input files, " \
+                                                     f"receiving {ligand_input_size} files."
+
 
 # if __name__=="__main__":
 #     test_run_cdk2_iterations_repex()

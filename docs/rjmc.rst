@@ -5,6 +5,17 @@ Molecular geometry generation via RJMC
 
 Reversible jump Monte Carlo (RJMC) engine for sampling molecular geometries in which atoms are created/destroyed.
 
+Atom mapping
+------------
+
+.. currentmodule:: perses.rjmc.atom_mapping
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
+    AtomMapping
+    AtomMapper
+
 Topology proposal engines
 -------------------------
 

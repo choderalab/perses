@@ -4,6 +4,7 @@ import os
 import copy
 
 import openmmtools.mcmc as mcmc
+from openmmtools import cache
 import openmmtools.integrators as integrators
 import openmmtools.states as states
 import numpy as np
@@ -19,11 +20,9 @@ from collections import namedtuple
 from perses.annihilation.lambda_protocol import LambdaProtocol
 
 # Instantiate logger
-logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("feptasks")
 _logger.setLevel(logging.INFO)
 
-#cache.global_context_cache.platform = openmm.Platform.getPlatformByName('Reference') #this is just a local version
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
 NonequilibriumFEPTask = namedtuple('NonequilibriumFEPTask', ['particle', 'inputs'])
 
@@ -659,6 +658,7 @@ def check_EquilibriumFEPTask(task):
 
 def minimize(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState,
              max_iterations: int=100) -> states.SamplerState:
+    # TODO: set max iterations to 1000 and check tyk2 benchmarks
     """
     Minimize the given system and state, up to a maximum number of steps.
     This does not return a copy of the samplerstate; it is an update-in-place.
@@ -685,6 +685,7 @@ def minimize(thermodynamic_state: states.ThermodynamicState, sampler_state: stat
         _logger.debug(f"using global context cache")
         context, integrator = cache.global_context_cache.get_context(thermodynamic_state)
     sampler_state.apply_to_context(context, ignore_velocities = True)
+    # TODO: Set logging for minimization
     openmm.LocalEnergyMinimizer.minimize(context, maxIterations = max_iterations)
     sampler_state.update_from_context(context)
 
@@ -884,7 +885,8 @@ def run_equilibrium(task):
     n_atoms = subset_topology.n_atoms
 
     #construct the MCMove:
-    mc_move = mcmc.LangevinSplittingDynamicsMove(n_steps=inputs['nsteps_equil'], splitting=inputs['splitting'], timestep = inputs['timestep'])
+    mc_move = mcmc.LangevinSplittingDynamicsMove(n_steps=inputs['nsteps_equil'],
+            splitting=inputs['splitting'], timestep = inputs['timestep'], context_cache=cache.ContextCache(capacity=None, time_to_live=None))
     mc_move.n_restart_attempts = 10
 
     #create a numpy array for the trajectory

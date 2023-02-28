@@ -2,18 +2,16 @@
 # IMPORTS
 ###########################################
 from simtk import unit, openmm
-import numpy as np
-import os
 from nose.tools import nottest
 from unittest import skipIf
 from perses.app.setup_relative_calculation import *
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_setup import RelativeFEPSetup
 from perses.dispersed.smc import SequentialMonteCarlo
-from openmmtools.constants import kB
 from perses.dispersed.utils import *
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
+import pytest
 #######################
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
@@ -39,8 +37,10 @@ os.system(f"mkdir {trajectory_directory}")
 rng = np.random.RandomState(42)
 #######################
 
+
+#@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
 @nottest
-@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
+@pytest.mark.skip(reason="Skip helper function on GH Actions")
 def sMC_setup():
     """
     function to setup local sMC
@@ -109,6 +109,7 @@ def sMC_setup():
     assert decorrelated_1 == sorted(decorrelated_1_files), f"there is a discrepancy between the decorrelated 1 equilibrium states and the decorrelated equilibria saved to disk"
     return ne_fep
 
+@pytest.mark.skip(reason="Skip helper function on GH Actions")
 def test_local_AIS():
     """
     test local annealed importance sampling method in it's entirety

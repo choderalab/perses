@@ -1,3 +1,4 @@
+import pytest
 import simtk.openmm.app as app
 import simtk.openmm as openmm
 import simtk.unit as unit
@@ -14,7 +15,7 @@ from nose.plugins.attrib import attr
 
 from openmmtools.constants import kB
 from perses.utils.openeye import OEMol_to_omm_ff, smiles_to_oemol
-from perses.utils.smallmolecules import render_atom_mapping
+from perses.utils.charge_changing import get_water_indices
 from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
 from perses.rjmc import topology_proposal
 from collections import defaultdict
@@ -25,7 +26,7 @@ from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
 #default arguments for SystemGenerators
 barostat = None
 forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
-forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus}
 nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff}
 small_molecule_forcefield = 'gaff-2.11'
 
@@ -38,6 +39,7 @@ PROHIBITED_RESIDUES = ['CYS']
 rng = np.random.RandomState(42)
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
+
 
 def test_small_molecule_proposals():
     """
@@ -73,32 +75,55 @@ def test_small_molecule_proposals():
         assert smiles == proposal.new_chemical_state_key
         proposal = new_proposal
 
-def test_mapping_strength_levels(pairs_of_smiles=[('Cc1ccccc1','c1ccc(cc1)N'),('CC(c1ccccc1)','O=C(c1ccccc1)'),('Oc1ccccc1','Sc1ccccc1')],test=True):
 
-    correct_results = {0:{'default': (3,2), 'weak':(3,2), 'strong':(4,3)},
-                       1:{'default': (7,3), 'weak':(6,2), 'strong':(7,3)},
-                       2:{'default': (1,1), 'weak':(1,1), 'strong':(2,2)}}
+def test_small_molecule_constraint_repair_mapping():
+    """
+    Tests that a constrained edge is demapped after transformed to an unconstrained one.
 
-    mapping = ['weak','default','strong']
+    This is done by checking that the new_to_old atom map doesn't have the atom that otherwise would be included.
 
-    for example in mapping:
-        for index, (lig_a, lig_b) in enumerate(pairs_of_smiles):
-            print(f"conducting {example} mapping with ligands {lig_a}, {lig_b}")
-            initial_molecule = smiles_to_oemol(lig_a)
-            proposed_molecule = smiles_to_oemol(lig_b)
-            molecules = [Molecule.from_openeye(mol) for mol in [initial_molecule, proposed_molecule]]
-            system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
-                                                 small_molecule_forcefield = 'gaff-1.81', molecules=molecules, cache=None)
-            proposal_engine = SmallMoleculeSetProposalEngine([initial_molecule, proposed_molecule], system_generator)
-            initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(initial_molecule, system_generator)
-            print(f"running now with map strength {example}")
-            proposal = proposal_engine.propose(initial_system, initial_topology, map_strength = example)
-            print(lig_a, lig_b,'length OLD and NEW atoms',len(proposal.unique_old_atoms), len(proposal.unique_new_atoms))
-            if test:
-                render_atom_mapping(f'{index}-{example}.png', initial_molecule, proposed_molecule, proposal._new_to_old_atom_map)
-                assert ( (len(proposal.unique_old_atoms), len(proposal.unique_new_atoms)) == correct_results[index][example]), f"the mapping failed, correct results are {correct_results[index][example]}"
-                print(f"the mapping worked!!!")
-            print()
+    For the ligands in the test this atom is the ONLY Fluorine atom involved in the transformation.
+    """
+    # TODO: we could try testing a pyridine to a fluoropyridine transformation with using the given geometries
+    from perses.utils.openeye import createOEMolFromSDF
+    # Get sdfs paths
+    sdf_path = resource_filename(
+        "perses",
+        os.path.join("data", "constrained-to-unconstrained", "ligands_constraint_test.sdf"),
+    )
+    # Using troublesome molecules in SDF data
+    ligand_a = createOEMolFromSDF(
+        sdf_path,
+        index=0)
+    ligand_b = createOEMolFromSDF(
+        sdf_path,
+        index=1)
+    # Set title to 'MOL'
+    ligand_a.SetTitle('MOL')
+    ligand_b.SetTitle('MOL')
+    # Create system
+    molecules = [ligand_a, ligand_b]
+    off_molecules = [Molecule.from_openeye(molecule) for molecule in molecules]
+
+    system_generator = SystemGenerator(forcefields=forcefield_files, barostat=barostat,
+                                       forcefield_kwargs=forcefield_kwargs,
+                                       nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
+                                       small_molecule_forcefield=small_molecule_forcefield, molecules=off_molecules,
+                                       cache=None)
+    # Propose topology
+    proposal_engine = SmallMoleculeSetProposalEngine(molecules, system_generator)
+    proposal_engine.use_given_geometries = True  # Force to use the given geometries in the propose
+    proposal_engine.given_geometries_tolerance = 0.4 * unit.angstrom
+    initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(molecules[0], system_generator)
+    # NOTE: We need to run the propose method for constraints repairs to happen
+    proposal = proposal_engine.propose(initial_system, initial_topology)
+    # Find index for the fluorine atom is in the new molecule
+    for atom_idx, oe_atom in enumerate(list(ligand_b.GetAtoms())):
+        if oe_atom.GetName() == "F1":  # Fluorine atom
+            fluorine_index = atom_idx
+    # Assert fluorine does NOT get mapped
+    with pytest.raises(KeyError):
+        _ = proposal_engine.non_offset_new_to_old_atom_map[fluorine_index]
 
 
 def load_pdbid_to_openmm(pdbid):
@@ -147,7 +172,7 @@ def create_simple_protein_system_generator():
     from openmmforcefields.generators import SystemGenerator
     barostat = None
     forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
-    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus}
     nonperiodic_forcefield_kwargs={'nonbondedMethod': app.NoCutoff}
 
     system_generator = SystemGenerator(forcefields = forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs, nonperiodic_forcefield_kwargs=nonperiodic_forcefield_kwargs,
@@ -176,7 +201,7 @@ def generate_atp(phase = 'vacuum'):
     """
     import openmmtools.testsystems as ts
     from openmmforcefields.generators import SystemGenerator
-    atp = ts.AlanineDipeptideVacuum(constraints = app.HBonds, hydrogenMass = 4 * unit.amus)
+    atp = ts.AlanineDipeptideVacuum(constraints = app.HBonds, hydrogenMass = 3 * unit.amus)
 
 
     forcefield_files = ['gaff.xml', 'amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
@@ -188,7 +213,7 @@ def generate_atp(phase = 'vacuum'):
                                        forcefield_kwargs={'removeCMMotion': False,
                                                             'ewaldErrorTolerance': 1e-4,
                                                             'constraints' : app.HBonds,
-                                                            'hydrogenMass' : 4 * unit.amus},
+                                                            'hydrogenMass' : 3 * unit.amus},
                                         nonperiodic_forcefield_kwargs={'nonbondedMethod': app.NoCutoff},
                                         small_molecule_forcefield='gaff-2.11',
                                         molecules=None,
@@ -204,7 +229,7 @@ def generate_atp(phase = 'vacuum'):
                                    forcefield_kwargs={'removeCMMotion': False,
                                                         'ewaldErrorTolerance': 1e-4,
                                                         'constraints' : app.HBonds,
-                                                        'hydrogenMass' : 4 * unit.amus},
+                                                        'hydrogenMass' : 3 * unit.amus},
                                     periodic_forcefield_kwargs={'nonbondedMethod': app.PME},
                                     small_molecule_forcefield='gaff-2.11',
                                     molecules=None,
@@ -212,7 +237,7 @@ def generate_atp(phase = 'vacuum'):
 
     if phase == 'solvent':
         modeller = app.Modeller(atp.topology, atp.positions)
-        modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9*unit.angstroms, ionicStrength=0.15*unit.molar)
+        modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=11*unit.angstroms, ionicStrength=0.15*unit.molar)
         solvated_topology = modeller.getTopology()
         solvated_positions = modeller.getPositions()
 
@@ -230,19 +255,23 @@ def generate_dipeptide_top_pos_sys(topology,
                                    system,
                                    positions,
                                    system_generator,
-                                   conduct_geometry_prop = True,
+                                   extra_sidechain_map=None,
+                                   demap_CBs=False,
+                                   conduct_geometry_prop=True,
                                    conduct_htf_prop = False,
                                    validate_energy_bookkeeping=True,
-                                   repartitioned=False,
+                                   generate_repartitioned_hybrid_topology_factory=False,
+                                   generate_rest_capable_hybrid_topology_factory=False,
                                    endstate=None,
                                    flatten_torsions=False,
                                    flatten_exceptions=False,
-                                   validate_endstate_energy=True
+                                   validate_endstate_energy=True # Cannot validate endstate energies if flatten_torsions/exceptions is True
                                    ):
     """generate point mutation engine, geometry_engine, and conduct topology proposal, geometry propsal, and hybrid factory generation"""
-    from perses.tests.utils import validate_endstate_energies
+
     if conduct_htf_prop:
         assert conduct_geometry_prop, f"the htf prop can only be conducted if there is a geometry proposal"
+
     # Create the point mutation engine
     from perses.rjmc.topology_proposal import PointMutationEngine
     point_mutation_engine = PointMutationEngine(wildtype_topology=topology,
@@ -255,7 +284,7 @@ def generate_dipeptide_top_pos_sys(topology,
 
     # Create a top proposal
     print(f"making topology proposal")
-    topology_proposal = point_mutation_engine.propose(current_system=system, current_topology=topology)
+    topology_proposal = point_mutation_engine.propose(current_system=system, current_topology=topology, extra_sidechain_map=extra_sidechain_map, demap_CBs=demap_CBs)
 
     if not conduct_geometry_prop:
         return topology_proposal
@@ -287,12 +316,16 @@ def generate_dipeptide_top_pos_sys(topology,
 
     if conduct_htf_prop:
         # Create a hybrid topology factory
-        if not repartitioned:
-            from perses.annihilation.relative import HybridTopologyFactory
-            factory = HybridTopologyFactory
-        else:
+        if generate_repartitioned_hybrid_topology_factory:
             from perses.annihilation.relative import RepartitionedHybridTopologyFactory
             factory = RepartitionedHybridTopologyFactory
+            assert endstate in [0, 1], "endstate must be 0 or 1"
+        elif generate_rest_capable_hybrid_topology_factory:
+            from perses.annihilation.relative import RESTCapableHybridTopologyFactory
+            factory = RESTCapableHybridTopologyFactory
+        else:
+            from perses.annihilation.relative import HybridTopologyFactory
+            factory = HybridTopologyFactory
 
         forward_htf = factory(topology_proposal=topology_proposal,
                      current_positions=positions,
@@ -318,30 +351,58 @@ def generate_dipeptide_top_pos_sys(topology,
         if not validate_endstate_energy:
             return forward_htf
         else:
-            if not topology_proposal.unique_new_atoms:
-                assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.forward_final_context_reduced_potential})"
-                assert geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
-                vacuum_added_valence_energy = 0.0
-            else:
-                added_valence_energy = geometry_engine.forward_final_context_reduced_potential - geometry_engine.forward_atoms_with_positions_reduced_potential
+            assert not flatten_torsions and not flatten_exceptions, "Cannot conduct endstate validation if flatten_torsions or flatten_exceptions is True"
 
-            if not topology_proposal.unique_old_atoms:
-                assert geometry_engine.reverse_final_context_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's final context reduced potential is not None (i.e. {self._geometry_engine.reverse_final_context_reduced_potential})"
-                assert geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.reverse_atoms_with_positions_reduced_potential})"
-                subtracted_valence_energy = 0.0
+            if generate_rest_capable_hybrid_topology_factory:
+                from perses.dispersed.utils import validate_endstate_energies_point
+                for endstate in [0, 1]:
+                    validate_endstate_energies_point(forward_htf, endstate=endstate, minimize=True)
             else:
-                subtracted_valence_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
+                from perses.dispersed.utils import validate_endstate_energies
 
-            zero_state_error, one_state_error = validate_endstate_energies(forward_htf._topology_proposal,
-                                                                           forward_htf,
-                                                                           added_valence_energy,
-                                                                           subtracted_valence_energy,
-                                                                           beta = 1.0/(kB*temperature),
-                                                                           ENERGY_THRESHOLD = ENERGY_THRESHOLD,
-                                                                           platform = openmm.Platform.getPlatformByName('Reference'),
-                                                                           repartitioned_endstate=endstate)
-            print(f"zero state error : {zero_state_error}")
-            print(f"one state error : {one_state_error}")
+                if not topology_proposal.unique_new_atoms:
+                    assert geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {geometry_engine.forward_final_context_reduced_potential})"
+                    assert geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { geometry_engine.forward_atoms_with_positions_reduced_potential})"
+                    vacuum_added_valence_energy = 0.0
+                else:
+                    added_valence_energy = geometry_engine.forward_final_context_reduced_potential - geometry_engine.forward_atoms_with_positions_reduced_potential
+
+                if not topology_proposal.unique_old_atoms:
+                    assert geometry_engine.reverse_final_context_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's final context reduced potential is not None (i.e. {geometry_engine.reverse_final_context_reduced_potential})"
+                    assert geometry_engine.reverse_atoms_with_positions_reduced_potential == None, f"There are no unique old atoms but the geometry_engine's atoms-with-positions-reduced-potential in not None (i.e. { geometry_engine.reverse_atoms_with_positions_reduced_potential})"
+                    subtracted_valence_energy = 0.0
+                else:
+                    subtracted_valence_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
+
+                if generate_repartitioned_hybrid_topology_factory:
+
+                    if endstate == 0:
+                        zero_state_error, _ = validate_endstate_energies(forward_htf._topology_proposal,
+                                                                         forward_htf,
+                                                                         added_valence_energy,
+                                                                         subtracted_valence_energy,
+                                                                         beta=beta,
+                                                                         ENERGY_THRESHOLD=ENERGY_THRESHOLD,
+                                                                         platform=openmm.Platform.getPlatformByName('Reference'),
+                                                                         repartitioned_endstate=endstate)
+                    else:
+                        _, one_state_error = validate_endstate_energies(forward_htf._topology_proposal,
+                                                                        forward_htf,
+                                                                        added_valence_energy,
+                                                                        subtracted_valence_energy,
+                                                                        beta=beta,
+                                                                        ENERGY_THRESHOLD=ENERGY_THRESHOLD,
+                                                                        platform=openmm.Platform.getPlatformByName('Reference'),
+                                                                        repartitioned_endstate=endstate)
+
+                else:
+                    zero_state_error, one_state_error = validate_endstate_energies(forward_htf._topology_proposal,
+                                                                                   forward_htf,
+                                                                                   added_valence_energy,
+                                                                                   subtracted_valence_energy,
+                                                                                   beta=beta,
+                                                                                   ENERGY_THRESHOLD=ENERGY_THRESHOLD,
+                                                                                   platform=openmm.Platform.getPlatformByName('Reference'))
 
             return forward_htf
 
@@ -354,7 +415,7 @@ def test_mutate_from_alanine():
     #      generating VERY large nonbonded energies, to which numerical precision cannot achieve a proper threshold of 1e-6.
     #      in the future, we can look to use sterics or something fancy.  At the moment, we recommend conservative transforms
     #      or transforms that have more unique _old_ atoms than new
-    aminos = ['ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','SER','THR','TRP','TYR','VAL']
+    aminos = ['ARG', 'ASH', 'ASN', 'ASP', 'CYS', 'GLH', 'GLN', 'GLU', 'GLY', 'HID', 'HIE', 'HIS', 'HIP', 'ILE', 'LEU', 'LYN', 'LYS', 'MET', 'PHE', 'SER', 'THR', 'TRP', 'TYR', 'VAL']
     attempt_full_pipeline_aminos = ['CYS', 'ILE', 'SER', 'THR', 'VAL'] #let's omit rings and large perturbations for now
 
     ala, system_generator = generate_atp()
@@ -364,6 +425,69 @@ def test_mutate_from_alanine():
             _ = generate_dipeptide_top_pos_sys(ala.topology, amino, ala.system, ala.positions, system_generator, conduct_htf_prop=True)
         else:
             _ = generate_dipeptide_top_pos_sys(ala.topology, amino, ala.system, ala.positions, system_generator, conduct_geometry_prop=False)
+
+def test_protein_atom_maps():
+
+    # Get alanine dipeptide in vacuum test system
+    ala, system_generator = generate_atp()
+
+
+    # Define function for checking that the atom map is correct
+    def check_atom_map(topology_proposal, reference_map):
+        # Retrieve atom index to name mapping for old and new residues
+        old_res = [res for res in topology_proposal.old_topology.residues() if res.name == topology_proposal.old_residue_name][0]
+        new_res = [res for res in topology_proposal.new_topology.residues() if res.name == topology_proposal.new_residue_name][0]
+        old_res_index_to_name = {atom.index: atom.name for atom in old_res.atoms()}
+        new_res_index_to_name = {atom.index: atom.name for atom in new_res.atoms()}
+
+        # Check whether the atom map generated matches the reference map
+        atom_map = topology_proposal._core_new_to_old_atom_map
+
+        mapped_atoms = [(new_res_index_to_name[new_idx], old_res_index_to_name[old_idx]) for new_idx, old_idx in atom_map.items() if new_idx in new_res_index_to_name.keys() and old_idx in old_res_index_to_name.keys()]
+        assert sorted(reference_map) == sorted(mapped_atoms), f"{topology_proposal.old_residue_name}->{topology_proposal.new_residue_name} map does not match reference map"
+
+    # ALA -> SER
+    topology_proposal, new_positions, logp_proposal, logp_reverse = generate_dipeptide_top_pos_sys(ala.topology, 'SER', ala.system, ala.positions, system_generator, conduct_geometry_prop=True)
+    ser_topology, ser_system = topology_proposal.new_topology, topology_proposal.new_system
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB')]
+    check_atom_map(topology_proposal, reference_map)
+
+    # SER -> ALA
+    topology_proposal = generate_dipeptide_top_pos_sys(ser_topology, 'ALA', ser_system, new_positions, system_generator, conduct_geometry_prop=False)
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB')]
+    check_atom_map(topology_proposal, reference_map)
+
+    # ALA -> VAL
+    topology_proposal, new_positions, logp_proposal, logp_reverse = generate_dipeptide_top_pos_sys(ala.topology, 'VAL', ala.system, ala.positions, system_generator, conduct_geometry_prop=True)
+    val_topology, val_system = topology_proposal.new_topology, topology_proposal.new_system
+    reference_map =  [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB')]
+    check_atom_map(topology_proposal, reference_map)
+
+    # VAL -> ALA
+    topology_proposal = generate_dipeptide_top_pos_sys(val_topology, 'ALA', val_system, new_positions, system_generator, conduct_geometry_prop=False)
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB')]
+    check_atom_map(topology_proposal, reference_map)
+
+    # VAL -> ILE
+    topology_proposal = generate_dipeptide_top_pos_sys(val_topology, 'ILE', val_system, new_positions, system_generator, conduct_geometry_prop=False)
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB')]
+    check_atom_map(topology_proposal, reference_map)
+
+    # VAL -> ILE with extra sidechain map
+    topology_proposal = generate_dipeptide_top_pos_sys(val_topology, 'ILE', val_system, new_positions, system_generator, extra_sidechain_map={13:13, 17: 18, 18: 19, 19: 20, 20: 21}, conduct_geometry_prop=False)
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('HA', 'HA'), ('C', 'C'), ('O', 'O'), ('CB', 'CB'), ('HB', 'HB'), ('CG2', 'CG2'), ('HG21', 'HG21'), ('HG22', 'HG22'), ('HG23', 'HG23')]
+    check_atom_map(topology_proposal, reference_map)
+
+    # ALA -> GLY
+    topology_proposal, new_positions, logp_proposal, logp_reverse = generate_dipeptide_top_pos_sys(ala.topology, 'GLY', ala.system, ala.positions, system_generator, conduct_geometry_prop=True)
+    gly_topology, gly_system = topology_proposal.new_topology, topology_proposal.new_system
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('C', 'C'), ('O', 'O')]
+    check_atom_map(topology_proposal, reference_map)
+
+    # GLY -> ALA
+    topology_proposal = generate_dipeptide_top_pos_sys(gly_topology, 'ALA', gly_system, new_positions, system_generator, conduct_geometry_prop=False)
+    reference_map = [('N', 'N'), ('H', 'H'), ('CA', 'CA'), ('C', 'C'), ('O', 'O')]
+    check_atom_map(topology_proposal, reference_map)
 
 #@attr('advanced')
 def test_specify_allowed_mutants():
@@ -546,7 +670,7 @@ def test_mutate_from_every_amino_to_every_other():
 
     metadata = dict()
 
-    system_generator = topology_proposal.SystemGenerator([ff_filename])
+    system_generator = SystemGenerator([ff_filename])
 
     pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, proposal_metadata=metadata, max_point_mutants=max_point_mutants, always_change=True)
 
@@ -572,8 +696,6 @@ def test_mutate_from_every_amino_to_every_other():
             continue
         if residue.index == (num_residues -1):
             continue
-        if residue.name in ['HID','HIE']:
-            residue.name = 'HIS'
         new_sequence.append(residue.name)
     for i in range(len(aminos)):
         assert new_sequence[i] == aminos[i]
@@ -678,7 +800,7 @@ def test_limiting_allowed_residues():
     ff = app.ForceField(ff_filename)
     system = ff.createSystem(modeller.topology)
 
-    system_generator = topology_proposal.SystemGenerator([ff_filename])
+    system_generator = SystemGenerator([ff_filename])
 
     max_point_mutants = 1
     residues_allowed_to_mutate = ['903','904','905']
@@ -716,7 +838,7 @@ def test_always_change():
     ff = app.ForceField(ff_filename)
     system = ff.createSystem(modeller.topology)
 
-    system_generator = topology_proposal.SystemGenerator([ff_filename])
+    system_generator = SystemGenerator([ff_filename])
 
     max_point_mutants = 1
     residues_allowed_to_mutate = ['903']
@@ -771,153 +893,151 @@ def test_run_peptide_library_engine():
     modeller.addSolvent(ff)
     system = ff.createSystem(modeller.topology)
 
-    system_generator = topology_proposal.SystemGenerator([ff_filename])
+    system_generator = SystemGenerator([ff_filename])
     library = ['AVILMFYQP','RHKDESTNQ','STNQCFGPL']
 
     pl_top_library = topology_proposal.PeptideLibraryEngine(system_generator, library, chain_id)
 
     pl_top_proposal = pl_top_library.propose(system, modeller.topology)
 
-def test_ring_breaking_detection():
+def test_protein_counterion_topology_fix_positive():
     """
-    Test the detection of ring-breaking transformations.
-
+    mutate alanine dipeptide into ASP dipeptide and assert that the appropriate number of water indices are identified
     """
-    from perses.rjmc.topology_proposal import AtomMapper
-    from openmoltools.openeye import iupac_to_oemol, generate_conformers
-    molecule1 = iupac_to_oemol("naphthalene")
-    molecule2 = iupac_to_oemol("benzene")
-    molecule1 = generate_conformers(molecule1,max_confs=1)
-    molecule2 = generate_conformers(molecule2,max_confs=1)
+    from perses.rjmc.topology_proposal import PolymerProposalEngine
+    new_res = 'ASP'
+    charge_diff = 1
 
-    # Allow ring breaking
-    new_to_old_atom_map = AtomMapper._get_mol_atom_map(molecule1, molecule2, allow_ring_breaking=True)
-    if not len(new_to_old_atom_map) > 0:
-        filename = 'mapping-error.png'
-        #render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map)
-        msg = 'Napthalene -> benzene transformation with allow_ring_breaking=True is not returning a valid mapping\n'
-        msg += 'Wrote atom mapping to %s for inspection; please check this.' % filename
-        msg += str(new_to_old_atom_map)
-        raise Exception(msg)
+    # Make a vacuum system
+    atp, system_generator = generate_atp(phase='vacuum')
 
-    new_to_old_atom_map = AtomMapper._get_mol_atom_map(molecule1, molecule2, allow_ring_breaking=False)
-    if new_to_old_atom_map is not None: # atom mapper should not retain _any_ atoms in default mode
-        filename = 'mapping-error.png'
-        #render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map)
-        msg = 'Napthalene -> benzene transformation with allow_ring_breaking=False is erroneously allowing ring breaking\n'
-        msg += 'Wrote atom mapping to %s for inspection; please check this.' % filename
-        msg += str(new_to_old_atom_map)
-        raise Exception(msg)
+    # Make a solvated system/topology/positions with modeller
+    modeller = app.Modeller(atp.topology, atp.positions)
+    modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=11*unit.angstroms, ionicStrength=0.15*unit.molar)
+    solvated_topology = modeller.getTopology()
+    solvated_positions = modeller.getPositions()
 
-def test_molecular_atom_mapping():
+    # Canonicalize the solvated positions: turn tuples into np.array
+    atp.positions = unit.quantity.Quantity(value=np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit=unit.nanometers)
+    atp.topology = solvated_topology
+
+    atp.system = system_generator.create_system(atp.topology)
+
+    # Make a topology proposal and generate new positions
+    top_proposal, new_pos, _, _ = generate_dipeptide_top_pos_sys(topology = atp.topology,
+                                   new_res = new_res,
+                                   system = atp.system,
+                                   positions = atp.positions,
+                                   system_generator = system_generator,
+                                   conduct_geometry_prop = True,
+                                   conduct_htf_prop = False,
+                                   validate_energy_bookkeeping=True,
+                                   )
+
+    # Get the charge difference
+    charge_diff_test = PolymerProposalEngine._get_charge_difference(top_proposal._old_topology.residue_topology.name,
+                                                                top_proposal._new_topology.residue_topology.name)
+    assert charge_diff_test == charge_diff
+
+    # Get the array of water indices (w.r.t. new topology) to turn into ions
+    water_indices = get_water_indices(charge_diff=charge_diff_test,
+                                      new_positions=new_pos,
+                                      new_topology=top_proposal._new_topology,
+                                      radius=0.8)
+
+    assert len(water_indices) == 3
+
+def test_protein_counterion_topology_fix_negitive():
     """
-    Test the creation of atom maps between pairs of molecules from the JACS benchmark set.
-
+    mutate alanine dipeptide into ARG dipeptide and assert that the appropriate number of water indices are identified
     """
-    from openeye import oechem
-    from perses.rjmc.topology_proposal import AtomMapper
+    from perses.rjmc.topology_proposal import PolymerProposalEngine
+    new_res = 'ARG'
+    charge_diff = -1
 
-    # Test mappings for JACS dataset ligands
-    for dataset_name in ['CDK2']: #, 'p38', 'Tyk2', 'Thrombin', 'PTP1B', 'MCL1', 'Jnk1', 'Bace']:
-        # Read molecules
-        dataset_path = 'data/schrodinger-jacs-datasets/%s_ligands.sdf' % dataset_name
-        mol2_filename = resource_filename('perses', dataset_path)
-        ifs = oechem.oemolistream(mol2_filename)
-        molecules = list()
-        for mol in ifs.GetOEGraphMols():
-            molecules.append(oechem.OEGraphMol(mol))
+    # Make a vacuum system
+    atp, system_generator = generate_atp(phase='vacuum')
 
-        # Build atom map for some transformations.
-        #for (molecule1, molecule2) in combinations(molecules, 2): # too slow
-        molecule1 = molecules[0]
-        for i, molecule2 in enumerate(molecules[1:]):
-            new_to_old_atom_map = AtomMapper._get_mol_atom_map(molecule1, molecule2)
-            # Make sure we aren't mapping hydrogens onto anything else
-            atoms1 = [atom for atom in molecule1.GetAtoms()]
-            atoms2 = [atom for atom in molecule2.GetAtoms()]
-            #for (index2, index1) in new_to_old_atom_map.items():
-            #    atom1, atom2 = atoms1[index1], atoms2[index2]
-            #    if (atom1.GetAtomicNum()==1) != (atom2.GetAtomicNum()==1):
-            filename = 'mapping-error-%d.png' % i
-            render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map)
-            #msg = 'Atom atomic number %d is being mapped to atomic number %d\n' % (atom1.GetAtomicNum(), atom2.GetAtomicNum())
-            msg = 'molecule 1 : %s\n' % oechem.OECreateIsoSmiString(molecule1)
-            msg += 'molecule 2 : %s\n' % oechem.OECreateIsoSmiString(molecule2)
-            msg += 'Wrote atom mapping to %s for inspection; please check this.' % filename
-            msg += str(new_to_old_atom_map)
-            print(msg)
-            #        raise Exception(msg)
+    # Make a solvated system/topology/positions with modeller
+    modeller = app.Modeller(atp.topology, atp.positions)
+    modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=11*unit.angstroms, ionicStrength=0.15*unit.molar)
+    solvated_topology = modeller.getTopology()
+    solvated_positions = modeller.getPositions()
 
-def test_map_strategy():
+    # Canonicalize the solvated positions: turn tuples into np.array
+    atp.positions = unit.quantity.Quantity(value=np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit=unit.nanometers)
+    atp.topology = solvated_topology
+
+    atp.system = system_generator.create_system(atp.topology)
+
+    # Make a topology proposal and generate new positions
+    top_proposal, new_pos, _, _ = generate_dipeptide_top_pos_sys(topology = atp.topology,
+                                   new_res = new_res,
+                                   system = atp.system,
+                                   positions = atp.positions,
+                                   system_generator = system_generator,
+                                   conduct_geometry_prop = True,
+                                   conduct_htf_prop = False,
+                                   validate_energy_bookkeeping=True,
+                                   )
+
+    # Get the charge difference
+    charge_diff_test = PolymerProposalEngine._get_charge_difference(top_proposal._old_topology.residue_topology.name,
+                                                                top_proposal._new_topology.residue_topology.name)
+    assert charge_diff_test == charge_diff
+
+    # Get the array of water indices (w.r.t. new topology) to turn into ions
+    water_indices = get_water_indices(charge_diff=charge_diff_test,
+                                      new_positions=new_pos,
+                                      new_topology=top_proposal._new_topology,
+                                      radius=0.8)
+
+    assert len(water_indices) == 3
+
+
+def test_protein_counterion_topology_fix_zero():
     """
-    Test the creation of atom maps between pairs of molecules from the JACS benchmark set.
-
+    mutate alanine dipeptide into ASN dipeptide and assert that the appropriate number of water indices are identified
     """
-    from openeye import oechem
-    from perses.rjmc.topology_proposal import AtomMapper
+    from perses.rjmc.topology_proposal import PolymerProposalEngine
+    new_res = 'ASN'
+    charge_diff = 0
 
-    # Test mappings for JACS dataset ligands
-    for dataset_name in ['Jnk1']:
-        # Read molecules
-        dataset_path = 'data/schrodinger-jacs-datasets/%s_ligands.sdf' % dataset_name
-        mol2_filename = resource_filename('perses', dataset_path)
-        ifs = oechem.oemolistream(mol2_filename)
-        molecules = list()
-        for mol in ifs.GetOEGraphMols():
-            molecules.append(oechem.OEGraphMol(mol))
+    # Make a vacuum system
+    atp, system_generator = generate_atp(phase='vacuum')
 
-        atom_expr = oechem.OEExprOpts_IntType
-        bond_expr = oechem.OEExprOpts_RingMember
+    # Make a solvated system/topology/positions with modeller
+    modeller = app.Modeller(atp.topology, atp.positions)
+    modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=11*unit.angstroms, ionicStrength=0.15*unit.molar)
+    solvated_topology = modeller.getTopology()
+    solvated_positions = modeller.getPositions()
 
-        # the 0th and 1st Jnk1 ligand have meta substituents that face opposite eachother
-        # in the active site. Using `map_strategy=matching_criterion` should align these groups, and put them
-        # both in the core. Using `map_strategy=geometry` should see that the orientations differ and chose
-        # to unmap (i.e. put both these groups in core) such as to get the geometry right at the expense of
-        # mapping fewer atoms
-        new_to_old_atom_map = AtomMapper._get_mol_atom_map(molecules[0], molecules[1],atom_expr=atom_expr,bond_expr=bond_expr)
-        assert len(new_to_old_atom_map) == 37, 'Expected meta groups methyl C to map onto ethyl O'
+    # Canonicalize the solvated positions: turn tuples into np.array
+    atp.positions = unit.quantity.Quantity(value=np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit=unit.nanometers)
+    atp.topology = solvated_topology
 
-        new_to_old_atom_map = AtomMapper._get_mol_atom_map(molecules[0], molecules[1],atom_expr=atom_expr,bond_expr=bond_expr,map_strategy='geometry')
-        assert len(new_to_old_atom_map) == 35,  'Expected meta groups methyl C to NOT map onto ethyl O as they are distal in cartesian space'
+    atp.system = system_generator.create_system(atp.topology)
 
+    # Make a topology proposal and generate new positions
+    top_proposal, new_pos, _, _ = generate_dipeptide_top_pos_sys(topology = atp.topology,
+                                   new_res = new_res,
+                                   system = atp.system,
+                                   positions = atp.positions,
+                                   system_generator = system_generator,
+                                   conduct_geometry_prop = True,
+                                   conduct_htf_prop = False,
+                                   validate_energy_bookkeeping=True,
+                                   )
 
-def test_simple_heterocycle_mapping(iupac_pairs = [('benzene', 'pyridine')]):
-    """
-    Test the ability to map conjugated heterocycles (that preserves all rings).  Will assert that the number of ring members in both molecules is the same.
-    """
-    # TODO: generalize this to test for ring breakage and closure.
-    from openmoltools.openeye import iupac_to_oemol
-    from openeye import oechem
-    from perses.rjmc.topology_proposal import AtomMapper
+    # Get the charge difference
+    charge_diff_test = PolymerProposalEngine._get_charge_difference(top_proposal._old_topology.residue_topology.name,
+                                                                top_proposal._new_topology.residue_topology.name)
+    assert charge_diff_test == charge_diff
 
-    for iupac_pair in iupac_pairs:
-        old_oemol, new_oemol = iupac_to_oemol(iupac_pair[0]), iupac_to_oemol(iupac_pair[1])
-        new_to_old_map = AtomMapper._get_mol_atom_map(old_oemol, new_oemol, allow_ring_breaking=False)
+    # Get the array of water indices (w.r.t. new topology) to turn into ions
+    water_indices = get_water_indices(charge_diff=charge_diff_test,
+                                      new_positions=new_pos,
+                                      new_topology=top_proposal._new_topology,
+                                      radius=0.8)
 
-        # Assert that the number of ring members is consistent in the mapping...
-        num_hetero_maps = 0
-        for new_index, old_index in new_to_old_map.items():
-            old_atom, new_atom = old_oemol.GetAtom(oechem.OEHasAtomIdx(old_index)), new_oemol.GetAtom(oechem.OEHasAtomIdx(new_index))
-            if old_atom.IsInRing() and new_atom.IsInRing():
-                if old_atom.GetAtomicNum() != new_atom.GetAtomicNum():
-                    num_hetero_maps += 1
-
-        assert num_hetero_maps > 0, f"there are no differences in atomic number mappings in {iupac_pair}"
-
-
-
-
-
-#if __name__ == "__main__":
-
-#    test_run_point_mutation_propose()
-#    test_mutate_from_every_amino_to_every_other()
-#    test_specify_allowed_mutants()
-#    test_propose_self()
-#    test_limiting_allowed_residues()
-#    test_run_peptide_library_engine()
-#    test_small_molecule_proposals()
-#    test_alanine_dipeptide_map()
-#    test_always_change()
-#    test_molecular_atom_mapping()
-# test_no_h_map()
+    assert len(water_indices) == 0

@@ -11,14 +11,17 @@ __author__ = 'John D. Chodera'
 import copy
 from simtk import openmm, unit
 from simtk.openmm import app
-import sys
 import numpy as np
+import os
+import shutil
+import tempfile
 from perses.rjmc import geometry
 from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
+from perses.dispersed import utils
 from openmmtools.constants import kB
-from openmmtools import states
+from openmmtools import states, integrators
 import contextlib
-from openmmtools import utils
+
 ################################################################################
 # CONSTANTS
 ################################################################################
@@ -27,7 +30,6 @@ temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 ENERGY_THRESHOLD = 1e-1
-DEFAULT_PLATFORM = utils.get_fastest_platform()
 
 ################################################################################
 # UTILITIES
@@ -37,23 +39,25 @@ import logging
 _logger = logging.getLogger("tests-utils")
 _logger.setLevel(logging.INFO)
 
+
 @contextlib.contextmanager
 def enter_temp_directory():
     """Create and enter a temporary directory; used as context manager."""
-    import tempfile
     temp_dir = tempfile.mkdtemp()
-    import os
     cwd = os.getcwd()
-    os.chdir(temp_dir)
-    yield temp_dir
-    os.chdir(cwd)
-    import shutil
-    shutil.rmtree(temp_dir)
+    try:
+        os.chdir(temp_dir)
+        yield temp_dir
+    finally:
+        os.chdir(cwd)
+        shutil.rmtree(temp_dir)
 
 # TODO: Move some of these utility routines to openmoltools.
 
+
 class NaNException(Exception):
     pass
+
 
 def quantity_is_finite(quantity):
     """
@@ -74,10 +78,12 @@ def quantity_is_finite(quantity):
         return False
     return True
 
+
 def compare_at_lambdas(context, functions):
     """
     Compare the energy components at all lambdas = 1 and 0.
     """
+    from perses.dispersed.utils import compute_potential_components
 
     # First, set all lambdas to 0
     for parm in functions.keys():
@@ -93,16 +99,14 @@ def compare_at_lambdas(context, functions):
     print("-----------------------")
     print("Energy components at lambda=0")
 
-    for i in range(len(energy_components_0)):
-        name, value = energy_components_0[i]
-        print("%s\t%s" % (name, str(value)))
+    for name, value in energy_components_0.items():
+        print(f"{name}\t{value}")
 
     print("-----------------------")
     print("Energy components at lambda=1")
 
-    for i in range(len(energy_components_1)):
-        name, value = energy_components_1[i]
-        print("%s\t%s" % (name, str(value)))
+    for name, value in energy_components_1.items():
+        print(f"{name}\t{value}")
 
     print("------------------------")
 
@@ -286,130 +290,8 @@ def compute_potential(system, positions, platform=None):
         raise NaNException("Potential energy is NaN")
     return potential
 
-def compute_potential_components(context, beta = beta, platform = DEFAULT_PLATFORM):
-    """
-    Compute potential energy, raising an exception if it is not finite.
 
-    Parameters
-    ----------
-    context : simtk.openmm.Context
-        The context from which to extract, System, parameters, and positions.
-
-    """
-    # Make a deep copy of the system.
-    import copy
-
-    from perses.dispersed.utils import configure_platform
-    platform = configure_platform(platform.getName(), fallback_platform_name='Reference', precision='double')
-
-    system = context.getSystem()
-    system = copy.deepcopy(system)
-    # Get positions.
-    positions = context.getState(getPositions=True).getPositions(asNumpy=True)
-    # Get Parameters
-    parameters = context.getParameters()
-    # Segregate forces.
-    for index in range(system.getNumForces()):
-        force = system.getForce(index)
-        force.setForceGroup(index)
-    # Create new Context.
-    integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-    context = openmm.Context(system, integrator, platform)
-    context.setPositions(positions)
-    for (parameter, value) in parameters.items():
-        context.setParameter(parameter, value)
-    energy_components = list()
-    for index in range(system.getNumForces()):
-        force = system.getForce(index)
-        forcename = force.__class__.__name__
-        groups = 1<<index
-        potential = beta * context.getState(getEnergy=True, groups=groups).getPotentialEnergy()
-        energy_components.append((forcename, potential))
-    del context, integrator
-    return energy_components
-
-def check_system(system):
-    """
-    Check OpenMM System object for pathologies, like duplicate atoms in torsions.
-
-    Parameters
-    ----------
-    system : simtk.openmm.System
-
-    """
-    forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
-    force = forces['PeriodicTorsionForce']
-    for index in range(force.getNumTorsions()):
-        [i, j, k, l, periodicity, phase, barrier] = force.getTorsionParameters(index)
-        if len(set([i,j,k,l])) < 4:
-            msg  = 'Torsion index %d of self._topology_proposal.new_system has duplicate atoms: %d %d %d %d\n' % (index,i,j,k,l)
-            msg += 'Serialzed system to system.xml for inspection.\n'
-            raise Exception(msg)
-    from simtk.openmm import XmlSerializer
-    serialized_system = XmlSerializer.serialize(system)
-    outfile = open('system.xml', 'w')
-    outfile.write(serialized_system)
-    outfile.close()
-
-def generate_endpoint_thermodynamic_states(system, topology_proposal, repartitioned_endstate=None):
-    """
-    Generate endpoint thermodynamic states for the system
-
-    Parameters
-    ----------
-    system : openmm.System
-        System object corresponding to thermodynamic state
-    topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
-        TopologyProposal representing transformation
-    repartitioned_endstate : int, default None
-        If the htf was generated using RepartitionedHybridTopologyFactory, use this argument to specify the endstate at
-        which it was generated. Otherwise, leave as None.
-
-    Returns
-    -------
-    nonalchemical_zero_thermodynamic_state : ThermodynamicState
-        Nonalchemical thermodynamic state for lambda zero endpoint
-    nonalchemical_one_thermodynamic_state : ThermodynamicState
-        Nonalchemical thermodynamic state for lambda one endpoint
-    lambda_zero_thermodynamic_state : ThermodynamicState
-        Alchemical (hybrid) thermodynamic state for lambda zero
-    lambda_one_thermodynamic_State : ThermodynamicState
-        Alchemical (hybrid) thermodynamic state for lambda one
-    """
-    # Create the thermodynamic state
-    from perses.annihilation.lambda_protocol import RelativeAlchemicalState
-
-    check_system(system)
-
-    # Create thermodynamic states for the nonalchemical endpoints
-    nonalchemical_zero_thermodynamic_state = states.ThermodynamicState(topology_proposal.old_system, temperature=temperature)
-    nonalchemical_one_thermodynamic_state = states.ThermodynamicState(topology_proposal.new_system, temperature=temperature)
-
-    # Create the base thermodynamic state with the hybrid system
-    thermodynamic_state = states.ThermodynamicState(system, temperature=temperature)
-
-    if repartitioned_endstate == 0:
-        lambda_zero_thermodynamic_state = thermodynamic_state
-        lambda_one_thermodynamic_state = None
-    elif repartitioned_endstate == 1:
-        lambda_zero_thermodynamic_state = None
-        lambda_one_thermodynamic_state = thermodynamic_state
-    else:
-        # Create relative alchemical states
-        lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(system)
-        lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
-
-        # Ensure their states are set appropriately
-        lambda_zero_alchemical_state.set_alchemical_parameters(0.0)
-        lambda_one_alchemical_state.set_alchemical_parameters(1.0)
-
-        # Now create the compound states with different alchemical states
-        lambda_zero_thermodynamic_state = states.CompoundThermodynamicState(thermodynamic_state, composable_states=[lambda_zero_alchemical_state])
-        lambda_one_thermodynamic_state = states.CompoundThermodynamicState(thermodynamic_state, composable_states=[lambda_one_alchemical_state])
-
-    return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
-
-def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene", current_mol_smiles = None, proposed_mol_smiles = None, vacuum = False, render_atom_mapping = False,atom_expression=['Hybridization'],bond_expression=['Hybridization']):
+def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene", current_mol_smiles = None, proposed_mol_smiles = None, vacuum = False, render_atom_mapping = False,atom_expression=['Hybridization'],bond_expression=['Hybridization']):
     """
     This function will generate a topology proposal, old positions, and new positions with a geometry proposal (either vacuum or solvated) given a set of input iupacs or smiles.
     The function will (by default) read the iupac names first.  If they are set to None, then it will attempt to read a set of current and new smiles.
@@ -501,7 +383,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         barostat = None
 
     forcefield_files = ['amber14/protein.ff14SB.xml', 'amber14/tip3p.xml']
-    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 4 * unit.amus}
+    forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': 1e-4, 'constraints' : app.HBonds, 'hydrogenMass' : 3 * unit.amus}
     periodic_forcefield_kwargs = {'nonbondedMethod': nonbonded_method}
     small_molecule_forcefield = 'gaff-2.11'
 
@@ -517,7 +399,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
         modeller.delete(hs)
         modeller.addHydrogens(forcefield=system_generator.forcefield)
-        modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9.0*unit.angstroms)
+        modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=16.0*unit.angstroms)
         solvated_topology = modeller.getTopology()
         solvated_positions = modeller.getPositions()
         solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
@@ -565,6 +447,8 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     new_positions : np.array, unit-bearing
         The positions of the new system
     """
+    # TODO: Modify this to use openff.toolkit.topology.Molecule instead of openeye
+
     from openmoltools import forcefield_generators
     from openmmtools import testsystems
     from openmmforcefields.generators import SystemGenerator
@@ -579,6 +463,7 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     current_mol = forcefield_generators.generateOEMolFromTopologyResidue(ligand_topology[1]) # guest is second residue in topology
     proposed_mol = smiles_to_oemol('C1CC2(CCC1(CC2)C)C')
 
+    from openeye import oechem
     initial_smiles = oechem.OEMolToSmiles(current_mol)
     final_smiles = oechem.OEMolToSmiles(proposed_mol)
 
@@ -591,8 +476,7 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     gaff_filename = get_data_filename('data/gaff.xml')
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False},nonperiodic_forcefield_kwargs = {'nonbondedMethod': app.NoCutoff})
     geometry_engine = geometry.FFAllAngleGeometryEngine()
-    proposal_engine = SmallMoleculeSetProposalEngine(
-        [current_mol, proposed_mol], system_generator, residue_name=current_mol_name,atom_expr=atom_expr,bond_expr=bond_expr)
+    proposal_engine = SmallMoleculeSetProposalEngine([current_mol, proposed_mol], system_generator, residue_name=current_mol_name)
 
     # Generate topology proposal
     topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol_id=0, proposed_mol_id=1)
@@ -719,123 +603,336 @@ def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_it
 
     return conformers, rj_works
 
-def validate_endstate_energies(topology_proposal,
-                               htf,
-                               added_energy,
-                               subtracted_energy,
-                               beta=1.0/kT,
-                               ENERGY_THRESHOLD=1e-6,
-                               platform=DEFAULT_PLATFORM,
-                               trajectory_directory=None,
-                               repartitioned_endstate=None):
+
+def validate_endstate_energies_md(input_htf, T_max=300 * unit.kelvin, endstate=0, n_steps=125000, save_freq=250):
     """
-    Function to validate that the difference between the nonalchemical versus alchemical state at lambda = 0,1 is
-    equal to the difference in valence energy (forward and reverse).
+    Check that the hybrid system's energy (without unique old/new valence energy) matches the original system's
+    energy for snapshots extracted (every 1 ps) from a MD simulation.
+
+    E.g. at endstate=0, the hybrid system's energy (with unique new valence terms zeroed) should match the old system's energy.
 
     Parameters
     ----------
-    topology_proposal : perses.topology_proposal.TopologyProposal object
-        top_proposal for relevant transformation
-    htf : perses.new_relative.HybridTopologyFactory object
-        hybrid top factory for setting alchemical hybrid states
-    added_energy : float
-        reduced added valence energy
-    subtracted_energy : float
-        reduced subtracted valence energy
-    beta : float, default 1.0/kT
-        unit-bearing inverse thermal energy
-    ENERGY_THRESHOLD : float, default 1e-6
-        threshold for ratio in energy difference at a particular endstate
-    platform : str, default utils.get_fastest_platform()
-        platform to conduct validation on (e.g. 'CUDA', 'Reference', 'OpenCL')
-    trajectory_directory : str, default None
-        path to save the save the serialized state to. If None, the state will not be saved
-    repartitioned_endstate : int, default None
-        if the htf was generated using RepartitionedHybridTopologyFactory, use this argument to specify the endstate at
-        which it was generated. Otherwise, leave as None.
+    input_htf : RESTCapableHybridTopologyFactory
+        the RESTCapableHybridTopologyFactory to test
+    T_max : unit.kelvin default=300 * unit.kelvin
+        T_max at which to test the factory. This should not actually affect the energy differences, since T_max should equal T_min at the endstates
+    endstate : int, default=0
+        the endstate to test (0 or 1)
+    n_steps : int, default=125000
+        number of MD steps to run. (125000 steps == 1 ns)
+    save_freq : int, default 250
+        frequency at which to save positions
+        by default, saves one snapshot every 250 steps
+    """
+    import tqdm
+    from perses.annihilation.lambda_protocol import RESTCapableRelativeAlchemicalState, RESTCapableLambdaProtocol
 
-    Returns
-    -------
-    zero_state_energy_difference : float
-        reduced potential difference of the nonalchemical and alchemical lambda = 0 state (corrected for valence energy).
-    one_state_energy_difference : float
-        reduced potential difference of the nonalchemical and alchemical lambda = 1 state (corrected for valence energy).
+    # Check that endstate is 0 or 1
+    assert endstate in [0, 1], "Endstate must be 0 or 1"
+
+    # Make deep copy to ensure original object remains unaltered
+    htf = copy.deepcopy(input_htf)
+
+    # Set temperature
+    T_min = temperature
+
+    # Get hybrid system, positions, box_vectors
+    hybrid_system = htf.hybrid_system
+    hybrid_positions = htf.hybrid_positions
+    box_vectors = hybrid_system.getDefaultPeriodicBoxVectors()
+
+    # For this test, we need to turn the LRC on for the CustomNonbondedForce scaled steric interactions,
+    # since there is no way to turn the LRC on for the non-scaled interactions only in the real systems
+    force_dict = {force.getName(): index for index, force in enumerate(hybrid_system.getForces())}
+    custom_force = hybrid_system.getForce(force_dict['CustomNonbondedForce_sterics'])
+    custom_force.setUseLongRangeCorrection(True)
+
+    # Create compound thermodynamic state
+    lambda_protocol = RESTCapableLambdaProtocol()
+    alchemical_state = RESTCapableRelativeAlchemicalState.from_system(hybrid_system)
+    thermostate = states.ThermodynamicState(hybrid_system, temperature=T_min)
+    compound_thermodynamic_state = states.CompoundThermodynamicState(thermostate, composable_states=[alchemical_state])
+
+    # Set alchemical parameters
+    beta_0 = 1 / (kB * T_min)
+    beta_m = 1 / (kB * T_max)
+    global_lambda = endstate
+    compound_thermodynamic_state.set_alchemical_parameters(global_lambda, beta_0, beta_m, lambda_protocol=lambda_protocol)
+
+    # Create context
+    integrator = integrators.LangevinIntegrator(temperature=T_min, collision_rate=1 / unit.picoseconds, timestep=4 * unit.femtoseconds)
+    context = compound_thermodynamic_state.create_context(integrator)
+    context.setPositions(hybrid_positions)
+    context.setPeriodicBoxVectors(*box_vectors)
+    context.setVelocitiesToTemperature(T_min)
+
+    # Minimize
+    openmm.LocalEnergyMinimizer.minimize(context)
+
+    # Run MD
+    hybrid = list()
+    for _ in tqdm.tqdm(range(int(n_steps / save_freq))):
+        integrator.step(save_freq)
+        pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
+        hybrid.append(pos)
+
+    # Make context for og system
+    og_system = htf._topology_proposal.old_system if endstate == 0 else htf._topology_proposal.new_system
+    thermodynamic_state = states.ThermodynamicState(og_system, temperature=T_min)
+    integrator_og = integrators.LangevinIntegrator(temperature=T_min,
+                                                   collision_rate=1 / unit.picoseconds,
+                                                   timestep=4 * unit.femtoseconds)
+    context_og = thermodynamic_state.create_context(integrator_og)
+
+    # Zero the unique old/new valence in the hybrid system
+    force_dict = {force.getName(): force for force in hybrid_system.getForces()}
+    bond_force = force_dict['CustomBondForce']
+    angle_force = force_dict['CustomAngleForce']
+    torsion_force = force_dict['CustomTorsionForce']
+    hybrid_to_bond_indices = htf._hybrid_to_new_bond_indices if endstate == 0 else htf._hybrid_to_old_bond_indices
+    hybrid_to_angle_indices = htf._hybrid_to_new_angle_indices if endstate == 0 else htf._hybrid_to_old_angle_indices
+    hybrid_to_torsion_indices = htf._hybrid_to_new_torsion_indices if endstate == 0 else htf._hybrid_to_old_torsion_indices
+    for hybrid_idx, idx in hybrid_to_bond_indices.items():
+        p1, p2, hybrid_params = bond_force.getBondParameters(hybrid_idx)
+        hybrid_params = list(hybrid_params)
+        hybrid_params[-2] *= 0  # zero K_old
+        hybrid_params[-1] *= 0  # zero K_new
+        bond_force.setBondParameters(hybrid_idx, p1, p2, hybrid_params)
+    for hybrid_idx, idx in hybrid_to_angle_indices.items():
+        p1, p2, p3, hybrid_params = angle_force.getAngleParameters(hybrid_idx)
+        hybrid_params = list(hybrid_params)
+        hybrid_params[-1] *= 0
+        hybrid_params[-2] *= 0
+        angle_force.setAngleParameters(hybrid_idx, p1, p2, p3, hybrid_params)
+    for hybrid_idx, idx in hybrid_to_torsion_indices.items():
+        p1, p2, p3, p4, hybrid_params = torsion_force.getTorsionParameters(hybrid_idx)
+        hybrid_params = list(hybrid_params)
+        hybrid_params[-1] *= 0
+        hybrid_params[-2] *= 0
+        torsion_force.setTorsionParameters(hybrid_idx, p1, p2, p3, p4, hybrid_params)
+
+    # Make context for hybrid system
+    lambda_protocol = RESTCapableLambdaProtocol()
+    alchemical_state = RESTCapableRelativeAlchemicalState.from_system(hybrid_system)
+    thermostate = states.ThermodynamicState(hybrid_system, temperature=T_min)
+    compound_thermodynamic_state = states.CompoundThermodynamicState(thermostate, composable_states=[alchemical_state])
+
+    beta_0 = 1 / (kB * T_min)
+    beta_m = 1 / (kB * T_max)
+    global_lambda = endstate
+    compound_thermodynamic_state.set_alchemical_parameters(global_lambda, beta_0, beta_m,
+                                                           lambda_protocol=lambda_protocol)
+
+    integrator_hybrid = integrators.LangevinIntegrator(temperature=T_min,
+                                                       collision_rate=1 / unit.picoseconds,
+                                                       timestep=4 * unit.femtoseconds)
+    context_hybrid = compound_thermodynamic_state.create_context(integrator_hybrid)
+
+    # Get energies for each conformation
+    # TODO: Instead of checking with np.isclose(), check whether the ratio of differences is less than a specified energy threshold (like in validate_endstate_energies())
+    energies_og = list()
+    energies_hybrid = list()
+    for i, pos in enumerate(tqdm.tqdm(hybrid)):
+        og_positions = htf.old_positions(pos) if endstate == 0 else htf.new_positions(pos)
+        context_og.setPositions(og_positions)
+        energy_og = context_og.getState(getEnergy=True).getPotentialEnergy().value_in_unit_system(unit.md_unit_system)
+        energies_og.append(energy_og)
+
+        context_hybrid.setPositions(pos)
+        energy_hybrid = context_hybrid.getState(getEnergy=True).getPotentialEnergy().value_in_unit_system(unit.md_unit_system)
+        energies_hybrid.append(energy_hybrid)
+
+        assert np.isclose([energy_og], [energy_hybrid]), f"Energies are not equal at frame {i}"
+        print(f"Success! Energies are equal at frame {i}!")
+
+def validate_unsampled_endstates_point(htf, hybrid_system, endstate=0, minimize=False):
+    """
+    Test create_endstates() to make sure that a given unsampled endstate's hybrid system has the same energies
+    for each force as the original hybrid system.
+
+    Parameters
+    ----------
+    htf : HybridTopologyFactory or RESTCapableHybridTopologyFactory
+        hybrid factory from which the unsampled endstate's hybrid system was created
+    hybrid_system : openmm.System
+        the hybrid system to test
+    endstate : int, default 0
+        the lambda value corresponding to the hybrid system's endstate, the allowed values are: 0, 1
+    minimize : bool, default False
+        whether to minimize the htf's hybrid positions before checking the energies
+
     """
     import copy
-    from perses.dispersed.utils import configure_platform
-    from perses.utils import data
-    platform = configure_platform(platform.getName(), fallback_platform_name='Reference', precision='double')
+    from openmmtools.states import ThermodynamicState, SamplerState
+    from perses.dispersed import feptasks
+    from perses.dispersed.utils import compute_potential_components
 
-    # Create copies of old/new systems and set the dispersion correction
-    top_proposal = copy.deepcopy(topology_proposal)
-    forces = { top_proposal._old_system.getForce(index).__class__.__name__ : top_proposal._old_system.getForce(index) for index in range(top_proposal._old_system.getNumForces()) }
-    forces['NonbondedForce'].setUseDispersionCorrection(False)
-    forces = { top_proposal._new_system.getForce(index).__class__.__name__ : top_proposal._new_system.getForce(index) for index in range(top_proposal._new_system.getNumForces()) }
-    forces['NonbondedForce'].setUseDispersionCorrection(False)
+    assert endstate in [0, 1], f"endstate must be 0 or 1, you supplied: {endstate}"
 
-    # Create copy of hybrid system, define old and new positions, and turn off dispersion correction
-    hybrid_system = copy.deepcopy(htf.hybrid_system)
-    hybrid_system_n_forces = hybrid_system.getNumForces()
-    for force_index in range(hybrid_system_n_forces):
-        forcename = hybrid_system.getForce(force_index).__class__.__name__
-        if forcename == 'NonbondedForce':
-            hybrid_system.getForce(force_index).setUseDispersionCorrection(False)
+    # Make a copy of the htf
+    htf = copy.deepcopy(htf)
+    hybrid_positions = htf.hybrid_positions
 
-    old_positions, new_positions = htf._old_positions, htf._new_positions
+    # Get original hybrid system
+    hybrid_system_og = htf.hybrid_system
 
-    # Generate endpoint thermostates
-    nonalch_zero, nonalch_one, alch_zero, alch_one = generate_endpoint_thermodynamic_states(hybrid_system, top_proposal, repartitioned_endstate)
+    # Get energy components of unsampled endstate hybrid system
+    thermostate_hybrid = ThermodynamicState(system=hybrid_system, temperature=temperature)
+    integrator_hybrid = openmm.VerletIntegrator(1.0 * unit.femtosecond)
+    context_hybrid = thermostate_hybrid.create_context(integrator_hybrid)
+    if minimize:
+        sampler_state = SamplerState(hybrid_positions)
+        feptasks.minimize(thermostate_hybrid, sampler_state)
+        hybrid_positions = sampler_state.positions
+    context_hybrid.setPositions(hybrid_positions)
+    components_hybrid = compute_potential_components(context_hybrid, beta=beta)
 
-    # Compute reduced energies for the nonalchemical systems...
-    attrib_list = [('real-old', nonalch_zero, old_positions, top_proposal._old_system.getDefaultPeriodicBoxVectors()),
-                    ('hybrid-old', alch_zero, htf._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
-                    ('hybrid-new', alch_one, htf._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
-                    ('real-new', nonalch_one, new_positions, top_proposal._new_system.getDefaultPeriodicBoxVectors())]
-
-    rp_list = []
-    for (state_name, state, pos, box_vectors) in attrib_list:
-        if not state:
-            rp_list.append(None)
-        else:
-            integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-            context = state.create_context(integrator, platform)
-            samplerstate = states.SamplerState(positions = pos, box_vectors = box_vectors)
-            samplerstate.apply_to_context(context)
-            rp = state.reduced_potential(context)
-            rp_list.append(rp)
-            energy_comps = compute_potential_components(context)
-            for name, force in energy_comps:
-               print("\t\t\t{}: {}".format(name, force))
-            _logger.debug(f'added forces:{sum([energy for name, energy in energy_comps])}')
-            _logger.debug(f'rp: {rp}')
-            if trajectory_directory is not None:
-                _logger.info(f'Saving {state_name} state xml to {trajectory_directory}/{state_name}-state.gz')
-                state = context.getState(getPositions=True, getVelocities=True, getForces=True, getEnergy=True, getParameters=True)
-                data.serialize(state,f'{trajectory_directory}-{state_name}-state.gz')
-            del context, integrator
-
-    nonalch_zero_rp, alch_zero_rp, alch_one_rp, nonalch_one_rp = rp_list[0], rp_list[1], rp_list[2], rp_list[3]
-
-    if repartitioned_endstate == 0:
-        zero_error = nonalch_zero_rp - alch_zero_rp + added_energy
-        one_error = None
-        ratio = abs((zero_error) / (nonalch_zero_rp + alch_zero_rp + added_energy))
-        assert ratio < ENERGY_THRESHOLD, f"The ratio in energy difference for the ZERO state is {ratio}.\n This is greater than the threshold of {ENERGY_THRESHOLD}.\n real-zero: {nonalch_zero_rp} \n alc-zero: {alch_zero_rp} \nadded-valence: {added_energy}"
-    elif repartitioned_endstate == 1:
-        zero_error = None
-        one_error = nonalch_one_rp - alch_one_rp + subtracted_energy
-        ratio = abs((one_error) / (nonalch_one_rp + alch_one_rp + subtracted_energy))
-        assert ratio < ENERGY_THRESHOLD, f"The ratio in energy difference for the ONE state is {ratio}.\n This is greater than the threshold of {ENERGY_THRESHOLD}.\n real-one: {nonalch_one_rp} \n alc-one: {alch_one_rp} \nsubtracted-valence: {subtracted_energy}"
+    # Get energy components of original hybrid system
+    thermostate_other = ThermodynamicState(system=hybrid_system_og, temperature=temperature)
+    integrator_other = openmm.VerletIntegrator(1.0 * unit.femtosecond)
+    context_other = thermostate_other.create_context(integrator_other)
+    htf_class = htf.__class__.__name__
+    if htf_class == 'HybridTopologyFactory':
+        for k, v in context_other.getParameters().items():
+            if 'lambda' in k:
+                context_other.setParameter(k, endstate)
+    elif htf_class == 'RESTCapableHybridTopologyFactory':
+        for k, v in context_other.getParameters().items():
+            if 'alchemical' in k:
+                if 'old' in k:
+                    context_other.setParameter(k, 1 - endstate)
+                elif 'new' in k or 'reciprocal' in k:
+                    context_other.setParameter(k, endstate)
     else:
-        zero_error = nonalch_zero_rp - alch_zero_rp + added_energy
-        one_error = nonalch_one_rp - alch_one_rp + subtracted_energy
-        ratio = abs((zero_error) / (nonalch_zero_rp + alch_zero_rp + added_energy))
-        assert ratio < ENERGY_THRESHOLD, f"The ratio in energy difference for the ZERO state is {ratio}.\n This is greater than the threshold of {ENERGY_THRESHOLD}.\n real-zero: {nonalch_zero_rp} \n alc-zero: {alch_zero_rp} \nadded-valence: {added_energy}"
-        ratio = abs((one_error) / (nonalch_one_rp + alch_one_rp + subtracted_energy))
-        assert ratio < ENERGY_THRESHOLD, f"The ratio in energy difference for the ONE state is {ratio}.\n This is greater than the threshold of {ENERGY_THRESHOLD}.\n real-one: {nonalch_one_rp} \n alc-one: {alch_one_rp} \nsubtracted-valence: {subtracted_energy}"
+        raise Exception(f"{htf_class} is not supported. Supported factories: HybridTopologyFactory, RESTCapableHybridTopologyFactory")
+    context_other.setPositions(hybrid_positions)
+    components_other = compute_potential_components(context_other, beta=beta)
 
-    return zero_error, one_error
+    # Check that each of the valence force energies are concordant
+    # TODO: Instead of checking with np.isclose(), check whether the ratio of differences is less than a specified energy threshold (like in validate_endstate_energies())
+    bonded_keys = [hybrid_system_og.getForce(i).getName() for i in range(hybrid_system_og.getNumForces())
+                   if 'Nonbonded' not in hybrid_system_og.getForce(i).getName() and 'exceptions' not in hybrid_system_og.getForce(i).getName()]
+    for key in bonded_keys:
+        other_value = components_other[key]
+        hybrid_value = components_hybrid[key]
+        print(f"{key} -- og: {other_value}, hybrid: {hybrid_value}")
+        assert np.isclose(other_value, hybrid_value)
 
+    # Check that the nonbonded (rest of the components) force energies are concordant
+    nonbonded_other_values = [components_other[key] for key in components_other.keys() if key not in bonded_keys and 'Force' in key]  # Do not include thermostats and barostats
+    print([key for key in components_other.keys() if key not in bonded_keys and 'Force' in key])
+    print(f"Nonbondeds -- og: {np.sum(nonbonded_other_values)}, hybrid: {components_hybrid['NonbondedForce']}")
+    assert np.isclose([components_hybrid['NonbondedForce']], np.sum(nonbonded_other_values))
+
+    print(f"Success! Energies are equal at lambda {endstate}!")
+
+
+def validate_unsampled_endstates_md(htf, hybrid_system, endstate=0, n_steps=125000, save_freq=250):
+    """
+    Test create_endstates() to make sure that a given unsampled endstate's hybrid system energy matches the
+    original system's energy for snapshots extracted (every 1 ps) from a MD simulation.
+
+    E.g. at endstate=0, the unsampled endstate hybrid system's energy  should match that of the original hybrid system.
+
+    Parameters
+    ----------
+    htf : HybridTopologyFactory or RESTCapableHybridTopologyFactory
+        hybrid factory from which the unsampled endstate's hybrid system was created
+    hybrid_system : openmm.System
+        the hybrid system to test
+    endstate : int, default=0
+        the endstate to test (0 or 1)
+    n_steps : int, default=125000
+        number of MD steps to run. (125000 steps == 1 ns)
+    save_freq : int, default 250
+        frequency at which to save positions
+        by default, saves one snapshot every 250 steps
+
+    """
+    import tqdm
+    from openmmtools import integrators
+    from openmmtools.states import ThermodynamicState
+
+    # Check that endstate is 0 or 1
+    assert endstate in [0, 1], "Endstate must be 0 or 1"
+
+    # Make a copy of the htf
+    htf = copy.deepcopy(htf)
+
+    # Get original hybrid system
+    hybrid_system_og = htf.hybrid_system
+
+    # Get positions, box_vectors
+    hybrid_positions = htf.hybrid_positions
+    box_vectors = hybrid_system_og.getDefaultPeriodicBoxVectors()
+
+    # Create thermodynamic state
+    thermostate = ThermodynamicState(hybrid_system, temperature=temperature)
+
+    # Create context
+    integrator = integrators.LangevinIntegrator(temperature=temperature, collision_rate=1 / unit.picoseconds, timestep=4 * unit.femtoseconds)
+    context = thermostate.create_context(integrator)
+    context.setPositions(hybrid_positions)
+    context.setPeriodicBoxVectors(*box_vectors)
+    context.setVelocitiesToTemperature(temperature)
+
+    # Minimize
+    openmm.LocalEnergyMinimizer.minimize(context)
+
+    # Run MD
+    hybrid = list()
+    for _ in tqdm.tqdm(range(int(n_steps / save_freq))):
+        integrator.step(save_freq)
+        pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
+        hybrid.append(pos)
+
+    # Make context for original hybrid system
+    thermostate = ThermodynamicState(hybrid_system_og, temperature=temperature)
+    integrator_og = integrators.LangevinIntegrator(temperature=temperature,
+                                                   collision_rate=1 / unit.picoseconds,
+                                                   timestep=4 * unit.femtoseconds)
+    context_og = thermostate.create_context(integrator_og)
+
+    # Set global parameters
+    htf_class = htf.__class__.__name__
+    if htf_class == 'HybridTopologyFactory':
+        for k, v in context_og.getParameters().items():
+            if 'lambda' in k:
+                context_og.setParameter(k, endstate)
+    elif htf_class == 'RESTCapableHybridTopologyFactory':
+        for k, v in context_og.getParameters().items():
+            if 'alchemical' in k:
+                if 'old' in k:
+                    context_og.setParameter(k, 1 - endstate)
+                elif 'new' in k or 'reciprocal' in k:
+                    context_og.setParameter(k, endstate)
+    else:
+        raise Exception(
+            f"{htf_class} is not supported. Supported factories: HybridTopologyFactory, RESTCapableHybridTopologyFactory")
+
+    # Make context for hybrid system
+    thermostate = ThermodynamicState(hybrid_system, temperature=temperature)
+    integrator_hybrid = integrators.LangevinIntegrator(temperature=temperature,
+                                                       collision_rate=1 / unit.picoseconds,
+                                                       timestep=4 * unit.femtoseconds)
+    context_hybrid = thermostate.create_context(integrator_hybrid)
+
+    # Get energies for each conformation
+    differences = list()
+    for i, pos in enumerate(tqdm.tqdm(hybrid)):
+        context_og.setPositions(pos)
+        energy_og = context_og.getState(getEnergy=True).getPotentialEnergy().value_in_unit_system(unit.md_unit_system)
+
+        context_hybrid.setPositions(pos)
+        energy_hybrid = context_hybrid.getState(getEnergy=True).getPotentialEnergy().value_in_unit_system(unit.md_unit_system)
+
+        differences.append(abs(energy_og - energy_hybrid))
+
+    # Check that the standard deviation of the differences is < 1 kT
+    stddev = np.std(differences)
+    assert stddev < 1, f"The standard deviation of the differences is > 1 kT: {stddev} kT"
+    print(f"Success! The standard deviation of the differences is < 1 kT: {stddev} kT")
 
 def track_torsions(hybrid_factory):
     """
@@ -858,12 +955,19 @@ def track_torsions(hybrid_factory):
     unique_new_atoms = hybrid_factory._atom_classes['unique_new_atoms']
     core_atoms = hybrid_factory._atom_classes['core_atoms']
 
+    # Build force name to index dict and pull out forces
+    old_system_force_names = {force.__class__.__name__ : index for index, force in enumerate(old_system.getForces())}
+    new_system_force_names = {force.__class__.__name__ : index for index, force in enumerate(new_system.getForces())}
+
+    old_system_torsions = old_system.getForce(old_system_force_names["PeriodicTorsionForce"])
+    new_system_torsions = new_system.getForce(new_system_force_names["PeriodicTorsionForce"])
+
     # First, grab all of the old/new torsions
-    num_old_torsions, num_new_torsions = old_system.getForce(2).getNumTorsions(), new_system.getForce(2).getNumTorsions()
+    num_old_torsions, num_new_torsions = old_system_torsions.getNumTorsions(), new_system_torsions.getNumTorsions()
     print(f"num old torsions, new torsions: {num_old_torsions}, {num_new_torsions}")
 
-    old_torsions = [old_system.getForce(2).getTorsionParameters(i) for i in range(num_old_torsions)]
-    new_torsions = [new_system.getForce(2).getTorsionParameters(i) for i in range(num_new_torsions)]
+    old_torsions = [old_system_torsions.getTorsionParameters(i) for i in range(num_old_torsions)]
+    new_torsions = [new_system_torsions.getTorsionParameters(i) for i in range(num_new_torsions)]
 
     # Reformat the last two entries
     old_torsions = [[old_to_hybrid[q] for q in i[:4]] + [float(i[4])] + [i[5]/unit.radian] + [i[6]/(unit.kilojoule/unit.mole)] for i in old_torsions]
@@ -961,3 +1065,11 @@ def track_torsions(hybrid_factory):
 
         else:
             print(f"this is a strange annealed torsion: {annealed_torsion}")
+
+
+# Added for API backward compatibility -- 23 Aug 2022
+check_system = utils.check_system
+compute_potential_components = utils.compute_potential_components
+generate_endpoint_thermodynamic_states = utils.generate_endpoint_thermodynamic_states
+validate_endstate_energies = utils.validate_endstate_energies
+validate_endstate_energies_point = utils.validate_endstate_energies_point

@@ -4,6 +4,8 @@ Tools for managing datafiles in perses
 
 """
 
+import logging
+
 __author__ = 'John D. Chodera'
 
 
@@ -106,20 +108,26 @@ def serialize(item, filename):
     item : System, State, or Integrator
         The thing to be serialized
     filename : str
-        The filename to serialize to    
+        The filename to serialize to
     """
-    from simtk.openmm import XmlSerializer
-    if filename[-2:] == 'gz':
+    from cloudpathlib import AnyPath
+    from openmm import XmlSerializer
+    filename = AnyPath(filename)
+    logging.debug(f"serializing item {item} to {filename} with suffix {filename.suffix}")
+    if filename.suffix == '.gz':
         import gzip
+        logging.debug("using gzip to serialize")
         with gzip.open(filename, 'wb') as outfile:
             serialized_thing = XmlSerializer.serialize(item)
             outfile.write(serialized_thing.encode())
-    if filename[-3:] == 'bz2':
+    elif filename.suffix == '.bz2':
         import bz2
+        logging.debug("using bz2 to serialize")
         with bz2.open(filename, 'wb') as outfile:
             serialized_thing = XmlSerializer.serialize(item)
             outfile.write(serialized_thing.encode())
     else:
+        logging.debug("serializing without compression")
         with open(filename, 'w') as outfile:
             serialized_thing = XmlSerializer.serialize(item)
             outfile.write(serialized_thing)

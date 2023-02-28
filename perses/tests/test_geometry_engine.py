@@ -10,6 +10,7 @@ import parmed
 from collections import namedtuple, OrderedDict
 import copy
 from unittest import skipIf
+import pytest
 try:
     from urllib.request import urlopen
     from io import StringIO
@@ -36,7 +37,7 @@ small_molecule_forcefield = 'gaff-2.11'
 # NOTE implicit solvent not supported by SystemGenerator yet
 system_generator = SystemGenerator(forcefields = forcefield_files,
                                                 barostat = None,
-                                                forcefield_kwargs = {'implicitSolvent' : None, 'constraints' : None },
+                                                forcefield_kwargs = {'constraints' : None },
                                                 nonperiodic_forcefield_kwargs = {'nonbondedMethod' : app.NoCutoff},
                                                 small_molecule_forcefield = small_molecule_forcefield)
 
@@ -609,7 +610,11 @@ def test_torsion_scan():
     for i, phi in enumerate(phis):
         xyz_ge = xyzs[i]
         r_new, theta_new, phi_new = _get_internal_from_omm(xyz_ge, testsystem.positions[1], testsystem.positions[2], testsystem.positions[3])
-        if np.abs(phi_new - phi) > TOLERANCE:
+
+        delta = abs(phi_new - phi)
+        error = min(delta, 2*np.pi-delta)
+
+        if error > TOLERANCE:
             raise Exception("Torsion scan did not match OpenMM torsion")
         if np.abs(r_new - r) > TOLERANCE or np.abs(theta_new - theta) > TOLERANCE:
             raise Exception("Theta or r was disturbed in torsion scan.")
@@ -904,9 +909,11 @@ def align_molecules(mol1, mol2):
         new_to_old_atom_mapping[new_index] = old_index
     return new_to_old_atom_mapping
 
+
+#@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 @attr('advanced')
 @nottest
-@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
+@pytest.mark.skip(reason="Skip advanced test on GH Actions")
 def test_mutate_from_all_to_all(): # TODO: fix protein mutations
     """
     Make sure mutations are successful between every possible pair of before-and-after residues
@@ -964,9 +971,11 @@ def test_mutate_from_all_to_all(): # TODO: fix protein mutations
             if np.isnan(potential_without_units):
                 raise Exception("Energy after proposal is NaN")
 
+
+#@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 @attr('advanced')
 @nottest
-@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
+@pytest.mark.skip(reason="Skip advanced test on GH Actions")
 def test_propose_lysozyme_ligands(): # TODO: fix protein mutations
     """
     Try proposing geometries for all T4 ligands from all T4 ligands
@@ -977,9 +986,11 @@ def test_propose_lysozyme_ligands(): # TODO: fix protein mutations
     proposals = make_geometry_proposal_array(smiles_list, forcefield=['data/T4-inhibitors.xml', 'data/gaff.xml'])
     run_proposals(proposals)
 
+
+#@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
 @attr('advanced')
 @nottest
-@skipIf(running_on_github_actions, "Skip advanced test on GH Actions")
+@pytest.mark.skip(reason="Skip advanced test on GH Actions")
 def test_propose_kinase_inhibitors(): # TODO: fix protein mutations
     from perses.tests.testsystems import KinaseInhibitorsTestSystem
     testsystem = KinaseInhibitorsTestSystem()
@@ -1117,84 +1128,6 @@ def _guessFileFormat(file, filename):
             return 'pdb'
     file.seek(0)
     return 'pdb'
-
-def run_geometry_engine(index=0):
-    """
-    Run the geometry engine a few times to make sure that it actually runs
-    without exceptions. Convert n-pentane to 2-methylpentane
-    """
-    import logging
-    logging.basicConfig(level=logging.INFO)
-    import copy
-    from perses.utils.openeye import iupac_to_oemol
-    molecule_name_1 = 'benzene'
-    molecule_name_2 = 'biphenyl'
-    #molecule_name_1 = 'imatinib'
-    #molecule_name_2 = 'erlotinib'
-
-    molecule1 = iupac_to_oemol(molecule_name_1)
-    molecule2 = iupac_to_oemol(molecule_name_2)
-    new_to_old_atom_mapping = align_molecules(molecule1, molecule2)
-
-    sys1, pos1, top1 = oemol_to_openmm_system(molecule1)
-    sys2, pos2, top2 = oemol_to_openmm_system(molecule2)
-
-    import perses.rjmc.geometry as geometry
-    import perses.rjmc.topology_proposal as topology_proposal
-    from perses.tests.utils import compute_potential_components
-
-    sm_top_proposal = topology_proposal.TopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
-                                                                      old_chemical_state_key='',new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
-    sm_top_proposal._beta = beta
-    geometry_engine = geometry.FFAllAngleGeometryEngine(metadata={})
-    # Turn on PDB file writing.
-    geometry_engine.write_proposal_pdb = True
-    geometry_engine.pdb_filename_prefix = 't13geometry-proposal'
-    test_pdb_file = open("%s_to_%s_%d.pdb" % (molecule_name_1, molecule_name_2, index), 'w')
-
-    def remove_nonbonded_force(system):
-        """Remove NonbondedForce from specified system."""
-        force_indices_to_remove = list()
-        for [force_index, force] in enumerate(system.getForces()):
-            if force.__class__.__name__ == 'NonbondedForce':
-                force_indices_to_remove.append(force_index)
-        for force_index in force_indices_to_remove[::-1]:
-            system.removeForce(force_index)
-
-    valence_system = copy.deepcopy(sys2)
-    remove_nonbonded_force(valence_system)
-    integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
-    integrator_1 = openmm.VerletIntegrator(1*unit.femtoseconds)
-    ctx_1 = openmm.Context(sys1, integrator_1)
-    ctx_1.setPositions(pos1)
-    ctx_1.setVelocitiesToTemperature(300*unit.kelvin)
-    integrator_1.step(1000)
-    pos1_new = ctx_1.getState(getPositions=True).getPositions(asNumpy=True)
-    context = openmm.Context(sys2, integrator)
-    context.setPositions(pos2)
-    state = context.getState(getEnergy=True)
-    print("Energy before proposal is: %s" % str(state.getPotentialEnergy()))
-    openmm.LocalEnergyMinimizer.minimize(context)
-
-    new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal, pos1_new, beta)
-    logp_reverse = geometry_engine.logp_reverse(sm_top_proposal, new_positions, pos1, beta)
-    print(logp_reverse)
-
-    app.PDBFile.writeFile(top2, new_positions, file=test_pdb_file)
-    test_pdb_file.close()
-    context.setPositions(new_positions)
-    state2 = context.getState(getEnergy=True)
-    print("Energy after proposal is: %s" %str(state2.getPotentialEnergy()))
-    print(compute_potential_components(context))
-
-    valence_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
-    platform = openmm.Platform.getPlatformByName("Reference")
-    valence_ctx = openmm.Context(valence_system, valence_integrator, platform)
-    valence_ctx.setPositions(new_positions)
-    vstate = valence_ctx.getState(getEnergy=True)
-    print("Valence energy after proposal is %s " % str(vstate.getPotentialEnergy()))
-    final_potential = state2.getPotentialEnergy()
-    return final_potential / final_potential.unit
 
 def test_existing_coordinates():
     """
@@ -1851,7 +1784,8 @@ class AnalyticalBeadSystems(object):
 
 
 #@nottest
-@skipIf(running_on_github_actions, "Skip deprecated test on GH Actions")
+#@skipIf(running_on_github_actions, "Skip deprecated test on GH Actions")
+@pytest.mark.skip(reason="Skip deprecated test on GH Actions")
 def test_AnalyticalBeadSystems(transformation=[[3,4], [4,5], [3,5]], num_iterations=100):
     """
     Function to assert that the forward and reverse works are equal and opposite, and that the variances of each work distribution is much less

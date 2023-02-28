@@ -14,7 +14,6 @@ from perses.storage import NetCDFStorageView
 ################################################################################
 
 import logging
-logging.basicConfig(level=logging.NOTSET)
 _logger = logging.getLogger("geometry")
 _logger.setLevel(logging.INFO)
 
@@ -325,7 +324,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         pdbfile.flush()
         pdbfile.write('ENDMDL\n')
 
-    def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward', validate_energy_bookkeeping = True):
+    def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward',
+                      validate_energy_bookkeeping=True, platform_name='CPU'):
         """
         This is an INTERNAL function that handles both the proposal and the logp calculation,
         to reduce code duplication. Whether it proposes or just calculates a logp is based on
@@ -370,7 +370,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         _logger.info("Conducting forward proposal...")
         import copy
-        from perses.tests.utils import compute_potential_components
+        from perses.dispersed.utils import compute_potential_components
         # Ensure all parameters have the expected units
         check_dimensionality(old_positions, unit.angstroms)
         if new_positions is not None:
@@ -450,8 +450,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         if self._storage:
             self._storage.write_object("{}_proposal_order".format(direction), proposal_order_tool, iteration=self.nproposed)
 
-        platform_name = 'CUDA'
-
         # Create an OpenMM context
         from simtk import openmm
         from perses.dispersed.utils import configure_platform
@@ -484,13 +482,18 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         #Print the energy of the system before unique_new/old atoms are placed...
         state = atoms_with_positions_context.getState(getEnergy=True)
         atoms_with_positions_reduced_potential = beta*state.getPotentialEnergy()
-        atoms_with_positions_reduced_potential_components = [(force, energy) for force, energy in compute_potential_components(atoms_with_positions_context)]
+        atoms_with_positions_reduced_potential_components = compute_potential_components(atoms_with_positions_context,
+                                                                                         platform=platform)
         _logger.debug(f'atoms_with_positions_reduced_potential_components:')
-        for f, e in atoms_with_positions_reduced_potential_components:
+        for f, e in atoms_with_positions_reduced_potential_components.items():
             _logger.debug(f'\t{f} : {e}')
-        atoms_with_positions_methods_differences = abs(atoms_with_positions_reduced_potential - sum([i[1] for i in atoms_with_positions_reduced_potential_components]))
+        atoms_with_positions_methods_differences = abs(atoms_with_positions_reduced_potential -
+                                                       sum(atoms_with_positions_reduced_potential_components.values()))
         _logger.debug(f'Diffence in energy on adding unique atoms: {atoms_with_positions_methods_differences}')
-        assert atoms_with_positions_methods_differences < ENERGY_THRESHOLD, f"the difference between the atoms_with_positions_reduced_potential and the sum of atoms_with_positions_reduced_potential_components is {atoms_with_positions_methods_differences}"
+        assert atoms_with_positions_methods_differences < \
+               ENERGY_THRESHOLD, f"the difference between the atoms_with_positions_reduced_potential and the sum of " \
+                                 f"atoms_with_positions_reduced_potential_components is" \
+                                 f" {atoms_with_positions_methods_differences}"
 
         # Place each atom in predetermined order
         _logger.info("There are {} new atoms".format(len(atom_proposal_order)))
@@ -643,19 +646,24 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         state = final_context.getState(getEnergy=True)
         final_context_reduced_potential = beta*state.getPotentialEnergy()
-        final_context_components = [(force, energy*beta) for force, energy in compute_potential_components(final_context)]
-        atoms_with_positions_reduced_potential_components = [(force, energy*beta) for force, energy in compute_potential_components(atoms_with_positions_context)]
+        final_context_components = [(force, energy*beta) for force, energy in
+                                    compute_potential_components(final_context, platform=platform).items()]
+        atoms_with_positions_reduced_potential_components = [
+            (force, energy*beta) for force, energy in compute_potential_components(atoms_with_positions_context,
+                                                                                   platform=platform).items()
+        ]
         _logger.debug(f"reduced potential components before atom placement:")
         for item in atoms_with_positions_reduced_potential_components:
             _logger.debug(f"\t\t{item[0]}: {item[1]}")
         _logger.info(f"total reduced potential before atom placement: {atoms_with_positions_reduced_potential}")
 
         _logger.debug(f"potential components added from growth system:")
-        added_energy_components = [(force, energy*beta) for force, energy in compute_potential_components(context)]
+        added_energy_components = [(force, energy*beta) for force, energy in
+                                   compute_potential_components(context, platform=platform).items()]
         for item in added_energy_components:
             _logger.debug(f"\t\t{item[0]}: {item[1]}")
 
-        #now for the corrected reduced_potential_energy
+        # now for the corrected reduced_potential_energy
         if direction == 'forward':
             positions = new_positions
         else:
@@ -702,7 +710,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         import copy
         from simtk import openmm
-        from perses.tests.utils import compute_potential_components
+        from perses.dispersed.utils import compute_potential_components
         _integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
         growth_system = copy.deepcopy(growth_system_generator.get_modified_system())
         #the last thing to do for bookkeeping is to delete the torsion force associated with the extra ring-closing and chirality restraints
@@ -722,8 +730,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         mod_state = mod_context.getState(getEnergy=True)
         modified_reduced_potential_energy = beta * mod_state.getPotentialEnergy()
 
-        added_energy_components = [(force, energy) for force, energy in compute_potential_components(mod_context)]
+        added_energy_components = compute_potential_components(mod_context, platform=platform)
         print(f"added energy components: {added_energy_components}")
+
+        # Explicitly clean up context memory allocation
+        del mod_context
 
         return modified_reduced_potential_energy
 
@@ -2225,22 +2236,22 @@ class GeometrySystemGenerator(object):
                 growth_idx = self._calculate_growth_idx(topology_index_map, growth_indices)
                 atom_names = [torsion.a.GetName(), torsion.b.GetName(), torsion.c.GetName(), torsion.d.GetName()]
 
-            #print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
-            #If this is a CustomTorsionForce, we need to pass the parameters as a list, and it will have the growth_idx parameter.
-            #If it's a regular PeriodicTorsionForce, there is no growth_index and the parameters are passed separately.
+                #print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
+                #If this is a CustomTorsionForce, we need to pass the parameters as a list, and it will have the growth_idx parameter.
+                #If it's a regular PeriodicTorsionForce, there is no growth_index and the parameters are passed separately.
 
-            p1, p2, p3, p4 = topology_index_map
-            possible_omissions = [(p1,p2), (p2,p3), (p3,p4), (p2,p1), (p3,p2), (p4,p3)]
-            if growth_idx > 0:
-                if any(torsion_pair in self.omitted_bonds for torsion_pair in possible_omissions):
-                    pass
+                p1, p2, p3, p4 = topology_index_map
+                possible_omissions = [(p1,p2), (p2,p3), (p3,p4), (p2,p1), (p3,p2), (p4,p3)]
+                if growth_idx > 0:
+                    if any(torsion_pair in self.omitted_bonds for torsion_pair in possible_omissions):
+                        pass
+                    else:
+                        _torsion_index = torsion_force.addTorsion(topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, adjusted_phase, k, growth_idx])
+                        self.extra_torsion_terms[_torsion_index] = (topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, adjusted_phase, k, growth_idx])
+                        _logger.debug(f"\t\t\t\t{(topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3])}")
                 else:
-                    _torsion_index = torsion_force.addTorsion(topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, adjusted_phase, k, growth_idx])
-                    self.extra_torsion_terms[_torsion_index] = (topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, adjusted_phase, k, growth_idx])
-                    _logger.debug(f"\t\t\t\t{(topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3])}")
-            else:
-                pass
-                #we omit terms wherein the growth index only pertains to the
+                    pass
+                    #we omit terms wherein the growth index only pertains to the
 
         _logger.debug(f"\t\t\trelevant torsions for chirality restraints being added...")
         #set chirality restraints (adapted from https://github.com/choderalab/perses/blob/protein_mutations_ivy/perses/rjmc/geometry.py)

@@ -10,6 +10,7 @@ from perses.rjmc.geometry import FFAllAngleGeometryEngine
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
 
 import pymbar
+from cloudpathlib import AnyPath
 import simtk.openmm as openmm
 import simtk.openmm.app as app
 import simtk.unit as unit
@@ -26,7 +27,6 @@ from collections import namedtuple
 import random
 from scipy.special import logsumexp
 
-logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("relative_setup")
 _logger.setLevel(logging.INFO)
 
@@ -54,7 +54,7 @@ class RelativeFEPSetup(object):
                  temperature=300.0 * unit.kelvin,
                  solvent_padding=9.0 * unit.angstroms,
                  ionic_strength=0.15 * unit.molar,
-                 hmass=4*unit.amus,
+                 hmass=3*unit.amus,
                  neglect_angles=False,
                  map_strength='default',
                  atom_expr=None,
@@ -68,16 +68,17 @@ class RelativeFEPSetup(object):
                  nonbonded_method = 'PME',
                  complex_box_dimensions=None,
                  solvent_box_dimensions=None,
-                 map_strategy='geometry',
                  remove_constraints=False,
-                 use_given_geometries = False
+                 use_given_geometries = False,
+                 given_geometries_tolerance=0.2*unit.angstroms,
+                 transform_waters_into_ions_for_charge_changes=True,
                  ):
         """
         Initialize a NonequilibriumFEPSetup object
 
         Parameters
         ----------
-        ligand_input : str
+        ligand_input : str or list of str
             the name of the ligand file (any openeye supported format)
             this can either be an .sdf or list of .sdf files, or a list of SMILES strings
         forcefield_files : list of str
@@ -106,7 +107,7 @@ class RelativeFEPSetup(object):
         small_molecule_forcefield : str, optional, default='gaff-2.11'
             Small molecule force field name.
             Anything supported by SystemGenerator is supported, but we recommend one of
-            ['gaff-1.81', 'gaff-2.11', 'smirnoff99Frosst-1.1.0', 'openff-1.0.0']
+            ['gaff-1.81', 'gaff-2.11', 'smirnoff99Frosst-1.1.0', 'openff-2.0.0']
         small_molecule_parameters_cache : str, optional, default=None
             If specified, this filename will be used for a small molecule parameter cache by the SystemGenerator.
         trajectory_directory : str, default None
@@ -122,27 +123,24 @@ class RelativeFEPSetup(object):
             box dimensions for the complex phase
         solvent_box_dimensions: Vec(3), optional, default=None
             box dimensions for the solvent phase
-        map_strategy : 'str' default='geometry'
-            determines which map is considered the best and returned
-            options are 'geometry', 'random', 'weighted-random', 'return-all'
-            can be one of ['geometry', 'matching_criterion', 'random', 'weighted-random', 'return-all']
-            - core will return the map with the largest number of atoms in the core. If there are multiple maps with the same highest score, then `matching_criterion` is used to tie break
-            - geometry uses the coordinates of the molB oemol to calculate the heavy atom distance between the proposed map and the actual geometry
-            this can be vital for getting the orientation of ortho- and meta- substituents correct in constrained (i.e. protein-like) environments.
-            this is ONLY useful if the positions of ligand B are known and/or correctly aligned.
-            - matching_criterion uses the `matching_criterion` flag to pick which of the maps best satisfies a 2D requirement.
-            - random will use a random map of those that are possible
-            - weighted-random uses a map chosen at random, proportional to how close it is in geometry to ligand B. The same as for 'geometry', this requires the coordinates of ligand B to be meaninful
-            - return-all BREAKS THE API as it returns a list of dicts, rather than list. This is intended for development code, not main pipeline.
         remove_constraints : bool, default=False
             if hydrogen constraints should be constrained in the simulation
             default is False, so no constraints removed, but 'all' or 'not water' can be used to remove constraints.
         use_given_geometries : bool, default False
             whether to extract the positions of ligand B and set the unique_new atom positions deterministically;
             if True, `complex` must be in `phases` and .sdf or .mol2 file of ligand must be provided
+        given_geometries_tolerance : simtk.unit.Quantity with units of length, default=0.2*angstrom
+            If use_given_geometries=True, use this tolerance for identifying mapped atoms
+        transform_waters_into_ions_for_charge_changes : bool, default True
+            whether to introduce a counterion by transforming water(s) into ion(s) for charge changing transformations
+            if False, counterions will not be introduced.
         """
         from openeye import oechem
 
+        # TODO: Refactor this class into initializer that configures options and factory methods that use them.
+        # QUESTION: Why do we add these as private object attributes?
+        #   If we want users to be able to modify them, they should not be private.
+        #   Also, these are all used immediately within __init__, so it doesn't make sense to store them this way.
         self._pressure = pressure
         self._temperature = temperature
         self._barostat_period = 50
@@ -159,12 +157,51 @@ class RelativeFEPSetup(object):
         self._spectator_filenames = spectator_filenames
         self._complex_box_dimensions = complex_box_dimensions
         self._solvent_box_dimensions = solvent_box_dimensions
-        self._map_strategy = map_strategy
         self._use_given_geometries = use_given_geometries
-        self._ligand_input = ligand_input
+        self._given_geometries_tolerance = given_geometries_tolerance
+        self.small_molecule_forcefield = small_molecule_forcefield
+        if isinstance(ligand_input, str):
+            self._ligand_input = AnyPath(ligand_input)
+        else:
+            # Accept list of paths
+            self._ligand_input = [AnyPath(_) for _ in ligand_input]
+
+        if protein_pdb_filename:
+            self.protein_pdb_filename = AnyPath(protein_pdb_filename)
+        else:
+            self.protein_pdb_filename = protein_pdb_filename
+
+        if receptor_mol2_filename:
+            self.receptor_mol2_filename = AnyPath(receptor_mol2_filename)
+        else:
+            self.receptor_mol2_filename = receptor_mol2_filename
+
+        if small_molecule_parameters_cache:
+            self.small_molecule_parameters_cache = AnyPath(small_molecule_parameters_cache)
+        else:
+            self.small_molecule_parameters_cache = small_molecule_parameters_cache
+
+        if trajectory_prefix:
+            self._trajectory_prefix = AnyPath(trajectory_prefix)
+        else:
+            self._trajectory_prefix = trajectory_prefix
+
+        if trajectory_directory:
+            self._trajectory_directory = AnyPath(trajectory_directory)
+        else:
+            self._trajectory_directory = trajectory_directory
+
+        if forcefield_files:
+            if isinstance(forcefield_files, (list, set, tuple)):
+                self.forcefield_files = [AnyPath(forcefield_file) for forcefield_file in forcefield_files]
+            else:
+                self.forcefield_files = AnyPath(forcefield_files)
+        else:
+            self.forcefield_files = forcefield_files
+
 
         if self._use_given_geometries:
-            assert self._ligand_input[-3:] == 'sdf' or self._ligand_input[-4:] == 'mol2', f"cannot use deterministic atom placement if the ligand input files do not contain geometry information (e.g. in .sdf or .mol2 format)"
+            assert self._ligand_input.suffix == '.sdf' or self._ligand_input.suffix == '.mol2', f"cannot use deterministic atom placement if the ligand input files do not contain geometry information (e.g. in .sdf or .mol2 format)"
             assert 'complex' in phases, f"cannot use deterministic atom placement if complex is not in the specified phases to generate"
             # TODO: add deterministic geometry proposal to solvent and vacuum
 
@@ -194,28 +231,19 @@ class RelativeFEPSetup(object):
                 _logger.info(f"Detected vacuum phase: setting noCutoff nonbonded method.")
                 self._nonbonded_method = app.NoCutoff
 
-
-        self._trajectory_prefix = trajectory_prefix
-        self._trajectory_directory = trajectory_directory
-
         beta = 1.0 / (kB * temperature)
 
-        mol_list = []
-
-        #all legs need ligands so do this first
-        self._ligand_input = ligand_input
+        # all legs need ligands so do this first
         self._old_ligand_index = old_ligand_index
         self._new_ligand_index = new_ligand_index
         _logger.info(f"Handling files for ligands and indices...")
         if type(self._ligand_input) is not list: # the ligand has been provided as a single file
-            if self._ligand_input[-3:] == 'smi': #
-                if self._map_strategy == 'geometry':
-                    _logger.warning('Geometry mapping strategy is not recommended with smiles input as the coordinates are meaningless')
-                    _logger.warning('setting map_strategy to core instead')
-                    self._map_strategy = 'core'
+            # Make sure the input file exists
+            if not os.path.isfile(self._ligand_input):
+                raise FileNotFoundError(f"Input file at {self._ligand_input} does not exist.")
+            if self._ligand_input.suffix == '.smi': #
                 _logger.info(f"Detected .smi format.  Proceeding...")
-                _logger.info('No geometry information for smiles, so ensuring mapping does not try use it')
-                self._map_strategy = 'core'
+                _logger.info('  Note that SMILES does not contain geometry information for use in mapping')
                 self._ligand_smiles_old = load_smi(self._ligand_input,self._old_ligand_index)
                 self._ligand_smiles_new = load_smi(self._ligand_input,self._new_ligand_index)
                 _logger.info(f"\told smiles: {self._ligand_smiles_old}")
@@ -230,9 +258,6 @@ class RelativeFEPSetup(object):
                 self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
                 _logger.info(f"\tsuccessfully created old and new systems from smiles")
 
-                mol_list.append(self._ligand_oemol_old)
-                mol_list.append(self._ligand_oemol_new)
-
                 # forcefield_generators needs to be able to distinguish between the two ligands
                 # while topology_proposal needs them to have the same residue name
                 self._ligand_oemol_old.SetTitle("MOL")
@@ -243,15 +268,12 @@ class RelativeFEPSetup(object):
                 self._ligand_topology_new = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_new)
                 _logger.info(f"\tsuccessfully generated topologies for both oemols.")
 
-            elif self._ligand_input[-3:] == 'sdf' or self._ligand_input[-4:] == 'mol2': #
+            elif self._ligand_input.suffix == '.sdf' or self._ligand_input.suffix == '.mol2': #
                 _logger.info(f"Detected .sdf format.  Proceeding...") #TODO: write checkpoints for sdf format
                 self._ligand_oemol_old = createOEMolFromSDF(self._ligand_input, index=self._old_ligand_index, allow_undefined_stereo=True)
                 self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input, index=self._new_ligand_index, allow_undefined_stereo=True)
                 # self._ligand_oemol_old = generate_unique_atom_names(self._ligand_oemol_old)
                 # self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
-
-                mol_list.append(self._ligand_oemol_old)
-                mol_list.append(self._ligand_oemol_new)
 
                 self._ligand_positions_old = extractPositionsFromOEMol(self._ligand_oemol_old)
                 self._ligand_positions_new = extractPositionsFromOEMol(self._ligand_oemol_new)
@@ -280,9 +302,6 @@ class RelativeFEPSetup(object):
             self._ligand_oemol_old.SetTitle("OLD")
             self._ligand_oemol_new.SetTitle("NEW")
 
-            mol_list.append(self._ligand_oemol_old)
-            mol_list.append(self._ligand_oemol_new)
-
             # forcefield_generators needs to be able to distinguish between the two ligands
             # while topology_proposal needs them to have the same residue name
             self._ligand_oemol_old.SetTitle("MOL")
@@ -307,6 +326,12 @@ class RelativeFEPSetup(object):
         self._ligand_md_topology_new = md.Topology.from_openmm(self._ligand_topology_new)
         _logger.info(f"Created mdtraj topologies for both ligands.")
 
+        # We must generate the complex topology and positions before the SystemGenerator is created because if the
+        # receptor is a mol2, it must be added to mol_list, which is use to create self._molecules, which is fed to the SystemGenerator
+        if 'complex' in phases:
+            _logger.info(f"setting up complex phase...")
+            self._setup_complex_phase()
+
         # Select barostat
         NONPERIODIC_NONBONDED_METHODS = [app.NoCutoff, app.CutoffNonPeriodic]
         if pressure is not None:
@@ -322,7 +347,8 @@ class RelativeFEPSetup(object):
 
         # Create openforcefield Molecule objects for old and new molecules
         from openff.toolkit.topology import Molecule
-        molecules = [ Molecule.from_openeye(oemol,allow_undefined_stereo=True) for oemol in [self._ligand_oemol_old, self._ligand_oemol_new] ]
+        molecules = [Molecule.from_openeye(oemol, allow_undefined_stereo=True) for oemol in [self._ligand_oemol_old,
+                                                                                             self._ligand_oemol_new]]
 
         # Handle spectator molecules
         if self._spectator_filenames is not None:
@@ -350,16 +376,23 @@ class RelativeFEPSetup(object):
         from openmmforcefields.generators import SystemGenerator
         _logger.info(f'PME tolerance: {self._pme_tol}')
         forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'constraints' : self._h_constraints, 'rigidWater': self._rigid_water, 'hydrogenMass' : self._hmass}
-        if small_molecule_forcefield is None or small_molecule_forcefield == 'None':
-            self._system_generator = SystemGenerator(forcefields=forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+        if self.small_molecule_forcefield is None or self.small_molecule_forcefield == 'None':
+            self._system_generator = SystemGenerator(forcefields=self.forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
                                       periodic_forcefield_kwargs = {'nonbondedMethod': self._nonbonded_method})
         else:
-            self._system_generator = SystemGenerator(forcefields=forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
-                                                     small_molecule_forcefield=small_molecule_forcefield, molecules=molecules, cache=small_molecule_parameters_cache, periodic_forcefield_kwargs = {'nonbondedMethod': self._nonbonded_method})
+            self._system_generator = SystemGenerator(forcefields=self.forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+                                                     small_molecule_forcefield=self.small_molecule_forcefield, molecules=molecules, cache=self.small_molecule_parameters_cache, periodic_forcefield_kwargs = {'nonbondedMethod': self._nonbonded_method})
         _logger.info("successfully created SystemGenerator to create ligand systems")
 
         _logger.info(f"executing SmallMoleculeSetProposalEngine...")
-        self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_oemol_old, self._ligand_oemol_new], self._system_generator, residue_name='MOL')
+        # Create proposal engine
+        proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_oemol_old, self._ligand_oemol_new], self._system_generator, residue_name='MOL')
+        proposal_engine.map_strength = self._map_strength
+        proposal_engine.atom_expr = self._atom_expr
+        proposal_engine.bond_expr = self._bond_expr
+        proposal_engine.use_given_geometries = self._use_given_geometries
+        proposal_engine.given_geometries_tolerance = self._given_geometries_tolerance
+        self._proposal_engine = proposal_engine
 
         _logger.info(f"instantiating FFAllAngleGeometryEngine...")
         if self._use_given_geometries:
@@ -373,7 +406,7 @@ class RelativeFEPSetup(object):
         if 'complex' in phases:
             _logger.info('Generating the topology proposal from the complex leg')
             _logger.info(f"setting up complex phase...")
-            self._setup_complex_phase(protein_pdb_filename,receptor_mol2_filename,mol_list)
+            self._setup_complex_phase()
             self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(
             self._complex_topology_old, self._complex_positions_old,phase='complex',box_dimensions=self._complex_box_dimensions, ionic_strength=self._ionic_strength)
             _logger.info(f"successfully generated complex topology, positions, system")
@@ -383,9 +416,7 @@ class RelativeFEPSetup(object):
             _logger.info(f"creating TopologyProposal...")
             self._complex_topology_proposal = self._proposal_engine.propose(self._complex_system_old_solvated,
                                           self._complex_topology_old_solvated,
-                                          current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr,
-                                          map_strategy=self._map_strategy,
-                                          use_given_geometries=self._use_given_geometries)
+                                          current_mol_id=0, proposed_mol_id=1)
 
             self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
 
@@ -422,6 +453,12 @@ class RelativeFEPSetup(object):
                 self._complex_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
             self._complex_geometry_engine = copy.deepcopy(self._geometry_engine)
 
+            if transform_waters_into_ions_for_charge_changes:
+                self._handle_charge_changes(topology_proposal=self._complex_topology_proposal,
+                                            new_positions=self._complex_positions_new_solvated)
+            else:
+                _logger.info("Skipping counterion")
+
 
         if 'solvent' in phases:
             _logger.info(f"Detected solvent...")
@@ -435,7 +472,7 @@ class RelativeFEPSetup(object):
                 _logger.info(f"creating TopologyProposal")
                 self._solvent_topology_proposal = self._proposal_engine.propose(self._ligand_system_old_solvated,
                                                                                 self._ligand_topology_old_solvated,
-                                          current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr,map_strategy=self._map_strategy)
+                                                                                current_mol_id=0, proposed_mol_id=1)
 
                 self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'solvent'
@@ -474,6 +511,12 @@ class RelativeFEPSetup(object):
                 self._solvent_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
             self._solvent_geometry_engine = copy.deepcopy(self._geometry_engine)
 
+            if transform_waters_into_ions_for_charge_changes:
+                self._handle_charge_changes(topology_proposal=self._solvent_topology_proposal,
+                                            new_positions=self._ligand_positions_new_solvated)
+            else:
+                _logger.info("Skipping counterion")
+
         if 'vacuum' in phases:
             _logger.info(f"Detected solvent...")
             # need to change nonbonded cutoff and remove barostat for vacuum leg
@@ -493,7 +536,7 @@ class RelativeFEPSetup(object):
                                                                                                          self._ligand_positions_old,phase='vacuum')
                 self._vacuum_topology_proposal = self._proposal_engine.propose(self._vacuum_system_old,
                                                                                self._vacuum_topology_old,
-                                          current_mol_id=0, proposed_mol_id=1, map_strength=self._map_strength, atom_expr=self._atom_expr, bond_expr=self._bond_expr)
+                                                                               current_mol_id=0, proposed_mol_id=1)
 
                 self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'vacuum'
@@ -538,30 +581,22 @@ class RelativeFEPSetup(object):
                 self._vacuum_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
             self._vacuum_geometry_engine = copy.deepcopy(self._geometry_engine)
 
-    def _setup_complex_phase(self,protein_pdb_filename,receptor_mol2_filename,mol_list):
+    def _setup_complex_phase(self):
         """
         Runs setup on the protein/receptor file for relative simulations
-
-        Parameters
-        ----------
-        protein_pdb_filename : str, default None
-            Protein pdb filename. If none, receptor_mol2_filename must be provided
-        receptor_mol2_filename : str, default None
-            Receptor mol2 filename. If none, protein_pdb_filename must be provided
         """
-        if protein_pdb_filename:
-            self._protein_pdb_filename = protein_pdb_filename
-            protein_pdbfile = open(self._protein_pdb_filename, 'r')
+        # TODO: What if you get both protein pdb and receptor mol2?
+        # It might be a better idea to have something to auto-detect the format or a kwarg to specify it.
+        if self.protein_pdb_filename:
+            protein_pdbfile = open(self.protein_pdb_filename, 'r')
             pdb_file = app.PDBFile(protein_pdbfile)
             protein_pdbfile.close()
             self._receptor_positions_old = pdb_file.positions
             self._receptor_topology_old = pdb_file.topology
             self._receptor_md_topology_old = md.Topology.from_openmm(self._receptor_topology_old)
 
-        elif receptor_mol2_filename:
-            self._receptor_mol2_filename = receptor_mol2_filename
-            self._receptor_mol = createOEMolFromSDF(self._receptor_mol2_filename)
-            mol_list.append(self._receptor_mol)
+        elif self.receptor_mol2_filename:
+            self._receptor_mol = createOEMolFromSDF(self.receptor_mol2_filename)
             self._receptor_positions_old = extractPositionsFromOEMol(self._receptor_mol)
             self._receptor_topology_old = forcefield_generators.generateTopologyFromOEMol(self._receptor_mol)
             self._receptor_md_topology_old = md.Topology.from_openmm(self._receptor_topology_old)
@@ -811,25 +846,24 @@ class RelativeFEPSetup(object):
         #hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
         #modeller.delete(hs)
         #modeller.addHydrogens(forcefield=self._system_generator.forcefield)
-        _logger.info(f'box_dimensions: {box_dimensions}')
-        _logger.info(f'solvent padding: {self._padding._value}')
         run_solvate = True
-        if phase == 'solvent':
-            self._padding = 9. * unit.angstrom
+
         if phase == 'vacuum':
             run_solvate = False
             _logger.info(f"\tSkipping solvation of vacuum perturbation")
-        if self._padding._value == 0.:
+        if self._padding == 0.:
             run_solvate = False
             _logger.info(f"\tSkipping solvation as solvent padding set to zero")
         if run_solvate:
             _logger.info(f"\tpreparing to add solvent")
             if box_dimensions is None:
+                _logger.info(f'solvent padding: {self._padding}')
                 modeller.addSolvent(self._system_generator.forcefield, model=model, padding=self._padding, ionicStrength=ionic_strength)
             else:
+                _logger.info(f'box_dimensions: {box_dimensions}')
                 modeller.addSolvent(self._system_generator.forcefield, model=model, ionicStrength=ionic_strength, boxSize=box_dimensions)
         solvated_topology = modeller.getTopology()
-        if phase == 'complex' and self._padding._value == 0. and box_dimensions is not None:
+        if phase == 'complex' and self._padding == 0. and box_dimensions is not None:
             _logger.info(f'Complex phase, where padding is set to 0. and box dimensions are provided so setting unit cell dimensions')
             solvated_topology.setUnitCellDimensions(box_dimensions)
         solvated_positions = modeller.getPositions()
@@ -841,13 +875,45 @@ class RelativeFEPSetup(object):
         _logger.info(f"\tSystem parameterized")
 
         if self._trajectory_directory is not None and self._trajectory_prefix is not None:
-            pdb_filename = f"{self._trajectory_directory}/{self._trajectory_prefix}-{phase}.pdb"
+            pdb_filename = AnyPath(f"{self._trajectory_directory}/{self._trajectory_prefix}-{phase}.pdb")
             with open(pdb_filename, 'w') as outfile:
                 PDBFile.writeFile(solvated_topology, solvated_positions, outfile)
         else:
             _logger.info('Both trajectory_directory and trajectory_prefix need to be provided to save .pdb')
 
         return solvated_topology, solvated_positions, solvated_system
+
+    def _handle_charge_changes(self, topology_proposal, new_positions):
+        """
+        modifies the atom mapping in the topology proposal and the new system parameters to handle the transformation of
+        waters into appropriate counterions upon a charge-changing ligand transformation
+        """
+        from perses.utils.charge_changing import (get_ion_and_water_parameters,
+                                                  transform_waters_into_ions,
+                                                  get_charge_difference,
+                                                  get_water_indices,
+                                                  modify_atom_classes)
+
+        charge_diff = get_charge_difference(self._ligand_oemol_old, self._ligand_oemol_new)
+        if charge_diff != 0: # then handle this.
+            new_water_indices_to_ionize = get_water_indices(charge_diff = charge_diff,
+                                                                                           new_positions = new_positions,
+                                                                                           new_topology = topology_proposal.new_topology,
+                                                                                           radius=0.8)
+            _logger.info(f"new water indices to ionize {new_water_indices_to_ionize}")
+            particle_parameters = get_ion_and_water_parameters(system=topology_proposal.old_system,
+                                                               topology = topology_proposal.old_topology,
+                                                               positive_ion_name="NA",
+                                                               negative_ion_name="CL",
+                                                               water_name="HOH")
+            # modify new system in place
+            transform_waters_into_ions(water_atoms = new_water_indices_to_ionize,
+                                       system = topology_proposal._new_system,
+                                       charge_diff = charge_diff,
+                                       particle_parameter_dict = particle_parameters)
+
+            # modify the topology proposal
+            modify_atom_classes(new_water_indices_to_ionize, topology_proposal)
 
     @property
     def complex_topology_proposal(self):
@@ -1011,7 +1077,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
                  eq_splitting_string="V R O R V",
                  neq_splitting_string = "V R O R V",
                  measure_shadow_work=False,
-                 timestep=1.0*unit.femtoseconds,
+                 timestep=4.0*unit.femtoseconds,
                  ncmc_save_interval = None,
                  write_ncmc_configuration = False,
                  relative_transform = True):
@@ -1072,7 +1138,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
         self._hybrid_system = self._factory.hybrid_system
         self._initial_hybrid_positions = self._factory.hybrid_positions
         self._n_equil_steps = n_equilibrium_steps_per_iteration
-        self._trajectory_prefix = trajectory_prefix
+        self._trajectory_prefix = AnyPath(trajectory_prefix)
         self._trajectory_directory = trajectory_directory
         self._atom_selection = atom_selection
         self._current_iteration = 0
@@ -1082,9 +1148,9 @@ class NonequilibriumSwitchingFEP(DaskClient):
         _logger.info(f"instantiating trajectory filenames")
         if self._trajectory_directory and self._trajectory_prefix:
             self._write_traj = True
-            self._trajectory_filename = {lambda_state: os.path.join(os.getcwd(), self._trajectory_directory, f"{trajectory_prefix}.eq.lambda_{lambda_state}.h5") for lambda_state in [0,1]}
+            self._trajectory_filename = {lambda_state: os.path.join(self._trajectory_directory, f"{self._trajectory_prefix}.eq.lambda_{lambda_state}.h5") for lambda_state in [0,1]}
             _logger.debug(f"eq_traj_filenames: {self._trajectory_filename}")
-            self._neq_traj_filename = {direct: os.path.join(os.getcwd(), self._trajectory_directory, f"{trajectory_prefix}.neq.lambda_{direct}") for direct in ['forward', 'reverse']}
+            self._neq_traj_filename = {direct: os.path.join(self._trajectory_directory, f"{self._trajectory_prefix}.neq.lambda_{direct}") for direct in ['forward', 'reverse']}
             _logger.debug(f"neq_traj_filenames: {self._neq_traj_filename}")
         else:
             self._write_traj = False

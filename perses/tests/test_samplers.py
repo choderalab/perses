@@ -19,7 +19,7 @@ import os
 import os.path
 from functools import partial
 from unittest import skipIf
-
+import pytest
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
@@ -27,7 +27,8 @@ running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 # TEST MCMCSAMPLER
 ################################################################################
 
-@skipIf(running_on_github_actions, "Skip analysis test on GH Actions.  Currently broken")
+#@skipIf(running_on_github_actions, "Skip analysis test on GH Actions.  Currently broken")
+@pytest.mark.skip(reason="Skip analysis test on GH Actions.  Currently broken")
 def test_valence():
     """
     Test valence-only test system.
@@ -153,11 +154,3 @@ def run_samplers(testsystem_names, niterations=5):
 #        f = partial(exen_sampler.run, niterations)
 #        f.description = "Testing expanded ensemble sampler with AlanineDipeptideTestSystem '%s'" % environment
 #        yield f
-
-
-if __name__=="__main__":
-    for t in test_hybrid_scheme():
-        t()
-#    for t in test_samplers():
-#        print(t.description)
-#        t()

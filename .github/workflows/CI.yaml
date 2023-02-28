@@ -3,31 +3,31 @@ name: CI
 on:
   pull_request:
     branches:
-      - "master"
+      - "main"
   schedule:
     # nightly tests
     - cron: "0 0 * * *"
   push:
     branches:
-      - master
+      - main
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
 
 jobs:
   test:
-    name: Test on ${{ matrix.cfg.os }}, Python ${{ matrix.cfg.python-version }}, OpenMM ${{ matrix.cfg.openmm }}
-    runs-on: ${{ matrix.cfg.os }}
+    name: Test on ubuntu-latest, Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm }}
+    runs-on: ubuntu-latest
+
     strategy:
       fail-fast: false
       matrix:
-        cfg:
-          - { os: ubuntu-latest, python-version: 3.7, openmm: latest }
-          - { os: ubuntu-latest, python-version: 3.8, openmm: latest }
-          - { os: ubuntu-latest, python-version: 3.7, openmm: nightly }
-          - { os: ubuntu-latest, python-version: 3.8, openmm: nightly }
-          - { os: ubuntu-latest, python-version: 3.7, openmm: conda-forge }
-          - { os: ubuntu-latest, python-version: 3.8, openmm: conda-forge }
+        python-version: [3.8, 3.9, "3.10",]
+        openmm: ["dev", "8.0", "7.7"]
 
     env:
-      OPENMM: ${{ matrix.cfg.openmm }}
+      OPENMM: ${{ matrix.openmm }}
       OE_LICENSE: ${{ github.workspace }}/oe_license.txt
 
     steps:
@@ -40,34 +40,25 @@ jobs:
           df -h
           ulimit -a
 
-      # More info on options: https://github.com/conda-incubator/setup-miniconda
-      - uses: conda-incubator/setup-miniconda@v2
+      - name: Setup micromamba
+        uses: mamba-org/provision-with-micromamba@main
         with:
-          python-version: ${{ matrix.python-version }}
           environment-file: devtools/conda-envs/test_env.yaml
-          channels: conda-forge,defaults,omnia-dev,openeye
-          activate-environment: test
-          auto-update-conda: true
-          auto-activate-base: false
-          show-channel-urls: true
+          environment-name: test
+          extra-specs: |
+            python=${{ matrix.python-version }}
+
 
       - name: Refine test environment
         shell: bash -l {0}
         run: |
-          case ${{ matrix.cfg.openmm }} in
-            latest)
-              echo "Using latest release OpenMM."
-              conda install --quiet -c conda-forge openmm;;
-           #rc) # We can uncomment this case when we have this label on conda-forge
-             #echo "Using OpenMM rc" 
-             #conda install --quiet -c conda-forge/label/openmm_rc openmm;;
-            nightly)
-              echo "Using OpenMM nightly dev build."
-              # need this until we cut a new openmoltools release
-              pip install git+https://github.com/choderalab/openmoltools.git
-              # need to install from master until parmed updates to a new release
-              pip install git+https://github.com/ParmEd/ParmEd.git
-              conda install --quiet -c omnia-dev openmm;;
+          case ${{ matrix.openmm }} in
+            dev)
+              echo "Using dev build of OpenMM"
+              micromamba install -c conda-forge/label/openmm_dev -c conda-forge openmm;;
+            *)
+              echo "installing OpenMM version ${{ matrix.openmm }}"
+              micromamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
           esac
 
       - name: Install package
@@ -78,8 +69,8 @@ jobs:
       - name: Environment Information
         shell: bash -l {0}
         run: |
-          conda info -a
-          conda list
+          micromamba info
+          micromamba list
 
       - name: Decrypt OpenEye license
         shell: bash -l {0}
@@ -91,14 +82,16 @@ jobs:
 
       - name: Test the package
         shell: bash -l {0}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_TEST_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_TEST_SECRET }}
         run: |
-          export OE_LICENSE="$HOME/oe_license.txt"
           export TRAVIS=true
-          pushd .
-          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced"
-          popd
+          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto -m "not gpu_needed" perses/tests
 
       - name: Codecov
+        if: ${{ github.repository == 'choderalab/perses'
+                && github.event != 'schedule' }}
         uses: codecov/codecov-action@v1
         with:
           file: ./coverage.xml
