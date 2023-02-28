@@ -2,14 +2,12 @@ name: test
 channels:
   - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
-  - defaults
-  - omnia-dev
   - openeye
 dependencies:
   - arsenic
   - autograd
   - click
-  - cloudpathlib-s3
+  - cloudpathlib-s3 >=0.13.0
   - coverage
   - dask
   - dask-jobqueue
@@ -41,7 +39,7 @@ dependencies:
   - pytest-attrib
   - pytest-cov
   - pytest-xdist
-  - python >=3.6
+  - python
   - rich
   - scipy
   - seaborn
