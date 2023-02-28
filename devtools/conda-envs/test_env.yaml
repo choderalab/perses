@@ -2,7 +2,6 @@ name: test
 channels:
   - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
-  - conda-forge/label/openmm_dev
   - openeye
 dependencies:
   - arsenic
