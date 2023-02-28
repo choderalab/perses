@@ -27,7 +27,7 @@ jobs:
         openmm: ["8.0", "7.7"]
         include:
           - openmm: "8.0.0dev3"
-          - python-version: "3.10"
+            python-version: "3.10"
 
     env:
       OPENMM: ${{ matrix.openmm }}
