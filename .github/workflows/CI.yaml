@@ -53,7 +53,7 @@ jobs:
           channel-priority: flexible
           extra-specs: |
             python==${{ matrix.python-version }}
-            openmm==8.0.0dev3
+            openmm=<8.0.0dev3
 
       - name: Setup micromamba
         if: ${{ matrix.openmm != 'dev' }}
