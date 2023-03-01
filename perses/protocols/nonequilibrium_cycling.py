@@ -126,13 +126,12 @@ class SimulationUnit(ProtocolUnit):
         import openmm.unit as openmm_unit
         from openmmtools.integrators import PeriodicNonequilibriumIntegrator
         from perses.utils.openeye import generate_unique_atom_names
-        from perses.utils.logging_utils import YAMLFormatter
 
         # Setting up logging to file in shared filesystem
-        output_log_path = ctx.shared / "perses_neq_cycling_log.yaml"
+        output_log_path = ctx.shared / "perses-neq-cycling.log"
         file_handler = logging.FileHandler(output_log_path)
         file_handler.setLevel(logging.DEBUG)  # TODO: Set to INFO in production
-        log_formatter = YAMLFormatter(datefmt='%Y-%m-%d %H:%M:%S')
+        log_formatter = logging.Formatter(fmt='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
         file_handler.setFormatter(log_formatter)
         logger.addHandler(file_handler)
 
@@ -314,7 +313,7 @@ class SimulationUnit(ProtocolUnit):
         simulation_time = 2*(eq_steps + neq_steps)*timestep
         walltime_in_seconds = cycle_walltime.total_seconds() * openmm_unit.seconds
         estimated_performance = simulation_time.value_in_unit(
-            openmm_unit.nanosecond) / walltime_in_seconds.value_in_unit(openmm_unit.days)  # Note: ends up unit-less
+            openmm_unit.nanosecond) / walltime_in_seconds.value_in_unit(openmm_unit.days)  # in ns/day
         logger.info(f"replicate_{self.name} Estimated performance: {estimated_performance} ns/day")
 
         # Serialize works
