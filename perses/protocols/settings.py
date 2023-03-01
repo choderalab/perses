@@ -8,6 +8,7 @@ energy calculations using perses.
 from gufe.settings.models import ProtocolSettings
 from openff.units import unit
 from perses.protocols.utils import _serialize_pydantic
+from pydantic import root_validator
 
 # Default settings for the lambda functions
 x = 'lambda'
@@ -59,16 +60,22 @@ class NonEqCyclingSettings(ProtocolSettings):
 
     # platform and serialization
     platform = 'CUDA'
-    # TODO: We have different settings
+    # TODO: Expression to save some atoms to trajectory
     #  - which atoms should we save (mdtraj selection ex: "not water")
-    #  - How often we want to store positions (set that 100 for example)
-    #  - works store/save frequency. It's not much more data so can be more frequent.
-    save_frequency = 100
-    traj_save_frequency = 100
-    work_save_frequency = 25
+    traj_save_frequency: int = 100
+    work_save_frequency: int = 25
 
     # Number of cycles to run
     num_replicates: int = 1
+
+    @root_validator
+    def save_frequencies_consistency(cls, values):
+        """Checks trajectory save frequency is a multiple of work save frequency, for convenience"""
+        if values.get("traj_save_frequency") % values.get("work_save_frequency") != 0:
+            raise ValueError("Work save frequency must be a divisor of trajectory save frequency. "
+                             "Please specify consistent values for trajectory and work save settings")
+        # TODO: Add check for eq and neq steps and save frequencies
+        return values
 
     def _gufe_tokenize(self):
         return _serialize_pydantic(self)

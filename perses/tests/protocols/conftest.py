@@ -73,7 +73,8 @@ def short_settings():
 
     settings = Settings.get_defaults()
     settings.thermo_settings.temperature = 300 * unit.kelvin
-    settings.protocol_settings = NonEqCyclingSettings(eq_steps=25000, neq_steps=25000, save_frequency=250)
+    settings.protocol_settings = NonEqCyclingSettings(eq_steps=25000, neq_steps=25000, traj_save_frequency=250,
+                                                      platform="CUDA")
 
     return settings
 
@@ -90,8 +91,8 @@ def short_settings_multiple_cycles():
     settings = Settings.get_defaults()
     settings.thermo_settings.temperature = 300 * unit.kelvin
     # TODO: add validation within settings that save_freq is divisor of total steps
-    settings.protocol_settings = NonEqCyclingSettings(eq_steps=25000, neq_steps=25000, save_frequency=250,
-                                                      num_replicates=5, platform="CPU")
+    settings.protocol_settings = NonEqCyclingSettings(eq_steps=25000, neq_steps=25000, traj_save_frequency=250,
+                                                      work_save_frequency=50, num_replicates=5, platform="CPU")
 
     return settings
 
