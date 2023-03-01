@@ -43,6 +43,7 @@ requirements:
     - dask-jobqueue
     - openmmforcefields
     - dicttoxml
+    - cloudpathlib
 #  - pip:
 #    - codecov
 
