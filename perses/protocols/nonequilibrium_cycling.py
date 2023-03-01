@@ -175,7 +175,8 @@ class SimulationUnit(ProtocolUnit):
         protocol_settings = settings.protocol_settings
         thermodynamic_settings = settings.thermo_settings
         phase = self._detect_phase(state_a, state_b)
-        save_frequency = protocol_settings.save_frequency
+        traj_save_frequency = protocol_settings.traj_save_frequency
+        work_save_frequency = protocol_settings.work_save_frequency  # Note: this is divisor of traj save freq.
 
         # Get the ligand mapping from ComponentMapping object
         ligand_mapping = mapping.componentA_to_componentB
@@ -245,10 +246,13 @@ class SimulationUnit(ProtocolUnit):
         # Equilibrium (lambda = 0)
         # start timer
         start_time = time.perf_counter()
-        for step in range(neq_steps):
-            integrator.step(1)  # TODO: Avoid overhead to have to check everytime of save_frequency. Use greatest common denominator also handle save_freq=0
-            # Store positions and works
-            if step % save_frequency == 0:
+        for step in range(0, eq_steps+1, work_save_frequency):
+            integrator.step(work_save_frequency)
+            logger.info(f"step: {step}: saving work (freq {work_save_frequency})")
+            # TODO: Create a helper function to serialize the positions and use that here and after the loop to store in the end
+            # Save positions
+            if step % traj_save_frequency == 0:
+                logger.info(f"step: {step}, saving trajectory (freq {traj_save_frequency})")
                 pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
                 old_pos = np.asarray(htf.old_positions(pos))
                 new_pos = np.asarray(htf.new_positions(pos))
@@ -260,11 +264,12 @@ class SimulationUnit(ProtocolUnit):
 
         # Run neq
         # Forward (0 -> 1)
+        # Initialize works with current value
         forward_works = [integrator.get_protocol_work(dimensionless=True)]
-        for fwd_step in range(eq_steps):
-            integrator.step(1)  # TODO: step for a certain number and then retrieve work
-            forward_works.append(integrator.get_protocol_work(dimensionless=True))  # TODO: we want to call this less frequently
-            if fwd_step % save_frequency == 0:
+        for fwd_step in range(0, neq_steps, work_save_frequency):
+            integrator.step(work_save_frequency)
+            forward_works.append(integrator.get_protocol_work(dimensionless=True))
+            if (fwd_step + 1) % traj_save_frequency == 0:
                 pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
                 old_pos = np.asarray(htf.old_positions(pos))
                 new_pos = np.asarray(htf.new_positions(pos))
@@ -275,10 +280,9 @@ class SimulationUnit(ProtocolUnit):
         logger.info(f"replicate_{self.name} Forward nonequilibrium time (lambda 0 -> 1): {neq_forward_walltime}")
 
         # Equilibrium (lambda = 1)
-        # TODO: Same thing as before
-        for step in range(neq_steps):
-            integrator.step(1)
-            if step % save_frequency == 0:
+        for step in range(int(eq_steps/work_save_frequency)):
+            integrator.step(work_save_frequency)
+            if (step + 1) % traj_save_frequency == 0:
                 pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
                 old_pos = np.asarray(htf.old_positions(pos))
                 new_pos = np.asarray(htf.new_positions(pos))
@@ -289,12 +293,11 @@ class SimulationUnit(ProtocolUnit):
         logger.info(f"replicate_{self.name} Reverse (lambda 1) time: {eq_reverse_walltime}")
 
         # Reverse work (1 -> 0)
-        # TODO: Same thing as before
         reverse_works = [integrator.get_protocol_work(dimensionless=True)]
-        for rev_step in range(eq_steps):
-            integrator.step(1)
+        for rev_step in range(int(neq_steps/work_save_frequency)):
+            integrator.step(work_save_frequency)
             reverse_works.append(integrator.get_protocol_work(dimensionless=True))
-            if rev_step % save_frequency == 0:
+            if (rev_step + 1) % traj_save_frequency == 0:
                 pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
                 old_pos = np.asarray(htf.old_positions(pos))
                 new_pos = np.asarray(htf.new_positions(pos))
@@ -310,13 +313,11 @@ class SimulationUnit(ProtocolUnit):
         # Computing performance in ns/day
         simulation_time = 2*(eq_steps + neq_steps)*timestep
         walltime_in_seconds = cycle_walltime.total_seconds() * openmm_unit.seconds
-        estimated_performance = simulation_time.in_units_of(openmm_unit.nanosecond) / walltime_in_seconds.in_units_of(
-            openmm_unit.days)  # Note: ends up unit-less
+        estimated_performance = simulation_time.value_in_unit(
+            openmm_unit.nanosecond) / walltime_in_seconds.value_in_unit(openmm_unit.days)  # Note: ends up unit-less
         logger.info(f"replicate_{self.name} Estimated performance: {estimated_performance} ns/day")
 
-        # Save output
-        # TODO: Assume initially we want the trajectories to understand when something wrong/weird happens.
-        # Save works
+        # Serialize works
         forward_work_path = ctx.shared / f"forward_{phase}_{self.name}.npy"
         reverse_work_path = ctx.shared / f"reverse_{phase}_{self.name}.npy"
         with open(forward_work_path, 'wb') as out_file:
@@ -325,8 +326,7 @@ class SimulationUnit(ProtocolUnit):
             np.save(out_file, reverse_works)
 
         # TODO: Do we need to save the trajectories?
-        # Save trajs
-        # trajectory paths
+        # Serialize trajectories
         forward_eq_old_path = ctx.shared / f"forward_eq_old_{phase}_{self.name}.npy"
         forward_eq_new_path = ctx.shared / f"forward_eq_new_{phase}_{self.name}.npy"
         forward_neq_old_path = ctx.shared / f"forward_neq_old_{phase}_{self.name}.npy"
@@ -372,6 +372,7 @@ class SimulationUnit(ProtocolUnit):
             'neq_forward_time': str(neq_forward_walltime),
             'eq_reverse_time': str(eq_reverse_walltime),
             'neq_reverse_time': str(neq_reverse_walltime),
+            # TODO: performance nested dictionary with the walltimes (total and each section) and performance in ns/day
         }
 
 
@@ -385,8 +386,6 @@ class ResultUnit(ProtocolUnit):
         import numpy as np
         # TODO: This can take the settings and process a debug flag, and populate all the paths for trajectories as needed
         # Load the works from shared serialized objects
-        # import pdb
-        # pdb.set_trace()
         # TODO: We need to make sure the array is the CUMULATIVE work and that we just want the last value
         cumulated_forward_works = []
         cumulated_reverse_works = []
