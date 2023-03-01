@@ -990,6 +990,8 @@ class AtomMapper(object):
         initial_time = time.time()
 
         import numpy as np
+        from openff.toolkit.topology import Molecule
+        old_mol, new_mol = Molecule(old_mol, allow_undefined_stereo=True), Molecule(new_mol, allow_undefined_stereo=True)
         atom_mappings = self.get_all_mappings(old_mol, new_mol)
         if (atom_mappings is None) or len(atom_mappings)==0:
             return None
