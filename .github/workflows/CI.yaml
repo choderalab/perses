@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: [3.8, 3.9, "3.10"]
-        openmm: ["rc", "7.7", "beta"]
+        openmm: ["dev", "8.0", "7.7"]
         exclude:
           - python-version: "3.10"
             openmm: "7.6"
@@ -43,36 +43,24 @@ jobs:
           df -h
           ulimit -a
 
-      # More info on options: https://github.com/conda-incubator/setup-miniconda
-      - uses: conda-incubator/setup-miniconda@v2
+      - name: Setup micromamba
+        uses: mamba-org/provision-with-micromamba@main
         with:
-          python-version: ${{ matrix.python-version }}
           environment-file: devtools/conda-envs/test_env.yaml
-          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge,openeye
-          activate-environment: test
-          auto-update-conda: true
-          auto-activate-base: false
-          show-channel-urls: true
-          channel-priority: true
-          miniforge-variant: Mambaforge
+          environment-name: test
+          extra-specs: |
+            python=${{ matrix.python-version }}
 
       - name: Refine test environment
         shell: bash -l {0}
         run: |
           case ${{ matrix.openmm }} in
-            rc)
-              echo "Using rc build of OpenMM."
-              conda install -y -c conda-forge/label/openmm_rc openmm==8.0.0rc2 --override-channels --force-reinstall
-              echo "Using beta build of openeye toolkit"
-              conda install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
-            beta)
-              echo "Using beta build of OpenMM."
-              conda install -c conda-forge/label/openmm_dev -c conda-forge openmm
-              echo "Using beta build of openeye toolkit"
-              conda install -y -c openeye/label/beta openeye-toolkits --override-channels --force-reinstall;;
+            dev)
+              echo "Using dev build of OpenMM"
+              micromamba install -c conda-forge/label/openmm_dev -c conda-forge openmm;;
             *)
               echo "installing OpenMM version ${{ matrix.openmm }}"
-              mamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
+              micromamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
           esac
 
       - name: Install package
@@ -83,8 +71,8 @@ jobs:
       - name: Environment Information
         shell: bash -l {0}
         run: |
-          mamba info -a
-          mamba list
+          micromamba info
+          micromamba list
 
       - name: Decrypt OpenEye license
         shell: bash -l {0}
