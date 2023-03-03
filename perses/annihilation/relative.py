@@ -2165,11 +2165,11 @@ class HybridTopologyFactory(object):
         old_positions : [m, 3] np.ndarray with unit
             The positions of the old system (in nanometers)
         """
-        n_atoms_old = self._topology_proposal.n_atoms_old
+
         # making sure hybrid positions are simtk.unit.Quantity objects
         if not isinstance(hybrid_positions, unit.Quantity):
             hybrid_positions = unit.Quantity(hybrid_positions, unit=unit.nanometer)
-        hybrid_indices = [self._old_to_hybrid_map[idx] for idx in range(n_atoms_old)]
+        hybrid_indices = self.old_atom_indices
         old_positions = hybrid_positions[hybrid_indices, :]
         return old_positions
 
@@ -2187,11 +2187,10 @@ class HybridTopologyFactory(object):
         new_positions : [m, 3] np.ndarray with unit
             The positions of the new system (in nanometers)
         """
-        n_atoms_new = self._topology_proposal.n_atoms_new
         # making sure hybrid positions are simtk.unit.Quantity objects
         if not isinstance(hybrid_positions, unit.Quantity):
             hybrid_positions = unit.Quantity(hybrid_positions, unit=unit.nanometer)
-        hybrid_indices = [self._new_to_hybrid_map[idx] for idx in range(n_atoms_new)]
+        hybrid_indices = self.new_atom_indices
         new_positions = hybrid_positions[hybrid_indices, :]
         return new_positions
 
@@ -2266,6 +2265,37 @@ class HybridTopologyFactory(object):
         hybrid_topology : simtk.openmm.app.Topology
         """
         return md.Topology.to_openmm(self._hybrid_topology)
+
+    # TODO: We need to refactor for the init to use these properties and have an attribute with the indices
+    @property
+    def old_atom_indices(self):
+        """
+        Indices of atoms in hybrid topology for atoms in the old topology.
+
+        Returns
+        -------
+        hybrid_indices: list[int]
+            Indices of old atoms in hybrid topology
+
+        """
+        n_atoms_old = self._topology_proposal.n_atoms_old
+        hybrid_indices = [self._old_to_hybrid_map[idx] for idx in range(n_atoms_old)]
+        return hybrid_indices
+
+    @property
+    def new_atom_indices(self):
+        """
+        Indices of atoms in hybrid topology for atoms in the new topology.
+
+        Returns
+        -------
+        hybrid_indices: list[int]
+            Indices of new atoms in hybrid topology
+
+        """
+        n_atoms_new = self._topology_proposal.n_atoms_new
+        hybrid_indices = [self._new_to_hybrid_map[idx] for idx in range(n_atoms_new)]
+        return hybrid_indices
 
 class RepartitionedHybridTopologyFactory(HybridTopologyFactory):
     """

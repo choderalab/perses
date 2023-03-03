@@ -60,10 +60,9 @@ class NonEqCyclingSettings(ProtocolSettings):
 
     # platform and serialization
     platform = 'CUDA'
-    # TODO: Expression to save some atoms to trajectory
-    #  - which atoms should we save (mdtraj selection ex: "not water")
     traj_save_frequency: int = 100
     work_save_frequency: int = 25
+    atom_selection_expression: str = "not water"
 
     # Number of cycles to run
     num_replicates: int = 1

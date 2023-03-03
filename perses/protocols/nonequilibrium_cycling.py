@@ -93,6 +93,58 @@ class SimulationUnit(ProtocolUnit):
 
         return detected_phase
 
+    @staticmethod
+    def extract_positions(context, hybrid_topology_factory, atom_selection_exp="not water"):
+        """
+        Extract positions from initial and final systems based from the hybrid topology.
+
+        Parameters
+        ----------
+        context: openmm.Context
+            Current simulation context where from extract positions.
+        hybrid_topology_factory: perses.annihilation.relative.HybridTopologyFactory
+            Hybrid topology factory where to extract positions and mapping information
+        atom_selection_exp: str, optional
+            Atom selection expression using mdtraj syntax. Defaults to "not water"
+
+        Returns
+        -------
+
+        Notes
+        -----
+        It achieves this by taking the positions and indices from the initial and final states of
+        the transformation, and computing the overlap of these with the indices of the complete
+        hybrid topology, filtered by some mdtraj selection expression.
+
+        1. Get positions from context
+        2. Get topology from HTF (already mdtraj topology)
+        3. Merge that information into mdtraj.Trajectory
+        4. Filter positions for initial/final according to selection string
+        """
+        # TODO: Maybe we want this as a helper/utils function in perses. We also need tests for this.
+        import mdtraj as md
+        import numpy as np
+
+        # Get positions from current openmm context
+        positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+
+        # Get topology from HTF - indices for initial and final topologies in hybrid topology
+        initial_indices = np.asarray(hybrid_topology_factory.old_atom_indices)
+        final_indices = np.asarray(hybrid_topology_factory.new_atom_indices)
+        hybrid_topology = hybrid_topology_factory.hybrid_topology
+        selection = atom_selection_exp
+        md_trajectory = md.Trajectory(xyz=positions, topology=hybrid_topology)
+        selection_indices = md_trajectory.topology.select(selection)
+
+        # Now we have to find the intersection/overlap between selected indices in the hybrid
+        # topology and the initial/final positions, respectively
+        initial_selected_indices = np.intersect1d(initial_indices, selection_indices)
+        final_selected_indices = np.intersect1d(final_indices, selection_indices)
+        initial_selected_positions = md_trajectory.xyz[0, initial_selected_indices, :]
+        final_selected_positions = md_trajectory.xyz[0, final_selected_indices, :]
+
+        return initial_selected_positions, final_selected_positions
+
     def _execute(self, ctx, *, state_a, state_b, mapping, settings, **inputs):
         """
         Execute the simulation part of the Nonequilibrium switching protocol using GUFE objects.
@@ -129,7 +181,7 @@ class SimulationUnit(ProtocolUnit):
 
         # Setting up logging to file in shared filesystem
         output_log_path = ctx.shared / "perses-neq-cycling.log"
-        file_handler = logging.FileHandler(output_log_path)
+        file_handler = logging.FileHandler(output_log_path, mode="w")
         file_handler.setLevel(logging.DEBUG)  # TODO: Set to INFO in production
         log_formatter = logging.Formatter(fmt='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
         file_handler.setFormatter(log_formatter)
@@ -176,6 +228,7 @@ class SimulationUnit(ProtocolUnit):
         phase = self._detect_phase(state_a, state_b)
         traj_save_frequency = protocol_settings.traj_save_frequency
         work_save_frequency = protocol_settings.work_save_frequency  # Note: this is divisor of traj save freq.
+        selection_expression = protocol_settings.atom_selection_expression
 
         # Get the ligand mapping from ComponentMapping object
         ligand_mapping = mapping.componentA_to_componentB
@@ -240,23 +293,32 @@ class SimulationUnit(ProtocolUnit):
         forward_eq_old, forward_eq_new, forward_neq_old, forward_neq_new = list(), list(), list(), list()
         reverse_eq_new, reverse_eq_old, reverse_neq_old, reverse_neq_new = list(), list(), list(), list()
 
-        #  Also get the GPU information (plain try-except with nvidia-smi)
+        # Coarse number of steps -- each coarse consists of work_save_frequency steps
+        coarse_eq_steps = int(eq_steps/work_save_frequency)  # Note: eq_steps is multiple of work save steps
+        coarse_neq_steps = int(neq_steps / work_save_frequency)  # Note: neq_steps is multiple of work save steps
+
+        # TODO: Also get the GPU information (plain try-except with nvidia-smi)
 
         # Equilibrium (lambda = 0)
         # start timer
         start_time = time.perf_counter()
-        for step in range(0, eq_steps+1, work_save_frequency):
+        for step in range(coarse_eq_steps):
             integrator.step(work_save_frequency)
-            logger.info(f"step: {step}: saving work (freq {work_save_frequency})")
-            # TODO: Create a helper function to serialize the positions and use that here and after the loop to store in the end
+            logger.debug(f"coarse step: {step}: saving work (freq {work_save_frequency})")
             # Save positions
             if step % traj_save_frequency == 0:
-                logger.info(f"step: {step}, saving trajectory (freq {traj_save_frequency})")
-                pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
-                old_pos = np.asarray(htf.old_positions(pos))
-                new_pos = np.asarray(htf.new_positions(pos))
-                forward_eq_old.append(old_pos)
-                forward_eq_new.append(new_pos)
+                logger.info(f"coarse step: {step}: saving trajectory (freq {traj_save_frequency})")
+                initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
+                                                                            atom_selection_exp=selection_expression)
+                forward_eq_old.append(initial_positions)
+                forward_eq_new.append(final_positions)
+        # Make sure trajectories are stored at the end of the eq loop
+        logger.debug(f"coarse step: {step}: saving trajectory (freq {traj_save_frequency})")
+        initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
+                                                                    atom_selection_exp=selection_expression)
+        forward_eq_old.append(initial_positions)
+        forward_eq_new.append(final_positions)
+
         eq_forward_time = time.perf_counter()
         eq_forward_walltime = datetime.timedelta(seconds=eq_forward_time - start_time)
         logger.info(f"replicate_{self.name} Forward (lamba = 0) equilibration time : {eq_forward_walltime}")
@@ -265,43 +327,58 @@ class SimulationUnit(ProtocolUnit):
         # Forward (0 -> 1)
         # Initialize works with current value
         forward_works = [integrator.get_protocol_work(dimensionless=True)]
-        for fwd_step in range(0, neq_steps, work_save_frequency):
+        for fwd_step in range(coarse_neq_steps):
             integrator.step(work_save_frequency)
             forward_works.append(integrator.get_protocol_work(dimensionless=True))
-            if (fwd_step + 1) % traj_save_frequency == 0:
-                pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
-                old_pos = np.asarray(htf.old_positions(pos))
-                new_pos = np.asarray(htf.new_positions(pos))
-                forward_neq_old.append(old_pos)
-                forward_neq_new.append(new_pos)
+            if fwd_step % traj_save_frequency == 0:
+                initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
+                                                                            atom_selection_exp=selection_expression)
+                forward_neq_old.append(initial_positions)
+                forward_neq_new.append(final_positions)
+        # Make sure trajectories are stored at the end of the neq loop
+        initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
+                                                                    atom_selection_exp=selection_expression)
+        forward_neq_old.append(initial_positions)
+        forward_neq_new.append(final_positions)
+
         neq_forward_time = time.perf_counter()
         neq_forward_walltime = datetime.timedelta(seconds=neq_forward_time - eq_forward_time)
         logger.info(f"replicate_{self.name} Forward nonequilibrium time (lambda 0 -> 1): {neq_forward_walltime}")
 
         # Equilibrium (lambda = 1)
-        for step in range(int(eq_steps/work_save_frequency)):
+        for step in range(coarse_eq_steps):
             integrator.step(work_save_frequency)
-            if (step + 1) % traj_save_frequency == 0:
-                pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
-                old_pos = np.asarray(htf.old_positions(pos))
-                new_pos = np.asarray(htf.new_positions(pos))
-                reverse_eq_new.append(new_pos)  # TODO: Maybe better naming not old/new initial/final
-                reverse_eq_old.append(old_pos)
+            if step % traj_save_frequency == 0:
+                initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
+                                                                            atom_selection_exp=selection_expression)
+                reverse_eq_new.append(initial_positions)  # TODO: Maybe better naming not old/new but initial/final
+                reverse_eq_old.append(final_positions)
+        # Make sure trajectories are stored at the end of the eq loop
+        initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
+                                                                    atom_selection_exp=selection_expression)
+        reverse_eq_old.append(initial_positions)
+        reverse_eq_new.append(final_positions)
+
         eq_reverse_time = time.perf_counter()
         eq_reverse_walltime = datetime.timedelta(seconds=eq_reverse_time - neq_forward_time)
         logger.info(f"replicate_{self.name} Reverse (lambda 1) time: {eq_reverse_walltime}")
 
         # Reverse work (1 -> 0)
         reverse_works = [integrator.get_protocol_work(dimensionless=True)]
-        for rev_step in range(int(neq_steps/work_save_frequency)):
+        for rev_step in range(coarse_neq_steps):
             integrator.step(work_save_frequency)
             reverse_works.append(integrator.get_protocol_work(dimensionless=True))
-            if (rev_step + 1) % traj_save_frequency == 0:
-                pos = context.getState(getPositions=True, enforcePeriodicBox=False).getPositions(asNumpy=True)
-                old_pos = np.asarray(htf.old_positions(pos))
-                new_pos = np.asarray(htf.new_positions(pos))
-                reverse_neq_old.append(old_pos)
-                reverse_neq_new.append(new_pos)
+            if rev_step % traj_save_frequency == 0:
+                initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
+                                                                            atom_selection_exp=selection_expression)
+                reverse_neq_old.append(initial_positions)
+                reverse_neq_new.append(final_positions)
+        # Make sure trajectories are stored at the end of the neq loop
+        initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
+                                                                    atom_selection_exp=selection_expression)
+        forward_eq_old.append(initial_positions)
+        forward_eq_new.append(final_positions)
+
         neq_reverse_time = time.perf_counter()
         neq_reverse_walltime = datetime.timedelta(seconds=neq_reverse_time - eq_reverse_time)
         logger.info(f"replicate_{self.name} Reverse nonequilibrium time (lambda 1 -> 0): {neq_reverse_walltime}")
@@ -323,6 +400,15 @@ class SimulationUnit(ProtocolUnit):
             np.save(out_file, forward_works)
         with open(reverse_work_path, 'wb') as out_file:
             np.save(out_file, reverse_works)
+
+        # Store timings and performance info in dictionary
+        timing_info = {
+            "eq_forward_time_in_s": eq_forward_walltime.total_seconds(),
+            "neq_forward_time_in_s": neq_forward_walltime.total_seconds(),
+            "eq_reverse_time_in_s": eq_reverse_walltime.total_seconds(),
+            "neq_reverse_time_in_s": neq_reverse_walltime.total_seconds(),
+            "performance_in_ns_day": estimated_performance
+        }
 
         # TODO: Do we need to save the trajectories?
         # Serialize trajectories
@@ -352,26 +438,27 @@ class SimulationUnit(ProtocolUnit):
         with open(reverse_neq_new_path, 'wb') as out_file:
             np.save(out_file, np.array(reverse_neq_new))
 
+        # Saving trajectory paths in dictionary structure
+        trajectory_paths = {
+            "forward_eq_initial": forward_eq_old_path,
+            "forward_eq_final": forward_eq_new_path,
+            "forward_neq_initial": forward_neq_old_path,
+            "forward_neq_final": forward_neq_new_path,
+            "reverse_eq_initial": reverse_eq_old_path,
+            "reverse_eq_final": reverse_eq_new_path,
+            "reverse_neq_initial": reverse_neq_old_path,
+            "reverse_neq_final": reverse_neq_new_path
+        }
+
         # Explicitly cleanup for GPU resources
         del context, integrator
 
         return {
             'forward_work': forward_work_path,
             'reverse_work': reverse_work_path,
-            'forward_eq_old': forward_eq_old_path,
-            'forward_eq_new': forward_eq_new_path,
-            'forward_neq_old': forward_neq_old_path,
-            'forward_neq_new': forward_neq_new_path,
-            'reverse_eq_old': reverse_eq_old_path,
-            'reverse_eq_new': reverse_eq_new_path,
-            'reverse_neq_old': reverse_neq_old_path,
-            'reverse_neq_new': reverse_neq_new_path,
+            "trajectory_paths": trajectory_paths,
             'log': output_log_path,
-            'eq_forward_time': str(eq_forward_walltime),
-            'neq_forward_time': str(neq_forward_walltime),
-            'eq_reverse_time': str(eq_reverse_walltime),
-            'neq_reverse_time': str(neq_reverse_walltime),
-            # TODO: performance nested dictionary with the walltimes (total and each section) and performance in ns/day
+            'timing_info': timing_info,
         }
 
 
@@ -556,7 +643,6 @@ class NonEquilibriumCyclingProtocol(Protocol):
     ) -> Dict[str, Any]:
 
         from collections import defaultdict
-        import numpy as np
         outputs = defaultdict(list)
         for pdr in protocol_dag_results:
             for pur in pdr.protocol_unit_results:
