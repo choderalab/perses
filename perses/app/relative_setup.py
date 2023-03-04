@@ -270,8 +270,8 @@ class RelativeFEPSetup(object):
 
             elif self._ligand_input.suffix == '.sdf' or self._ligand_input.suffix == '.mol2': #
                 _logger.info(f"Detected .sdf format.  Proceeding...") #TODO: write checkpoints for sdf format
-                self._ligand_oemol_old = createOEMolFromSDF(self._ligand_input, index=self._old_ligand_index, allow_undefined_stereo=True)
-                self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input, index=self._new_ligand_index, allow_undefined_stereo=True)
+                self._ligand_oemol_old = createOEMolFromSDF(self._ligand_input, index=self._old_ligand_index, allow_undefined_stereo=False)
+                self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input, index=self._new_ligand_index, allow_undefined_stereo=False)
                 # self._ligand_oemol_old = generate_unique_atom_names(self._ligand_oemol_old)
                 # self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
 
