@@ -362,10 +362,10 @@ def createOEMolFromSDF(sdf_filename, index=0, add_hydrogens=True, allow_undefine
     if add_hydrogens:
         oechem.OEAddExplicitHydrogens(molecule)
     oechem.OEPerceiveChiral(molecule)
+    oechem.OE3DToInternalStereo(molecule)
 
     # perceive chirality
     if not allow_undefined_stereo:
-        assert oechem.OE3DToInternalStereo(molecule), f"the stereochemistry perception from 3D coordinates failed"
         assert not has_undefined_stereocenters(molecule), f"there is an atom with an undefined stereochemistry"
 
     return molecule

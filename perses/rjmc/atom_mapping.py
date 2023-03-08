@@ -786,7 +786,7 @@ class AtomMapper(object):
                     atom.name = oeatom.GetName()
             elif hasattr(mol, 'GetAtoms'):
                 # OpenEye OEMol
-                offmol = Molecule(mol, allow_undefined_stereo=True)
+                offmol = Molecule(mol)
                 oemol = oechem.OEMol(mol)
             else:
                 raise ValueError(f'Not sure how to copy {mol}; should be openff.toolkit.topology.Molecule or openeye.oechem.OEMol')
