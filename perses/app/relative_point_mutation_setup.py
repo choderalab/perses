@@ -89,7 +89,6 @@ class PointMutationExecutor(object):
             hss = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep= 4.0 * unit.femtoseconds,
                                                                                   collision_rate=5.0 / unit.picosecond,
                                                                                   n_steps=250,
-                                                                                  reassign_velocities=True,
                                                                                   n_restart_attempts=20,
                                                                                   splitting="V R R R O R R R V",
                                                                                   constraint_tolerance=1e-06),
