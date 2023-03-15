@@ -4,7 +4,7 @@ import datetime
 import logging
 import time
 
-from gufe.settings.models import ProtocolSettings
+from gufe.settings.models import ProtocolSettings, Settings
 from gufe.chemicalsystem import ChemicalSystem
 from gufe.mapping import ComponentMapping
 from gufe.protocols import (
@@ -606,8 +606,10 @@ class NonEquilibriumCyclingProtocol(Protocol):
     @classmethod
     def _default_settings(cls) -> ProtocolSettings:
         from perses.protocols import settings
+        default_settings = Settings.get_defaults()
         non_eq_settings = settings.NonEqCyclingSettings()
-        return non_eq_settings
+        default_settings.protocol_settings = non_eq_settings
+        return default_settings
 
     # NOTE: create method should be really fast, since it would be running in the work units not the clients!!
     def _create(
