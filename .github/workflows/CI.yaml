@@ -24,10 +24,10 @@ jobs:
       fail-fast: false
       matrix:
         python-version: [3.8, 3.9, "3.10"]
-        openmm: ["dev", "8.0", "7.7"]
-        exclude:
-          - python-version: "3.10"
-            openmm: "7.6"
+        openmm: ["8.0", "7.7"]
+        include:
+          - openmm: "dev"
+            python-version: "3.10"
 
     env:
       OPENMM: ${{ matrix.openmm }}
@@ -43,25 +43,27 @@ jobs:
           df -h
           ulimit -a
 
+      - name: Setup micromamba dev
+        if: ${{ matrix.openmm == 'dev' }}
+        uses: mamba-org/provision-with-micromamba@main
+        with:
+          environment-file: devtools/conda-envs/test_env.yaml
+          environment-name: test
+          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmm_dev/linux-64,conda-forge,openeye
+          channel-priority: flexible
+          extra-specs: |
+            python==${{ matrix.python-version }}
+            openmm==8.0.0dev3
+
       - name: Setup micromamba
+        if: ${{ matrix.openmm != 'dev' }}
         uses: mamba-org/provision-with-micromamba@main
         with:
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: test
           extra-specs: |
-            python=${{ matrix.python-version }}
-
-      - name: Refine test environment
-        shell: bash -l {0}
-        run: |
-          case ${{ matrix.openmm }} in
-            dev)
-              echo "Using dev build of OpenMM"
-              micromamba install -c conda-forge/label/openmm_dev -c conda-forge openmm;;
-            *)
-              echo "installing OpenMM version ${{ matrix.openmm }}"
-              micromamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
-          esac
+            python==${{ matrix.python-version }}
+            openmm==${{ matrix.openmm }}
 
       - name: Install package
         shell: bash -l {0}
