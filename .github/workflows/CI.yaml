@@ -91,7 +91,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_TEST_SECRET }}
         run: |
           export TRAVIS=true
-          python -c "import openmmtools; print(openmmtools.__verson__)"
+          python -c "import openmmtools; print(openmmtools.__version__)"
           pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto -m "not gpu_needed" perses/tests
 
       - name: Codecov
