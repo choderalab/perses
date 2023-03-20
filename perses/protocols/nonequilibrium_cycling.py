@@ -231,7 +231,7 @@ class SimulationUnit(ProtocolUnit):
         selection_expression = protocol_settings.atom_selection_expression
 
         # Get the ligand mapping from ComponentMapping object
-        ligand_mapping = mapping.componentA_to_componentB
+        ligand_mapping = mapping.componentB_to_componentA
 
         # Setup relative FE calculation
         fe_setup = RelativeFEPSetup(
