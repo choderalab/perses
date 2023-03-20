@@ -231,6 +231,8 @@ class SimulationUnit(ProtocolUnit):
         selection_expression = protocol_settings.atom_selection_expression
 
         # Get the ligand mapping from ComponentMapping object
+        # NOTE: perses to date has a different "directionality" sense in terms of the mapping,
+        #   see perses.rjmc.topology_proposal.propose docstring for detailed information.
         ligand_mapping = mapping.componentB_to_componentA
 
         # Setup relative FE calculation
