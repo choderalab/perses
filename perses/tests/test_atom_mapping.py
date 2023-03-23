@@ -193,6 +193,33 @@ class TestAtomMapper(unittest.TestCase):
             atom_mapping = atom_mapper.get_best_mapping(molecules[0], molecules[2])
             #assert len(atom_mapping.new_to_old_atom_map) == 35,  f'Expected meta groups methyl C to NOT map onto ethyl O as they are distal in cartesian space\n{atom_mapping}' # TODO
 
+    def test_sampled_mappings(self):
+        """
+        Test the sampling of atom mappings between pairs of molecules from the JACS benchmark set.
+        """
+        # Create and configure an AtomMapper
+        from openeye import oechem
+        atom_expr = oechem.OEExprOpts_IntType
+        bond_expr = oechem.OEExprOpts_RingMember
+        atom_mapper = AtomMapper(atom_expr=atom_expr, bond_expr=bond_expr)
+
+        # Test mappings for JACS dataset ligands
+        for dataset_name in ['Jnk1']:
+            molecules = self.molecules[dataset_name]
+
+            # Jnk1 ligands 0 and 2 have meta substituents that face opposite each other in the active site.
+            # When ignoring position information, the mapper should align these groups, and put them both in the core.
+            # When using position information, the mapper should see that the orientations differ and chose
+            # to unmap (i.e. put both these groups in core) such as to get the geometry right at the expense of
+            # mapping fewer atoms
+
+            # Sample a mapping
+            sampled_mapping = atom_mapper.get_sampled_mapping(molecules[0], molecules[2])
+
+            # Get all mappings
+            all_mappings = atom_mapper.get_all_mappings(molecules[0], molecules[2])
+            assert (sampled_mapping in all_mappings)
+
     def test_generate_atom_mapping_from_positions(self):
         """
         Test the generation of atom mappings from positions on JACS set compounds

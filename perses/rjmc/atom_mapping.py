@@ -40,6 +40,14 @@ class InvalidMappingException(Exception):
 # ATOM MAPPING
 ################################################################################
 
+# TODO: Replace with gufe object
+# gufe: LigandAtomMapping for small molecules
+#       AtomMapping base class
+# protein mapping might need a different strategy
+# Note: immutable
+# https://github.com/OpenFreeEnergy/gufe/blob/main/gufe/mapping/ligandatommapping.py#L13
+# https://github.com/OpenFreeEnergy/gufe/blob/main/gufe/visualization/mapping_visualization.py#L178
+
 class AtomMapping(object):
     """
     A container representing an atom mapping between two small molecules.
@@ -74,8 +82,8 @@ class AtomMapping(object):
 
     Create an atom mapping for ethane -> ethanol
     >>> from openff.toolkit.topology import Molecule
-    >>> ethane = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])([H:7])')
-    >>> ethanol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])[O:7][H:8]')
+    >>> ethane = Molecule.from_mapped_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])([H:8])')
+    >>> ethanol = Molecule.from_mapped_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])[O:8][H:9]')
     >>> atom_mapping = AtomMapping(ethane, ethanol, old_to_new_atom_map={0:0, 4:4})
 
     """
@@ -112,7 +120,7 @@ class AtomMapping(object):
             self.new_to_old_atom_map = new_to_old_atom_map
 
     def __repr__(self):
-        return f"AtomMapping(Molecule.from_smiles('{self.old_mol.to_smiles(mapped=True)}'), Molecule.from_smiles('{self.new_mol.to_smiles(mapped=True)}'), old_to_new_atom_map={self.old_to_new_atom_map})"
+        return f"AtomMapping(Molecule.from_mapped_smiles('{self.old_mol.to_smiles(mapped=True)}'), Molecule.from_mapped_smiles('{self.new_mol.to_smiles(mapped=True)}'), old_to_new_atom_map={self.old_to_new_atom_map})"
 
     def __str__(self):
         return f'AtomMapping : {self.old_mol.to_smiles(mapped=True)} -> {self.new_mol.to_smiles(mapped=True)} : mapped atoms {self.old_to_new_atom_map}'
@@ -343,6 +351,7 @@ class AtomMapping(object):
                     return True
         return False
 
+    # TODO: Not present in gufe -> might be a factory to "fix" or a function in PersesAtomMapper
     def unmap_partially_mapped_cycles(self):
         """De-map atoms to ensure the partition function will be factorizable.
 
@@ -446,6 +455,7 @@ class AtomMapping(object):
             self.render_image('final-mapping.png')
             raise InvalidMappingException(msg)
 
+    # TODO: Not present in gufe
     def preserve_chirality(self):
         """
         Alter the atom mapping to preserve chirality
@@ -531,6 +541,7 @@ class AtomMapping(object):
 # ATOM MAPPERS
 ################################################################################
 
+# TODO: Use gufe AtomMapper API (and extend if needed)
 class AtomMapper(object):
     """
     Generate atom mappings between two molecules for relative free energy transformations.
@@ -579,8 +590,8 @@ class AtomMapper(object):
     Specify two molecules without positions
 
     >>> from openff.toolkit.topology import Molecule
-    >>> ethane = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])([H:7])')
-    >>> ethanol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])[O:7][H:8]')
+    >>> ethane = Molecule.from_mapped_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])([H:8])')
+    >>> ethanol = Molecule.from_mapped_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])[O:8][H:9]')
 
     Retrieve all mappings between two molecules
 
@@ -671,6 +682,16 @@ class AtomMapper(object):
         self.matching_criterion = matching_criterion
         self.coordinate_tolerance = coordinate_tolerance
 
+        # TODO:
+        # rdFMCS module
+        # https://www.rdkit.org/docs/source/rdkit.Chem.rdFMCS.html
+        # MCS example: https://www.rdkit.org/docs/GettingStartedInPython.html#maximum-common-substructure
+        # mcs_result = rdFMCS.FindMCS([mol1, mol2])
+        # timemachine example: https://github.com/proteneer/timemachine/blob/master/timemachine/fe/atom_mapping.py
+        # lomap: https://github.com/OpenFreeEnergy/Lomap/blob/main/lomap/mcs.py#L600
+        # gives us a single SMARTS that we can use to figure out what our match is
+        # https://github.com/proteneer/timemachine/blob/6ee118739a1800bae33e0f489e0718369eaa091d/timemachine/fe/atom_mapping.py#L11
+
         # Determine atom and bond expressions
         import openeye.oechem as oechem
         DEFAULT_EXPRESSIONS = {
@@ -725,15 +746,15 @@ class AtomMapper(object):
         Returns
         -------
         atom_mappings : list of AtomMapping
-            All valid atom mappings
+            All valid atom mappings annotated with mapping scores
 
         Examples:
         ---------
         Specify two molecules without positions
 
         >>> from openff.toolkit.topology import Molecule
-        >>> ethane = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])([H:7])')
-        >>> ethanol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])[O:7][H:8]')
+        >>> ethane = Molecule.from_mapped_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])([H:8])')
+        >>> ethanol = Molecule.from_mapped_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])[O:8][H:9]')
 
         Retrieve all mappings between two molecules
 
@@ -745,50 +766,19 @@ class AtomMapper(object):
         >>> atom_mappings = atom_mapper.get_all_mappings(ethane.to_openeye(), ethanol)
 
         """
-        atom_mappings = set() # all unique atom mappings found
+        atom_mappings = set() # all unique valid atom mappings found
 
-        # Create OpenFF and OEMol copies of input molecules, retaining properties if provided
-        # TODO: Do we really need to retain OEMol atom/bond inttypes?
-        def copy_molecule(mol):
-            """Generate OpenFF and OEMol copies of a given molecule,
-            retaining OEMol properties (such as atom/bond inttypes) if present.
-
-            Parameters
-            ----------
-            mol : openeye.oechem.OEMol or openeye.oechem.OEGraphMol or openff.toolkit.topology.Molecule
-                Molecule to be copied
-
-            Returns
-            -------
-            offmol : openff.toolkit.topology.Molecule
-                The OpenFF Molecule
-            oemol : openeye.oechem.OEMol
-                A copy of the OEMol, preserving data if provided
-            """
-            from openff.toolkit.topology import Molecule
-            from openeye import oechem
-            if isinstance(mol, Molecule):
-                # OpenFF Molecule
-                offmol = Molecule(mol)
-                oemol = offmol.to_openeye()
-                # Fix atom name retrieval from OEMol objects
-                # TODO: When https://github.com/openforcefield/openff-toolkit/issues/1026 is fixed, remove this
-                for atom, oeatom in zip(offmol.atoms, oemol.GetAtoms()):
-                    atom.name = oeatom.GetName()
-            elif hasattr(mol, 'GetAtoms'):
-                # OpenEye OEMol
-                offmol = Molecule(mol)
-                oemol = oechem.OEMol(mol)
-            else:
-                raise ValueError(f'Not sure how to copy {mol}; should be openff.toolkit.topology.Molecule or openeye.oechem.OEMol')
-
-            return offmol, oemol
-
-        old_offmol, old_oemol = copy_molecule(old_mol)
-        new_offmol, new_oemol = copy_molecule(new_mol)
+        # Create (copies of) OpenFF Molecule objects from old and new molecules
+        old_offmol = Molecule(old_mol, allow_undefined_stereo=True)
+        new_offmol = Molecule(new_mol, allow_undefined_stereo=True)
 
         if (old_offmol.n_atoms==0) or (new_offmol.n_atoms==0):
             raise ValueError(f'old_mol ({old_offmol.n_atoms} atoms) and new_mol ({new_offmol.n_atoms} atoms) must both have more than zero atoms')
+
+        # Work in OEMol for the remainder of the function
+        # TODO: Replace the rest of this with a mapping strategy based on OpenFF Molecule objects only
+        old_oemol = old_offmol.to_openeye()
+        new_oemol = new_offmol.to_openeye()
 
         # Annotate OEMol representations with ring IDs
         # TODO: What is all this doing
@@ -796,10 +786,11 @@ class AtomMapper(object):
             self._assign_ring_ids(old_oemol)
             self._assign_ring_ids(new_oemol)
 
-        from perses.utils.openeye import get_scaffold
-        old_oescaffold = get_scaffold(old_oemol)
-        new_oescaffold = get_scaffold(new_oemol)
+        # TODO: How do we generate framework in RDKit?
+        old_oescaffold = self._get_scaffold(old_oemol)
+        new_oescaffold = self._get_scaffold(new_oemol)
 
+        # Assign unique IDs to rings
         self._assign_ring_ids(old_oescaffold, assign_atoms=True, assign_bonds=False)
         self._assign_ring_ids(new_oescaffold, assign_atoms=True, assign_bonds=False)
 
@@ -972,8 +963,8 @@ class AtomMapper(object):
         Retrieve best-scoring mapping between ethane and ethanol
 
         >>> from openff.toolkit.topology import Molecule
-        >>> ethane = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])([H:7])')
-        >>> ethanol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])[O:7][H:8]')
+        >>> ethane = Molecule.from_mapped_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])([H:8])')
+        >>> ethanol = Molecule.from_mapped_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])[O:8][H:9]')
         >>> atom_mapping = atom_mapper.get_best_mapping(ethane, ethanol)
 
         """
@@ -1013,13 +1004,13 @@ class AtomMapper(object):
         Sample a mapping stochasticaly between ethane and ethanol
 
         >>> from openff.toolkit.topology import Molecule
-        >>> ethane = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])([H:7])')
-        >>> ethanol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])[O:7][H:8]')
+        >>> ethane = Molecule.from_mapped_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])([H:8])')
+        >>> ethanol = Molecule.from_mapped_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])[O:8][H:9]')
         >>> atom_mapping = atom_mapper.get_sampled_mapping(ethane, ethanol)
 
         """
         import numpy as np
-        atom_mappings = self.get_all_maps(old_mol, new_mol)
+        atom_mappings = self.get_all_mappings(old_mol, new_mol)
         scores = np.array([ self.score_mapping(atom_mapping) for atom_mapping in atom_mappings ])
         # Compute normalized probability for sampling from mappings
         p = scores/np.sum(scores)
@@ -1053,8 +1044,8 @@ class AtomMapper(object):
         of both the forward mapping and reverse mapping choices:
 
         >>> from openff.toolkit.topology import Molecule
-        >>> ethane = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])([H:7])')
-        >>> ethanol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])[O:7][H:8]')
+        >>> ethane = Molecule.from_mapped_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])([H:8])')
+        >>> ethanol = Molecule.from_mapped_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])[O:8][H:9]')
         >>> atom_mapping, logP_forward, logP_reverse = atom_mapper.propose_mapping(ethane, ethanol)
 
 
@@ -1087,8 +1078,8 @@ class AtomMapper(object):
         Compute scores for all mappings between ethane and ethanol:
 
         >>> from openff.toolkit.topology import Molecule
-        >>> ethane = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])([H:7])')
-        >>> ethanol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])[O:7][H:8]')
+        >>> ethane = Molecule.from_mapped_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])([H:8])')
+        >>> ethanol = Molecule.from_mapped_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])[O:8][H:9]')
         >>> atom_mappings = atom_mapper.propose_mapping(ethane, ethanol)
         >>> scores = [ atom_mapper.score_mapping(atom_mapping) for atom_mapping in atom_mappings ]
 
@@ -1211,6 +1202,7 @@ class AtomMapper(object):
             raise InvalidMappingException(f'Both old and new molecules must have at least one conformer defined.')
 
         # Get conformers in common distance unit as numpy arrays
+        # NOTE: Matt has a migration guide in openff units README : https://github.com/openforcefield/openff-units#getting-started
         old_mol_positions = old_mol.conformers[0] / distance_unit
         new_mol_positions = new_mol.conformers[0] / distance_unit
 
@@ -1291,6 +1283,11 @@ class AtomMapper(object):
         .. todo :: Can we refactor to get rid of this function?
 
         """
+        # TODO: Check out RDKit example: https://greglandrum.github.io/rdkit-blog/posts/2022-06-23-3d-mcs.html
+        # Already prepared by openfe: https://github.com/OpenFreeEnergy/openfe/blob/40f018401204c3ae0f8f997e65ee15a30f4fe1bf/openfe/setup/atom_mapping/rdfmcs_mapper.py
+        # only works with implicit hydrogens
+        # rdFCMS does not like hydrogens because of poor scaling
+
         # Check arguments
         if (old_oemol.NumAtoms()==0) or (new_oemol.NumAtoms()==0):
             raise ValueError(f'old_oemol ({old_oemol.NumAtoms()} atoms) and new_oemol ({new_oemol.NumAtoms()} atoms) must both have a nonzero number of atoms')
@@ -1386,7 +1383,7 @@ class AtomMapper(object):
             The atom mapping
 
         """
-        # TODO : Overhaul this to use OpenFF Molecule
+        # TODO : Eliminate this entirely in favor of using OpenFF Molecule objects once we can avoid needing to represent partial molecules for cores
         import openeye.oechem as oechem
         new_to_old_atom_map = dict()
         pattern_to_target_map = AtomMapper._create_pattern_to_target_map(old_oemol, new_oemol, match, matching_criterion)
@@ -1418,13 +1415,12 @@ class AtomMapper(object):
 
     @staticmethod
     def _assign_ring_ids(oemol, max_ring_size=10, assign_atoms=True, assign_bonds=True, only_assign_if_zero=False):
-        """ Sets the Int of each atom in the oemol to a number
-        corresponding to the ring membership of that atom
-
+        """Encode the sizes of rings each atom belongs to in a bitstring and assign it to the atom's Int field.
+         
         Parameters
         ----------
         oemol : openeye.oechem.OEMol
-            oemol to assign ring ID to
+            oemol to assign atom Int field for. This will be modified.
         assign_atoms : bool, optional, default=True
             If True, assign atoms
         assign_bonds : bool, optional, default=True
@@ -1476,3 +1472,71 @@ class AtomMapper(object):
         if assign_bonds:
             for oebond in oemol.GetBonds():
                 oebond.SetIntType(_assign_ring_id(oebond, max_ring_size=max_ring_size))
+
+    @staticmethod
+    def _get_scaffold(oemol, adjustHcount=False):
+        """
+        Takes an openeye.oechem.oemol and return an openeye.oechem.OEMol of the scaffold.
+
+        The scaffold is a molecule where all atoms that are not in rings or in linkers between rings have been removed.
+        Double bonded atoms exo to a ring are retained as scaffold atoms.
+
+        This function has been completely taken from openeye's extractscaffold.py script
+        https://docs.eyesopen.com/toolkits/python/oechemtk/oechem_examples/oechem_example_extractscaffold.html#section-example-oechem-extractscaffold
+
+        Parameters
+        ----------
+        oemol : openeye.oechem.OEMol
+            molecule for which scaffold is to be retrieved
+        adjustHcount : bool, default=False
+            add/remove hydrogens to satisfy valence of scaffold
+
+
+        Returns
+        -------
+        oescaffold : openeye.oechem.OEMol
+            new molecule representing the scaffold of oemol
+        """
+        from openeye import oechem
+
+        # Make a copy so as not to modify original oemol
+        oemol = oechem.OEMol(oemol)
+
+        def TraverseForRing(visited, atom):
+            visited.add(atom.GetIdx())
+
+            for nbor in atom.GetAtoms():
+                if nbor.GetIdx() not in visited:
+                    if nbor.IsInRing():
+                        return True
+
+                    if TraverseForRing(visited, nbor):
+                        return True
+
+            return False
+
+        def DepthFirstSearchForRing(root, nbor):
+            visited = set()
+            visited.add(root.GetIdx())
+
+            return TraverseForRing(visited, nbor)
+
+        class IsInScaffold(oechem.OEUnaryAtomPred):
+            def __call__(self, atom):
+                if atom.IsInRing():
+                    return True
+
+                count = 0
+                for nbor in atom.GetAtoms():
+                    if DepthFirstSearchForRing(atom, nbor):
+                        count += 1
+
+                return count > 1
+
+        oescaffold = oechem.OEMol()
+        pred = IsInScaffold()
+
+        oechem.OESubsetMol(oescaffold, oemol, pred, adjustHcount)
+
+        return oescaffold
+
