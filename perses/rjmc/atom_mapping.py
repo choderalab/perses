@@ -105,10 +105,22 @@ class AtomMapping(object):
         """
         # Store molecules
         # TODO: Should we be allowing unspecified stereochemistry?
-        from openff.toolkit.topology import Molecule
-        self.old_mol = Molecule(old_mol, allow_undefined_stereo=True)
-        self.new_mol = Molecule(new_mol, allow_undefined_stereo=True)
 
+
+        # Create (copies of) OpenFF Molecule objects from old and new molecules
+        def create_offmol_copy(mol):
+            """Create an OpenFF Molecule object copy from the specified molecule"""            
+            try:    
+                from openff.toolkit.topology import Molecule
+                offmol = Molecule(old_mol, allow_undefined_stereo=True)
+            except ValueError as e:
+                # Try the sneaky OpenEye OEMol -> OpenFF Molecule converter that bypasses the RadicalsNotSupportedError thrown internally.
+                offmol = _convert_opemol_to_offmol(mol, allow_undefined_stereo=True)
+            return offmol
+
+        self.old_mol = create_offmol_copy(old_mol)
+        self.new_mol = create_offmol_copy(new_mol)
+        
         # Store atom maps
         if (old_to_new_atom_map is not None) and (new_to_old_atom_map is not None):
             raise ValueError('Only one of old_to_new_atom_map or new_to_old_atom_map can be specified')
@@ -147,7 +159,7 @@ class AtomMapping(object):
         if (   not set(self.new_to_old_atom_map.keys()).issubset(range(self.new_mol.n_atoms))
             or not set(self.new_to_old_atom_map.values()).issubset(range(self.old_mol.n_atoms))
            ):
-            raise InvalidMappingException('Atom mapping contains invalid atom indices:\n{self.new_to_old_atom_map}\nold_mol: {self.old_mol}\nnew_mol: {self.new_mol}')
+            raise InvalidMappingException(f'Atom mapping contains invalid atom indices:\n{self.new_to_old_atom_map}\nold_mol: {self.old_mol.to_smiles(mapped=True)}\nnew_mol: {self.new_mol.to_smiles(mapped=True)}')
 
         # Make sure mapping is one-to-one
         if len(set(self.new_to_old_atom_map.keys())) != len(set(self.new_to_old_atom_map.values())):
@@ -765,13 +777,22 @@ class AtomMapper(object):
         >>> atom_mappings = atom_mapper.get_all_mappings(ethane.to_openeye(), ethanol.to_openeye())
         >>> atom_mappings = atom_mapper.get_all_mappings(ethane.to_openeye(), ethanol)
 
+        Algorithm
+        ---------
+        First, we attempt to generate scaffold mappings between compounds:
+            We build a scaffold for old and new molecules by identifying all heavy atoms in rings (including double bonds exo to rings) and in linkers between rings.
+            We then enumerate valid mappings between these scaffolds
+        If there are no valid scaffold mappings, we directly attempt to map the compounds using the factory mapping settings.
+        If there is a valid scaffold mapping, we retain any mappings with the top score and use these to generate molecule mappings
+
+
         """
         atom_mappings = set() # all unique valid atom mappings found
 
-        # Create (copies of) OpenFF Molecule objects from old and new molecules
+        from openff.toolkit.topology import Molecule
         old_offmol = Molecule(old_mol, allow_undefined_stereo=True)
         new_offmol = Molecule(new_mol, allow_undefined_stereo=True)
-
+        
         if (old_offmol.n_atoms==0) or (new_offmol.n_atoms==0):
             raise ValueError(f'old_mol ({old_offmol.n_atoms} atoms) and new_mol ({new_offmol.n_atoms} atoms) must both have more than zero atoms')
 
@@ -801,7 +822,7 @@ class AtomMapper(object):
             scaffold_maps = list()
         else:
             # Generate scaffold maps
-            # TODO: Why are these hard-coded?
+            # TODO: Determine why atom and bond expressions are hard-coded. Should these be flexible instead?
             from openeye import oechem
             scaffold_maps = AtomMapper._get_all_maps(old_oescaffold, new_oescaffold,
                                                      atom_expr=oechem.OEExprOpts_RingMember | oechem.OEExprOpts_IntType,
@@ -1093,9 +1114,9 @@ class AtomMapper(object):
         if self.use_positions and (atom_mapping.old_mol.conformers is not None) and (atom_mapping.new_mol.conformers is not None):
             # Get all-to-all atom distance matrix
             # TODO: Only compute heavy atom distances
-            from simtk import unit
-            old_positions = atom_mapping.old_mol.conformers[0] / unit.angstroms
-            new_positions = atom_mapping.new_mol.conformers[0] / unit.angstroms
+
+            old_positions = _convert_positions_to_angstroms(atom_mapping.old_mol.conformers[0])
+            new_positions = _convert_positions_to_angstroms(atom_mapping.new_mol.conformers[0])
 
             def dist(a, b):
                 """Compute distance between numpy d-vectors a and b.
@@ -1191,7 +1212,6 @@ class AtomMapper(object):
 
         """
         from openff.toolkit.topology import Molecule
-        distance_unit = unit.angstroms # distance unit for comparisons
 
         # Coerce to openff Molecule
         old_mol = Molecule(old_mol, allow_undefined_stereo=True)
@@ -1203,8 +1223,8 @@ class AtomMapper(object):
 
         # Get conformers in common distance unit as numpy arrays
         # NOTE: Matt has a migration guide in openff units README : https://github.com/openforcefield/openff-units#getting-started
-        old_mol_positions = old_mol.conformers[0] / distance_unit
-        new_mol_positions = new_mol.conformers[0] / distance_unit
+        old_mol_positions = _convert_positions_to_angstroms(old_mol.conformers[0])
+        new_mol_positions = _convert_positions_to_angstroms(new_mol.conformers[0])
 
         # TODO: Refactor
         molA_positions = old_mol.to_openeye().GetCoords() # coordinates (Angstroms)
@@ -1213,7 +1233,7 @@ class AtomMapper(object):
 
         # Define closeness criteria for np.allclose
         rtol = 0.0 # relative tolerane
-        atol = self.coordinate_tolerance / distance_unit # absolute tolerance (Angstroms)
+        atol = _convert_positions_to_angstroms(self.coordinate_tolerance) # absolute tolerance (Angstroms)
 
         # TODO: Can we instead anneal mappings based on closeness in case there is ambiguity?
         old_to_new_atom_map = dict()
@@ -1540,3 +1560,299 @@ class AtomMapper(object):
 
         return oescaffold
 
+def _convert_opemol_to_offmol(oemol, allow_undefined_stereo: bool=False, _cls=None):
+    """
+    Create a Molecule from an OpenEye molecule. If the OpenEye molecule has
+    implicit hydrogens, this function will make them explicit.
+
+    NOTE: This was copied and modified from the openff-toolkit on 2023-03-23 in order to support molecule cores in atom mapping.
+    https://github.com/openforcefield/openff-toolkit/blob/main/openff/toolkit/utils/openeye_wrapper.py#L1061
+
+    WARNING: This is dangerous and risks both the resulting Molecule behaving poorly and code drift away from openff-toolkit.
+    TODO: Eliminate this code as soon as possible when we migrate to a new simpler mapping strategy.
+
+    ``OEAtom`` s have a different set of allowed value for partial charges than
+    ``openff.toolkit.topology.Molecule`` s. In the OpenEye toolkits, partial charges
+    are stored on individual ``OEAtom`` s, and their values are initialized to ``0.0``.
+    In the Open Force Field Toolkit, an ``openff.toolkit.topology.Molecule``'s
+    ``partial_charges`` attribute is initialized to ``None`` and can be set to a
+    unit-wrapped numpy array with units of
+    elementary charge. The Open Force
+    Field Toolkit considers an ``OEMol`` where every ``OEAtom`` has a partial
+    charge of ``float('nan')`` to be equivalent to an Open Force Field Toolkit `Molecule`'s
+    ``partial_charges = None``.
+    This assumption is made in both ``to_openeye`` and ``from_openeye``.
+    .. warning :: This API is experimental and subject to change.
+    Parameters
+    ----------
+    oemol : openeye.oechem.OEMol
+        An OpenEye molecule
+    allow_undefined_stereo : bool, default=False
+        If false, raises an exception if oemol contains undefined stereochemistry.
+    _cls : class
+        Molecule constructor
+    Returns
+    -------
+    molecule : openff.toolkit.topology.Molecule
+        An OpenFF molecule
+    Examples
+    --------
+    Create a Molecule from an OpenEye OEMol
+    >>> from openeye import oechem
+    >>> from openff.toolkit.tests.utils import get_data_file_path
+    >>> ifs = oechem.oemolistream(get_data_file_path('systems/monomers/ethanol.mol2'))
+    >>> oemols = list(ifs.GetOEGraphMols())
+    >>> toolkit_wrapper = OpenEyeToolkitWrapper()
+    >>> molecule = toolkit_wrapper.from_openeye(oemols[0])
+    """
+    import math
+
+    from openeye import oechem
+
+    oemol = oechem.OEMol(oemol)
+
+    # Add explicit hydrogens if they're implicit
+    if oechem.OEHasImplicitHydrogens(oemol):
+        oechem.OEAddExplicitHydrogens(oemol)
+
+    # TODO: Is there any risk to perceiving aromaticity here instead of later?
+    oechem.OEAssignAromaticFlags(oemol, oechem.OEAroModel_MDL)
+
+    oechem.OEPerceiveChiral(oemol)
+
+    # Check that all stereo is specified
+    # Potentially better OE stereo check: OEFlipper — Toolkits - - Python
+    # https: // docs.eyesopen.com / toolkits / python / omegatk / OEConfGenFunctions / OEFlipper.html
+
+    unspec_chiral = False
+    unspec_db = False
+    problematic_atoms = list()
+    problematic_bonds = list()
+
+    for oeatom in oemol.GetAtoms():
+        if oeatom.IsChiral():
+            if not (oeatom.HasStereoSpecified()):
+                unspec_chiral = True
+                problematic_atoms.append(oeatom)
+    for oebond in oemol.GetBonds():
+        if oebond.IsChiral():
+            if not (oebond.HasStereoSpecified()):
+                unspec_db = True
+                problematic_bonds.append(oebond)
+    if unspec_chiral or unspec_db:
+
+        def oeatom_to_str(oeatom) -> str:
+            return "atomic num: {}, name: {}, idx: {}, aromatic: {}, chiral: {}".format(
+                oeatom.GetAtomicNum(),
+                oeatom.GetName(),
+                oeatom.GetIdx(),
+                oeatom.IsAromatic(),
+                oeatom.IsChiral(),
+            )
+
+        def oebond_to_str(oebond) -> str:
+            return "order: {}, chiral: {}".format(
+                oebond.GetOrder(), oebond.IsChiral()
+            )
+
+        def describe_oeatom(oeatom) -> str:
+            description = "Atom {} with bonds:".format(oeatom_to_str(oeatom))
+            for oebond in oeatom.GetBonds():
+                description += "\nbond {} to atom {}".format(
+                    oebond_to_str(oebond), oeatom_to_str(oebond.GetNbr(oeatom))
+                )
+            return description
+
+        msg = (
+            "OEMol has unspecified stereochemistry. "
+            "oemol.GetTitle(): {}\n".format(oemol.GetTitle())
+        )
+        if len(problematic_atoms) != 0:
+            msg += "Problematic atoms are:\n"
+            for problematic_atom in problematic_atoms:
+                msg += describe_oeatom(problematic_atom) + "\n"
+        if len(problematic_bonds) != 0:
+            msg += "Problematic bonds are: {}\n".format(problematic_bonds)
+        if allow_undefined_stereo:
+            msg = "Warning (not error because allow_undefined_stereo=True): " + msg
+            logger.warning(msg)
+        else:
+            msg = "Unable to make OFFMol from OEMol: " + msg
+            raise UndefinedStereochemistryError(msg)
+
+    if _cls is None:
+        from openff.toolkit.topology.molecule import Molecule
+
+        _cls = Molecule
+
+    molecule = _cls()
+    molecule.name = oemol.GetTitle()
+
+    # Copy any attached SD tag information
+    for dp in oechem.OEGetSDDataPairs(oemol):
+        molecule._properties[dp.GetTag()] = dp.GetValue()
+
+    off_to_oe_idx = dict()  # {oemol_idx: molecule_idx}
+    atom_mapping = {}
+    for oeatom in oemol.GetAtoms():
+        oe_idx = oeatom.GetIdx()
+        map_id = oeatom.GetMapIdx()
+        atomic_number = oeatom.GetAtomicNum()
+        # Carry with implicit units of elementary charge for faster route through _add_atom
+        formal_charge = oeatom.GetFormalCharge()
+        explicit_valence = oeatom.GetExplicitValence()
+        # Implicit hydrogens are never added to D- and F- block elements,
+        # and the MDL valence is always the explicit valence for these
+        # elements, so this does not count radical electrons in these blocks.
+        mdl_valence = oechem.OEMDLGetValence(
+            atomic_number, formal_charge, explicit_valence
+        )
+        number_radical_electrons = mdl_valence - (
+            oeatom.GetImplicitHCount() + explicit_valence
+        )
+
+        # WARNING: This has been intentionally commented out to support cores (molecule subsets)
+        #if number_radical_electrons > 0:
+        #    raise RadicalsNotSupportedError(
+        #        "The OpenFF Toolkit does not currently support parsing molecules with radicals. "
+        #        f"Found {number_radical_electrons} radical electrons on molecule "
+        #        f"{oechem.OECreateSmiString(oemol)}."
+        #    )
+
+        is_aromatic = oeatom.IsAromatic()
+        from openff.toolkit.utils import OpenEyeToolkitWrapper
+        stereochemistry = OpenEyeToolkitWrapper._openeye_cip_atom_stereochemistry(
+            oemol, oeatom
+        )
+        # stereochemistry = self._openeye_cip_atom_stereochemistry(oemol, oeatom)
+        name = oeatom.GetName()
+
+        # Transfer in hierarchy metadata
+        metadata_dict = dict()
+        if oechem.OEHasResidues(oemol):
+            metadata_dict["residue_name"] = oechem.OEAtomGetResidue(
+                oeatom
+            ).GetName()
+            metadata_dict["residue_number"] = oechem.OEAtomGetResidue(
+                oeatom
+            ).GetResidueNumber()
+            metadata_dict["insertion_code"] = oechem.OEAtomGetResidue(
+                oeatom
+            ).GetInsertCode()
+            metadata_dict["chain_id"] = oechem.OEAtomGetResidue(oeatom).GetChainID()
+        # print('from', metadata_dict)
+
+        atom_index = molecule._add_atom(
+            atomic_number,
+            formal_charge,
+            is_aromatic,
+            stereochemistry=stereochemistry,
+            name=name,
+            metadata=metadata_dict,
+            invalidate_cache=False,
+        )
+        off_to_oe_idx[
+            oe_idx
+        ] = atom_index  # store for mapping oeatom to molecule atom indices below
+        atom_mapping[atom_index] = map_id
+
+    molecule._invalidate_cached_properties()
+
+    # If we have a full / partial atom map add it to the molecule. Zeroes 0
+    # indicates no mapping
+    if {*atom_mapping.values()} != {0}:
+        molecule._properties["atom_map"] = {
+            idx: map_idx for idx, map_idx in atom_mapping.items() if map_idx != 0
+        }
+
+    for oebond in oemol.GetBonds():
+        atom1_index = off_to_oe_idx[oebond.GetBgnIdx()]
+        atom2_index = off_to_oe_idx[oebond.GetEndIdx()]
+        bond_order = oebond.GetOrder()
+        is_aromatic = oebond.IsAromatic()
+        stereochemistry = OpenEyeToolkitWrapper._openeye_cip_bond_stereochemistry(
+            oemol, oebond
+        )
+        if oebond.HasData("fractional_bond_order"):
+            fractional_bond_order = oebond.GetData("fractional_bond_order")
+        else:
+            fractional_bond_order = None
+
+        molecule._add_bond(
+            atom1_index,
+            atom2_index,
+            bond_order,
+            is_aromatic=is_aromatic,
+            stereochemistry=stereochemistry,
+            fractional_bond_order=fractional_bond_order,
+            invalidate_cache=False,
+        )
+
+    molecule._invalidate_cached_properties()
+
+    # TODO: Copy conformations, if present
+    # TODO: Come up with some scheme to know when to import coordinates
+    # From SMILES: no
+    # From MOL2: maybe
+    # From other: maybe
+    if hasattr(oemol, "GetConfs"):
+        for conf in oemol.GetConfs():
+            n_atoms = molecule.n_atoms
+            # Store with implicit units until we're sure this conformer exists
+            positions = np.zeros(shape=[n_atoms, 3], dtype=np.float64)
+            for oe_id in conf.GetCoords().keys():
+                # implicitly in angstrom
+                off_atom_coords = conf.GetCoords()[oe_id]
+                off_atom_index = off_to_oe_idx[oe_id]
+                positions[off_atom_index, :] = off_atom_coords
+            all_zeros = not np.any(positions)
+            if all_zeros and n_atoms > 1:
+                continue
+            molecule._add_conformer(unit.Quantity(positions, unit.angstrom))
+
+    # Store charges with implicit units in this scope
+    unitless_charges = np.zeros(shape=molecule.n_atoms, dtype=np.float64)
+
+    # If all OEAtoms have a partial charge of NaN, then the OFFMol should
+    # have its partial_charges attribute set to None
+    any_partial_charge_is_not_nan = False
+    for oe_atom in oemol.GetAtoms():
+        oe_idx = oe_atom.GetIdx()
+        off_idx = off_to_oe_idx[oe_idx]
+        unitless_charge = oe_atom.GetPartialCharge()
+        # Once this is True, skip the isnancheck
+        if not any_partial_charge_is_not_nan:
+            if not math.isnan(unitless_charge):
+                any_partial_charge_is_not_nan = True
+        unitless_charges[off_idx] = unitless_charge
+
+    if any_partial_charge_is_not_nan:
+        molecule.partial_charges = unit.Quantity(
+            unitless_charges, unit.elementary_charge
+        )
+    else:
+        molecule.partial_charges = None
+
+    return molecule
+
+def _convert_positions_to_angstroms(positions):
+    """Convert an openmm or pint Quantity wrapped object in distance units to unitless object in Angstroms
+    
+    Parameters
+    ----------
+    positions : openmm or pint Quantity wrapped object with units of distance
+        The positions array or distance to convert
+
+    Returns
+    -------
+    unwrapped : object
+        The object (e.g. numpy array or float) in Angstroms
+
+    """        
+    if hasattr(positions, 'to'):
+        # pint Quantity
+        return positions.to('angstroms').magnitude
+    elif hasattr(positions, 'value_in_unit'):
+        # openmm Quantity
+        from openmm import unit
+        return positions / unit.angstroms
