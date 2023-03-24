@@ -208,8 +208,8 @@ class SimulationUnit(ProtocolUnit):
             receptor_top, receptor_pos = None, None
 
         # Get ligands cheminformatics molecules
-        ligand_a = ligand_a.to_openeye()
-        ligand_b = ligand_b.to_openeye()
+        ligand_a = ligand_a.to_openff().to_openeye()
+        ligand_b = ligand_b.to_openff().to_openeye()
         # Generating unique atom names for ligands -- openmmforcefields needs them
         ligand_a = generate_unique_atom_names(ligand_a)
         ligand_b = generate_unique_atom_names(ligand_b)
