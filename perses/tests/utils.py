@@ -562,9 +562,9 @@ def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_it
 
         if compute_timeseries:
             print(f"computing production and data correlation")
-            from pymbar import timeseries
-            t0, g, Neff = timeseries.detectEquilibration(rps)
-            series = timeseries.subsampleCorrelatedData(np.arange(t0, num_iterations), g = g)
+            from openmmtools.multistate.pymbar import detect_equilibration,
+            t0, g, Neff = detect_equilibration(rps)
+            series = subsample_correlated_data(np.arange(t0, num_iterations), g = g)
             print(f"production starts at index {t0} of {num_iterations}")
             print(f"the number of effective samples is {Neff}")
             indices = t0 + series
