@@ -19,7 +19,7 @@ import openmmtools.cache as cache
 from openmmtools.integrators import LangevinIntegrator
 from unittest import skipIf
 
-from openmmtools.multistate.pymbar import _pymbar_exp, detect_equilibration,
+from openmmtools.multistate.pymbar import _pymbar_exp, detect_equilibration
 import pytest
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'

@@ -504,7 +504,7 @@ def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_it
     md_steps: int
         number of md_steps to run in each num_iteration
     compute_timeseries = bool (default False)
-        whether to use pymbar detectEquilibration and subsampleCorrelated data from the MD run (the potential energy is the data)
+        whether to use pymbar detect_equilibration and subsample_correlated data from the MD run (the potential energy is the data)
     prespecified_conformers = None or unit.Quantity(np.array([num_iterations, system.getNumParticles(), 3]), unit = unit.nanometers)
         whether to input a unit.Quantity of conformers and bypass the conformer_generation/pymbar stage; None will default conduct this phase
 
@@ -562,7 +562,7 @@ def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_it
 
         if compute_timeseries:
             print(f"computing production and data correlation")
-            from openmmtools.multistate.pymbar import detect_equilibration,
+            from openmmtools.multistate.pymbar import detect_equilibration
             t0, g, Neff = detect_equilibration(rps)
             series = subsample_correlated_data(np.arange(t0, num_iterations), g = g)
             print(f"production starts at index {t0} of {num_iterations}")
