@@ -34,7 +34,7 @@ def run_script_file(file_path, cmd_args=None):
         if cmd_args:
             cmd.extend(cmd_args)
         try:
-            subprocess.run(cmd, capture_output=True, check=True)
+            subprocess.run(cmd, capture_output=True, check=True, shell=True)
         except subprocess.CalledProcessError as error:
             raise Exception(f"Example {file_path} failed. STDERR: {error.stderr.decode()}")
 
