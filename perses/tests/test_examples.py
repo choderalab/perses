@@ -12,6 +12,8 @@ Test that the examples in the repo run without errors.
 # GLOBAL IMPORTS
 # ======================================================================
 
+import sys
+
 import pathlib
 import pytest
 import subprocess
@@ -25,7 +27,8 @@ NOT_EXAMPLES_KEYWORDS = ("analyze-benchmark", "moonshot-mainseries")
 def run_script_file(file_path, cmd_args=None):
     """Run through the shell a python script."""
     with enter_temp_directory():
-        cmd = ["python", file_path]
+        # Make sure we grab the python executable in our env
+        cmd = [f"{sys.executable}", file_path]
         print(cmd)
         # Extend cmd list with given cmd_args
         if cmd_args:
