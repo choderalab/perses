@@ -30,11 +30,11 @@ dependencies:
   - openmmforcefields >=0.9.0
   - openmmtools >=0.21.2 # may need to sort out ambermini/ambertools/parmed dependencies
   - openmoltools # may need to sort out ambermini/ambertools/parmed dependencies (we don't want ambertools)
-  - parmed >= 4 # may need to sort out ambermini/ambertools/parmed dependencies
+  - parmed ==3.4.4 # may need to sort out ambermini/ambertools/parmed dependencies
   - pdbfixer
   - pip
   - progressbar2
-  - pymbar ==3.4.4
+  - pymbar < 4
   - pytest
   - pytest-attrib
   - pytest-cov
