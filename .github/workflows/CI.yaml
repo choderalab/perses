@@ -76,6 +76,7 @@ jobs:
           micromamba info
           micromamba list
           pip freeze
+          python -c "from parmed.utils.decorators import HAS_OPENMM; print(HAS_OPENMM)"
 
       - name: Decrypt OpenEye license
         shell: bash -l {0}
