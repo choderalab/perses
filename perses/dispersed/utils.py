@@ -310,7 +310,7 @@ def compute_timeseries(reduced_potentials):
     from openmmtools.multistate.pymbar import detect_equilibration, subsample_correlated_data
     t0, g, Neff_max = detect_equilibration(reduced_potentials) #computing indices of uncorrelated timeseries
     A_t_equil = reduced_potentials[t0:]
-    uncorrelated_indices = timeseries.subsample_correlated_data(A_t_equil, g=g)
+    uncorrelated_indices = subsample_correlated_data(A_t_equil, g=g)
     A_t = A_t_equil[uncorrelated_indices]
     full_uncorrelated_indices = [i+t0 for i in uncorrelated_indices]
 
