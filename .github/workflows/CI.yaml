@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - "main"
+      - "*"
   schedule:
     # nightly tests
     - cron: "0 0 * * *"
