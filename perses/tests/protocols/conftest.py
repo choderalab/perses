@@ -113,10 +113,11 @@ def production_settings(short_settings):
 def mapping_benzene_toluene(benzene, toluene):
     """Mapping from toluene to benzene"""
     mapping_toluene_to_benzene = {4: 0, 5: 1, 6: 2, 7: 3, 8: 4, 9: 5, 10: 6, 11: 7, 12: 8, 13: 9, 14: 11}
+    inverted_mapping = {value: key for key, value in mapping_toluene_to_benzene.items()}
     mapping_obj = LigandAtomMapping(
         componentA=benzene,
         componentB=toluene,
-        componentA_to_componentB=mapping_toluene_to_benzene,
+        componentA_to_componentB=inverted_mapping,
     )
     return mapping_obj
 
