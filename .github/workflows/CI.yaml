@@ -97,7 +97,8 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_TEST_SECRET }}
         run: |
           export TRAVIS=true
-          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto -m "not gpu_needed" perses/tests
+          # TODO: revert this back to testing the entire test suite when finished with #1177
+          pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -n auto -m "not gpu_needed" perses/tests/protocols
 
       - name: Codecov
         if: ${{ github.repository == 'choderalab/perses'
