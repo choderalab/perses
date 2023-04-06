@@ -112,12 +112,11 @@ def production_settings(short_settings):
 @pytest.fixture
 def mapping_benzene_toluene(benzene, toluene):
     """Mapping from toluene to benzene"""
-    mapping_toluene_to_benzene = {4: 0, 5: 1, 6: 2, 7: 3, 8: 4, 9: 5, 10: 6, 11: 7, 12: 8, 13: 9, 14: 11}
-    inverted_mapping = {value: key for key, value in mapping_toluene_to_benzene.items()}
+    mapping_toluene_to_benzene = {0: 4, 1: 5, 2: 6, 3: 7, 4: 8, 5: 9, 6: 10, 7: 11, 8: 12, 9: 13, 11: 14}
     mapping_obj = LigandAtomMapping(
         componentA=benzene,
         componentB=toluene,
-        componentA_to_componentB=inverted_mapping,
+        componentA_to_componentB=mapping_toluene_to_benzene,
     )
     return mapping_obj
 
