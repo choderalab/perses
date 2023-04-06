@@ -4,7 +4,7 @@ import datetime
 import logging
 import time
 
-from gufe.settings.models import ProtocolSettings, Settings
+from gufe.settings import Settings, OpenMMSystemGeneratorFFSettings, ThermoSettings
 from gufe.chemicalsystem import ChemicalSystem
 from gufe.mapping import ComponentMapping
 from gufe.protocols import (
@@ -163,8 +163,8 @@ class SimulationUnit(ProtocolUnit):
         mapping : gufe.mapping.ComponentMapping
             The mapping between the two chemical systems.
 
-        settings : gufe.settings.model.ProtocolSettings
-            The settings for the protocol.
+        settings : gufe.settings.model.Settings
+            The full settings for the protocol.
 
         Returns
         -------
@@ -223,12 +223,11 @@ class SimulationUnit(ProtocolUnit):
             ion_concentration, positive_ion, negative_ion = None, None, None
 
         # Get settings
-        protocol_settings = settings.protocol_settings
         thermodynamic_settings = settings.thermo_settings
         phase = self._detect_phase(state_a, state_b)
-        traj_save_frequency = protocol_settings.traj_save_frequency
-        work_save_frequency = protocol_settings.work_save_frequency  # Note: this is divisor of traj save freq.
-        selection_expression = protocol_settings.atom_selection_expression
+        traj_save_frequency = settings.traj_save_frequency
+        work_save_frequency = settings.work_save_frequency  # Note: this is divisor of traj save freq.
+        selection_expression = settings.atom_selection_expression
 
         # Get the ligand mapping from ComponentMapping object
         # NOTE: perses to date has a different "directionality" sense in terms of the mapping,
@@ -259,8 +258,8 @@ class SimulationUnit(ProtocolUnit):
             topology_proposal=topology_proposals[phase],
             current_positions=old_positions[phase],
             new_positions=new_positions[phase],
-            softcore_LJ_v2=protocol_settings.softcore_LJ_v2,
-            interpolate_old_and_new_14s=protocol_settings.interpolate_old_and_new_14s,
+            softcore_LJ_v2=settings.softcore_LJ_v2,
+            interpolate_old_and_new_14s=settings.interpolate_old_and_new_14s,
         )
 
         system = htf.hybrid_system
@@ -268,11 +267,11 @@ class SimulationUnit(ProtocolUnit):
 
         # Set up integrator
         temperature = to_openmm(thermodynamic_settings.temperature)
-        neq_steps = protocol_settings.eq_steps
-        eq_steps = protocol_settings.neq_steps
-        timestep = to_openmm(protocol_settings.timestep)
-        splitting = protocol_settings.neq_splitting
-        integrator = PeriodicNonequilibriumIntegrator(alchemical_functions=protocol_settings.lambda_functions,
+        neq_steps = settings.eq_steps
+        eq_steps = settings.neq_steps
+        timestep = to_openmm(settings.timestep)
+        splitting = settings.neq_splitting
+        integrator = PeriodicNonequilibriumIntegrator(alchemical_functions=settings.lambda_functions,
                                                       nsteps_neq=neq_steps,
                                                       nsteps_eq=eq_steps,
                                                       splitting=splitting,
@@ -280,7 +279,7 @@ class SimulationUnit(ProtocolUnit):
                                                       temperature=temperature, )
 
         # Set up context
-        platform = get_openmm_platform(protocol_settings.platform)
+        platform = get_openmm_platform(settings.platform)
         context = openmm.Context(system, integrator, platform)
         context.setPeriodicBoxVectors(*system.getDefaultPeriodicBoxVectors())
         context.setPositions(positions)
@@ -602,16 +601,17 @@ class NonEquilibriumCyclingProtocol(Protocol):
 
     result_cls = NonEquilibriumCyclingProtocolResult
 
-    def __init__(self, settings: ProtocolSettings):
+    def __init__(self, settings: Settings):
         super().__init__(settings)
 
     @classmethod
-    def _default_settings(cls) -> ProtocolSettings:
-        from perses.protocols import settings
-        default_settings = Settings.get_defaults()
-        non_eq_settings = settings.NonEqCyclingSettings()
-        default_settings.protocol_settings = non_eq_settings
-        return default_settings
+    def _default_settings(cls):
+        from openff.units import unit
+        from perses.protocols.settings import NonEquilibriumCyclingSettings
+        return NonEquilibriumCyclingSettings(
+                forcefield_settings=OpenMMSystemGeneratorFFSettings(),
+                thermo_settings=ThermoSettings(temperature=300 * unit.kelvin),
+                )
 
     # NOTE: create method should be really fast, since it would be running in the work units not the clients!!
     def _create(
@@ -632,7 +632,7 @@ class NonEquilibriumCyclingProtocol(Protocol):
 
         # inputs to `ProtocolUnit.__init__` should either be `Gufe` objects
         # or JSON-serializable objects
-        num_replicates = self.settings.protocol_settings.num_replicates
+        num_replicates = self.settings.num_replicates
 
         simulations = [
             SimulationUnit(state_a=stateA, state_b=stateB, mapping=mapping, settings=self.settings, name=f"{replicate}")

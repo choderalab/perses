@@ -1,4 +1,7 @@
+from pathlib import Path
+
 import pytest
+
 from perses.protocols import NonEquilibriumCyclingProtocol
 from gufe.protocols.protocoldag import ProtocolDAGResult, execute_DAG
 from gufe.protocols.protocolunit import ProtocolUnitResult
@@ -17,12 +20,21 @@ class TestNonEquilibriumCycling:
 
     @pytest.fixture
     def protocol_dag_result(self, protocol_short, benzene_vacuum_system, toluene_vacuum_system,
-                            mapping_benzene_toluene):
+                            mapping_benzene_toluene, tmpdir):
         dag = protocol_short.create(
             stateA=benzene_vacuum_system, stateB=toluene_vacuum_system, name="Short vacuum transformation",
             mapping=mapping_benzene_toluene
         )
-        dagresult: ProtocolDAGResult = execute_DAG(dag)
+
+        with tmpdir.as_cwd():
+
+            shared=Path('shared')
+            shared.mkdir()
+
+            scratch=Path('scratch')
+            scratch.mkdir()
+
+            dagresult: ProtocolDAGResult = execute_DAG(dag, shared_basedir=shared, scratch_basedir=scratch)
 
         return protocol_short, dag, dagresult
 
@@ -48,13 +60,21 @@ class TestNonEquilibriumCycling:
         return protocol_short_multiple_cycles, dag
 
     @pytest.fixture
-    def protocol_dag_broken(self, protocol_short, benzene_vacuum_system, toluene_vacuum_system, broken_mapping):
+    def protocol_dag_broken(self, protocol_short, benzene_vacuum_system, toluene_vacuum_system, broken_mapping, tmpdir):
         dag = protocol_short.create(
             stateA=benzene_vacuum_system, stateB=toluene_vacuum_system, name="Broken vacuum transformation",
             mapping=broken_mapping
         )
-        # Don't raise the error for getting ProtocolResult
-        dagresult: ProtocolDAGResult = execute_DAG(dag, raise_error=False)
+        with tmpdir.as_cwd():
+
+            shared=Path('shared')
+            shared.mkdir()
+
+            scratch=Path('scratch')
+            scratch.mkdir()
+
+            # Don't raise the error for getting ProtocolResult
+            dagresult: ProtocolDAGResult = execute_DAG(dag, raise_error=False, shared_basedir=shared, scratch_basedir=scratch)
 
         return protocol_short, dag, dagresult
 
@@ -88,7 +108,7 @@ class TestNonEquilibriumCycling:
         assert isinstance(failed_units[0], ProtocolUnitFailure)
 
     def test_dag_execute_failure_raise_error(self, protocol_short, benzene_vacuum_system, toluene_vacuum_system,
-                                             broken_mapping):
+                                             broken_mapping, tmpdir):
         """Executes a bad setup of a protocol DAG which has an incorrect mapping"""
         dag = protocol_short.create(
             stateA=benzene_vacuum_system, stateB=toluene_vacuum_system, name="a broken dummy run",
@@ -96,10 +116,18 @@ class TestNonEquilibriumCycling:
          )
 
         # tries to access an atom index that does not exist
-        with pytest.raises(IndexError):
-            execute_DAG(dag, raise_error=True)
+        with tmpdir.as_cwd():
 
-    def test_create_execute_gather(self, protocol_dag):
+            shared=Path('shared')
+            shared.mkdir()
+
+            scratch=Path('scratch')
+            scratch.mkdir()
+
+            with pytest.raises(IndexError):
+                execute_DAG(dag, raise_error=True, shared_basedir=shared, scratch_basedir=scratch)
+
+    def test_create_execute_gather(self, protocol_dag, tmpdir):
         """
         Perform 20 independent simulations of the NEQ cycling protocol for the benzene to toluene
         transformation and gather the results.
@@ -110,10 +138,18 @@ class TestNonEquilibriumCycling:
 
         results = []
         n_replicates = 4
-        for _ in range(n_replicates):
+        for i in range(n_replicates):
             protocol, dag = protocol_dag
-            dagresult = execute_DAG(dag)
-            results.append(dagresult)
+            with tmpdir.as_cwd():
+
+                shared=Path(f'shared_{i}')
+                shared.mkdir()
+
+                scratch=Path(f'scratch_{i}')
+                scratch.mkdir()
+
+                dagresult = execute_DAG(dag, shared_basedir=shared, scratch_basedir=scratch)
+                results.append(dagresult)
         # gather aggregated results of interest
         protocolresult = protocol.gather(results)
 
@@ -129,7 +165,7 @@ class TestNonEquilibriumCycling:
         assert not np.isnan(fe_error), "Free energy error estimate is NaN."
         # print(f"Free energy = {fe_estimate} +/- {fe_error}") # DEBUG
 
-    def test_create_execute_gather_toluene_to_toluene(self, protocol_dag_toluene_to_toluene):
+    def test_create_execute_gather_toluene_to_toluene(self, protocol_dag_toluene_to_toluene, tmpdir):
         """
         Perform 20 independent simulations of the NEQ cycling protocol for the toluene to toluene
         transformation and gather the results.
@@ -143,9 +179,17 @@ class TestNonEquilibriumCycling:
 
         results = []
         n_replicates = 4
-        for _ in range(n_replicates):
+        for i in range(n_replicates):
             protocol, dag = protocol_dag_toluene_to_toluene
-            dagresult = execute_DAG(dag)
+            with tmpdir.as_cwd():
+
+                shared=Path(f'shared_{i}')
+                shared.mkdir()
+
+                scratch=Path(f'scratch_{i}')
+                scratch.mkdir()
+
+                dagresult = execute_DAG(dag, shared_basedir=shared, scratch_basedir=scratch)
             results.append(dagresult)
         # gather aggregated results of interest
         protocolresult = protocol.gather(results)

@@ -5,7 +5,7 @@ This module implements the objects that will be needed to run relative binding f
 energy calculations using perses.
 """
 
-from gufe.settings.models import ProtocolSettings
+from gufe.settings import Settings
 from openff.units import unit
 from perses.protocols.utils import _serialize_pydantic
 from pydantic import root_validator
@@ -24,9 +24,9 @@ DEFAULT_ALCHEMICAL_FUNCTIONS = {
     'lambda_torsions': x
 }
 
-class NonEqCyclingSettings(ProtocolSettings):
+class NonEquilibriumCyclingSettings(Settings):
     """
-    Settings for the relative free energy setup protocol.
+    Settings for the NEQ cycling protocol.
 
     Attributes
     ----------

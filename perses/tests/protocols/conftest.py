@@ -65,16 +65,15 @@ def toluene_solvent_system(toluene, solvent_comp):
 @pytest.fixture
 def short_settings():
     from openff.units import unit
-    # Build Settings gufe object
-    from gufe.settings.models import (
-        Settings,
-    )
-    from perses.protocols.settings import NonEqCyclingSettings
+    from perses.protocols import NonEquilibriumCyclingProtocol
+    
+    settings = NonEquilibriumCyclingProtocol.default_settings()
 
-    settings = Settings.get_defaults()
     settings.thermo_settings.temperature = 300 * unit.kelvin
-    settings.protocol_settings = NonEqCyclingSettings(eq_steps=25000, neq_steps=25000, traj_save_frequency=250,
-                                                      platform="CUDA")
+    settings.eq_steps=25000
+    settings.neq_steps=25000
+    settings.traj_save_frequency=250
+    settings.platform="CUDA"
 
     return settings
 
@@ -82,25 +81,28 @@ def short_settings():
 @pytest.fixture
 def short_settings_multiple_cycles():
     from openff.units import unit
-    # Build Settings gufe object
-    from gufe.settings.models import (
-        Settings,
-    )
-    from perses.protocols.settings import NonEqCyclingSettings
+    from perses.protocols import NonEquilibriumCyclingProtocol
 
-    settings = Settings.get_defaults()
+    settings = NonEquilibriumCyclingProtocol.default_settings()
+
     settings.thermo_settings.temperature = 300 * unit.kelvin
-    # TODO: add validation within settings that save_freq is divisor of total steps
-    settings.protocol_settings = NonEqCyclingSettings(eq_steps=25000, neq_steps=25000, traj_save_frequency=250,
-                                                      work_save_frequency=50, num_replicates=5, platform="CPU")
+    settings.eq_steps=25000
+    settings.neq_steps=25000
+    settings.traj_save_frequency=250
+    settings.work_save_frequency=50
+    settings.num_replicates=5
+    settings.platform="CPU"
 
     return settings
 
+
 @pytest.fixture
 def production_settings(short_settings):
-    from perses.protocols.settings import NonEqCyclingSettings
     settings = short_settings
-    settings.protocol_settings = NonEqCyclingSettings(eq_steps=250000, neq_steps=250000, save_frequency=2000)
+
+    settings.eq_steps=250000
+    settings.neq_steps=250000
+    settings.save_frequency=2000
 
     return settings
 
