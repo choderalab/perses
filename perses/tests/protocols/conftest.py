@@ -73,7 +73,7 @@ def short_settings():
     settings.eq_steps=25000
     settings.neq_steps=25000
     settings.traj_save_frequency=250
-    settings.platform="CUDA"
+    settings.platform="CPU"
 
     return settings
 

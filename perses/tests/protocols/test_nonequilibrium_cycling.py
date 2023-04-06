@@ -127,6 +127,7 @@ class TestNonEquilibriumCycling:
             with pytest.raises(IndexError):
                 execute_DAG(dag, raise_error=True, shared_basedir=shared, scratch_basedir=scratch)
 
+    @pytest.mark.gpu_ci
     def test_create_execute_gather(self, protocol_dag, tmpdir):
         """
         Perform 20 independent simulations of the NEQ cycling protocol for the benzene to toluene
@@ -165,6 +166,7 @@ class TestNonEquilibriumCycling:
         assert not np.isnan(fe_error), "Free energy error estimate is NaN."
         # print(f"Free energy = {fe_estimate} +/- {fe_error}") # DEBUG
 
+    @pytest.mark.gpu_ci
     def test_create_execute_gather_toluene_to_toluene(self, protocol_dag_toluene_to_toluene, tmpdir):
         """
         Perform 20 independent simulations of the NEQ cycling protocol for the toluene to toluene
