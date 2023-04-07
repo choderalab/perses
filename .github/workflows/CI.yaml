@@ -52,6 +52,7 @@ jobs:
           channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmm_dev/linux-64,conda-forge,openeye
           channel-priority: flexible
           cache-env: true
+          cache-downloads: true
           extra-specs: |
             python==${{ matrix.python-version }}
             openmm==8.0.0dev3
@@ -63,6 +64,7 @@ jobs:
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: test
           cache-env: true
+          cache-downloads: true
           extra-specs: |
             python==${{ matrix.python-version }}
             openmm==${{ matrix.openmm }}
