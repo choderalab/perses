@@ -46,4 +46,4 @@ dependencies:
   # gufe deps
   - pydantic
   - typing-extensions
-  - gufe
+  - gufe >=0.7
