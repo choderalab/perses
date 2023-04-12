@@ -82,8 +82,12 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
             f_ij, df_ij = analyzer.get_free_energy()
             data[f"{wt_name}-{mutant_name}"] = {'free_energy': f_ij[0, -1], 'error': df_ij[0, -1]}
 
-        DDG = abs(data['ala-thr']['free_energy'] - data['thr-ala']['free_energy'] * -1)
+        DDG_forward = data['ala-thr']['free_energy']
+        DDG_reverse = data['thr-ala']['free_energy']  # This should have the inverse sign of the forward DDG
+        # they should add up to close to zero
+        DDG = abs(DDG_forward + DDG_reverse)
         dDDG = np.sqrt(data['ala-thr']['error'] ** 2 + data['thr-ala']['error'] ** 2)
+        print(f"DDG: {DDG}, 6*dDDG: {6 * dDDG}")
         assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6  * dDDG})"
 
 
@@ -122,7 +126,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
 
     data = {}
     n_iterations = 1000
-    d_mutations = {'forward': [('arg', 'ala'), ('lys', 'ala')], 'reverse': [('ala', 'arg'), ('ala', 'lys')]}
+    d_mutations = {'forward': [('arg', 'ala'), ('ala', 'lys')], 'reverse': [('ala', 'arg'), ('lys', 'ala')]}
 
     with enter_temp_directory() as temp_dir:
         for mutation_type, mutations in d_mutations.items():
@@ -185,24 +189,24 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
                 f_ij, df_ij = analyzer.get_free_energy()
                 data[f"{wt_name}-{mutant_name}"] = {'free_energy': f_ij[0, -1], 'error': df_ij[0, -1]}
 
-        DDG = data['arg-ala']['free_energy'] + data['ala-arg']['free_energy'] - (
-                    data['lys-ala']['free_energy'] + data['ala-lys']['free_energy'])
-        dDDG = np.sqrt(data['arg-ala']['error'] ** 2
-                       + data['ala-arg']['error'] ** 2
-                       + data['lys-ala']['error'] ** 2
-                       + data['ala-lys']['error'] ** 2)
+        DDG_forward = data['arg-ala']['free_energy'] + data['ala-lys']['free_energy']
+        DDG_forward_error = np.sqrt()
+        DDG_reverse = data['lys-ala']['free_energy'] + data['ala-arg']['free_energy']
+        DDG_reverse_error = np.sqrt()
+
+        # Note that DDG_reverse should have the inverse sign compared to DDG_forward
+        DDG = DDG_forward + DDG_reverse  # they should ADD up to close to zero
+        dDDG = np.sqrt(DDG_forward_error**2 + DDG_reverse_error**2)
+        print(f"DDG: {DDG}, 6*dDDG: {6 * dDDG}")  # debug control print
         assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6 * dDDG})"
 
 
 @pytest.mark.gpu_needed
 def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
     """
-    Run CCC->CCCC and CCCC->CCC repex with the RESTCapableHybridTopologyFactory and make sure that the free energies are
-    equal and opposite.
-
+    Run phenol->paracetamol and paracetamol->phenol repex with the RESTCapableHybridTopologyFactory and make sure that
+    the free energies are equal and opposite.
     """
-
-    from pkg_resources import resource_filename
     import numpy as np
 
     from openmm import unit
@@ -300,12 +304,15 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
             f_ij, df_ij = analyzer.get_free_energy()
             data[f"{ligand_A_index}-{ligand_B_index}"] = {'free_energy': f_ij[0, -1], 'error': df_ij[0, -1]}
 
-        DDG = abs(data['0-1']['free_energy'] - data['1-0']['free_energy'] * -1)
+        DDG_forward = data['0-1']['free_energy']
+        DDG_reverse = data['1-0']['free_energy']
+        # Note that DDG_reverse should have the inverse sign compared to DDG_forward
+        DDG = abs(DDG_forward + DDG_reverse)  # This should ADD up to close to zero
         dDDG = np.sqrt(data['0-1']['error'] ** 2 + data['1-0']['error'] ** 2)
+        print(f"DDG: {DDG}, 6*dDDG: {6 * dDDG}")  # debug control print
         assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6 * dDDG})"
 
 
-@pytest.mark.skip(reason="Need better system for test")
 @pytest.mark.gpu_needed
 def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
     """
@@ -408,7 +415,6 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
                 reporter.close()
                 reporter = MultiStateReporter(reporter_file)
                 analyzer = MultiStateSamplerAnalyzer(reporter, max_n_iterations=n_iterations)
-                # f_ij, df_ij = analyzer.get_free_energy()
                 # Extract uncorrelated energy matrix (u_ln) and samples from states (N_l)
                 energy_matrix = analyzer._unbiased_decorrelated_u_ln
                 sampled_states = analyzer._unbiased_decorrelated_N_l
@@ -420,8 +426,11 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
 
         forward_DG = data['0-1_complex']['free_energy'] - data['0-1_solvent']['free_energy']
         reverse_DG = data['1-0_complex']['free_energy'] - data['1-0_solvent']['free_energy']
-        DDG = abs(forward_DG - reverse_DG)
-        dDDG = np.sqrt(data['0-1_complex']['error'] ** 2 + data['0-1_solvent']['error'] ** 2 + data['1-0_complex']['error'] ** 2 + data['1-0_solvent']['error'] ** 2)
-        # print(f"DDG: {DDG}, 6*dDDG: {6*dDDG}")
+        # NOTE: reverse_DG should have the inverse sign compared to forward_DG, so they should ADD up to close to zero
+        DDG = abs(forward_DG + reverse_DG)
+        dDDG = np.sqrt(
+            data['0-1_complex']['error'] ** 2 + data['0-1_solvent']['error'] ** 2 + data['1-0_complex']['error'] ** 2 +
+            data['1-0_solvent']['error'] ** 2)
+        print(f"DDG: {DDG}, 6*dDDG: {6*dDDG}")  # debug control print
         assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6 * dDDG})"
 
