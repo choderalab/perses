@@ -232,7 +232,7 @@ class SimulationUnit(ProtocolUnit):
         # Get the ligand mapping from ComponentMapping object
         # NOTE: perses to date has a different "directionality" sense in terms of the mapping,
         #   see perses.rjmc.topology_proposal.propose docstring for detailed information.
-        ligand_mapping = mapping.componentB_to_componentA
+        ligand_mapping = mapping['ligand'].componentB_to_componentA
 
         # Setup relative FE calculation
         fe_setup = RelativeFEPSetup(
