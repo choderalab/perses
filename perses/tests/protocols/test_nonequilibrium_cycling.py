@@ -23,7 +23,7 @@ class TestNonEquilibriumCycling:
                             mapping_benzene_toluene, tmpdir):
         dag = protocol_short.create(
             stateA=benzene_vacuum_system, stateB=toluene_vacuum_system, name="Short vacuum transformation",
-            mapping=mapping_benzene_toluene
+            mapping={'ligand': mapping_benzene_toluene}
         )
 
         with tmpdir.as_cwd():
@@ -43,7 +43,7 @@ class TestNonEquilibriumCycling:
                      mapping_benzene_toluene):
         dag = protocol_short_multiple_cycles.create(
             stateA=benzene_vacuum_system, stateB=toluene_vacuum_system, name="Short vacuum transformation",
-            mapping=mapping_benzene_toluene
+            mapping={'ligand': mapping_benzene_toluene}
         )
 
         return protocol_short_multiple_cycles, dag
@@ -54,7 +54,7 @@ class TestNonEquilibriumCycling:
         """Fixture to test toluene-to-toluene transformation using benzene-to-toluene mapping"""
         dag = protocol_short_multiple_cycles.create(
             stateA=toluene_vacuum_system, stateB=toluene_vacuum_system, name="Toluene vacuum transformation",
-            mapping=mapping_benzene_toluene
+            mapping={'ligand': mapping_benzene_toluene}
         )
 
         return protocol_short_multiple_cycles, dag
@@ -63,7 +63,7 @@ class TestNonEquilibriumCycling:
     def protocol_dag_broken(self, protocol_short, benzene_vacuum_system, toluene_vacuum_system, broken_mapping, tmpdir):
         dag = protocol_short.create(
             stateA=benzene_vacuum_system, stateB=toluene_vacuum_system, name="Broken vacuum transformation",
-            mapping=broken_mapping
+            mapping={'ligand': broken_mapping}
         )
         with tmpdir.as_cwd():
 
@@ -112,7 +112,7 @@ class TestNonEquilibriumCycling:
         """Executes a bad setup of a protocol DAG which has an incorrect mapping"""
         dag = protocol_short.create(
             stateA=benzene_vacuum_system, stateB=toluene_vacuum_system, name="a broken dummy run",
-            mapping=broken_mapping
+            mapping={'ligand': broken_mapping}
          )
 
         # tries to access an atom index that does not exist
@@ -126,6 +126,8 @@ class TestNonEquilibriumCycling:
 
             with pytest.raises(IndexError):
                 execute_DAG(dag, raise_error=True, shared_basedir=shared, scratch_basedir=scratch)
+
+    # TODO: add a non-gpu gather test for #1177
 
     @pytest.mark.gpu_ci
     def test_create_execute_gather(self, protocol_dag, tmpdir):

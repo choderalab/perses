@@ -160,8 +160,8 @@ class SimulationUnit(ProtocolUnit):
         state_b : gufe.ChemicalSystem
             The objective chemical system.
 
-        mapping : gufe.mapping.ComponentMapping
-            The mapping between the two chemical systems.
+        mapping : dict[str, gufe.mapping.ComponentMapping]
+            A dict featuring mappings between the two chemical systems.
 
         settings : gufe.settings.model.Settings
             The full settings for the protocol.
@@ -194,8 +194,8 @@ class SimulationUnit(ProtocolUnit):
         # Get components from systems if found (None otherwise) -- NOTE: Uses hardcoded keys!
         receptor_a = state_a.components.get("protein")
         # receptor_b = state_b.components.get("protein")  # Should not be needed
-        ligand_a = state_a.components.get("ligand")
-        ligand_b = state_b.components.get("ligand")
+        ligand_a = mapping.get("ligand").componentA
+        ligand_b = mapping.get("ligand").componentB
         solvent_a = state_a.components.get("solvent")
         # solvent_b = state_b.components.get("solvent")  # Should not be needed
 
@@ -618,17 +618,17 @@ class NonEquilibriumCyclingProtocol(Protocol):
             self,
             stateA: ChemicalSystem,
             stateB: ChemicalSystem,
-            mapping: Optional[ComponentMapping] = None,
+            mapping: Optional[dict[str, ComponentMapping]] = None,
             extends: Optional[ProtocolDAGResult] = None,
     ) -> List[ProtocolUnit]:
 
         # Handle parameters
-        # if mapping is None:
-        #     raise ValueError("`mapping` is required for this Protocol")
-        # if 'ligand' not in mapping:
-        #     raise ValueError("'ligand' must be specified in `mapping` dict")
-        # if extends:
-        #     raise NotImplementedError("Can't extend simulations yet")
+        if mapping is None:
+            raise ValueError("`mapping` is required for this Protocol")
+        if 'ligand' not in mapping:
+            raise ValueError("'ligand' must be specified in `mapping` dict")
+        if extends:
+            raise NotImplementedError("Can't extend simulations yet")
 
         # inputs to `ProtocolUnit.__init__` should either be `Gufe` objects
         # or JSON-serializable objects
