@@ -419,8 +419,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
                 reporter = MultiStateReporter(reporter_file)
                 analyzer = MultiStateSamplerAnalyzer(reporter, max_n_iterations=n_iterations)
                 # Extract uncorrelated energy matrix (u_ln) and samples from states (N_l)
-                energy_matrix = analyzer._unbiased_decorrelated_u_ln
-                sampled_states = analyzer._unbiased_decorrelated_N_l
+                energy_matrix, sampled_states = analyzer._compute_mbar_decorrelated_energies()
                 # Compute free energies with boostrapping using pymbar
                 mbar = pymbar.MBAR(energy_matrix, sampled_states, nbootstraps=200)
                 f_ij, df_ij = mbar.getFreeEnergyDifferences(uncertainty_method="bootstrap", return_theta=False)
