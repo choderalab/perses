@@ -82,13 +82,14 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
             f_ij, df_ij = analyzer.get_free_energy()
             data[f"{wt_name}-{mutant_name}"] = {'free_energy': f_ij[0, -1], 'error': df_ij[0, -1]}
 
-        DDG_forward = data['ala-thr']['free_energy']
-        DDG_reverse = data['thr-ala']['free_energy']  # This should have the inverse sign of the forward DDG
+        forward_fe = data['ala-thr']['free_energy']
+        reverse_fe = data['thr-ala']['free_energy']  # This should have the inverse sign of the forward fe
         # they should add up to close to zero
-        DDG = abs(DDG_forward + DDG_reverse)
-        dDDG = np.sqrt(data['ala-thr']['error'] ** 2 + data['thr-ala']['error'] ** 2)
-        print(f"DDG: {DDG}, 6*dDDG: {6 * dDDG}")
-        assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6  * dDDG})"
+        forward_reverse_diff = abs(forward_fe + reverse_fe)
+        forward_reverse_diff_err = np.sqrt(data['ala-thr']['error'] ** 2 + data['thr-ala']['error'] ** 2)
+        print(f"DDG: {forward_reverse_diff}, 6*dDDG: {6 * forward_reverse_diff_err}")
+        assert forward_reverse_diff < 6 * forward_reverse_diff_err, (f"DDG ({forward_reverse_diff}) is greater than "
+                                                                     f"6 * dDDG ({6  * forward_reverse_diff_err})")
 
 
 # @pytest.mark.skip(reason="Currently taking too long in CI.")
@@ -189,16 +190,17 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
                 f_ij, df_ij = analyzer.get_free_energy()
                 data[f"{wt_name}-{mutant_name}"] = {'free_energy': f_ij[0, -1], 'error': df_ij[0, -1]}
 
-        DDG_forward = data['arg-ala']['free_energy'] + data['ala-lys']['free_energy']
-        DDG_forward_error = np.sqrt()
-        DDG_reverse = data['lys-ala']['free_energy'] + data['ala-arg']['free_energy']
-        DDG_reverse_error = np.sqrt()
+        forward_fe = data['arg-ala']['free_energy'] + data['ala-lys']['free_energy']
+        forward_fe_error = np.sqrt(data['arg-ala']['error']**2 + data['ala-lys']['error']**2)
+        reverse_fe = data['lys-ala']['free_energy'] + data['ala-arg']['free_energy']
+        reverse_fe_error = np.sqrt(data['lys-ala']['error']**2 + data['ala-arg']['error']**2)
 
-        # Note that DDG_reverse should have the inverse sign compared to DDG_forward
-        DDG = DDG_forward + DDG_reverse  # they should ADD up to close to zero
-        dDDG = np.sqrt(DDG_forward_error**2 + DDG_reverse_error**2)
-        print(f"DDG: {DDG}, 6*dDDG: {6 * dDDG}")  # debug control print
-        assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6 * dDDG})"
+        # Note that reverse_fe should have the inverse sign compared to forward_fe
+        forward_reverse_diff = forward_fe + reverse_fe  # they should ADD up to close to zero
+        forward_reverse_diff_err = np.sqrt(forward_fe_error**2 + reverse_fe_error**2)
+        print(f"DDG: {forward_reverse_diff}, 6*dDDG: {6 * forward_reverse_diff_err}")  # debug control print
+        assert forward_reverse_diff < 6 * forward_reverse_diff_err, (f"DDG ({forward_reverse_diff}) is greater than " 
+                                                                     f"6 * dDDG ({6 * forward_reverse_diff_err})")
 
 
 @pytest.mark.gpu_needed
@@ -304,13 +306,14 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
             f_ij, df_ij = analyzer.get_free_energy()
             data[f"{ligand_A_index}-{ligand_B_index}"] = {'free_energy': f_ij[0, -1], 'error': df_ij[0, -1]}
 
-        DDG_forward = data['0-1']['free_energy']
-        DDG_reverse = data['1-0']['free_energy']
+        forward_fe = data['0-1']['free_energy']
+        reverse_fe = data['1-0']['free_energy']
         # Note that DDG_reverse should have the inverse sign compared to DDG_forward
-        DDG = abs(DDG_forward + DDG_reverse)  # This should ADD up to close to zero
-        dDDG = np.sqrt(data['0-1']['error'] ** 2 + data['1-0']['error'] ** 2)
-        print(f"DDG: {DDG}, 6*dDDG: {6 * dDDG}")  # debug control print
-        assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6 * dDDG})"
+        forward_reverse_diff = abs(forward_fe + reverse_fe)  # This should ADD up to close to zero
+        forward_reverse_diff_err = np.sqrt(data['0-1']['error'] ** 2 + data['1-0']['error'] ** 2)
+        print(f"DDG: {forward_reverse_diff}, 6*dDDG: {6 * forward_reverse_diff_err}")  # debug control print
+        assert forward_reverse_diff < 6 * forward_reverse_diff_err, (f"DDG ({forward_reverse_diff}) is greater than "
+                                                                     f"6 * dDDG ({6 * forward_reverse_diff_err})")
 
 
 @pytest.mark.gpu_needed
@@ -424,13 +427,13 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
 
                 data[f"{ligand_A_index}-{ligand_B_index}_{phase}"] = {'free_energy': f_ij[0, -1], 'error': df_ij[0, -1]}
 
-        forward_DG = data['0-1_complex']['free_energy'] - data['0-1_solvent']['free_energy']
-        reverse_DG = data['1-0_complex']['free_energy'] - data['1-0_solvent']['free_energy']
+        forward_fe = data['0-1_complex']['free_energy'] - data['0-1_solvent']['free_energy']
+        reverse_fe = data['1-0_complex']['free_energy'] - data['1-0_solvent']['free_energy']
         # NOTE: reverse_DG should have the inverse sign compared to forward_DG, so they should ADD up to close to zero
-        DDG = abs(forward_DG + reverse_DG)
-        dDDG = np.sqrt(
+        forward_reverse_difference = abs(forward_fe + reverse_fe)
+        forward_reverse_diff_error = np.sqrt(
             data['0-1_complex']['error'] ** 2 + data['0-1_solvent']['error'] ** 2 + data['1-0_complex']['error'] ** 2 +
             data['1-0_solvent']['error'] ** 2)
-        print(f"DDG: {DDG}, 6*dDDG: {6*dDDG}")  # debug control print
-        assert DDG < 6 * dDDG, f"DDG ({DDG}) is greater than 6 * dDDG ({6 * dDDG})"
-
+        print(f"DDG: {forward_reverse_difference}, 6*dDDG: {6 * forward_reverse_diff_error}")  # debug control print
+        assert forward_reverse_difference < 6 * forward_reverse_diff_error, (f"DDG ({forward_reverse_difference}) is "
+                                                                             f"greater than 6 * dDDG ({6 * forward_reverse_diff_error})")
