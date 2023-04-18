@@ -50,11 +50,11 @@ class TestNonEquilibriumCycling:
 
     @pytest.fixture
     def protocol_dag_toluene_to_toluene(self, protocol_short_multiple_cycles, benzene_vacuum_system,
-                                        toluene_vacuum_system, mapping_benzene_toluene):
+                                        toluene_vacuum_system, mapping_toluene_toluene):
         """Fixture to test toluene-to-toluene transformation using benzene-to-toluene mapping"""
         dag = protocol_short_multiple_cycles.create(
             stateA=toluene_vacuum_system, stateB=toluene_vacuum_system, name="Toluene vacuum transformation",
-            mapping={'ligand': mapping_benzene_toluene}
+            mapping={'ligand': mapping_toluene_toluene}
         )
 
         return protocol_short_multiple_cycles, dag

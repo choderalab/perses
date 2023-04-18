@@ -120,6 +120,16 @@ def mapping_benzene_toluene(benzene, toluene):
     )
     return mapping_obj
 
+@pytest.fixture
+def mapping_toluene_toluene(toluene):
+    """Mapping from toluene to toluene"""
+    mapping_toluene_to_toluene = {i: i for i in range(len(toluene.to_rdkit().GetAtoms()))}
+    mapping_obj = LigandAtomMapping(
+        componentA=toluene,
+        componentB=toluene,
+        componentA_to_componentB=mapping_toluene_to_toluene,
+    )
+    return mapping_obj
 
 @pytest.fixture
 def broken_mapping(benzene, toluene):
