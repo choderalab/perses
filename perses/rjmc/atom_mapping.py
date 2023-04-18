@@ -827,7 +827,6 @@ class AtomMapper(object):
             scaffold_maps = AtomMapper._get_all_maps(old_oescaffold, new_oescaffold,
                                                      atom_expr=oechem.OEExprOpts_RingMember | oechem.OEExprOpts_IntType,
                                                      bond_expr=oechem.OEExprOpts_RingMember,
-                                                     external_inttypes=True,
                                                      unique=False,
                                                      matching_criterion=self.matching_criterion)
 
@@ -842,7 +841,6 @@ class AtomMapper(object):
             # why weren't matching arguments carried to these mapping functions? is there an edge case that i am missing?
             # it still doesn't fix the protein sidechain mapping problem
             generated_atom_mappings = AtomMapper._get_all_maps(old_oemol, new_oemol,
-                                                        external_inttypes=self.external_inttypes,
                                                         atom_expr=self.atom_expr,
                                                         bond_expr=self.bond_expr,
                                                         matching_criterion=self.matching_criterion)
@@ -921,7 +919,6 @@ class AtomMapper(object):
                     self._assign_ring_ids(new_oemol, only_assign_if_zero=True)
 
                 atom_mappings_for_this_scaffold_map = AtomMapper._get_all_maps(old_oemol, new_oemol,
-                                                        external_inttypes=True,
                                                         atom_expr=self.atom_expr,
                                                         bond_expr=self.bond_expr,
                                                         matching_criterion=self.matching_criterion)
@@ -1260,7 +1257,6 @@ class AtomMapper(object):
 
     @staticmethod
     def _get_all_maps(old_oemol, new_oemol,
-        external_inttypes=False,
         atom_expr=None,
         bond_expr=None,
         # TODO: Should 'unique' be False by default?
@@ -1276,9 +1272,6 @@ class AtomMapper(object):
             old molecule
         new_oemol : openeye.oechem.OEMol
             new molecule
-        external_inttypes : bool, optional, default=False
-            If True, IntTypes already assigned to oemols will be used for mapping, if IntType is in the atom or bond expression.
-            Otherwise, IntTypes will be overwritten such as to ensure rings of different sizes are not matched.
         atom_expr : openeye.oechem.OEExprOpts
             Override for atom matching expression; None if default is to be used.
         bond_expr : openeye.oechem.OEExprOpts
