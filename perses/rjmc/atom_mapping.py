@@ -1397,7 +1397,6 @@ class AtomMapper(object):
 
         """
         # TODO : Eliminate this entirely in favor of using OpenFF Molecule objects once we can avoid needing to represent partial molecules for cores
-        import openeye.oechem as oechem
         new_to_old_atom_map = dict()
         pattern_to_target_map = AtomMapper._create_pattern_to_target_map(old_oemol, new_oemol, match, matching_criterion)
         for pattern_oeatom, target_oeatom in pattern_to_target_map.items():
