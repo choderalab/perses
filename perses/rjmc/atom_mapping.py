@@ -112,7 +112,7 @@ class AtomMapping(object):
             """Create an OpenFF Molecule object copy from the specified molecule"""            
             try:    
                 from openff.toolkit.topology import Molecule
-                offmol = Molecule(old_mol, allow_undefined_stereo=True)
+                offmol = Molecule(mol, allow_undefined_stereo=True)
             except ValueError as e:
                 # Try the sneaky OpenEye OEMol -> OpenFF Molecule converter that bypasses the RadicalsNotSupportedError thrown internally.
                 offmol = _convert_opemol_to_offmol(mol, allow_undefined_stereo=True)
@@ -1372,6 +1372,7 @@ class AtomMapper(object):
 
         return pattern_to_target_map
 
+    @staticmethod
     def _create_atom_mapping(old_oemol, new_oemol, match, matching_criterion):
         """
         Returns an AtomMapping that omits hydrogen-to-nonhydrogen atom maps
