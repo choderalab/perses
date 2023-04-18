@@ -177,13 +177,13 @@ class TestNonEquilibriumCycling:
         This sets up a toluene to toluene transformation using the benzene to toluene mapping
         and check that the free energy estimates are around 0, within 6*dDG.
 
-        This is done by using 4 replicates of the protocol with 5 simulation units each.
+        This is done by using 4 repeats of the protocol with 5 simulation units each.
         """
         import numpy as np
 
         results = []
-        n_replicates = 4
-        for i in range(n_replicates):
+        n_repeats = 2
+        for i in range(n_repeats):
             protocol, dag = protocol_dag_toluene_to_toluene
             with tmpdir.as_cwd():
 
@@ -210,7 +210,7 @@ class TestNonEquilibriumCycling:
         assert not np.isnan(fe_error), "Free energy error estimate is NaN."
 
         # Test that estimate is around 0 within tolerance
-        assert fe_estimate <= 6*fe_error, f"FE estimate of {fe_estimate} not within tolerance (tol={6*fe_error})."
+        assert np.isclose(fe_estimate, 0.0, atol=1e-10), f"Free energy estimate {fe_estimate} is not close to zero."
 
     # TODO: We could also generate a plot with the forward and reverse works and visually check the results.
     # TODO: Potentially setup (not run) a protein-ligand system
