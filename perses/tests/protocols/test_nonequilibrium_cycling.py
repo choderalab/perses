@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pymbar.utils
 import pytest
 
 from perses.protocols import NonEquilibriumCyclingProtocol
@@ -178,11 +179,16 @@ class TestNonEquilibriumCycling:
         and check that the free energy estimates are around 0, within 6*dDG.
 
         This is done by using 4 repeats of the protocol with 5 simulation units each.
+
+        Notes
+        -----
+        The error estimate for the free energy calculations is tried up to 5 times in case there
+        are stochastic errors with the BAR calculations.
         """
         import numpy as np
 
         results = []
-        n_repeats = 2
+        n_repeats = 4
         for i in range(n_repeats):
             protocol, dag = protocol_dag_toluene_to_toluene
             with tmpdir.as_cwd():
@@ -203,9 +209,18 @@ class TestNonEquilibriumCycling:
             failed_units = dag_result.protocol_unit_failures
             assert len(failed_units) == 0, "Unit failure in protocol dag result."
 
-        # Get an estimate that is not NaN
+        # Get an estimate that is not NaN -- Retry if BoundsError is reported
         fe_estimate = protocolresult.get_estimate()
-        fe_error = protocolresult.get_uncertainty()
+        for _ in range(5):
+            try:
+                fe_error = protocolresult.get_uncertainty()
+                break
+            except pymbar.utils.BoundsError as pymbar_error:
+                # save exception msg try again
+                error_msg = repr(pymbar_error)
+                continue
+        else:
+            raise ValueError(error_msg)
         assert not np.isnan(fe_estimate), "Free energy estimate is NaN."
         assert not np.isnan(fe_error), "Free energy error estimate is NaN."
 

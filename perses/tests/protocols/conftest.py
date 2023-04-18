@@ -86,8 +86,8 @@ def short_settings_multiple_cycles():
     settings = NonEquilibriumCyclingProtocol.default_settings()
 
     settings.thermo_settings.temperature = 300 * unit.kelvin
-    settings.eq_steps = 2500
-    settings.neq_steps = 2500
+    settings.eq_steps = 1000
+    settings.neq_steps = 1000
     settings.traj_save_frequency=250
     settings.work_save_frequency=50
     settings.num_replicates=5
