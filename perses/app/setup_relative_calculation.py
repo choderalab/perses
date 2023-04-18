@@ -584,7 +584,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         _logger.info(f"\tatom selection detected: {atom_selection}")
     else:
         _logger.info(f"\tno atom selection detected: default to all.")
-        atom_selection = 'all'
+        atom_selection = 'none'
 
     if setup_options['fe_type'] == 'neq':
         _logger.info(f"\tInstantiating nonequilibrium switching FEP")
