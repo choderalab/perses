@@ -1308,9 +1308,9 @@ class AtomMapper(object):
         import openeye.oechem as oechem
 
         if atom_expr is None:
-            atom_expr = self.atom_expr
+            atom_expr = atom_expr
         if bond_expr is None:
-            bond_expr = self.bond_expr
+            bond_expr = bond_expr
 
         # this ensures that the hybridization of the oemols is done for correct atom mapping
         oechem.OEAssignHybridization(old_oemol)
