@@ -218,7 +218,9 @@ class TestAtomMapper(unittest.TestCase):
 
             # Get all mappings
             all_mappings = atom_mapper.get_all_mappings(molecules[0], molecules[2])
-            assert (sampled_mapping in all_mappings)
+            # Get hashes to compare equivalence of mappings
+            all_hashes = [hash(mapping) for mapping in all_mappings]
+            assert (hash(sampled_mapping) in all_hashes), f"Sampled mapping not found in all mappings."
 
     def test_generate_atom_mapping_from_positions(self):
         """
