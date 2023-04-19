@@ -11,7 +11,6 @@ to the OpenFF toolkit.
 from simtk import unit
 
 import copy
-import os
 import numpy as np
 
 ################################################################################
@@ -505,13 +504,13 @@ class AtomMapping(object):
                 #make sure that not all the neighbors are being mapped
                 #get neighbor indices:
                 neighbor_indices = [atom.GetIdx() for atom in target_atoms[new_index].GetAtoms()]
-                if all(nbr in set(list(new_to_old_atom_map.keys())) for nbr in neighbor_indices):
+                if all(nbr in set(list(self.new_to_old_atom_map.keys())) for nbr in neighbor_indices):
                     _logger.warning(f"the atom map cannot be reconciled with chirality preservation!  It is advisable to conduct a manual atom map.")
                     return {}
                 else:
                     #try to remove a hydrogen
                     hydrogen_maps = [atom.GetIdx() for atom in target_atoms[new_index].GetAtoms() if atom.GetAtomicNum() == 1]
-                    mapped_hydrogens = [_idx for _idx in hydrogen_maps if _idx in list(new_to_old_atom_map.keys())]
+                    mapped_hydrogens = [_idx for _idx in hydrogen_maps if _idx in list(self.new_to_old_atom_map.keys())]
                     if mapped_hydrogens != []:
                         del copied_new_to_old_atom_map[mapped_hydrogens[0]]
                     else:
@@ -519,28 +518,32 @@ class AtomMapping(object):
             elif not target_atoms[new_index].IsChiral() and pattern_atoms[old_index].IsChiral():
                 #we have to assert that one of the neighbors is being deleted
                 neighbor_indices = [atom.GetIdx() for atom in target_atoms[new_index].GetAtoms()]
-                if any(nbr_idx not in list(new_to_old_atom_map.keys()) for nbr_idx in neighbor_indices):
+                if any(nbr_idx not in list(self.new_to_old_atom_map.keys()) for nbr_idx in neighbor_indices):
                     pass
                 else:
                     _logger.warning(f"the atom map cannot be reconciled with chirality preservation since no hydrogens can be deleted!  It is advisable to conduct a manual atom map.")
                     return {}
-            elif target_atoms[new_index].IsChiral() and pattern_atoms[old_index].IsChiral() and oechem.OEPerceiveCIPStereo(current_mol, pattern_atoms[old_index]) == oechem.OEPerceiveCIPStereo(proposed_mol, target_atoms[new_index]):
+            elif target_atoms[new_index].IsChiral() and pattern_atoms[
+                old_index].IsChiral() and oechem.OEPerceiveCIPStereo(self.old_mol, pattern_atoms[
+                old_index]) == oechem.OEPerceiveCIPStereo(self.new_mol, target_atoms[new_index]):
                 #check if all the atoms are mapped
                 neighbor_indices = [atom.GetIdx() for atom in target_atoms[new_index].GetAtoms()]
-                if all(nbr in set(list(new_to_old_atom_map.keys())) for nbr in neighbor_indices):
+                if all(nbr in set(list(self.new_to_old_atom_map.keys())) for nbr in neighbor_indices):
                     pass
                 else:
                     _logger.warning(f"the atom map cannot be reconciled with chirality preservation since all atom neighbors are being mapped!  It is advisable to conduct a manual atom map.")
                     return {}
-            elif target_atoms[new_index].IsChiral() and pattern_atoms[old_index].IsChiral() and oechem.OEPerceiveCIPStereo(current_mol, pattern_atoms[old_index]) != oechem.OEPerceiveCIPStereo(proposed_mol, target_atoms[new_index]):
+            elif target_atoms[new_index].IsChiral() and pattern_atoms[
+                old_index].IsChiral() and oechem.OEPerceiveCIPStereo(self.old_mol, pattern_atoms[
+                old_index]) != oechem.OEPerceiveCIPStereo(self.new_mol, target_atoms[new_index]):
                 neighbor_indices = [atom.GetIdx() for atom in target_atoms[new_index].GetAtoms()]
-                if all(nbr in set(list(new_to_old_atom_map.keys())) for nbr in neighbor_indices):
+                if all(nbr in set(list(self.new_to_old_atom_map.keys())) for nbr in neighbor_indices):
                     _logger.warning(f"the atom map cannot be reconciled with chirality preservation since all atom neighbors are being mapped!  It is advisable to conduct a manual atom map.")
                     return {}
                 else:
                     #try to remove a hydrogen
                     hydrogen_maps = [atom.GetIdx() for atom in target_atoms[new_index].GetAtoms() if atom.GetAtomicNum() == 1]
-                    mapped_hydrogens = [_idx for _idx in hydrogen_maps if _idx in list(new_to_old_atom_map.keys())]
+                    mapped_hydrogens = [_idx for _idx in hydrogen_maps if _idx in list(self.new_to_old_atom_map.keys())]
                     if mapped_hydrogens != []:
                         del copied_new_to_old_atom_map[mapped_hydrogens[0]]
                     else:
@@ -1601,6 +1604,7 @@ def _convert_opemol_to_offmol(oemol, allow_undefined_stereo: bool=False, _cls=No
     import math
 
     from openeye import oechem
+    from openff.toolkit.utils import UndefinedStereochemistryError
 
     oemol = oechem.OEMol(oemol)
 
@@ -1668,7 +1672,7 @@ def _convert_opemol_to_offmol(oemol, allow_undefined_stereo: bool=False, _cls=No
             msg += "Problematic bonds are: {}\n".format(problematic_bonds)
         if allow_undefined_stereo:
             msg = "Warning (not error because allow_undefined_stereo=True): " + msg
-            logger.warning(msg)
+            _logger.warning(msg)
         else:
             msg = "Unable to make OFFMol from OEMol: " + msg
             raise UndefinedStereochemistryError(msg)
