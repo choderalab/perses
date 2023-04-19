@@ -18,6 +18,7 @@ from perses.app.relative_setup import RelativeFEPSetup
 from perses.app.setup_relative_calculation import get_openmm_platform
 from perses.annihilation.relative import HybridTopologyFactory
 
+from openff.units import unit
 from openff.units.openmm import to_openmm
 
 # Specific instance of logger for this module
@@ -523,7 +524,7 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
         reverse_work: npt.NDArray[float] = np.array(self.data["reverse_work"])
         free_energy, error = pymbar.bar.BAR(forward_work, reverse_work)
 
-        return free_energy
+        return free_energy * unit.k * self.data['temperature']
 
     def get_uncertainty(self, n_bootstraps=1000):
         """
@@ -549,7 +550,7 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
         all_dgs = self._do_bootstrap(forward, reverse, n_bootstraps=n_bootstraps)
 
         # TODO: Check if standard deviation is a good uncertainty estimator
-        return np.std(all_dgs)
+        return np.std(all_dgs) * unit.k * self.data['temperature']
 
     def get_rate_of_convergence(self):
         ...
@@ -606,7 +607,6 @@ class NonEquilibriumCyclingProtocol(Protocol):
 
     @classmethod
     def _default_settings(cls):
-        from openff.units import unit
         from perses.protocols.settings import NonEquilibriumCyclingSettings
         return NonEquilibriumCyclingSettings(
                 forcefield_settings=OpenMMSystemGeneratorFFSettings(),
@@ -654,6 +654,10 @@ class NonEquilibriumCyclingProtocol(Protocol):
                     outputs["forward_work"].extend(pur.outputs["forward_work"])
                     outputs["reverse_work"].extend(pur.outputs["reverse_work"])
                     outputs["work_file_paths"].extend(pur.outputs["paths"])
+
+        # include the temperature so the ProtocolResult object can convert out
+        # of kT units
+        outputs['temperature'] = self.settings.thermo_settings.temperature
 
         # This can be populated however we want
         return outputs
