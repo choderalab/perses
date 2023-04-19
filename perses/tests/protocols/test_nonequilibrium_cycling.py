@@ -16,10 +16,6 @@ class TestNonEquilibriumCycling:
         return NonEquilibriumCyclingProtocol(settings=short_settings)
 
     @pytest.fixture
-    def protocol_short_gpu(self, short_settings_gpu):
-        return NonEquilibriumCyclingProtocol(settings=short_settings_gpu)
-
-    @pytest.fixture
     def protocol_short_multiple_cycles(self, short_settings_multiple_cycles):
         return NonEquilibriumCyclingProtocol(settings=short_settings_multiple_cycles)
 
@@ -116,8 +112,8 @@ class TestNonEquilibriumCycling:
                 execute_DAG(dag, raise_error=True, shared_basedir=shared, scratch_basedir=scratch)
 
     @pytest.mark.gpu_ci
-    @pytest.mark.parametrize("protocol", [protocol_short_multiple_cycles, protocol_short_multiple_cycles_gpu])
-    def test_create_execute_gather(self, protocol, benzene_vacuum_system, toluene_vacuum_system, mapping_benzene_toluene, tmpdir):
+    @pytest.mark.parametrize("protocol", ['protocol_short_multiple_cycles', 'protocol_short_multiple_cycles_gpu'])
+    def test_create_execute_gather(self, protocol, benzene_vacuum_system, toluene_vacuum_system, mapping_benzene_toluene, tmpdir, request):
         """
         Perform 20 independent simulations of the NEQ cycling protocol for the benzene to toluene
         transformation and gather the results.
@@ -125,6 +121,8 @@ class TestNonEquilibriumCycling:
         This is done by using 4 replicates of the protocol with 5 simulation units each.
         """
         import numpy as np
+
+        protocol = request.getfixturevalue(protocol)
 
         dag = protocol.create(
             stateA=benzene_vacuum_system, stateB=toluene_vacuum_system, name="Short vacuum transformation",
@@ -160,8 +158,8 @@ class TestNonEquilibriumCycling:
         # print(f"Free energy = {fe_estimate} +/- {fe_error}") # DEBUG
 
     @pytest.mark.gpu_ci
-    @pytest.mark.parametrize("protocol", [protocol_short_multiple_cycles, protocol_short_multiple_cycles_gpu])
-    def test_create_execute_gather_toluene_to_toluene(self, protocol, toluene_vacuum_system, mapping_toluene_toluene, tmpdir):
+    @pytest.mark.parametrize("protocol", ['protocol_short_multiple_cycles', 'protocol_short_multiple_cycles_gpu'])
+    def test_create_execute_gather_toluene_to_toluene(self, protocol, toluene_vacuum_system, mapping_toluene_toluene, tmpdir, request):
         """
         Perform 20 independent simulations of the NEQ cycling protocol for the toluene to toluene
         transformation and gather the results.
@@ -177,6 +175,8 @@ class TestNonEquilibriumCycling:
         are stochastic errors with the BAR calculations.
         """
         import numpy as np
+
+        protocol = request.getfixturevalue(protocol)
 
         dag = protocol.create(
             stateA=toluene_vacuum_system, stateB=toluene_vacuum_system, name="Toluene vacuum transformation",
