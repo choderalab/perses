@@ -28,7 +28,7 @@ def test_PointMutationExecutor():
     assert len(solvent_atoms.intersection(htf._atom_classes['core_atoms'])) != 0, "There are no water atoms in the core atom " \
                                                                            "class, which may mean that the counterion was not introduced"
 
-
+@pytest.mark.skipif(os.getenv("OPENMM", default="7.7").upper() == "8.0", reason="FastMath is BadMath")
 def test_PointMutationExecutor_endstate_validation():
     """
     Check that HybridTopologyFactory, RepartitionedHybridTopologyFactory, and RESTCapableHybridTopologyFactory objects
