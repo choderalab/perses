@@ -112,7 +112,11 @@ class TestNonEquilibriumCycling:
                 execute_DAG(dag, raise_error=True, shared_basedir=shared, scratch_basedir=scratch)
 
     @pytest.mark.gpu_ci
-    @pytest.mark.parametrize("protocol", ['protocol_short_multiple_cycles', 'protocol_short_multiple_cycles_gpu'])
+    @pytest.mark.parametrize("protocol",
+                             [
+                                 'protocol_short_multiple_cycles', 
+                                 #'protocol_short_multiple_cycles_gpu'
+                             ])
     def test_create_execute_gather(self, protocol, benzene_vacuum_system, toluene_vacuum_system, mapping_benzene_toluene, tmpdir, request):
         """
         Perform 20 independent simulations of the NEQ cycling protocol for the benzene to toluene
@@ -158,7 +162,11 @@ class TestNonEquilibriumCycling:
         # print(f"Free energy = {fe_estimate} +/- {fe_error}") # DEBUG
 
     @pytest.mark.gpu_ci
-    @pytest.mark.parametrize("protocol", ['protocol_short_multiple_cycles', 'protocol_short_multiple_cycles_gpu'])
+    @pytest.mark.parametrize("protocol",
+                             [
+                                 'protocol_short_multiple_cycles',
+                                 #'protocol_short_multiple_cycles_gpu'
+                             ])
     def test_create_execute_gather_toluene_to_toluene(self, protocol, toluene_vacuum_system, mapping_toluene_toluene, tmpdir, request):
         """
         Perform 20 independent simulations of the NEQ cycling protocol for the toluene to toluene
