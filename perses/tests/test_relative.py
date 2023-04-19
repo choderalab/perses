@@ -1018,7 +1018,7 @@ def run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_en
     else:
         for endstate in [0, 1]:
             validate_endstate_energies_md(htf, endstate=endstate, n_steps=10, save_freq=1)
-@pytest.mark.skipif(os.getenv("OPENMM", default="7.7").upper() == "8.0", reason="FastMath is BadMath")
+@pytest.mark.skipif(os.getenv("OPENMM", default="7.7").upper() in ["8.0", "DEV"], reason="FastMath is BadMath")
 def test_RESTCapableHybridTopologyFactory_energies():
     """
     Uses run_RESTCapableHybridTopologyFactory_energies() to run energy validation for RESTCapableHybridTopologyFactory
@@ -1189,7 +1189,7 @@ def run_unsampled_endstate_energies(test_name, use_point_energies=True, use_md_e
             if use_md_energies:
                 validate_unsampled_endstates_md(htf, unsampled_endstates[endstate].system, endstate, n_steps=10, save_freq=1)
 
-@pytest.mark.skipif(os.getenv("OPENMM", default="7.7").upper() == "8.0", reason="FastMath is BadMath")
+@pytest.mark.skipif(os.getenv("OPENMM", default="7.7").upper() in ["8.0", "DEV"], reason="FastMath is BadMath")
 def test_unsampled_endstate_energies():
     """
     Uses run_unsampled_endstate_energies() to run energy validation for the unsampled endstates generated for
