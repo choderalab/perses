@@ -16,8 +16,16 @@ class TestNonEquilibriumCycling:
         return NonEquilibriumCyclingProtocol(settings=short_settings)
 
     @pytest.fixture
+    def protocol_short_gpu(self, short_settings_gpu):
+        return NonEquilibriumCyclingProtocol(settings=short_settings_gpu)
+
+    @pytest.fixture
     def protocol_short_multiple_cycles(self, short_settings_multiple_cycles):
         return NonEquilibriumCyclingProtocol(settings=short_settings_multiple_cycles)
+
+    @pytest.fixture
+    def protocol_short_multiple_cycles_gpu(self, short_settings_multiple_cycles_gpu):
+        return NonEquilibriumCyclingProtocol(settings=short_settings_multiple_cycles_gpu)
 
     @pytest.fixture
     def protocol_dag_result(self, protocol_short, benzene_vacuum_system, toluene_vacuum_system,
@@ -38,27 +46,6 @@ class TestNonEquilibriumCycling:
             dagresult: ProtocolDAGResult = execute_DAG(dag, shared_basedir=shared, scratch_basedir=scratch)
 
         return protocol_short, dag, dagresult
-
-    @pytest.fixture
-    def protocol_dag(self, protocol_short_multiple_cycles, benzene_vacuum_system, toluene_vacuum_system,
-                     mapping_benzene_toluene):
-        dag = protocol_short_multiple_cycles.create(
-            stateA=benzene_vacuum_system, stateB=toluene_vacuum_system, name="Short vacuum transformation",
-            mapping={'ligand': mapping_benzene_toluene}
-        )
-
-        return protocol_short_multiple_cycles, dag
-
-    @pytest.fixture
-    def protocol_dag_toluene_to_toluene(self, protocol_short_multiple_cycles, benzene_vacuum_system,
-                                        toluene_vacuum_system, mapping_toluene_toluene):
-        """Fixture to test toluene-to-toluene transformation using benzene-to-toluene mapping"""
-        dag = protocol_short_multiple_cycles.create(
-            stateA=toluene_vacuum_system, stateB=toluene_vacuum_system, name="Toluene vacuum transformation",
-            mapping={'ligand': mapping_toluene_toluene}
-        )
-
-        return protocol_short_multiple_cycles, dag
 
     @pytest.fixture
     def protocol_dag_broken(self, protocol_short, benzene_vacuum_system, toluene_vacuum_system, broken_mapping, tmpdir):
@@ -128,10 +115,9 @@ class TestNonEquilibriumCycling:
             with pytest.raises(IndexError):
                 execute_DAG(dag, raise_error=True, shared_basedir=shared, scratch_basedir=scratch)
 
-    # TODO: add a non-gpu gather test for #1177
-
     @pytest.mark.gpu_ci
-    def test_create_execute_gather(self, protocol_dag, tmpdir):
+    @pytest.mark.parametrize("protocol", [protocol_short_multiple_cycles, protocol_short_multiple_cycles_gpu])
+    def test_create_execute_gather(self, protocol, benzene_vacuum_system, toluene_vacuum_system, mapping_benzene_toluene, tmpdir):
         """
         Perform 20 independent simulations of the NEQ cycling protocol for the benzene to toluene
         transformation and gather the results.
@@ -140,10 +126,14 @@ class TestNonEquilibriumCycling:
         """
         import numpy as np
 
+        dag = protocol.create(
+            stateA=benzene_vacuum_system, stateB=toluene_vacuum_system, name="Short vacuum transformation",
+            mapping={'ligand': mapping_benzene_toluene}
+        )
+
         results = []
         n_replicates = 4
         for i in range(n_replicates):
-            protocol, dag = protocol_dag
             with tmpdir.as_cwd():
 
                 shared=Path(f'shared_{i}')
@@ -170,7 +160,8 @@ class TestNonEquilibriumCycling:
         # print(f"Free energy = {fe_estimate} +/- {fe_error}") # DEBUG
 
     @pytest.mark.gpu_ci
-    def test_create_execute_gather_toluene_to_toluene(self, protocol_dag_toluene_to_toluene, tmpdir):
+    @pytest.mark.parametrize("protocol", [protocol_short_multiple_cycles, protocol_short_multiple_cycles_gpu])
+    def test_create_execute_gather_toluene_to_toluene(self, protocol, toluene_vacuum_system, mapping_toluene_toluene, tmpdir):
         """
         Perform 20 independent simulations of the NEQ cycling protocol for the toluene to toluene
         transformation and gather the results.
@@ -187,10 +178,14 @@ class TestNonEquilibriumCycling:
         """
         import numpy as np
 
+        dag = protocol.create(
+            stateA=toluene_vacuum_system, stateB=toluene_vacuum_system, name="Toluene vacuum transformation",
+            mapping={'ligand': mapping_toluene_toluene}
+        )
+
         results = []
         n_repeats = 4
         for i in range(n_repeats):
-            protocol, dag = protocol_dag_toluene_to_toluene
             with tmpdir.as_cwd():
 
                 shared=Path(f'shared_{i}')

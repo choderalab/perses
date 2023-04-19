@@ -79,6 +79,14 @@ def short_settings():
 
 
 @pytest.fixture
+def short_settings_gpu(short_settings):
+    settings = short_settings.copy(deep=True)
+    settings.platform="CUDA"
+
+    return settings
+
+
+@pytest.fixture
 def short_settings_multiple_cycles():
     from openff.units import unit
     from perses.protocols import NonEquilibriumCyclingProtocol
@@ -97,8 +105,16 @@ def short_settings_multiple_cycles():
 
 
 @pytest.fixture
+def short_settings_multiple_cycles_gpu(short_settings_multiple_cycles):
+    settings = short_settings_multiple_cycles.copy(deep=True)
+    settings.platform="CUDA"
+
+    return settings
+
+
+@pytest.fixture
 def production_settings(short_settings):
-    settings = short_settings
+    settings = short_settings.copy(deep=True)
 
     settings.eq_steps=250000
     settings.neq_steps=250000
