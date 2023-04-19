@@ -96,8 +96,8 @@ def short_settings_multiple_cycles():
     settings.thermo_settings.temperature = 300 * unit.kelvin
     settings.eq_steps = 1000
     settings.neq_steps = 1000
-    settings.traj_save_frequency=250
     settings.work_save_frequency=50
+    settings.traj_save_frequency=250
     settings.num_replicates=5
     settings.platform="CPU"
 
@@ -118,8 +118,8 @@ def production_settings(short_settings):
 
     settings.eq_steps=250000
     settings.neq_steps=250000
-    settings.traj_save_frequency=2000
     settings.work_save_frequency=500
+    settings.traj_save_frequency=2000
 
     return settings
 
