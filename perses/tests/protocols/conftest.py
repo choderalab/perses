@@ -118,7 +118,8 @@ def production_settings(short_settings):
 
     settings.eq_steps=250000
     settings.neq_steps=250000
-    settings.save_frequency=2000
+    settings.traj_save_frequency=2000
+    settings.work_save_frequency=500
 
     return settings
 

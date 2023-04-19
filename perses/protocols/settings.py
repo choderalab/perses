@@ -55,13 +55,13 @@ class NonEquilibriumCyclingSettings(Settings):
     # NEQ integration settings
     timestep = 4.0 * unit.femtoseconds
     neq_splitting = "V R H O R V"
-    eq_steps = 1000
-    neq_steps = 1000
+    eq_steps = 250000
+    neq_steps = 250000
 
     # platform and serialization
     platform = 'CUDA'
-    traj_save_frequency: int = 100
-    work_save_frequency: int = 25
+    traj_save_frequency: int = 2000
+    work_save_frequency: int = 500
     atom_selection_expression: str = "not water"
 
     # Number of cycles to run
