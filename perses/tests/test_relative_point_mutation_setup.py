@@ -1,3 +1,5 @@
+import pytest
+
 def test_PointMutationExecutor():
     """
     Check that a PointMutationExecutor can be instantiated properly for ALA->ASP dipeptide in solvent and that a
