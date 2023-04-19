@@ -98,7 +98,7 @@ jobs:
       - name: Test the package
         run: |
           export TRAVIS=true
-          micromamba list --explicit
+          micromamba list
           pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -m "gpu_ci or gpu_needed" perses/tests
 
       - name: Codecov
