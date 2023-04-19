@@ -18,6 +18,8 @@ import subprocess
 from perses.tests.utils import enter_temp_directory
 
 ROOT_DIR_PATH = pathlib.Path(__file__).joinpath("../../../").resolve()
+SLOW_EXAMPLES_KEYWORDS = ("barnase-barstar", "kinase-neq-switching")
+NOT_EXAMPLES_KEYWORDS = ("analyze-benchmark", "moonshot-mainseries")
 
 
 def run_script_file(file_path, cmd_args=None):
@@ -47,9 +49,11 @@ def find_example_scripts():
     for example_file_path in examples_dir_path.glob("*/*.py"):
         # TODO: find a better way to mark slow examples
         example_posix_path = example_file_path.as_posix()
-        if "barnase-barstar" in example_posix_path or "kinase-neq-switching" in example_posix_path:
+        # mark slow examples
+        if any(example in example_posix_path for example in SLOW_EXAMPLES_KEYWORDS):
             example_posix_path = pytest.param(example_posix_path, marks=pytest.mark.slow)
-        elif "analyze-benchmark" in example_posix_path:
+        # mark non-examples
+        elif any(example in example_posix_path for example in NOT_EXAMPLES_KEYWORDS):
             example_posix_path = pytest.param(example_posix_path, marks=pytest.mark.skip("not an example"))
         example_file_paths.append(example_posix_path)
 
