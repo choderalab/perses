@@ -72,6 +72,7 @@ def short_settings():
     settings.thermo_settings.temperature = 300 * unit.kelvin
     settings.eq_steps=25000
     settings.neq_steps=25000
+    settings.work_save_frequency=50
     settings.traj_save_frequency=250
     settings.platform="CPU"
 
