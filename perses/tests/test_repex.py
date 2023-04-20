@@ -89,7 +89,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
         forward_reverse_sum_err = np.sqrt(data['ala-thr']['error'] ** 2 + data['thr-ala']['error'] ** 2)
         print(f"DDG: {forward_reverse_sum}, 6*dDDG: {6 * forward_reverse_sum_err}")
         assert forward_reverse_sum < 6 * forward_reverse_sum_err, (f"DDG ({forward_reverse_sum}) is greater than "
-                                                                     f"6 * dDDG ({6  * forward_reverse_sum_err})")
+                                                                   f"6 * dDDG ({6  * forward_reverse_sum_err})")
 
 
 # @pytest.mark.skip(reason="Currently taking too long in CI.")
@@ -311,7 +311,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
         forward_reverse_sum_err = np.sqrt(data['0-1']['error'] ** 2 + data['1-0']['error'] ** 2)
         print(f"DDG: {forward_reverse_sum}, 6*dDDG: {6 * forward_reverse_sum_err}")  # debug control print
         assert forward_reverse_sum < 6 * forward_reverse_sum_err, (f"DDG ({forward_reverse_sum}) is greater than "
-                                                                     f"6 * dDDG ({6 * forward_reverse_sum_err})")
+                                                                   f"6 * dDDG ({6 * forward_reverse_sum_err})")
 
 
 @pytest.mark.gpu_needed
@@ -417,9 +417,9 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
                 reporter = MultiStateReporter(reporter_file)
                 analyzer = MultiStateSamplerAnalyzer(reporter, max_n_iterations=n_iterations)
                 # Extract uncorrelated energy matrix (u_ln) and samples from states (N_l)
-                energy_matrix, sampled_states = analyzer._compute_mbar_decorrelated_energies()
+                energy_matrix, samples_per_state = analyzer._compute_mbar_decorrelated_energies()
                 # Compute free energies with boostrapping using pymbar
-                mbar = pymbar.MBAR(energy_matrix, sampled_states, nbootstraps=200)
+                mbar = pymbar.MBAR(energy_matrix, samples_per_state, nbootstraps=200)
                 f_ij, df_ij = mbar.getFreeEnergyDifferences(uncertainty_method="bootstrap", return_theta=False)
 
                 data[f"{ligand_A_index}-{ligand_B_index}_{phase}"] = {'free_energy': f_ij[0, -1], 'error': df_ij[0, -1]}
@@ -433,4 +433,4 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
             data['1-0_solvent']['error'] ** 2)
         print(f"DDG: {forward_reverse_sum}, 6*dDDG: {6 * forward_reverse_sum_error}")  # debug control print
         assert forward_reverse_sum < 6 * forward_reverse_sum_error, (f"DDG ({forward_reverse_sum}) is "
-                                                                             f"greater than 6 * dDDG ({6 * forward_reverse_sum_error})")
+                                                                     f"greater than 6 * dDDG ({6 * forward_reverse_sum_error})")
