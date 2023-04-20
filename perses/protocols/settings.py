@@ -7,7 +7,6 @@ energy calculations using perses.
 
 from gufe.settings import Settings
 from openff.units import unit
-from perses.protocols.utils import _serialize_pydantic
 from pydantic import root_validator
 
 # Default settings for the lambda functions
@@ -75,6 +74,3 @@ class NonEquilibriumCyclingSettings(Settings):
                              "Please specify consistent values for trajectory and work save settings")
         # TODO: Add check for eq and neq steps and save frequencies
         return values
-
-    def _gufe_tokenize(self):
-        return _serialize_pydantic(self)
