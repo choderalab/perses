@@ -285,175 +285,176 @@ class SimulationUnit(ProtocolUnit):
         context.setPeriodicBoxVectors(*system.getDefaultPeriodicBoxVectors())
         context.setPositions(positions)
 
-        # Minimize
-        openmm.LocalEnergyMinimizer.minimize(context)
+        try:
+            # Minimize
+            openmm.LocalEnergyMinimizer.minimize(context)
 
-        # Equilibrate
-        context.setVelocitiesToTemperature(temperature)
+            # Equilibrate
+            context.setVelocitiesToTemperature(temperature)
 
-        # Prepare objects to store data -- empty lists so far
-        forward_eq_old, forward_eq_new, forward_neq_old, forward_neq_new = list(), list(), list(), list()
-        reverse_eq_new, reverse_eq_old, reverse_neq_old, reverse_neq_new = list(), list(), list(), list()
+            # Prepare objects to store data -- empty lists so far
+            forward_eq_old, forward_eq_new, forward_neq_old, forward_neq_new = list(), list(), list(), list()
+            reverse_eq_new, reverse_eq_old, reverse_neq_old, reverse_neq_new = list(), list(), list(), list()
 
-        # Coarse number of steps -- each coarse consists of work_save_frequency steps
-        coarse_eq_steps = int(eq_steps/work_save_frequency)  # Note: eq_steps is multiple of work save steps
-        coarse_neq_steps = int(neq_steps / work_save_frequency)  # Note: neq_steps is multiple of work save steps
+            # Coarse number of steps -- each coarse consists of work_save_frequency steps
+            coarse_eq_steps = int(eq_steps/work_save_frequency)  # Note: eq_steps is multiple of work save steps
+            coarse_neq_steps = int(neq_steps / work_save_frequency)  # Note: neq_steps is multiple of work save steps
 
-        # TODO: Also get the GPU information (plain try-except with nvidia-smi)
+            # TODO: Also get the GPU information (plain try-except with nvidia-smi)
 
-        # Equilibrium (lambda = 0)
-        # start timer
-        start_time = time.perf_counter()
-        for step in range(coarse_eq_steps):
-            integrator.step(work_save_frequency)
-            file_logger.debug(f"coarse step: {step}: saving work (freq {work_save_frequency})")
-            # Save positions
-            if step % traj_save_frequency == 0:
-                file_logger.debug(f"coarse step: {step}: saving trajectory (freq {traj_save_frequency})")
-                initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
-                                                                            atom_selection_exp=selection_expression)
-                forward_eq_old.append(initial_positions)
-                forward_eq_new.append(final_positions)
-        # Make sure trajectories are stored at the end of the eq loop
-        file_logger.debug(f"coarse step: {step}: saving trajectory (freq {traj_save_frequency})")
-        initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
-                                                                    atom_selection_exp=selection_expression)
-        forward_eq_old.append(initial_positions)
-        forward_eq_new.append(final_positions)
+            # Equilibrium (lambda = 0)
+            # start timer
+            start_time = time.perf_counter()
+            for step in range(coarse_eq_steps):
+                integrator.step(work_save_frequency)
+                file_logger.debug(f"coarse step: {step}: saving work (freq {work_save_frequency})")
+                # Save positions
+                if step % traj_save_frequency == 0:
+                    file_logger.debug(f"coarse step: {step}: saving trajectory (freq {traj_save_frequency})")
+                    initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
+                                                                                atom_selection_exp=selection_expression)
+                    forward_eq_old.append(initial_positions)
+                    forward_eq_new.append(final_positions)
+            # Make sure trajectories are stored at the end of the eq loop
+            file_logger.debug(f"coarse step: {step}: saving trajectory (freq {traj_save_frequency})")
+            initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
+                                                                        atom_selection_exp=selection_expression)
+            forward_eq_old.append(initial_positions)
+            forward_eq_new.append(final_positions)
 
-        eq_forward_time = time.perf_counter()
-        eq_forward_walltime = datetime.timedelta(seconds=eq_forward_time - start_time)
-        file_logger.info(f"replicate_{self.name} Forward (lamba = 0) equilibration time : {eq_forward_walltime}")
+            eq_forward_time = time.perf_counter()
+            eq_forward_walltime = datetime.timedelta(seconds=eq_forward_time - start_time)
+            file_logger.info(f"replicate_{self.name} Forward (lamba = 0) equilibration time : {eq_forward_walltime}")
 
-        # Run neq
-        # Forward (0 -> 1)
-        # Initialize works with current value
-        forward_works = [integrator.get_protocol_work(dimensionless=True)]
-        for fwd_step in range(coarse_neq_steps):
-            integrator.step(work_save_frequency)
-            forward_works.append(integrator.get_protocol_work(dimensionless=True))
-            if fwd_step % traj_save_frequency == 0:
-                initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
-                                                                            atom_selection_exp=selection_expression)
-                forward_neq_old.append(initial_positions)
-                forward_neq_new.append(final_positions)
-        # Make sure trajectories are stored at the end of the neq loop
-        initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
-                                                                    atom_selection_exp=selection_expression)
-        forward_neq_old.append(initial_positions)
-        forward_neq_new.append(final_positions)
+            # Run neq
+            # Forward (0 -> 1)
+            # Initialize works with current value
+            forward_works = [integrator.get_protocol_work(dimensionless=True)]
+            for fwd_step in range(coarse_neq_steps):
+                integrator.step(work_save_frequency)
+                forward_works.append(integrator.get_protocol_work(dimensionless=True))
+                if fwd_step % traj_save_frequency == 0:
+                    initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
+                                                                                atom_selection_exp=selection_expression)
+                    forward_neq_old.append(initial_positions)
+                    forward_neq_new.append(final_positions)
+            # Make sure trajectories are stored at the end of the neq loop
+            initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
+                                                                        atom_selection_exp=selection_expression)
+            forward_neq_old.append(initial_positions)
+            forward_neq_new.append(final_positions)
 
-        neq_forward_time = time.perf_counter()
-        neq_forward_walltime = datetime.timedelta(seconds=neq_forward_time - eq_forward_time)
-        file_logger.info(f"replicate_{self.name} Forward nonequilibrium time (lambda 0 -> 1): {neq_forward_walltime}")
+            neq_forward_time = time.perf_counter()
+            neq_forward_walltime = datetime.timedelta(seconds=neq_forward_time - eq_forward_time)
+            file_logger.info(f"replicate_{self.name} Forward nonequilibrium time (lambda 0 -> 1): {neq_forward_walltime}")
 
-        # Equilibrium (lambda = 1)
-        for step in range(coarse_eq_steps):
-            integrator.step(work_save_frequency)
-            if step % traj_save_frequency == 0:
-                initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
-                                                                            atom_selection_exp=selection_expression)
-                reverse_eq_new.append(initial_positions)  # TODO: Maybe better naming not old/new but initial/final
-                reverse_eq_old.append(final_positions)
-        # Make sure trajectories are stored at the end of the eq loop
-        initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
-                                                                    atom_selection_exp=selection_expression)
-        reverse_eq_old.append(initial_positions)
-        reverse_eq_new.append(final_positions)
+            # Equilibrium (lambda = 1)
+            for step in range(coarse_eq_steps):
+                integrator.step(work_save_frequency)
+                if step % traj_save_frequency == 0:
+                    initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
+                                                                                atom_selection_exp=selection_expression)
+                    reverse_eq_new.append(initial_positions)  # TODO: Maybe better naming not old/new but initial/final
+                    reverse_eq_old.append(final_positions)
+            # Make sure trajectories are stored at the end of the eq loop
+            initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
+                                                                        atom_selection_exp=selection_expression)
+            reverse_eq_old.append(initial_positions)
+            reverse_eq_new.append(final_positions)
 
-        eq_reverse_time = time.perf_counter()
-        eq_reverse_walltime = datetime.timedelta(seconds=eq_reverse_time - neq_forward_time)
-        file_logger.info(f"replicate_{self.name} Reverse (lambda 1) time: {eq_reverse_walltime}")
+            eq_reverse_time = time.perf_counter()
+            eq_reverse_walltime = datetime.timedelta(seconds=eq_reverse_time - neq_forward_time)
+            file_logger.info(f"replicate_{self.name} Reverse (lambda 1) time: {eq_reverse_walltime}")
 
-        # Reverse work (1 -> 0)
-        reverse_works = [integrator.get_protocol_work(dimensionless=True)]
-        for rev_step in range(coarse_neq_steps):
-            integrator.step(work_save_frequency)
-            reverse_works.append(integrator.get_protocol_work(dimensionless=True))
-            if rev_step % traj_save_frequency == 0:
-                initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
-                                                                            atom_selection_exp=selection_expression)
-                reverse_neq_old.append(initial_positions)
-                reverse_neq_new.append(final_positions)
-        # Make sure trajectories are stored at the end of the neq loop
-        initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
-                                                                    atom_selection_exp=selection_expression)
-        forward_eq_old.append(initial_positions)
-        forward_eq_new.append(final_positions)
+            # Reverse work (1 -> 0)
+            reverse_works = [integrator.get_protocol_work(dimensionless=True)]
+            for rev_step in range(coarse_neq_steps):
+                integrator.step(work_save_frequency)
+                reverse_works.append(integrator.get_protocol_work(dimensionless=True))
+                if rev_step % traj_save_frequency == 0:
+                    initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
+                                                                                atom_selection_exp=selection_expression)
+                    reverse_neq_old.append(initial_positions)
+                    reverse_neq_new.append(final_positions)
+            # Make sure trajectories are stored at the end of the neq loop
+            initial_positions, final_positions = self.extract_positions(context, hybrid_topology_factory=htf,
+                                                                        atom_selection_exp=selection_expression)
+            forward_eq_old.append(initial_positions)
+            forward_eq_new.append(final_positions)
 
-        neq_reverse_time = time.perf_counter()
-        neq_reverse_walltime = datetime.timedelta(seconds=neq_reverse_time - eq_reverse_time)
-        file_logger.info(f"replicate_{self.name} Reverse nonequilibrium time (lambda 1 -> 0): {neq_reverse_walltime}")
-        # Elapsed time for the whole cycle
-        cycle_walltime = datetime.timedelta(seconds=neq_reverse_time - start_time)
-        file_logger.info(f"replicate_{self.name} Nonequilibrium cycle total walltime: {cycle_walltime}")
+            neq_reverse_time = time.perf_counter()
+            neq_reverse_walltime = datetime.timedelta(seconds=neq_reverse_time - eq_reverse_time)
+            file_logger.info(f"replicate_{self.name} Reverse nonequilibrium time (lambda 1 -> 0): {neq_reverse_walltime}")
+            # Elapsed time for the whole cycle
+            cycle_walltime = datetime.timedelta(seconds=neq_reverse_time - start_time)
+            file_logger.info(f"replicate_{self.name} Nonequilibrium cycle total walltime: {cycle_walltime}")
 
-        # Computing performance in ns/day
-        simulation_time = 2*(eq_steps + neq_steps)*timestep
-        walltime_in_seconds = cycle_walltime.total_seconds() * openmm_unit.seconds
-        estimated_performance = simulation_time.value_in_unit(
-            openmm_unit.nanosecond) / walltime_in_seconds.value_in_unit(openmm_unit.days)  # in ns/day
-        file_logger.info(f"replicate_{self.name} Estimated performance: {estimated_performance} ns/day")
+            # Computing performance in ns/day
+            simulation_time = 2*(eq_steps + neq_steps)*timestep
+            walltime_in_seconds = cycle_walltime.total_seconds() * openmm_unit.seconds
+            estimated_performance = simulation_time.value_in_unit(
+                openmm_unit.nanosecond) / walltime_in_seconds.value_in_unit(openmm_unit.days)  # in ns/day
+            file_logger.info(f"replicate_{self.name} Estimated performance: {estimated_performance} ns/day")
 
-        # Serialize works
-        forward_work_path = ctx.shared / f"forward_{phase}_{self.name}.npy"
-        reverse_work_path = ctx.shared / f"reverse_{phase}_{self.name}.npy"
-        with open(forward_work_path, 'wb') as out_file:
-            np.save(out_file, forward_works)
-        with open(reverse_work_path, 'wb') as out_file:
-            np.save(out_file, reverse_works)
+            # Serialize works
+            forward_work_path = ctx.shared / f"forward_{phase}_{self.name}.npy"
+            reverse_work_path = ctx.shared / f"reverse_{phase}_{self.name}.npy"
+            with open(forward_work_path, 'wb') as out_file:
+                np.save(out_file, forward_works)
+            with open(reverse_work_path, 'wb') as out_file:
+                np.save(out_file, reverse_works)
 
-        # Store timings and performance info in dictionary
-        timing_info = {
-            "eq_forward_time_in_s": eq_forward_walltime.total_seconds(),
-            "neq_forward_time_in_s": neq_forward_walltime.total_seconds(),
-            "eq_reverse_time_in_s": eq_reverse_walltime.total_seconds(),
-            "neq_reverse_time_in_s": neq_reverse_walltime.total_seconds(),
-            "performance_in_ns_day": estimated_performance
-        }
+            # Store timings and performance info in dictionary
+            timing_info = {
+                "eq_forward_time_in_s": eq_forward_walltime.total_seconds(),
+                "neq_forward_time_in_s": neq_forward_walltime.total_seconds(),
+                "eq_reverse_time_in_s": eq_reverse_walltime.total_seconds(),
+                "neq_reverse_time_in_s": neq_reverse_walltime.total_seconds(),
+                "performance_in_ns_day": estimated_performance
+            }
 
-        # TODO: Do we need to save the trajectories?
-        # Serialize trajectories
-        forward_eq_old_path = ctx.shared / f"forward_eq_old_{phase}_{self.name}.npy"
-        forward_eq_new_path = ctx.shared / f"forward_eq_new_{phase}_{self.name}.npy"
-        forward_neq_old_path = ctx.shared / f"forward_neq_old_{phase}_{self.name}.npy"
-        forward_neq_new_path = ctx.shared / f"forward_neq_new_{phase}_{self.name}.npy"
-        reverse_eq_new_path = ctx.shared / f"reverse_eq_new_{phase}_{self.name}.npy"
-        reverse_eq_old_path = ctx.shared / f"reverse_eq_old_{phase}_{self.name}.npy"
-        reverse_neq_old_path = ctx.shared / f"reverse_neq_old_{phase}_{self.name}.npy"
-        reverse_neq_new_path = ctx.shared / f"reverse_neq_new_{phase}_{self.name}.npy"
+            # TODO: Do we need to save the trajectories?
+            # Serialize trajectories
+            forward_eq_old_path = ctx.shared / f"forward_eq_old_{phase}_{self.name}.npy"
+            forward_eq_new_path = ctx.shared / f"forward_eq_new_{phase}_{self.name}.npy"
+            forward_neq_old_path = ctx.shared / f"forward_neq_old_{phase}_{self.name}.npy"
+            forward_neq_new_path = ctx.shared / f"forward_neq_new_{phase}_{self.name}.npy"
+            reverse_eq_new_path = ctx.shared / f"reverse_eq_new_{phase}_{self.name}.npy"
+            reverse_eq_old_path = ctx.shared / f"reverse_eq_old_{phase}_{self.name}.npy"
+            reverse_neq_old_path = ctx.shared / f"reverse_neq_old_{phase}_{self.name}.npy"
+            reverse_neq_new_path = ctx.shared / f"reverse_neq_new_{phase}_{self.name}.npy"
 
-        with open(forward_eq_old_path, 'wb') as out_file:
-            np.save(out_file, np.array(forward_eq_old))
-        with open(forward_eq_new_path, 'wb') as out_file:
-            np.save(out_file, np.array(forward_eq_new))
-        with open(reverse_eq_old_path, 'wb') as out_file:
-            np.save(out_file, np.array(reverse_eq_old))
-        with open(reverse_eq_new_path, 'wb') as out_file:
-            np.save(out_file, np.array(reverse_eq_new))
-        with open(forward_neq_old_path, 'wb') as out_file:
-            np.save(out_file, np.array(forward_neq_old))
-        with open(forward_neq_new_path, 'wb') as out_file:
-            np.save(out_file, np.array(forward_neq_new))
-        with open(reverse_neq_old_path, 'wb') as out_file:
-            np.save(out_file, np.array(reverse_neq_old))
-        with open(reverse_neq_new_path, 'wb') as out_file:
-            np.save(out_file, np.array(reverse_neq_new))
+            with open(forward_eq_old_path, 'wb') as out_file:
+                np.save(out_file, np.array(forward_eq_old))
+            with open(forward_eq_new_path, 'wb') as out_file:
+                np.save(out_file, np.array(forward_eq_new))
+            with open(reverse_eq_old_path, 'wb') as out_file:
+                np.save(out_file, np.array(reverse_eq_old))
+            with open(reverse_eq_new_path, 'wb') as out_file:
+                np.save(out_file, np.array(reverse_eq_new))
+            with open(forward_neq_old_path, 'wb') as out_file:
+                np.save(out_file, np.array(forward_neq_old))
+            with open(forward_neq_new_path, 'wb') as out_file:
+                np.save(out_file, np.array(forward_neq_new))
+            with open(reverse_neq_old_path, 'wb') as out_file:
+                np.save(out_file, np.array(reverse_neq_old))
+            with open(reverse_neq_new_path, 'wb') as out_file:
+                np.save(out_file, np.array(reverse_neq_new))
 
-        # Saving trajectory paths in dictionary structure
-        trajectory_paths = {
-            "forward_eq_initial": forward_eq_old_path,
-            "forward_eq_final": forward_eq_new_path,
-            "forward_neq_initial": forward_neq_old_path,
-            "forward_neq_final": forward_neq_new_path,
-            "reverse_eq_initial": reverse_eq_old_path,
-            "reverse_eq_final": reverse_eq_new_path,
-            "reverse_neq_initial": reverse_neq_old_path,
-            "reverse_neq_final": reverse_neq_new_path
-        }
-
-        # Explicitly cleanup for GPU resources
-        del context, integrator
+            # Saving trajectory paths in dictionary structure
+            trajectory_paths = {
+                "forward_eq_initial": forward_eq_old_path,
+                "forward_eq_final": forward_eq_new_path,
+                "forward_neq_initial": forward_neq_old_path,
+                "forward_neq_final": forward_neq_new_path,
+                "reverse_eq_initial": reverse_eq_old_path,
+                "reverse_eq_final": reverse_eq_new_path,
+                "reverse_neq_initial": reverse_neq_old_path,
+                "reverse_neq_final": reverse_neq_new_path
+            }
+        finally:
+            # Explicit cleanup for GPU resources
+            del context, integrator
 
         return {
             'forward_work': forward_work_path,
@@ -475,22 +476,21 @@ class ResultUnit(ProtocolUnit):
         # TODO: This can take the settings and process a debug flag, and populate all the paths for trajectories as needed
         # Load the works from shared serialized objects
         # TODO: We need to make sure the array is the CUMULATIVE work and that we just want the last value
-        cumulated_forward_works = []
-        cumulated_reverse_works = []
+        forward_works = []
+        reverse_works = []
         for simulation in simulations:
             forward_work = np.load(simulation.outputs['forward_work'])
-            cumulated_forward = forward_work[-1] - forward_work[0]
             reverse_work = np.load(simulation.outputs['reverse_work'])
-            cumulated_reverse = reverse_work[-1] - reverse_work[0]
-            cumulated_forward_works.append(cumulated_forward)
-            cumulated_reverse_works.append(cumulated_reverse)
+
+            forward_works.append(forward_work - forward_work[0])
+            reverse_works.append(reverse_work - reverse_work[0])
 
         # Path dictionary
         paths_dict = {"forward_work": [simulation.outputs["forward_work"] for simulation in simulations],
                       "reverse_work": [simulation.outputs["reverse_work"] for simulation in simulations]}
 
-        return {"forward_work": cumulated_forward_works,
-                "reverse_work": cumulated_reverse_works,
+        return {"forward_work": forward_works,
+                "reverse_work": reverse_works,
                 "paths": paths_dict,
                 }
 
@@ -520,11 +520,14 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
         import numpy.typing as npt
         import pymbar
 
-        forward_work: npt.NDArray[float] = np.array(self.data["forward_work"])
-        reverse_work: npt.NDArray[float] = np.array(self.data["reverse_work"])
+        forward_work = [i[-1] for i in self.data['forward_work']]
+        reverse_work = [i[-1] for i in self.data['reverse_work']]
+
+        forward_work: npt.NDArray[float] = np.array(forward_work)
+        reverse_work: npt.NDArray[float] = np.array(reverse_work)
         free_energy, error = pymbar.bar.BAR(forward_work, reverse_work)
 
-        return free_energy * unit.k * self.data['temperature']
+        return (free_energy * unit.k * self.data['temperature'] * unit.avogadro_constant).to('kcal/mol')
 
     def get_uncertainty(self, n_bootstraps=1000):
         """
@@ -544,13 +547,16 @@ class NonEquilibriumCyclingProtocolResult(ProtocolResult):
         import numpy as np
         import numpy.typing as npt
 
-        forward: npt.NDArray[float] = np.array(self.data["forward_work"])
-        reverse: npt.NDArray[float] = np.array(self.data["reverse_work"])
+        forward_work = [i[-1] for i in self.data['forward_work']]
+        reverse_work = [i[-1] for i in self.data['reverse_work']]
+
+        forward: npt.NDArray[float] = np.array(forward_work)
+        reverse: npt.NDArray[float] = np.array(reverse_work)
 
         all_dgs = self._do_bootstrap(forward, reverse, n_bootstraps=n_bootstraps)
 
         # TODO: Check if standard deviation is a good uncertainty estimator
-        return np.std(all_dgs) * unit.k * self.data['temperature']
+        return (np.std(all_dgs) * unit.k * self.data['temperature'] * unit.avogadro_constant).to('kcal/mol')
 
     def get_rate_of_convergence(self):
         ...
@@ -653,7 +659,9 @@ class NonEquilibriumCyclingProtocol(Protocol):
                 if pur.name == "result":
                     outputs["forward_work"].extend(pur.outputs["forward_work"])
                     outputs["reverse_work"].extend(pur.outputs["reverse_work"])
-                    outputs["work_file_paths"].extend(pur.outputs["paths"])
+                    # TODO: below is broken; extending from a dict only puts in keys
+                    # don't need it right now anyway
+                    #outputs["work_file_paths"].extend(pur.outputs["paths"])
 
         # include the temperature so the ProtocolResult object can convert out
         # of kT units
