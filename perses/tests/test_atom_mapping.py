@@ -21,8 +21,8 @@ class TestAtomMapping(unittest.TestCase):
     """Test AtomMapping object."""
     def setUp(self):
         """Create useful common objects for testing."""
-        self.old_mol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])([H:7])') # ethane
-        self.new_mol = Molecule.from_smiles('[C:0]([H:1])([H:2])([H:3])[C:4]([H:5])([H:6])[O:7][H:8]') # ethanol
+        self.old_mol = Molecule.from_mapped_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])([H:8])') # ethane
+        self.new_mol = Molecule.from_mapped_smiles('[C:1]([H:2])([H:3])([H:4])[C:5]([H:6])([H:7])[O:8][H:9]') # ethanol
         self.old_to_new_atom_map = { 0:0, 4:4 }
         self.new_to_old_atom_map = dict(map(reversed, self.old_to_new_atom_map.items()))
 
@@ -82,8 +82,8 @@ class TestAtomMapping(unittest.TestCase):
         assert atom_mapping.creates_or_breaks_rings() == False
 
         # Define benzene -> napthalene transformation
-        old_mol = Molecule.from_smiles('[c:0]1[c:1][c:2][c:3][c:4][c:5]1') # benzene
-        new_mol = Molecule.from_smiles('[c:0]12[c:1][c:2][c:3][c:4][c:5]2[c:6][c:7][c:8][c:9]1') # napthalene
+        old_mol = Molecule.from_mapped_smiles('[c:1]1([H:7])[c:2]([H:8])[c:3]([H:9])[c:4]([H:10])[c:5]([H:11])[c:6]1([H:12])') # benzene
+        new_mol = Molecule.from_mapped_smiles('[c:1]12([H:11])[c:2]([H:12])[c:3]([H:13])[c:4]([H:14])[c:5]([H:15])[c:6]2([H:16])[c:7]([H:17])[c:8]([H:18])[c:9]([H:19])[c:10]1([H:20])') # napthalene
         old_to_new_atom_map = { 0:0, 1:1, 2:2, 3:3, 4:4, 5:5 }
         new_to_old_atom_map = dict(map(reversed, self.old_to_new_atom_map.items()))
         atom_mapping = AtomMapping(old_mol, new_mol, old_to_new_atom_map=old_to_new_atom_map)
@@ -97,8 +97,8 @@ class TestAtomMapping(unittest.TestCase):
         assert atom_mapping.n_mapped_atoms == n_mapped_atoms_old
 
         # Test methyl-cyclohexane -> methyl-cyclopentane, demapping the ring transformation
-        old_mol = Molecule.from_smiles('[C:0][C:1]1[C:2][C:3][C:4][C:5][C:6]1') # methyl-cyclohexane
-        new_mol = Molecule.from_smiles('[C:0][C:1]1[C:2][C:3][C:4][C:5]1') # methyl-cyclopentane
+        old_mol = Molecule.from_mapped_smiles('[C:1]([H:8])([H:9])([H:10])[C:2]1([H:11])[C:3]([H:12])([H:13])[C:4]([H:14])([H:15])[C:5]([H:16])([H:17])[C:6]([H:18])([H:19])[C:7]1([H:20])([H:21])') # methyl-cyclohexane
+        new_mol = Molecule.from_mapped_smiles('[C:1]([H:7])([H:8])([H:9])[C:2]1([H:10])[C:3]([H:11])([H:12])[C:4]([H:13])([H:14])[C:5]([H:15])([H:16])[C:6]1([H:17])([H:18])') # methyl-cyclopentane
         old_to_new_atom_map = { 0:0, 1:1, 2:2, 3:3, 5:4, 6:5 }
         new_to_old_atom_map = dict(map(reversed, self.old_to_new_atom_map.items()))
         atom_mapping = AtomMapping(old_mol, new_mol, old_to_new_atom_map=old_to_new_atom_map)
@@ -114,8 +114,8 @@ class TestAtomMapping(unittest.TestCase):
         assert atom_mapping.n_mapped_atoms == n_mapped_atoms_old
 
         # Test resolution of incorrect stereochemistry
-        old_mol = Molecule.from_smiles('[C@H:0]([Cl:1])([Br:2])([F:3])')
-        new_mol = Molecule.from_smiles('[C@@H:0]([Cl:1])([Br:2])([F:3])')
+        old_mol = Molecule.from_mapped_smiles('[C@:1]([Cl:2])([Br:3])([F:4])([H:5])')
+        new_mol = Molecule.from_mapped_smiles('[C@@:1]([Cl:2])([Br:3])([F:4])([H:5])')
         atom_mapping = AtomMapping(old_mol, new_mol, old_to_new_atom_map={0:0, 1:1, 2:2, 3:3})
         atom_mapping.preserve_chirality()
         assert atom_mapping.old_to_new_atom_map == {0:0, 1:1, 2:2, 3:3} # TODO: Check this
@@ -192,6 +192,35 @@ class TestAtomMapper(unittest.TestCase):
             atom_mapper.use_positions = True
             atom_mapping = atom_mapper.get_best_mapping(molecules[0], molecules[2])
             #assert len(atom_mapping.new_to_old_atom_map) == 35,  f'Expected meta groups methyl C to NOT map onto ethyl O as they are distal in cartesian space\n{atom_mapping}' # TODO
+
+    def test_sampled_mappings(self):
+        """
+        Test the sampling of atom mappings between pairs of molecules from the JACS benchmark set.
+        """
+        # Create and configure an AtomMapper
+        from openeye import oechem
+        atom_expr = oechem.OEExprOpts_IntType
+        bond_expr = oechem.OEExprOpts_RingMember
+        atom_mapper = AtomMapper(atom_expr=atom_expr, bond_expr=bond_expr)
+
+        # Test mappings for JACS dataset ligands
+        for dataset_name in ['Jnk1']:
+            molecules = self.molecules[dataset_name]
+
+            # Jnk1 ligands 0 and 2 have meta substituents that face opposite each other in the active site.
+            # When ignoring position information, the mapper should align these groups, and put them both in the core.
+            # When using position information, the mapper should see that the orientations differ and chose
+            # to unmap (i.e. put both these groups in core) such as to get the geometry right at the expense of
+            # mapping fewer atoms
+
+            # Sample a mapping
+            sampled_mapping = atom_mapper.get_sampled_mapping(molecules[0], molecules[2])
+
+            # Get all mappings
+            all_mappings = atom_mapper.get_all_mappings(molecules[0], molecules[2])
+            # Get hashes to compare equivalence of mappings
+            all_hashes = [hash(mapping) for mapping in all_mappings]
+            assert (hash(sampled_mapping) in all_hashes), f"Sampled mapping not found in all mappings."
 
     def test_generate_atom_mapping_from_positions(self):
         """
