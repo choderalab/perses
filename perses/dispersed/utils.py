@@ -80,11 +80,11 @@ def configure_platform(platform_name='Reference', fallback_platform_name='CPU', 
         check_platform(platform)
 
     except:
-        print(
+        _logger.warning(
         "Warning: Returning {} platform instead of requested platform {}".format(fallback_platform_name, platform_name))
         platform = fallback_platform
 
-    print(f"conducting subsequent work with the following platform: {platform.getName()}")
+    _logger.info(f"conducting subsequent work with the following platform: {platform.getName()}")
     return platform
 
 

@@ -72,7 +72,16 @@ def short_settings():
     settings.thermo_settings.temperature = 300 * unit.kelvin
     settings.eq_steps=25000
     settings.neq_steps=25000
+    settings.work_save_frequency=50
     settings.traj_save_frequency=250
+    settings.platform="CPU"
+
+    return settings
+
+
+@pytest.fixture
+def short_settings_gpu(short_settings):
+    settings = short_settings.copy(deep=True)
     settings.platform="CUDA"
 
     return settings
@@ -86,10 +95,10 @@ def short_settings_multiple_cycles():
     settings = NonEquilibriumCyclingProtocol.default_settings()
 
     settings.thermo_settings.temperature = 300 * unit.kelvin
-    settings.eq_steps=25000
-    settings.neq_steps=25000
-    settings.traj_save_frequency=250
+    settings.eq_steps = 1000
+    settings.neq_steps = 1000
     settings.work_save_frequency=50
+    settings.traj_save_frequency=250
     settings.num_replicates=5
     settings.platform="CPU"
 
@@ -97,12 +106,21 @@ def short_settings_multiple_cycles():
 
 
 @pytest.fixture
+def short_settings_multiple_cycles_gpu(short_settings_multiple_cycles):
+    settings = short_settings_multiple_cycles.copy(deep=True)
+    settings.platform="CUDA"
+
+    return settings
+
+
+@pytest.fixture
 def production_settings(short_settings):
-    settings = short_settings
+    settings = short_settings.copy(deep=True)
 
     settings.eq_steps=250000
     settings.neq_steps=250000
-    settings.save_frequency=2000
+    settings.work_save_frequency=500
+    settings.traj_save_frequency=2000
 
     return settings
 
@@ -120,6 +138,16 @@ def mapping_benzene_toluene(benzene, toluene):
     )
     return mapping_obj
 
+@pytest.fixture
+def mapping_toluene_toluene(toluene):
+    """Mapping from toluene to toluene"""
+    mapping_toluene_to_toluene = {i: i for i in range(len(toluene.to_rdkit().GetAtoms()))}
+    mapping_obj = LigandAtomMapping(
+        componentA=toluene,
+        componentB=toluene,
+        componentA_to_componentB=mapping_toluene_to_toluene,
+    )
+    return mapping_obj
 
 @pytest.fixture
 def broken_mapping(benzene, toluene):

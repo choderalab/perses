@@ -3,8 +3,6 @@ channels:
   - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
   - defaults
-  - omnia-dev
-  - omnia
   - openeye
 dependencies:
   - python >=3.6
@@ -14,9 +12,6 @@ dependencies:
   - joblib
   - numpy >=1.14
   - scipy
-  - numexpr
-  - autograd
-  - pymbar <4
   - openmm >=7.6
   - openmoltools # may need to sort out ambermini/ambertools/parmed dependencies (we don't want ambertools)
   - openmmtools >=0.21.2 # may need to sort out ambermini/ambertools/parmed dependencies
@@ -26,13 +21,11 @@ dependencies:
   - seaborn
   - mdtraj
   - pdbfixer
-  - lxml
   - networkx >=2.0
   - openeye-toolkits
   - dask
   - dask-jobqueue
   - distributed
-  - progressbar2
   - parmed # may need to sort out ambermini/ambertools/parmed dependencies
   - tqdm
   - pytest
@@ -42,18 +35,15 @@ dependencies:
   - sphinx
   - dicttoxml
   - openmmforcefields >=0.9.0
-  - dicttoxml
   - tinydb
   - pytest-attrib
   - pytest-xdist
   - arsenic
   - click
   - rich
-  - cloudpathlib-all
+  - cloudpathlib
 
   # gufe deps
   - pydantic
-  - openff-units
   - typing-extensions
-  - pip:
-    - git+https://github.com/OpenFreeEnergy/gufe.git
+  - gufe >=0.7

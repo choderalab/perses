@@ -7,7 +7,6 @@ energy calculations using perses.
 
 from gufe.settings import Settings
 from openff.units import unit
-from perses.protocols.utils import _serialize_pydantic
 from pydantic import root_validator
 
 # Default settings for the lambda functions
@@ -55,13 +54,13 @@ class NonEquilibriumCyclingSettings(Settings):
     # NEQ integration settings
     timestep = 4.0 * unit.femtoseconds
     neq_splitting = "V R H O R V"
-    eq_steps = 1000
-    neq_steps = 1000
+    eq_steps = 250000
+    neq_steps = 250000
 
     # platform and serialization
     platform = 'CUDA'
-    traj_save_frequency: int = 100
-    work_save_frequency: int = 25
+    traj_save_frequency: int = 2000
+    work_save_frequency: int = 500
     atom_selection_expression: str = "not water"
 
     # Number of cycles to run
@@ -75,6 +74,3 @@ class NonEquilibriumCyclingSettings(Settings):
                              "Please specify consistent values for trajectory and work save settings")
         # TODO: Add check for eq and neq steps and save frequencies
         return values
-
-    def _gufe_tokenize(self):
-        return _serialize_pydantic(self)
