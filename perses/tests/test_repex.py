@@ -125,7 +125,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
 
     data = {}
     n_iterations = 1000
-    d_mutations = {'forward': [('arg', 'ala'), ('`lys`', 'ala')], 'reverse': [('ala', 'arg'), ('ala', 'lys')]}
+    d_mutations = {'forward': [('arg', 'ala'), ('lys', 'ala')], 'reverse': [('ala', 'arg'), ('ala', 'lys')]}
 
     with enter_temp_directory() as temp_dir:
         for mutation_type, mutations in d_mutations.items():
