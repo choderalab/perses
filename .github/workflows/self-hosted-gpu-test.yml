@@ -45,7 +45,7 @@ jobs:
     timeout-minutes: 1200 # 20 hrs
     env:
       TEST_MODE: GPU
-      OPENMM: ${{ matrix.cfg.openmm }}
+      OPENMM: 8.0
       OE_LICENSE: ${{ github.workspace }}/oe_license.txt
       HOME: /home/ec2-user
 
