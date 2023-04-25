@@ -24,7 +24,7 @@ dependencies:
   - numexpr
   - numpy >=1.14
   - openeye-toolkits
-  - openff-toolkit <0.11.0
+  - openff-toolkit >=0.11.0 # updated to latest
   - openff-units >=0.1.8
   - openmm >=7.7
   - openmmforcefields >=0.9.0
