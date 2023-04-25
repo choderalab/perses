@@ -34,7 +34,7 @@ dependencies:
   - pdbfixer
   - pip
   - progressbar2
-  - pymbar < 4
+  - pymbar <4
   - pytest
   - pytest-attrib
   - pytest-cov
