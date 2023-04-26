@@ -45,7 +45,7 @@ jobs:
     timeout-minutes: 1200 # 20 hrs
     env:
       TEST_MODE: GPU
-      OPENMM: ${{ matrix.cfg.openmm }}
+      OPENMM: 8.0
       OE_LICENSE: ${{ github.workspace }}/oe_license.txt
       HOME: /home/ec2-user
 
@@ -59,29 +59,23 @@ jobs:
           export HOME=/home/ec2-user
           echo $HOME
 
-      - uses: actions/checkout@v2
-      - uses: conda-incubator/setup-miniconda@v2
+      - uses: actions/checkout@v3
+      - uses: mamba-org/provision-with-micromamba@main
         with:
-          python-version: "3.10"
           environment-file: devtools/conda-envs/test_env.yaml
           channels: conda-forge,openeye
-          activate-environment: test
-          auto-update-conda: true
-          auto-activate-base: false
-          show-channel-urls: true
-          channel-priority: true
-          miniforge-variant: Mambaforge
-      - name: Refine test env
-        run: |
-          mamba install -y cudatoolkit==11.7 openmm>=8.0
+          extra-specs: |
+            python==3.9
+            openmm>=8.0
+            cudatoolkit==11.7
       
       - name: Additional info about the build
         run: |
           uname -a
           df -h
           ulimit -a
-          conda info -a
-          conda list
+          micromamba info
+          micromamba list
           python -c "import openmm; print(openmm.Platform.getPluginLoadFailures())"
           python -m openmm.testInstallation
 
@@ -91,8 +85,8 @@ jobs:
 
       - name: Environment Information
         run: |
-          conda info -a
-          conda list
+          micromamba info
+          micromamba list
 
       - name: Decrypt OpenEye license
         env:
@@ -104,7 +98,7 @@ jobs:
       - name: Test the package
         run: |
           export TRAVIS=true
-          conda list --explicit
+          micromamba list
           pytest -v --cov-report xml --cov=perses --durations=0 -a "not advanced" -m "gpu_ci or gpu_needed" perses/tests
 
       - name: Codecov

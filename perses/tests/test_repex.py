@@ -85,11 +85,11 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
         forward_fe = data['ala-thr']['free_energy']
         reverse_fe = data['thr-ala']['free_energy']  # This should have the inverse sign of the forward fe
         # they should add up to close to zero
-        forward_reverse_diff = abs(forward_fe + reverse_fe)
-        forward_reverse_diff_err = np.sqrt(data['ala-thr']['error'] ** 2 + data['thr-ala']['error'] ** 2)
-        print(f"DDG: {forward_reverse_diff}, 6*dDDG: {6 * forward_reverse_diff_err}")
-        assert forward_reverse_diff < 6 * forward_reverse_diff_err, (f"DDG ({forward_reverse_diff}) is greater than "
-                                                                     f"6 * dDDG ({6  * forward_reverse_diff_err})")
+        forward_reverse_sum = abs(forward_fe + reverse_fe)
+        forward_reverse_sum_err = np.sqrt(data['ala-thr']['error'] ** 2 + data['thr-ala']['error'] ** 2)
+        print(f"DDG: {forward_reverse_sum}, 6*dDDG: {6 * forward_reverse_sum_err}")
+        assert forward_reverse_sum < 6 * forward_reverse_sum_err, (f"DDG ({forward_reverse_sum}) is greater than "
+                                                                   f"6 * dDDG ({6  * forward_reverse_sum_err})")
 
 
 # @pytest.mark.skip(reason="Currently taking too long in CI.")
@@ -107,8 +107,6 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
     the use of solvated PDBs as input (vs the neutral mutation test uses vacuum PDBs and requires the PointMutationExecutor to solvate).
     This difference is because the ARG and LYS dipeptide PDBs were generated using the geometry engine and were therefore clashy,
     so we needed to run equilibration before using them as inputs. The ALA and THR PDBs were not clashy.
-
-    Note: We are using 50 steps per iteration here to speed up the test. We expect larger DDGs and dDDGs as as result.
 
     """
 
@@ -190,17 +188,17 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
                 f_ij, df_ij = analyzer.get_free_energy()
                 data[f"{wt_name}-{mutant_name}"] = {'free_energy': f_ij[0, -1], 'error': df_ij[0, -1]}
 
-        forward_fe = data['arg-ala']['free_energy'] + data['ala-lys']['free_energy']
-        forward_fe_error = np.sqrt(data['arg-ala']['error']**2 + data['ala-lys']['error']**2)
-        reverse_fe = data['lys-ala']['free_energy'] + data['ala-arg']['free_energy']
-        reverse_fe_error = np.sqrt(data['lys-ala']['error']**2 + data['ala-arg']['error']**2)
+        arg_fe = data['arg-ala']['free_energy'] + data['ala-arg']['free_energy']
+        arg_fe_error = data['arg-ala']['error'] ** 2 + data['ala-arg']['error'] ** 2
+        lys_fe = data['lys-ala']['free_energy'] + data['ala-lys']['free_energy']
+        lys_fe_error = data['lys-ala']['error'] ** 2 + data['ala-lys']['error'] ** 2
+        # We compute the difference (-) here because we expect them to have the same sign
+        arg_lys_diff = abs(arg_fe - lys_fe)
+        arg_lys_diff_error = np.sqrt(arg_fe_error + lys_fe_error)
 
-        # Note that reverse_fe should have the inverse sign compared to forward_fe
-        forward_reverse_diff = forward_fe + reverse_fe  # they should ADD up to close to zero
-        forward_reverse_diff_err = np.sqrt(forward_fe_error**2 + reverse_fe_error**2)
-        print(f"DDG: {forward_reverse_diff}, 6*dDDG: {6 * forward_reverse_diff_err}")  # debug control print
-        assert forward_reverse_diff < 6 * forward_reverse_diff_err, (f"DDG ({forward_reverse_diff}) is greater than " 
-                                                                     f"6 * dDDG ({6 * forward_reverse_diff_err})")
+        print(f"DDG: {arg_lys_diff}, 6*dDDG: {6 * arg_lys_diff_error}")  # debug control print
+        assert arg_lys_diff < 6 * arg_lys_diff_error, (f"DDG ({arg_lys_diff}) is greater than " 
+                                                       f"6 * dDDG ({6 * arg_lys_diff_error})")
 
 
 @pytest.mark.gpu_needed
@@ -309,11 +307,11 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
         forward_fe = data['0-1']['free_energy']
         reverse_fe = data['1-0']['free_energy']
         # Note that DDG_reverse should have the inverse sign compared to DDG_forward
-        forward_reverse_diff = abs(forward_fe + reverse_fe)  # This should ADD up to close to zero
-        forward_reverse_diff_err = np.sqrt(data['0-1']['error'] ** 2 + data['1-0']['error'] ** 2)
-        print(f"DDG: {forward_reverse_diff}, 6*dDDG: {6 * forward_reverse_diff_err}")  # debug control print
-        assert forward_reverse_diff < 6 * forward_reverse_diff_err, (f"DDG ({forward_reverse_diff}) is greater than "
-                                                                     f"6 * dDDG ({6 * forward_reverse_diff_err})")
+        forward_reverse_sum = abs(forward_fe + reverse_fe)  # This should ADD up to close to zero
+        forward_reverse_sum_err = np.sqrt(data['0-1']['error'] ** 2 + data['1-0']['error'] ** 2)
+        print(f"DDG: {forward_reverse_sum}, 6*dDDG: {6 * forward_reverse_sum_err}")  # debug control print
+        assert forward_reverse_sum < 6 * forward_reverse_sum_err, (f"DDG ({forward_reverse_sum}) is greater than "
+                                                                   f"6 * dDDG ({6 * forward_reverse_sum_err})")
 
 
 @pytest.mark.gpu_needed
@@ -419,9 +417,9 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
                 reporter = MultiStateReporter(reporter_file)
                 analyzer = MultiStateSamplerAnalyzer(reporter, max_n_iterations=n_iterations)
                 # Extract uncorrelated energy matrix (u_ln) and samples from states (N_l)
-                energy_matrix, sampled_states = analyzer._compute_mbar_decorrelated_energies()
+                energy_matrix, samples_per_state = analyzer._compute_mbar_decorrelated_energies()
                 # Compute free energies with boostrapping using pymbar
-                mbar = pymbar.MBAR(energy_matrix, sampled_states, nbootstraps=200)
+                mbar = pymbar.MBAR(energy_matrix, samples_per_state, nbootstraps=200)
                 f_ij, df_ij = mbar.getFreeEnergyDifferences(uncertainty_method="bootstrap", return_theta=False)
 
                 data[f"{ligand_A_index}-{ligand_B_index}_{phase}"] = {'free_energy': f_ij[0, -1], 'error': df_ij[0, -1]}
@@ -429,10 +427,10 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
         forward_fe = data['0-1_complex']['free_energy'] - data['0-1_solvent']['free_energy']
         reverse_fe = data['1-0_complex']['free_energy'] - data['1-0_solvent']['free_energy']
         # NOTE: reverse_DG should have the inverse sign compared to forward_DG, so they should ADD up to close to zero
-        forward_reverse_difference = abs(forward_fe + reverse_fe)
-        forward_reverse_diff_error = np.sqrt(
+        forward_reverse_sum = abs(forward_fe + reverse_fe)
+        forward_reverse_sum_error = np.sqrt(
             data['0-1_complex']['error'] ** 2 + data['0-1_solvent']['error'] ** 2 + data['1-0_complex']['error'] ** 2 +
             data['1-0_solvent']['error'] ** 2)
-        print(f"DDG: {forward_reverse_difference}, 6*dDDG: {6 * forward_reverse_diff_error}")  # debug control print
-        assert forward_reverse_difference < 6 * forward_reverse_diff_error, (f"DDG ({forward_reverse_difference}) is "
-                                                                             f"greater than 6 * dDDG ({6 * forward_reverse_diff_error})")
+        print(f"DDG: {forward_reverse_sum}, 6*dDDG: {6 * forward_reverse_sum_error}")  # debug control print
+        assert forward_reverse_sum < 6 * forward_reverse_sum_error, (f"DDG ({forward_reverse_sum}) is "
+                                                                     f"greater than 6 * dDDG ({6 * forward_reverse_sum_error})")

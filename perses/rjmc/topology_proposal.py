@@ -1221,6 +1221,7 @@ class PolymerProposalEngine(ProposalEngine):
         bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
         mcs.Init(oegraphmol_current, atomexpr, bondexpr)
 
+        # TODO: In RDKit rd.FCMS, you can initialize with a SMARTS match for the relevant protein backbone
         def forcibly_matched(mcs, proposed, atom_name):
             old_atom = list(mcs.GetPattern().GetAtoms(atom_name))
             assert len(old_atom) == 1
