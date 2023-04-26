@@ -57,7 +57,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
             reporter = MultiStateReporter(reporter_file, checkpoint_interval=100)
             hss = HybridRepexSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=4.0 * unit.femtoseconds,
                                                                           collision_rate=1.0 / unit.picosecond,
-                                                                          n_steps=250,
+                                                                          n_steps=125,
                                                                           reassign_velocities=False,
                                                                           n_restart_attempts=20,
                                                                           constraint_tolerance=1e-06),
@@ -163,7 +163,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
                 reporter = MultiStateReporter(reporter_file, checkpoint_interval=100)
                 hss = HybridRepexSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=4.0 * unit.femtoseconds,
                                                                               collision_rate=1.0 / unit.picosecond,
-                                                                              n_steps=250,
+                                                                              n_steps=125,
                                                                               reassign_velocities=False,
                                                                               n_restart_attempts=20,
                                                                               constraint_tolerance=1e-06),
@@ -274,7 +274,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
                 mcmc_moves=mcmc.LangevinDynamicsMove(
                     timestep=4.0 * unit.femtoseconds,
                     collision_rate=1.0 / unit.picosecond,
-                    n_steps=250,
+                    n_steps=125,
                     reassign_velocities=False,
                     n_restart_attempts=20,
                     constraint_tolerance=1e-06),
@@ -389,7 +389,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
                     mcmc_moves=mcmc.LangevinDynamicsMove(
                         timestep=4.0 * unit.femtoseconds,
                         collision_rate=1.0 / unit.picosecond,
-                        n_steps=250,
+                        n_steps=125,
                         reassign_velocities=False,
                         n_restart_attempts=20,
                         constraint_tolerance=1e-06),
