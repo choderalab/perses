@@ -10,8 +10,6 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
     Run ALA->THR and THR->ALA repex with the RESTCapableHybridTopologyFactory and make sure that the free energies are
     equal and opposite.
 
-    Note: We are using 50 steps per iteration here to speed up the test. We expect larger DDGs and dDDGs as as result.
-
     """
 
     from pkg_resources import resource_filename
