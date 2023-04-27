@@ -226,7 +226,6 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
     with enter_temp_directory() as temp_dir:
         for ligand_A_index, ligand_B_index in transformations:
             # Generate topology proposal and positions
-            # smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
             # Define molecules smiles for transformation
             phenol_smiles = "Oc1ccccc1"
             paracetamol_smiles = "CC(=O)Nc1ccc(O)cc1"
