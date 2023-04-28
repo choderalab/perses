@@ -365,7 +365,7 @@ class RelativeFEPSetup(object):
                 spectator_mol = generate_unique_atom_names(spectator_mol)
                 self._spectator_molecules.append(spectator_mol)
                 # add this to a small molecule register
-                molecules.append(Molecule.from_openeye(spectator_mol,allow_undefined_stereo=True))
+                self._molecules.append(Molecule.from_openeye(spectator_mol,allow_undefined_stereo=True))
                 self._spectator_positions.append(extractPositionsFromOEMol(spectator_mol))
                 spectator_topology = forcefield_generators.generateTopologyFromOEMol(spectator_mol)
                 self._spectator_md_topologies.append(md.Topology.from_openmm(spectator_topology))
