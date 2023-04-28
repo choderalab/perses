@@ -1135,14 +1135,14 @@ def run_unsampled_endstate_energies(test_name, use_point_energies=True, use_md_e
             base_repo_url = "https://github.com/openforcefield/protein-ligand-benchmark"
             ligand_files = []
             for ligand in ['lig_ejm_42', 'lig_ejm_54']:
-                ligand_url = f"{base_repo_url}/raw/main/data/2020-02-07_tyk2/02_ligands/{ligand}/crd/{ligand}.sdf"
+                ligand_url = f"{base_repo_url}/raw/0.2.1/data/2020-02-07_tyk2/02_ligands/{ligand}/crd/{ligand}.sdf"
                 ligand_file = retrieve_file_url(ligand_url)
                 ligand_files.append(ligand_file)
             concatenate_files(ligand_files, os.path.join(temp_dir, 'ligands.sdf'))
             ligands_filename = os.path.join(temp_dir, 'ligands.sdf')
 
             # Retrieve host PDB
-            pdb_url = f"{base_repo_url}/raw/main/data/2020-02-07_tyk2/01_protein/crd/protein.pdb"
+            pdb_url = f"{base_repo_url}/raw/0.2.1/data/2020-02-07_tyk2/01_protein/crd/protein.pdb"
             host_pdb = retrieve_file_url(pdb_url)
 
             # Generate topology proposal, old/new positions
