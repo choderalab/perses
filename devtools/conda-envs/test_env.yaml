@@ -1,51 +1,48 @@
 name: test
 channels:
-  - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
-  - omnia-dev
-  - omnia
   - openeye
 dependencies:
-  - python >=3.6
-  - pip
-  - setuptools
-  - fire
-  - joblib
-  - numpy >=1.14
-  - scipy
-  - numexpr
+  - arsenic
   - autograd
-  - pymbar <4
-  - openmm >=7.6
-  - openmoltools # may need to sort out ambermini/ambertools/parmed dependencies (we don't want ambertools)
-  - openmmtools >=0.21.2 # may need to sort out ambermini/ambertools/parmed dependencies
-  - numba >=0.55.2
-  - netcdf4
-  - matplotlib
-  - seaborn
-  - mdtraj
-  - pdbfixer
-  - lxml
-  - networkx >=2.0
-  - openeye-toolkits
+  - click
+  - cloudpathlib-s3 >=0.13.0
+  - coverage
   - dask
   - dask-jobqueue
+  - dicttoxml
   - distributed
-  - progressbar2
-  - parmed # may need to sort out ambermini/ambertools/parmed dependencies
-  - tqdm
-  - pytest
-  - pytest-cov
-  - coverage
-  - openff-toolkit <0.11.0
-  - sphinx
-  - dicttoxml
+  - fire
+  - joblib
+  - lxml
+  - matplotlib
+  - mdtraj
+  - netcdf4
+  - networkx >=2.0
+  - numba >=0.55.2
+  - numexpr
+  - numpy >=1.14
+  - openeye-toolkits
+  - openff-toolkit >=0.11.0 # updated to latest
+  - openff-units >=0.1.8
+  - openmm >=7.7
   - openmmforcefields >=0.9.0
-  - dicttoxml
-  - tinydb
+  - openmmtools >=0.21.5 # may need to sort out ambermini/ambertools/parmed dependencies
+  - openmoltools # may need to sort out ambermini/ambertools/parmed dependencies (we don't want ambertools)
+  - parmed # may need to sort out ambermini/ambertools/parmed dependencies
+  - pdbfixer
+  - pip
+  - progressbar2
+  - pymbar <4
+  - pytest
   - pytest-attrib
+  - pytest-cov
   - pytest-xdist
-  - arsenic
-  - click
+  - python
   - rich
-  - cloudpathlib-s3
+  - scipy
+  - seaborn
+  - setuptools
+  - sphinx
+  - tinydb
+  - tqdm

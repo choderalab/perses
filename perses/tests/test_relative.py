@@ -1018,7 +1018,7 @@ def run_RESTCapableHybridTopologyFactory_energies(test_name, phase, use_point_en
     else:
         for endstate in [0, 1]:
             validate_endstate_energies_md(htf, endstate=endstate, n_steps=10, save_freq=1)
-
+@pytest.mark.skipif(os.getenv("OPENMM", default="7.7").upper() in ["8.0", "DEV"], reason="FastMath is BadMath")
 def test_RESTCapableHybridTopologyFactory_energies():
     """
     Uses run_RESTCapableHybridTopologyFactory_energies() to run energy validation for RESTCapableHybridTopologyFactory
@@ -1135,14 +1135,14 @@ def run_unsampled_endstate_energies(test_name, use_point_energies=True, use_md_e
             base_repo_url = "https://github.com/openforcefield/protein-ligand-benchmark"
             ligand_files = []
             for ligand in ['lig_ejm_42', 'lig_ejm_54']:
-                ligand_url = f"{base_repo_url}/raw/main/data/2020-02-07_tyk2/02_ligands/{ligand}/crd/{ligand}.sdf"
+                ligand_url = f"{base_repo_url}/raw/0.2.1/data/2020-02-07_tyk2/02_ligands/{ligand}/crd/{ligand}.sdf"
                 ligand_file = retrieve_file_url(ligand_url)
                 ligand_files.append(ligand_file)
             concatenate_files(ligand_files, os.path.join(temp_dir, 'ligands.sdf'))
             ligands_filename = os.path.join(temp_dir, 'ligands.sdf')
 
             # Retrieve host PDB
-            pdb_url = f"{base_repo_url}/raw/main/data/2020-02-07_tyk2/01_protein/crd/protein.pdb"
+            pdb_url = f"{base_repo_url}/raw/0.2.1/data/2020-02-07_tyk2/01_protein/crd/protein.pdb"
             host_pdb = retrieve_file_url(pdb_url)
 
             # Generate topology proposal, old/new positions
@@ -1189,6 +1189,7 @@ def run_unsampled_endstate_energies(test_name, use_point_energies=True, use_md_e
             if use_md_energies:
                 validate_unsampled_endstates_md(htf, unsampled_endstates[endstate].system, endstate, n_steps=10, save_freq=1)
 
+@pytest.mark.skipif(os.getenv("OPENMM", default="7.7").upper() in ["8.0", "DEV"], reason="FastMath is BadMath")
 def test_unsampled_endstate_energies():
     """
     Uses run_unsampled_endstate_energies() to run energy validation for the unsampled endstates generated for

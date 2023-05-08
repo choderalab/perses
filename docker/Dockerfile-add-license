@@ -1,0 +1,2 @@
+FROM choderalab/perses:dev
+ADD oe_license.txt /openeye/

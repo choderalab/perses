@@ -68,13 +68,13 @@ def test_cli_resume_repex():
             yaml.dump(y_doc, outfile)
 
         env = os.environ.copy()
-        subprocess.run("perses-relative test.yml", shell=True, check=True, env=env)
+        subprocess.run("perses-cli --yaml test.yml", shell=True, check=True, env=env)
 
         # Now we change the yaml to run longer
         y_doc["n_cycles"] = 20
         with open("test.yml", "w") as outfile:
             yaml.dump(y_doc, outfile)
-        subprocess.run("perses-relative test.yml", shell=True, check=True, env=env)
+        subprocess.run("perses-cli --yaml test.yml", shell=True, check=True, env=env)
 
         # Check to see if we have a total of 20
         reporter = MultiStateReporter(
@@ -127,13 +127,12 @@ def test_resume_small_molecule():
             checkpoint_interval=checkpoint_interval,
         )
         hss = HybridRepexSampler(
-            mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
+            mcmc_moves=mcmc.LangevinDynamicsMove(
                 timestep=4.0 * unit.femtoseconds,
                 collision_rate=5.0 / unit.picosecond,
                 n_steps=250,
                 reassign_velocities=False,
                 n_restart_attempts=20,
-                splitting="V R R R O R R R V",
                 constraint_tolerance=1e-06,
             ),
             hybrid_factory=htf,
@@ -197,13 +196,12 @@ def test_resume_protein_mutation_with_checkpoint(tmp_path):
             checkpoint_interval=checkpoint_interval,
         )
         hss = HybridRepexSampler(
-            mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
+            mcmc_moves=mcmc.LangevinDynamicsMove(
                 timestep=4.0 * unit.femtoseconds,
                 collision_rate=5.0 / unit.picosecond,
                 n_steps=250,
                 reassign_velocities=False,
                 n_restart_attempts=20,
-                splitting="V R R R O R R R V",
                 constraint_tolerance=1e-06,
             ),
             hybrid_factory=htf,
@@ -268,13 +266,12 @@ def test_resume_protein_mutation_no_checkpoint(tmp_path):
             checkpoint_interval=checkpoint_interval,
         )
         hss = HybridRepexSampler(
-            mcmc_moves=mcmc.LangevinSplittingDynamicsMove(
+            mcmc_moves=mcmc.LangevinDynamicsMove(
                 timestep=4.0 * unit.femtoseconds,
                 collision_rate=5.0 / unit.picosecond,
                 n_steps=250,
                 reassign_velocities=False,
                 n_restart_attempts=20,
-                splitting="V R R R O R R R V",
                 constraint_tolerance=1e-06,
             ),
             hybrid_factory=htf,

@@ -50,7 +50,6 @@ def _check_mpy():
 ################################################################################
 
 import logging
-logging.basicConfig(level=logging.NOTSET)
 
 _logger = logging.getLogger("visualization")
 _logger.setLevel(logging.INFO)
