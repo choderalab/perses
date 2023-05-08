@@ -149,7 +149,7 @@ def compare_energies(REST_system, other_system, positions, rest_atoms, T_min, T)
     beta_m = 1 / (kB * T)
     compound_thermodynamic_state.set_alchemical_parameters(beta_0, beta_m)
 
-    # Minimize and save energy
+    # Retrieve energy
     integrator = openmm.VerletIntegrator(1.0 * unit.femtosecond)
     context = compound_thermodynamic_state.create_context(integrator)
     context.setPositions(positions)
@@ -234,7 +234,7 @@ def compare_energies(REST_system, other_system, positions, rest_atoms, T_min, T)
     sampler_state = SamplerState.from_context(context)
     nonREST_energy = thermostate.reduced_potential(sampler_state)
 
-    assert REST_energy - nonREST_energy < 1, f"The energy of the REST system ({REST_energy}) does not match " \
+    assert abs(REST_energy - nonREST_energy) < 1, f"The energy of the REST system ({REST_energy}) does not match " \
                                                         f"that of the non-REST system with terms manually scaled according to REST2({nonREST_energy})."
 
 def test_energy_scaling():
