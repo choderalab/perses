@@ -36,6 +36,8 @@ pressure: 1 # atmsopheres
 temperature: 300 # kelvin
 timestep: 4 # femtoseconds
 ionic_strength: 0.15 # molar
+# Max temperature for REST scaling (optional)
+max_temperature: 600 # Kelvin
 
 # Atom mapping specification
 atom_expression:
@@ -78,3 +80,7 @@ phases:
 # Use geometry-derived mapping
 use_given_geometries: true
 given_geometries_tolerance: 0.4 # angstroms
+
+# Realtime analysis frequency
+offline-freq: 100
+

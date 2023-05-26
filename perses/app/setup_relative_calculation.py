@@ -3,7 +3,7 @@ import numpy as np
 import pickle
 import os
 import sys
-import simtk.unit as unit
+from openmm import unit
 import logging
 import warnings
 from cloudpathlib import AnyPath
@@ -469,26 +469,28 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     else:
         measure_shadow_work = False
         _logger.info(f"\tno measure_shadow_work specified: defaulting to False.")
-    if isinstance(setup_options['pressure'], (float, int)):
-        pressure = setup_options['pressure'] * unit.atmosphere
-    else:
-        pressure = setup_options['pressure']
-    if isinstance(setup_options['temperature'], (float, int)):
-        temperature = setup_options['temperature'] * unit.kelvin
-    else:
-        temperature = setup_options['temperature']
-    if isinstance(setup_options['solvent_padding'], (float, int)):
-        solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
-    else:
-        solvent_padding_angstroms = setup_options['solvent_padding']
-    if isinstance(setup_options['ionic_strength'], (float, int)):
-        ionic_strength = setup_options['ionic_strength'] * unit.molar
-    else:
-        ionic_strength = setup_options['ionic_strength']
+    # Read simulation options/parameters and assign units if needed
+    pressure = setup_options['pressure']
+    temperature = setup_options['temperature']
+    solvent_padding_angstroms = setup_options['solvent_padding']
+    ionic_strength = setup_options['ionic_strength']
+    max_temperature = setup_options.get('max_temperature')
+    if isinstance(pressure, (float, int)):
+        pressure *= unit.atmosphere
+    if isinstance(temperature, (float, int)):
+        temperature *= unit.kelvin
+    if isinstance(solvent_padding_angstroms, (float, int)):
+        solvent_padding_angstroms *= unit.angstrom
+    if isinstance(ionic_strength, (float, int)):
+        ionic_strength *= unit.molar
+    if isinstance(max_temperature, (float, int)):
+        max_temperature *= unit.kelvin
+
     _logger.info(f"\tsetting pressure: {pressure}.")
-    _logger.info(f"\tsetting temperature: {temperature}.")
+    _logger.info(f"\tsetting temperature: {temperature}K.")
     _logger.info(f"\tsetting solvent padding: {solvent_padding_angstroms}A.")
     _logger.info(f"\tsetting ionic strength: {ionic_strength}M.")
+    _logger.info(f"\tsetting max temperature: {max_temperature}K.")
 
     setup_pickle_file = setup_options['save_setup_pickle_as'] if 'save_setup_pickle_as' in list(setup_options) else None
     _logger.info(f"\tsetup pickle file: {setup_pickle_file}")
@@ -710,7 +712,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                         hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                     )
                     hss[phase].setup(n_states=n_states, temperature=temperature, storage_file=reporter,
-                                     endstates=endstates)
+                                     endstates=endstates, t_max=max_temperature)
                     # We need to specify contexts AFTER setup
                     hss[phase].energy_context_cache = energy_context_cache
                     hss[phase].sampler_context_cache = sampler_context_cache
