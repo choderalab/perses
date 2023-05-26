@@ -36,8 +36,7 @@ pressure: 1 # atmsopheres
 temperature: 300 # kelvin
 timestep: 4 # femtoseconds
 ionic_strength: 0.15 # molar
-# Max temperature for REST scaling (optional)
-max_temperature: 600 # Kelvin
+
 
 # Atom mapping specification
 atom_expression:
@@ -85,4 +84,8 @@ given_geometries_tolerance: 0.4 # angstroms
 offline-freq: 100
 
 # Advanced (optional) -- Specify HTF (HybridTopologyFactory or RESTCapableHybridTopologyFactory)
-# hybrid_topology_factory: RESTCapableHybridTopologyFactory
+#hybrid_topology_factory: RESTCapableHybridTopologyFactory
+# REST specific parameters (optional)
+#max_temperature: 600  # Kelvin
+#rest_radius: 0.3  # nanometers
+#w_lifting: 0.3  # nanometers

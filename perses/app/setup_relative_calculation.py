@@ -1095,11 +1095,13 @@ def _generate_htf(phase: str, topology_proposal_dictionary: dict, setup_options:
         # Add/use specified REST HTF parameters if present
         rest_specific_options = dict()
         try:
-            rest_specific_options.update({'rest_radius': setup_options['rest_radius']})
+            rest_radius = setup_options['rest_radius'] * unit.nanometer
+            rest_specific_options.update({'rest_radius': rest_radius})
         except KeyError:
             _logger.info("'rest_radius' not specified. Using default value.")
         try:
-            rest_specific_options.update({'w_lifting': setup_options['w_lifting']})
+            w_lifting = setup_options['w_lifting'] * unit.nanometer
+            rest_specific_options.update({'w_lifting': w_lifting})
         except KeyError:
             _logger.info("'w_lifting' not specified. Using default value.")
 
