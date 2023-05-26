@@ -2833,14 +2833,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     _new_system_exceptions : dict of key: tuple of ints, value: list of floats
         key: new system indices of the atoms in the exception, value: chargeProd (units of the proton charge squared), sigma (nm), and epsilon (kJ/mol) for the exception
     """
-    
-    # Constants copied from: https://github.com/openmm/openmm/blob/master/platforms/reference/include/SimTKOpenMMRealType.h#L89. These will be imported directly once we have addresssed https://github.com/choderalab/openmmtools/issues/522
-    M_PI = 3.14159265358979323846
-    E_CHARGE = (1.602176634e-19)
-    AVOGADRO = (6.02214076e23)
-    EPSILON0 = (1e-6*8.8541878128e-12/(E_CHARGE*E_CHARGE*AVOGADRO))
-    ONE_4PI_EPS0 = (1/(4*M_PI*EPSILON0))
-    #from openmmtools.constants import ONE_4PI_EPS0
+    from openmmtools.constants import ONE_4PI_EPS0
 
     _default_electrostatics_expression_list = [
 
