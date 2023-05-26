@@ -84,3 +84,5 @@ given_geometries_tolerance: 0.4 # angstroms
 # Realtime analysis frequency
 offline-freq: 100
 
+# Advanced (optional) -- Specify HTF (HybridTopologyFactory or RESTCapableHybridTopologyFactory)
+# hybrid_topology_factory: RESTCapableHybridTopologyFactory
