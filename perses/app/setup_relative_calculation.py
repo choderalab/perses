@@ -660,7 +660,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                 if atom_selection:
                     selection_indices = htf[phase].hybrid_topology.select(atom_selection)
                 else:
-                    selection_indices = None
+                    selection_indices = []
 
                 storage_name = AnyPath(trajectory_directory) / f"{trajectory_prefix}-{phase}.nc"
                 _logger.info(f'\tstorage_name: {storage_name}')
