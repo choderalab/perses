@@ -45,7 +45,7 @@ Currently only `key:value` parts of the yaml can be overridden i.e. not sequence
 
 To view all options ultimately used in the simulation, a file named `perses-$date-$yaml_name.yaml` is created under the simulation/experiment directory.
 
-The `LOGLEVEL` environmental variable is used to control the logging messages printed to the terminal.
+The `LOGLEVEL` environment variable is used to control the logging messages printed to the terminal.
 Two common methods to set this environmental variable are:
 1. Setting the environmental variable for all applications ran in the terminal session
 ```bash
