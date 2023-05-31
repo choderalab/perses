@@ -14,6 +14,10 @@ For example, if you have an `oe_license.txt` file in `$HOME/.OpenEye/`.
 $ docker run --rm --mount type=bind,source=$HOME/.OpenEye/,target=/openeye/,readonly choderalab/perses:0.9.2 python -c "import openeye; assert openeye.oechem.OEChemIsLicensed(), 'OpenEye license checks failed!'"
 ```
 
+There is also an example file `Dockerfile-add-license` if you want to build a new container with the openeye license file inside it.
+If you use this method, be sure to push the container to private locations only. 
+Anyone with access to the container can extract the license. 
+
 ## GPU Support
 
 Pass the option `--gpus device=0` to use the host's GPU:
