@@ -102,7 +102,7 @@ jobs:
           echo "${{ secrets.OE_LICENSE }}" > oe_license_dir/oe_license.txt
           docker run --rm ${{ steps.fqirp.outputs.FQIRP }} perses-cli --help
           # Mount oe_license_dir (which should have the license file) to /openeye on container for testing
-          docker run --mount type=bind,source=./oe_license_dir/,target=/openeye/,readonly --rm ${{ steps.fqirp.outputs.FQIRP }} pytest --pyargs perses
+          docker run --mount type=bind,source=$PWD/oe_license_dir/,target=/openeye/,readonly --rm ${{ steps.fqirp.outputs.FQIRP }} pytest --pyargs perses
 
       - name: Push Docker image
         uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
