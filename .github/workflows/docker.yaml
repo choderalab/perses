@@ -102,7 +102,7 @@ jobs:
           echo "${{ secrets.OE_LICENSE }}" > oe_license_dir/oe_license.txt
           docker run --rm ${{ steps.fqirp.outputs.FQIRP }} perses-cli --help
           # Mount oe_license_dir (which should have the license file) to /openeye on container for testing
-          docker run --mount type=bind,source=$PWD/oe_license_dir/,target=/openeye/,readonly --rm ${{ steps.fqirp.outputs.FQIRP }} pytest --pyargs perses
+          docker run -e GITHUB_ACTIONS=True --mount type=bind,source=$PWD/oe_license_dir/,target=/openeye/,readonly --rm ${{ steps.fqirp.outputs.FQIRP }} pytest --pyargs perses -a "not advanced" -n auto -m "not gpu_needed"
 
       - name: Push Docker image
         uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
@@ -128,6 +128,6 @@ jobs:
           mkdir test_apptainer
           cd test_apptainer
           singularity run ../perses_${{ steps.latest-version.outputs.VERSION }}.sif perses-cli --help
-          singularity run ../perses_${{ steps.latest-version.outputs.VERSION }}.sif pytest --pyargs perses
+          singularity run --bind $PWD/oe_license_dir/:/openeye/ --env "GITHUB_ACTIONS=True" ../perses_${{ steps.latest-version.outputs.VERSION }}.sif pytest --pyargs perses -a "not advanced" -n auto -m "not gpu_needed"
           echo ${{ secrets.GITHUB_TOKEN }} | singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://ghcr.io
           singularity push ../perses_${{ steps.latest-version.outputs.VERSION }}.sif oras://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.latest-version.outputs.VERSION }}-apptainer
