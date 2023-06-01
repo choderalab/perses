@@ -15,7 +15,9 @@ RUN micromamba install -y -n base -c conda-forge/label/perses_dev -c conda-forge
 
 # Make directory and tell openeye where to find
 # license file
+USER root
 RUN mkdir /openeye
+USER $MAMBA_USER
 ENV OE_LICENSE=/openeye/oe_license.txt
 
 # Ensure that conda environment is automatically activated
