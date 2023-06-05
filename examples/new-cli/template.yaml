@@ -78,3 +78,6 @@ phases:
 # Use geometry-derived mapping
 use_given_geometries: true
 given_geometries_tolerance: 0.4 # angstroms
+
+# Solvent model
+solvent_model: "tip3p"
