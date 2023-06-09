@@ -506,24 +506,37 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
 
     if 'topology_proposal' not in list(setup_options.keys()) or setup_options['topology_proposal'] is None:
         _logger.info(f"\tno topology_proposal specified; proceeding to RelativeFEPSetup...\n\n\n")
+        # TODO: This if-else is not doing anything as far as I can tell. Remove?
         if 'set_solvent_box_dims_to_complex' in list(setup_options.keys()) and setup_options['set_solvent_box_dims_to_complex']:
             set_solvent_box_dims_to_complex=True
         else:
             set_solvent_box_dims_to_complex=False
 
         _logger.info(f'Box dimensions: {setup_options["complex_box_dimensions"]} and {setup_options["solvent_box_dimensions"]}')
-        fe_setup = RelativeFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files,phases=phases,
-                                          protein_pdb_filename=protein_pdb_filename,
-                                          receptor_mol2_filename=receptor_mol2, pressure=pressure,
-                                          temperature=temperature, solvent_padding=solvent_padding_angstroms, spectator_filenames=setup_options['spectators'],
-                                          map_strength=setup_options['map_strength'],
-                                          atom_expr=setup_options['atom_expr'], bond_expr=setup_options['bond_expr'],
-                                          neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
-                                          small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
-                                          trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'],
-                                          complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'], ionic_strength=ionic_strength, remove_constraints=setup_options['remove_constraints'],
-                                          use_given_geometries=use_given_geometries, given_geometries_tolerance=given_geometries_tolerance,
-                                          transform_waters_into_ions_for_charge_changes = setup_options['transform_waters_into_ions_for_charge_changes'])
+        fe_setup = RelativeFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files, phases=phases,
+                                    protein_pdb_filename=protein_pdb_filename,
+                                    receptor_mol2_filename=receptor_mol2, pressure=pressure,
+                                    temperature=temperature, solvent_padding=solvent_padding_angstroms,
+                                    spectator_filenames=setup_options['spectators'],
+                                    map_strength=setup_options['map_strength'],
+                                    atom_expr=setup_options['atom_expr'], bond_expr=setup_options['bond_expr'],
+                                    neglect_angles=setup_options['neglect_angles'],
+                                    anneal_14s=setup_options['anneal_1,4s'],
+                                    small_molecule_forcefield=setup_options['small_molecule_forcefield'],
+                                    small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
+                                    trajectory_directory=trajectory_directory,
+                                    trajectory_prefix=setup_options['trajectory_prefix'],
+                                    nonbonded_method=setup_options['nonbonded_method'],
+                                    complex_box_dimensions=setup_options['complex_box_dimensions'],
+                                    solvent_box_dimensions=setup_options['solvent_box_dimensions'],
+                                    ionic_strength=ionic_strength,
+                                    remove_constraints=setup_options['remove_constraints'],
+                                    use_given_geometries=use_given_geometries,
+                                    given_geometries_tolerance=given_geometries_tolerance,
+                                    transform_waters_into_ions_for_charge_changes=setup_options[
+                                        'transform_waters_into_ions_for_charge_changes'],
+                                    solvent_model=setup_options.get("solvent_model", "tip3p"),
+                                    )
 
 
         _logger.info(f"\twriting pickle output...")
