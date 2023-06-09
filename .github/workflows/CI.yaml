@@ -55,6 +55,7 @@ jobs:
           cache-downloads: true
           extra-specs: |
             python==${{ matrix.python-version }}
+            openmmtools==0.22.2_dev0
             openmm==8.0.0dev3
 
       - name: Setup micromamba
@@ -69,6 +70,7 @@ jobs:
           extra-specs: |
             python==${{ matrix.python-version }}
             openmm==${{ matrix.openmm }}
+            openmmtools==0.22.2_dev0
 
       - name: Install package
         shell: bash -l {0}
