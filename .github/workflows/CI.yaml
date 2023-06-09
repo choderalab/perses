@@ -62,6 +62,7 @@ jobs:
         uses: mamba-org/provision-with-micromamba@main
         with:
           environment-file: devtools/conda-envs/test_env.yaml
+          channels: conda-forge/label/openmmtools_dev
           environment-name: test
           cache-env: true
           cache-downloads: true
