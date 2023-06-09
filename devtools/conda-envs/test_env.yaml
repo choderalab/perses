@@ -8,7 +8,7 @@ dependencies:
   - click
   - cloudpathlib-s3 >=0.13.0
   - coverage
-  - dask
+  - dask <2023.5
   - dask-jobqueue
   - dicttoxml
   - distributed
