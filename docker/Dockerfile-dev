@@ -12,7 +12,7 @@ ENV PYTHONUNBUFFERED=1
 
 # git is nice if anyone needs to drop into this image and clone/patch something
 # pytest-xdist and pytest-attrib let us run our tests fast and skip broken ones
-RUN micromamba install -y -n base -c conda-forge/label/perses_dev -c conda-forge -c openeye openeye-toolkits git perses pytest-attrib pytest-xdist cudatoolkit==11.7 && \
+RUN micromamba install -y -n base -c conda-forge/label/perses_dev -c conda-forge -c openeye openeye-toolkits git perses pytest-attrib pytest-xdist openmmtools==0.22.1 cudatoolkit==11.7 && \
     micromamba clean --all --yes
 
 # Make directory and tell openeye where to find
