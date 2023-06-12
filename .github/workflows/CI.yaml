@@ -49,13 +49,13 @@ jobs:
         with:
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: test
-          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmmtools_dev,conda-forge/label/openmm_dev,conda-forge,openeye
+          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmm_dev,conda-forge,openeye
           channel-priority: flexible
           cache-env: true
           cache-downloads: true
           extra-specs: |
             python==${{ matrix.python-version }}
-            openmmtools==0.22.2_dev0
+            openmmtools==0.23.0
             openmm==8.0.0dev3
 
       - name: Setup micromamba
@@ -63,14 +63,13 @@ jobs:
         uses: mamba-org/provision-with-micromamba@main
         with:
           environment-file: devtools/conda-envs/test_env.yaml
-          channels: conda-forge/label/openmmtools_dev
           environment-name: test
           cache-env: true
           cache-downloads: true
           extra-specs: |
             python==${{ matrix.python-version }}
             openmm==${{ matrix.openmm }}
-            openmmtools==0.22.2_dev0
+            openmmtools==0.23.0
 
       - name: Install package
         shell: bash -l {0}
