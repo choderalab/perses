@@ -67,7 +67,7 @@ trajectory_directory: lig0to1
 trajectory_prefix: out
 
 # Atoms to store in NetCDF files (MDTraj selection syntax)
-atom_selection: null
+atom_selection: not water
 
 # Calculation phases to run
 # Permitted phases: ['complex', 'solvent', 'vacuum']

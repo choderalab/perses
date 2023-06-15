@@ -584,7 +584,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
         _logger.info(f"\tatom selection detected: {atom_selection}")
     else:
         _logger.info(f"\tno atom selection detected: default to all.")
-        atom_selection = 'none'
+        atom_selection = 'all'
 
     if setup_options['fe_type'] == 'neq':
         _logger.info(f"\tInstantiating nonequilibrium switching FEP")
@@ -660,7 +660,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                 if atom_selection:
                     selection_indices = htf[phase].hybrid_topology.select(atom_selection)
                 else:
-                    selection_indices = []
+                    selection_indices = None
 
                 storage_name = AnyPath(trajectory_directory) / f"{trajectory_prefix}-{phase}.nc"
                 _logger.info(f'\tstorage_name: {storage_name}')
