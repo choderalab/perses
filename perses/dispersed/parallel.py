@@ -1,6 +1,6 @@
 import logging
 import time
-import dask.distributed as distributed
+
 
 # Instantiate logger
 _logger = logging.getLogger("parallelism")
@@ -35,6 +35,7 @@ class Parallelism(object):
         timeout : int
             number of seconds to wait to fulfill the workers order
         """
+        import dask.distributed as distributed
         self.library = library
         if library is not None:
             _logger.debug(f"library is not None")
@@ -231,6 +232,7 @@ class Parallelism(object):
         future : <generalized> future
             the future object to be collected from an actor
         """
+        import dask.distributed as distributed
         if self.client is None:
             return future
         else:
@@ -254,6 +256,7 @@ class Parallelism(object):
         -------
         actor : dask.distributed.Actor pointer (future)
         """
+        import dask.distributed as distributed
         if self.client is not None:
             if self.library[0] == 'dask':
                 future = self.client.submit(_class, workers = [self.workers[self.worker_counter]], actor=True)  # Create a _class on a worker
@@ -275,6 +278,7 @@ class Parallelism(object):
         futures : list of <generalized> futures
             futures that are to be gathered
         """
+        import dask.distributed as distributed
         if self.client is None:
             pass
         else:
@@ -293,6 +297,7 @@ class Parallelism(object):
         futures : list of <generalized> futures
             futures that are to be gathered
         """
+        import dask.distributed as distributed
         if self.client is None:
             pass
         else:
