@@ -45,19 +45,6 @@ Currently only `key:value` parts of the yaml can be overridden i.e. not sequence
 
 To view all options ultimately used in the simulation, a file named `perses-$date-$yaml_name.yaml` is created under the simulation/experiment directory.
 
-The `LOGLEVEL` environment variable is used to control the logging messages printed to the terminal.
-Two common methods to set this environmental variable are:
-1. Setting the environmental variable for all applications ran in the terminal session
-```bash
-$ export LOGLEVEL=DEBUG # This will set the log level to DEBUG for all programs ran after this export 
-$ perses-cli --yaml template.yaml
-```
-2. Setting the environmental variable for only one command
-```bash
-$ LOGLEVEL=DEBUG  perses-cli --yaml template.yaml
-```
-
-
 ## Example Use Case
 
 In this example folder we have a protein: [2ZFF](https://www.rcsb.org/structure/2zff) and some ligands which we will use for a series of free energy calculations.
