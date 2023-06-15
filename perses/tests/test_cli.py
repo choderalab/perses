@@ -7,6 +7,7 @@ from pkg_resources import resource_filename
 
 from perses.app.cli import cli
 
+
 @pytest.fixture
 def default_input_yaml_template_cli():
     test_yaml = """
