@@ -21,8 +21,6 @@ import mdtraj as md
 from openmmtools.constants import kB
 import logging
 import os
-import dask.distributed as distributed
-from collections import namedtuple
 from collections import namedtuple
 import random
 from scipy.special import logsumexp
@@ -971,6 +969,7 @@ class DaskClient(object):
                         LSF = True,
                         num_processes = 2,
                         adapt = False):
+        import dask.distributed as distributed
 
         if LSF:
             from dask_jobqueue import LSFCluster
@@ -1056,6 +1055,7 @@ class DaskClient(object):
         """
         wrapper to wait until futures are complete.
         """
+        import dask.distributed as distributed
         if self.client is None:
             pass
         else:
