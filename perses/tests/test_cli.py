@@ -28,6 +28,7 @@ bond_expession:
 n_steps_per_move_application: 1
 fe_type: repex
 checkpoint_interval: 50
+offline-freq: 50
 n_cycles: 1
 n_states: 3
 n_equilibration_iterations: 0

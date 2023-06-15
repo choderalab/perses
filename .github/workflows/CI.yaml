@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.8, 3.9, "3.10"]
+        python-version: [3.9, "3.10"]
         openmm: ["8.0", "7.7"]
         include:
           - openmm: "dev"
@@ -49,12 +49,13 @@ jobs:
         with:
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: test
-          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmm_dev/linux-64,conda-forge,openeye
+          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmm_dev,conda-forge,openeye
           channel-priority: flexible
           cache-env: true
           cache-downloads: true
           extra-specs: |
             python==${{ matrix.python-version }}
+            openmmtools==0.23.0
             openmm==8.0.0dev3
 
       - name: Setup micromamba
@@ -68,6 +69,7 @@ jobs:
           extra-specs: |
             python==${{ matrix.python-version }}
             openmm==${{ matrix.openmm }}
+            openmmtools==0.23.0
 
       - name: Install package
         shell: bash -l {0}
