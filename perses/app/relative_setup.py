@@ -381,6 +381,81 @@ class RelativeFEPSetup(object):
             self._complex_topology_old, self._complex_positions_old,phase='complex',box_dimensions=self._complex_box_dimensions, ionic_strength=self._ionic_strength)
             _logger.info(f"successfully generated complex topology, positions, system")
 
+
+            # Save and serialize system
+            from openmm import XmlSerializer
+            with open(f"{self._trajectory_directory}/out-complex.xml", "w") as wf:
+                xml = XmlSerializer.serialize(self._complex_system_old_solvated)
+                wf.write(xml)
+
+
+            #
+            # ESPALOMA
+            #
+            _logger.info(f"{type(self._complex_topology_old_solvated)}, {type(self._complex_positions_old_solvated)}, {type(self._complex_system_old_solvated)}")
+            # Update toplogy and system if protein parameterization with espaloma is requested
+            chain_ids = [ chain.id for chain in self._complex_topology_old_solvated.chains() ]
+            #_logger.info(f"Detected {len(chain_ids)} chains ({chain_ids})")
+            
+            # Initialize
+            new_complex_topology_old_solvated = app.Topology()
+            new_complex_topology_old_solvated.setPeriodicBoxVectors(self._complex_topology_old_solvated.getPeriodicBoxVectors())
+            new_atoms = {}
+
+            # Regenerate protein topology as a single residue assuming the first chain is a protein.
+            _logger.info(f"Regenerating protein topology...")
+            for chain in self._complex_topology_old_solvated.chains():
+                new_chain = new_complex_topology_old_solvated.addChain(chain.id)
+                if chain.id == chain_ids[0]:
+                    resname = 'ESP'
+                    resid = '1'
+                    new_residue = new_complex_topology_old_solvated.addResidue(resname, new_chain, resid)
+                for i, residue in enumerate(chain.residues()):
+                    if residue.chain.id != chain_ids[0]:
+                        new_residue = new_complex_topology_old_solvated.addResidue(residue.name, new_chain, residue.id)
+                    for atom in residue.atoms():
+                        new_atom = new_complex_topology_old_solvated.addAtom(atom.name, atom.element, new_residue, atom.id)
+                        new_atoms[atom] = new_atom
+                        #_logger.info(f"{new_atom.residue.name}, {new_atom.residue.chain.id}, {new_atom.residue.id}")
+                        #_logger.info(f"{new_residue.chain.id}, {new_residue.id}")
+                        #_logger.info(f"{new_residue} {new_atom}")
+            
+            # Regenerate bond information
+            for bond in self._complex_topology_old_solvated.bonds():
+                if bond[0] in new_atoms and bond[1] in new_atoms:
+                    new_complex_topology_old_solvated.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
+            
+            pdb_filename = f"{self._trajectory_directory}/out-complex-esplaoma.pdb"
+            with open(pdb_filename, 'w') as outfile:
+                app.PDBFile.writeFile(new_complex_topology_old_solvated, self._complex_positions_old_solvated, outfile)
+
+            # EspalomaTemplateGenerator to build Espaloma system
+            t = md.load_pdb(f'{pdb_filename}')
+            indices = t.topology.select('resname ESP')
+            pdb_filename = "target-espaloma.pdb"
+            t.atom_slice(indices).save_pdb(f'{pdb_filename}')
+            protein_molecule = Molecule.from_file(f'{pdb_filename}', file_format='pdb')
+            self._system_generator.template_generator.add_molecules(protein_molecule)
+            new_complex_system_old_solvated = self._system_generator.create_system(new_complex_topology_old_solvated)
+
+            _logger.info(f"{type(new_complex_system_old_solvated)}")
+
+            # Save and serialize system
+            #new_complex_system_old_solvated.topology = new_complex_topology_old_solvated
+            #new_complex_system_old_solvated.positions = self._complex_positions_old_solvated
+            with open(f"{self._trajectory_directory}/out-complex-espaloma.xml", "w") as wf:
+                xml = XmlSerializer.serialize(new_complex_system_old_solvated)
+                wf.write(xml)
+            
+            # Update
+            self._complex_topology_old_solvated = new_complex_topology_old_solvated
+            self._complex_system_old_solvated = new_complex_system_old_solvated
+
+            #
+            # END
+            #
+
+
             self._complex_md_topology_old_solvated = md.Topology.from_openmm(self._complex_topology_old_solvated)
 
             _logger.info(f"creating TopologyProposal...")
