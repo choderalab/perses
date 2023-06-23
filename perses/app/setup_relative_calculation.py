@@ -100,6 +100,7 @@ def getSetupOptions(filename, override_string=None):
 
     if 'small_molecule_parameters_cache' not in setup_options:
         setup_options['small_molecule_parameters_cache'] = None
+        
 
     if 'remove_constraints' not in setup_options:
         setup_options['remove_constraints'] = False
@@ -394,6 +395,11 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
     #   such as deferring to defaults for modules we call unless the user
     #   chooses to override them.
 
+    if 'use_protein_espaloma' not in list(setup_options.keys()):
+        use_protein_espaloma = False
+    else:
+        assert type(setup_options['use_protein_espaloma']) == type(True)
+        use_protein_espaloma = setup_options['use_protein_espaloma']
 
     if 'use_given_geometries' not in list(setup_options.keys()):
         use_given_geometries = False
@@ -520,6 +526,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
                                           atom_expr=setup_options['atom_expr'], bond_expr=setup_options['bond_expr'],
                                           neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'],
+                                          use_protein_espaloma=use_protein_espaloma,
                                           trajectory_directory=trajectory_directory, trajectory_prefix=setup_options['trajectory_prefix'], nonbonded_method=setup_options['nonbonded_method'],
                                           complex_box_dimensions=setup_options['complex_box_dimensions'],solvent_box_dimensions=setup_options['solvent_box_dimensions'], ionic_strength=ionic_strength, remove_constraints=setup_options['remove_constraints'],
                                           use_given_geometries=use_given_geometries, given_geometries_tolerance=given_geometries_tolerance,
