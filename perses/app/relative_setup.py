@@ -935,6 +935,8 @@ class RelativeFEPSetup(object):
         indices = t.topology.select('resname ESP')
         pdb_filename = "target-espaloma.pdb"
         t.atom_slice(indices).save_pdb(f'{pdb_filename}')
+        
+        from openff.toolkit.topology import Molecule
         protein_molecule = Molecule.from_file(f'{pdb_filename}', file_format='pdb')
         
         # We already added small molecules to template generator when we first created ``self._system_generator``.
