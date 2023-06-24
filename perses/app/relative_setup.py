@@ -165,7 +165,6 @@ class RelativeFEPSetup(object):
         self._use_given_geometries = use_given_geometries
         self._given_geometries_tolerance = given_geometries_tolerance
         self._ligand_input = ligand_input
-        self._use_protein_espaloma
 
         if self._use_given_geometries:
             assert self._ligand_input[-3:] == 'sdf' or self._ligand_input[-4:] == 'mol2', f"cannot use deterministic atom placement if the ligand input files do not contain geometry information (e.g. in .sdf or .mol2 format)"
@@ -388,7 +387,7 @@ class RelativeFEPSetup(object):
             _logger.info(f"successfully generated complex topology, positions, system")
 
             # Assign espaloma to protein. Topology and system will be regenerated.
-            if self._use_protein_espaloma:
+            if use_protein_espaloma:
                 _logger.info(f"Regenerating toplogy and system with espaloma...")
                 # Save and serialize current system
                 from openmm import XmlSerializer
