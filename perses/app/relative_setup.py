@@ -389,11 +389,11 @@ class RelativeFEPSetup(object):
             # Assign espaloma to protein. Topology and system will be regenerated.
             if use_protein_espaloma:
                 _logger.info(f"Regenerating toplogy and system with espaloma...")
-                # Save and serialize current system
-                from openmm import XmlSerializer
-                with open(f"{self._trajectory_directory}/out-complex.xml", "w") as wf:
-                    xml = XmlSerializer.serialize(self._complex_system_old_solvated)
-                    wf.write(xml)
+                # DEBUG: Save and serialize current system
+                #from openmm import XmlSerializer
+                #with open(f"{self._trajectory_directory}/out-complex.xml", "w") as wf:
+                #    xml = XmlSerializer.serialize(self._complex_system_old_solvated)
+                #    wf.write(xml)
                 assert 'espaloma' in small_molecule_forcefield, "Espaloma force field not defined in ``small_molecule_forcefield``"
                 self._complex_topology_old_solvated, self._complex_system_old_solvated = self._regenerate_espaloma_system()
                 _logger.info(f"Regenerated toplogy and system with espaloma")
@@ -924,20 +924,18 @@ class RelativeFEPSetup(object):
         # TODO: Is there a better way to handle this?
         # Currently, the updated complex openmm.app.topology is saved as a new pdb and reloaded with mdtraj.
         # Proteins are selected and saved as pdb and loaded as openff.toolkit.topology.Molecule.
-
-        # Save updated complex topology as pdb
-        pdb_filename = f"{self._trajectory_directory}/out-complex-esplaoma.pdb"
-        with open(pdb_filename, 'w') as outfile:
-            app.PDBFile.writeFile(new_complex_topology_old_solvated, self._complex_positions_old_solvated, outfile)
-
-        # Load protein structure converted into a single residue as openff.toolkit.topology.Molecule
-        t = md.load_pdb(f'{pdb_filename}')
-        indices = t.topology.select('resname ESP')
-        pdb_filename = "target-espaloma.pdb"
-        t.atom_slice(indices).save_pdb(f'{pdb_filename}')
-        
+        protein_espaloma_filename = "protein-espaloma.pdb"
+        if not os.path.exists(protein_espaloma_filename):
+            # Save updated complex topology as pdb
+            complex_espaloma_filename = f"{self._trajectory_directory}/out-complex-espaloma.pdb"
+            with open(complex_espaloma_filename, 'w') as outfile:
+                app.PDBFile.writeFile(new_complex_topology_old_solvated, self._complex_positions_old_solvated, outfile)
+            # Load protein structure converted into a single residue as openff.toolkit.topology.Molecule
+            t = md.load_pdb(complex_espaloma_filename)
+            indices = t.topology.select('resname ESP')
+            t.atom_slice(indices).save_pdb(protein_espaloma_filename)
         from openff.toolkit.topology import Molecule
-        protein_molecule = Molecule.from_file(f'{pdb_filename}', file_format='pdb')
+        protein_molecule = Molecule.from_file(protein_espaloma_filename, file_format='pdb')
         
         # We already added small molecules to template generator when we first created ``self._system_generator``.
         # So we only need to add protein molecule to template generator (EspalomaTemplateGenerator).
@@ -945,11 +943,11 @@ class RelativeFEPSetup(object):
         # Regenerate system with system generator
         new_complex_system_old_solvated = self._system_generator.create_system(new_complex_topology_old_solvated)
 
-        # DEBUG
-        from openmm import XmlSerializer
-        with open(f"{self._trajectory_directory}/out-complex-espaloma.xml", "w") as wf:
-            xml = XmlSerializer.serialize(new_complex_system_old_solvated)
-            wf.write(xml)
+        # DEBUG: Save updated system
+        #from openmm import XmlSerializer
+        #with open(f"{self._trajectory_directory}/out-complex-espaloma.xml", "w") as wf:
+        #    xml = XmlSerializer.serialize(new_complex_system_old_solvated)
+        #    wf.write(xml)
 
         return new_complex_topology_old_solvated, new_complex_system_old_solvated
 
