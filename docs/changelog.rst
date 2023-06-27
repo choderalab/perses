@@ -16,16 +16,16 @@ Bugfix release.
 Enhancements
 ^^^^^^^^^^^^
 
-* Added upport for reading input files (ex yaml, sdf, pdbs) from AWS, GCP, and Azure. See the documentation for [cloudpathlib](https://cloudpathlib.drivendata.org/stable/authentication/) for how to setup authentication. Currently only reading the yaml from S3 is unit tested (ie `perses-cli --yaml s3://perses-testing/template_s3.yaml`), but other cloud providers and input files should work. Please report any issues on our issue tracker!  by @mikemhenry in https://github.com/choderalab/perses/pull/1073
+* Added support for reading input files (ex yaml, sdf, pdbs) from AWS, GCP, and Azure. See the documentation for [cloudpathlib](https://cloudpathlib.drivendata.org/stable/authentication/) for how to setup authentication. Currently only reading the yaml from S3 is unit tested (ie `perses-cli --yaml s3://perses-testing/template_s3.yaml`), but other cloud providers and input files should work. `AzureBlobPath`, `S3Path` and `GSPath` are supported URI endpoints. Please report any issues on our issue tracker!  by @mikemhenry in https://github.com/choderalab/perses/pull/1073
 * ``CUDA`` platform was hardcoded in geometry engine, generating performance issues by not clearing openmm contexts correctly. Fixed by defaulting to using the faster ``CPU`` platform (for the geometry engine) and explicitly deleting context variables after they are used. by @ijpulidos in https://github.com/choderalab/perses/pull/1091
 * Set aromatic draw style to `OEAromaticStyle_Circle` in atom mapper rendering by @mikemhenry in https://github.com/choderalab/perses/pull/1103
 * Ligands with atoms changing constrained status were not being handled by mapping proposal. Atoms in bonds that change constrained/unconstrained to unconstrained/constrained during the transformation are now _demapped_. by @ijpulidos in https://github.com/choderalab/perses/pull/1125
-* Now that upstream ``openmmtools`` is storing velocities on checkpoint, the small molecule transformation pipeline does not reassign velocities on resume ny defualt. Instead, the velocities are read from the checkpoint file. by @ijpulidos in https://github.com/choderalab/perses/pull/1133
+* Now that upstream ``openmmtools`` is storing velocities on checkpoint, the small molecule transformation pipeline does not reassign velocities on resume by default. Instead, the velocities are read from the checkpoint file. by @ijpulidos in https://github.com/choderalab/perses/pull/1133
 * CLI workflow for replica exchange now uses the faster ``LangevinMiddleIntegrator`` via the ``LangevinDynamicsMove``. Tests were updated to reflect the changes.  by @ijpulidos in https://github.com/choderalab/perses/pull/1138
 * Add opencontainers image-spec to `Dockerfile` by @SauravMaheshkar in https://github.com/choderalab/perses/pull/1139
 * Updated to support openff-toolkit 0.11, which included API-breaking changes. by @jchodera in https://github.com/choderalab/perses/pull/1128
-* Make solute-only trajectory writing optional @mikemhenry in https://github.com/choderalab/perses/pull/1185
-* Users can now specify solvent model for simulations using the ``solvent_model`` field in the input YAML file. by @ijpulidos in https://github.com/choderalab/perses/pull/1202
+* Make solute-only trajectory writing optional. This option is controlled by the `atom_selection` option in the yaml file. The syntax uses the MDTraj selection syntax, e.g. `not water` @mikemhenry in https://github.com/choderalab/perses/pull/1185
+* Users can now specify solvent model for simulations using the ``solvent_model`` field in the input YAML file. Supported values are 'tip3p', 'spce', 'tip4pew', 'tip5p', and 'swm4ndp' (polarizable) by @ijpulidos in https://github.com/choderalab/perses/pull/1202
 
 Documentation
 ^^^^^^^^^^^^^
@@ -38,7 +38,7 @@ Documentation
 Bug Fixes
 ^^^^^^^^^
 
-* Fixes bug where if a `:` was in a key, we could not override the arguement in our perses-cli.  @mikemhenry in https://github.com/choderalab/perses/pull/1062
+* Fixes bug where if a `:` was in a key, we could not override the argument in our perses-cli.  @mikemhenry in https://github.com/choderalab/perses/pull/1062
 * Resolves #1157 objects serialized with `utils.data.serialize` now will be compressed with `bzip2` or `gzip` depending on file name (`.gz` and `.bz2`, respectively) by @mikemhenry in https://github.com/choderalab/perses/pull/1163
 * Fixes for new openmmtools 0.23.0 by @mikemhenry in https://github.com/choderalab/perses/pull/1203
 
