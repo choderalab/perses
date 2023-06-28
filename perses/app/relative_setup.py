@@ -62,7 +62,7 @@ class RelativeFEPSetup(object):
                  anneal_14s=False,
                  small_molecule_forcefield='gaff-2.11',
                  small_molecule_parameters_cache=None,
-                 use_protein_espaloma=False,
+                 use_espaloma_for_protein=False,
                  trajectory_directory=None,
                  trajectory_prefix=None,
                  spectator_filenames=None,
@@ -111,7 +111,7 @@ class RelativeFEPSetup(object):
             ['gaff-1.81', 'gaff-2.11', 'smirnoff99Frosst-1.1.0', 'openff-2.0.0']
         small_molecule_parameters_cache : str, optional, default=None
             If specified, this filename will be used for a small molecule parameter cache by the SystemGenerator.
-        use_protein_espaloma : bool, default False
+        use_espaloma_for_protein : bool, default False
             Whether to parameterize protein with epaloma force field.
             If True, complex topology and system created by protein force fields in ``forcefield_files`` will be regenerated
             using espaloma force field specified in ``small_molecule_forcefield``.
@@ -386,8 +386,8 @@ class RelativeFEPSetup(object):
             self._complex_topology_old, self._complex_positions_old,phase='complex',box_dimensions=self._complex_box_dimensions, ionic_strength=self._ionic_strength)
             _logger.info(f"successfully generated complex topology, positions, system")
 
-            # Assign espaloma to protein. Topology and system will be regenerated.
-            if use_protein_espaloma:
+            # Apply espaloma model to protein. Topology and system will be regenerated.
+            if use_espaloma_for_protein:
                 _logger.info(f"Regenerating toplogy and system with espaloma...")
                 # DEBUG: Save and serialize current system
                 #from openmm import XmlSerializer
@@ -396,7 +396,7 @@ class RelativeFEPSetup(object):
                 #    wf.write(xml)
                 assert 'espaloma' in small_molecule_forcefield, "Espaloma force field not defined in ``small_molecule_forcefield``"
                 self._complex_topology_old_solvated, self._complex_system_old_solvated = self._regenerate_espaloma_system()
-                _logger.info(f"Regenerated toplogy and system with espaloma")
+                _logger.info(f"Toplogy and system regenerated with espaloma")
 
             self._complex_md_topology_old_solvated = md.Topology.from_openmm(self._complex_topology_old_solvated)
 
@@ -883,7 +883,7 @@ class RelativeFEPSetup(object):
     def _regenerate_espaloma_system(self):
         """
         Regnerate topology and system with espaloma force field. Protein topology will be updated with 
-        espaloma force field specified by ``small_molecule_forcefield``.
+        espaloma model specified in ``small_molecule_forcefield``.
         
         Returns
         -------
@@ -893,21 +893,46 @@ class RelativeFEPSetup(object):
             The parameterized system with the same kwargs used to generate 
             ``self._system_generator`` with ``openmmforcefields.generators.SystemGenerator``.
         """
-        chain_ids = [ chain.id for chain in self._complex_topology_old_solvated.chains() ]
+        # Check protein chains
+        mdtop = md.Topology.from_openmm(self._complex_topology_old_solvated)
+        chain_indices = [ chain.index for chain in self._complex_topology_old_solvated.chains() ]
+        
+        # DEBUG
+        #for chainid in chain_indices:
+        #    indice = mdtop.select(f"protein and chainid == {chainid}")
+        #    _logger.info(f"Protein chain ID {chainid}: {indice}")
+
+        protein_chain_indices = [ chain_index for chain_index in chain_indices if mdtop.select(f"protein and chainid == {chain_index}").any() ]
+        assert len(protein_chain_indices) != 0, "Could not detect protein"
+        assert len(protein_chain_indices) <= 10, "Only supports up to 10 chains for proteins"
+        _logger.info(f"Protein chain indices: {protein_chain_indices}")
+
+        # Check conflicting residue names
+        conflict_resnames = [ residue.name for residue in mdtop.residues if residue.name.startswith("XX") ]
+        if conflict_resnames:
+            raise Exception('Found conflict residue name in protein.')
+
+        # Initialize
         new_complex_topology_old_solvated = app.Topology()
         new_complex_topology_old_solvated.setPeriodicBoxVectors(self._complex_topology_old_solvated.getPeriodicBoxVectors())
         new_atoms = {}
 
-        # Regenerate protein topology as a single residue assuming the first chain is a protein.
+        # Regenerate protein topology
+        chain_counter = 0
         _logger.info(f"Regenerating protein topology...")
         for chain in self._complex_topology_old_solvated.chains():
             new_chain = new_complex_topology_old_solvated.addChain(chain.id)
-            if chain.id == chain_ids[0]:
-                resname = 'ESP'
+            # Convert protein into a single residue
+            # NOTE: ``resname`` is used in ``annihilation/relative.py#L2051.`` to deterimine the protein CA atoms to 
+            # impose virtual bonds to keep the core atoms closeby with the protein subunits. If ``resname`` is changed,
+            # then protein CA atom selection expression in ``annihilation/relative.py#L2051.`` should also be changed.
+            if chain.index in protein_chain_indices:
+                resname = f'XX{chain_counter:01d}'
                 resid = '1'
+                chain_counter += 1
                 new_residue = new_complex_topology_old_solvated.addResidue(resname, new_chain, resid)
             for i, residue in enumerate(chain.residues()):
-                if residue.chain.id != chain_ids[0]:
+                if residue.chain.index not in protein_chain_indices:
                     new_residue = new_complex_topology_old_solvated.addResidue(residue.name, new_chain, residue.id)
                 for atom in residue.atoms():
                     new_atom = new_complex_topology_old_solvated.addAtom(atom.name, atom.element, new_residue, atom.id)
@@ -922,26 +947,35 @@ class RelativeFEPSetup(object):
                 new_complex_topology_old_solvated.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
 
         # TODO: Is there a better way to handle this?
-        # Currently, the updated complex openmm.app.topology is saved as a new pdb and reloaded with mdtraj.
-        # Proteins are selected and saved as pdb and loaded as openff.toolkit.topology.Molecule.
-        protein_espaloma_filename = "protein-espaloma.pdb"
-        if not os.path.exists(protein_espaloma_filename):
-            # Save updated complex topology as pdb
-            complex_espaloma_filename = f"{self._trajectory_directory}/out-complex-espaloma.pdb"
+        # Currently, the new solvated complex openmm.app.topology ``new_complex_topology_old_solvated``  
+        # saved as a pdb (self._trajectory_directory/out-complex-espaloma.pdb) is loaded with mdtraj. 
+        # Proteins are selected and saved as pdb files and loaded as openff.toolkit.topology.Molecule.
+
+        # Save the updated complex model as pdb
+        complex_espaloma_filename = f"{self._trajectory_directory}/out-complex-espaloma.pdb"
+        if not os.path.exists(complex_espaloma_filename):
             with open(complex_espaloma_filename, 'w') as outfile:
                 app.PDBFile.writeFile(new_complex_topology_old_solvated, self._complex_positions_old_solvated, outfile)
-            # Load protein structure converted into a single residue as openff.toolkit.topology.Molecule
-            t = md.load_pdb(complex_espaloma_filename)
-            indices = t.topology.select('resname ESP')
-            t.atom_slice(indices).save_pdb(protein_espaloma_filename)
+        # Seperate proteins into indivdual pdb files according to chain ID.
+        import glob
+        protein_espaloma_filenames = glob.glob("protein-espaloma-*.pdb")
+        if not protein_espaloma_filenames:
+            for chain_index in protein_chain_indices:
+                t = md.load_pdb(complex_espaloma_filename)
+                indices = t.topology.select(f"chainid == {chain_index}")
+                # Should this be saved all trajectory directories? We are assuming all trajectory directories share 
+                # the same input protein structure.
+                t.atom_slice(indices).save_pdb(f"protein-espaloma-{chain_index}.pdb")
+            protein_espaloma_filenames = glob.glob("protein-espaloma-*.pdb")
+        #  Load individual protein structure into openff.toolkit.topology.Molecule
         from openff.toolkit.topology import Molecule
-        protein_molecule = Molecule.from_file(protein_espaloma_filename, file_format='pdb')
+        protein_molecules = [ Molecule.from_file(protein_filename) for protein_filename in protein_espaloma_filenames ]
         
         # We already added small molecules to template generator when we first created ``self._system_generator``.
         # So we only need to add protein molecule to template generator (EspalomaTemplateGenerator).
-        self._system_generator.template_generator.add_molecules(protein_molecule)
+        self._system_generator.template_generator.add_molecules(protein_molecules)
         # Regenerate system with system generator
-        new_complex_system_old_solvated = self._system_generator.create_system(new_complex_topology_old_solvated)
+        new_complex_system_old_solvated = self._system_generator.create_system(new_complex_topology_old_solvated)    
 
         # DEBUG: Save updated system
         #from openmm import XmlSerializer
