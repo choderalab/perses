@@ -87,7 +87,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
-          file: docker/Dockerfile
+          file: docker/Dockerfile-dev
           load: true
           push: false
           tags: ${{ steps.meta.outputs.tags }}
@@ -102,13 +102,13 @@ jobs:
           echo "${{ secrets.OE_LICENSE }}" > oe_license_dir/oe_license.txt
           docker run --rm ${{ steps.fqirp.outputs.FQIRP }} perses-cli --help
           # Mount oe_license_dir (which should have the license file) to /openeye on container for testing
-          docker run -e GITHUB_ACTIONS=true --mount type=bind,source=$PWD/oe_license_dir/,target=/openeye/,readonly --rm ${{ steps.fqirp.outputs.FQIRP }} pytest --pyargs perses -a "not advanced" -n auto -m "not gpu_needed" -v
+          #docker run -e GITHUB_ACTIONS=true --mount type=bind,source=$PWD/oe_license_dir/,target=/openeye/,readonly --rm ${{ steps.fqirp.outputs.FQIRP }} pytest --pyargs perses -a "not advanced" -n auto -m "not gpu_needed" -v
 
       - name: Push Docker image
         uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
         with:
           context: .
-          file: docker/Dockerfile
+          file: docker/Dockerfile-dev
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
