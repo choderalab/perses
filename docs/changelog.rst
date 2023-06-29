@@ -8,6 +8,69 @@ This section lists features and improvements of note in each release.
 
 The full release history can be viewed `at the GitHub perses releases page <https://github.com/choderalab/perses/releases>`_.
 
+0.10.2 - Release
+----------------
+
+Bugfix release.
+
+Enhancements
+^^^^^^^^^^^^
+
+* Added support for reading input files (ex yaml, sdf, pdbs) from AWS, GCP, and Azure. See the documentation for [cloudpathlib](https://cloudpathlib.drivendata.org/stable/authentication/) for how to setup authentication. Currently only reading the yaml from S3 is unit tested (ie `perses-cli --yaml s3://perses-testing/template_s3.yaml`), but other cloud providers and input files should work. `AzureBlobPath`, `S3Path` and `GSPath` are supported URI endpoints. Please report any issues on our issue tracker!  by @mikemhenry in https://github.com/choderalab/perses/pull/1073
+* ``CUDA`` platform was hardcoded in geometry engine, generating performance issues by not clearing openmm contexts correctly. Fixed by defaulting to using the faster ``CPU`` platform (for the geometry engine) and explicitly deleting context variables after they are used. by @ijpulidos in https://github.com/choderalab/perses/pull/1091
+* Set aromatic draw style to `OEAromaticStyle_Circle` in atom mapper rendering by @mikemhenry in https://github.com/choderalab/perses/pull/1103
+* Ligands with atoms changing constrained status were not being handled by mapping proposal. Atoms in bonds that change constrained/unconstrained to unconstrained/constrained during the transformation are now _demapped_. by @ijpulidos in https://github.com/choderalab/perses/pull/1125
+* Now that upstream ``openmmtools`` is storing velocities on checkpoint, the small molecule transformation pipeline does not reassign velocities on resume by default. Instead, the velocities are read from the checkpoint file. by @ijpulidos in https://github.com/choderalab/perses/pull/1133
+* CLI workflow for replica exchange now uses the faster ``LangevinMiddleIntegrator`` via the ``LangevinDynamicsMove``. Tests were updated to reflect the changes.  by @ijpulidos in https://github.com/choderalab/perses/pull/1138
+* Add opencontainers image-spec to `Dockerfile` by @SauravMaheshkar in https://github.com/choderalab/perses/pull/1139
+* Updated to support openff-toolkit 0.11, which included API-breaking changes. by @jchodera in https://github.com/choderalab/perses/pull/1128
+* Make solute-only trajectory writing optional. This option is controlled by the `atom_selection` option in the yaml file. The syntax uses the MDTraj selection syntax, e.g. `not water` @mikemhenry in https://github.com/choderalab/perses/pull/1185
+* Users can now specify solvent model for simulations using the ``solvent_model`` field in the input YAML file. Supported values are 'tip3p', 'spce', 'tip4pew', 'tip5p', and 'swm4ndp' (polarizable) by @ijpulidos in https://github.com/choderalab/perses/pull/1202
+
+Documentation
+^^^^^^^^^^^^^
+* Document setting `ionic_strength` in `examples/new-cli/template.yaml` by @mikemhenry in https://github.com/choderalab/perses/pull/1104
+* Add reproducible version of COVID Moonshot example anyone can run as an example by @jchodera in https://github.com/choderalab/perses/pull/1145
+* Speed up RTD env generation by @mikemhenry in https://github.com/choderalab/perses/pull/1105
+* Fix documentation string for `ProteinMutationExecutor`, using `False` for `reassign_velocities` parameter. by @ijpulidos in https://github.com/choderalab/perses/pull/1169
+* Document how to control the log level in the CLI by @mikemhenry in https://github.com/choderalab/perses/pull/1198
+
+Bug Fixes
+^^^^^^^^^
+
+* Fixes bug where if a `:` was in a key, we could not override the argument in our perses-cli.  @mikemhenry in https://github.com/choderalab/perses/pull/1062
+* Resolves #1157 objects serialized with `utils.data.serialize` now will be compressed with `bzip2` or `gzip` depending on file name (`.gz` and `.bz2`, respectively) by @mikemhenry in https://github.com/choderalab/perses/pull/1163
+* Fixes for new openmmtools 0.23.0 by @mikemhenry in https://github.com/choderalab/perses/pull/1203
+
+Testing/CI/Packaging 
+^^^^^^^^^^^^^^^^^^^^
+* add python 3.10 to CI by @mikemhenry in https://github.com/choderalab/perses/pull/1080
+* skip broken tests by @mikemhenry in https://github.com/choderalab/perses/pull/1074
+* Feat/fix ssl gpu error by @mikemhenry in https://github.com/choderalab/perses/pull/1095
+* Previously the keyword argument `save_freq` in `validate_endstate_energies_md` was not functional and the value of `250` steps was hard coded. Now, `save_freq` works and has a default value of `250` steps. by @mikemhenry in https://github.com/choderalab/perses/pull/1101
+* fix issue with test asset name by @mikemhenry in https://github.com/choderalab/perses/pull/1102
+* Examples and benchmarks template input files now run vacuum, solvent and complex phases in order. by @ijpulidos in https://github.com/choderalab/perses/pull/1122
+* Add openmm 8  to testing matrix by @mikemhenry in https://github.com/choderalab/perses/pull/1124
+* Fix resume tests  to use new CLI (resolves issue #1150) by @mikemhenry in https://github.com/choderalab/perses/pull/1151
+* Avoid testing non-examples in CI by @ijpulidos in https://github.com/choderalab/perses/pull/1164
+* only run dev with newest python version by @mikemhenry in https://github.com/choderalab/perses/pull/1165
+* remove outdated recipe by @mikemhenry in https://github.com/choderalab/perses/pull/1159
+* update release process by @mikemhenry in https://github.com/choderalab/perses/pull/1162
+* add env caching to CI by @mikemhenry in https://github.com/choderalab/perses/pull/1178
+* Skip failing openmm 8 tests by @mikemhenry in https://github.com/choderalab/perses/pull/1186
+* Add small molecule repex consistency tests by @zhang-ivy in https://github.com/choderalab/perses/pull/1065
+* Fix RESTTopologyFactory test by @zhang-ivy in https://github.com/choderalab/perses/pull/1188
+* enable merge queue by @mikemhenry in https://github.com/choderalab/perses/pull/1206
+* Using default online analysis interval in GPU repex tests by @ijpulidos in https://github.com/choderalab/perses/pull/1207
+
+New Contributors
+^^^^^^^^^^^^^^^^
+
+* @SauravMaheshkar made their first contribution in https://github.com/choderalab/perses/pull/1139
+
+**Full Changelog**: https://github.com/choderalab/perses/compare/0.10.1...0.10.2
+
+
 0.10.1 - Release
 ----------------
 
