@@ -11,7 +11,7 @@ ARG VERSION
 # https://docs.python.org/3/using/cmdline.html#cmdoption-u
 ENV PYTHONUNBUFFERED=1
 
-RUN micromamba install -y -n base -c openeye openeye-toolkits git "perses==$VERSION" cudatoolkit==11.7 && \
+RUN micromamba install -y -n base -c conda-forge -c openeye openeye-toolkits git "perses==$VERSION" cudatoolkit==11.7 && \
     micromamba clean --all --yes
 
 # Make directory and tell openeye where to find
