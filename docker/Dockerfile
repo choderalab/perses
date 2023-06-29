@@ -16,7 +16,9 @@ RUN micromamba install -y -n base -c openeye openeye-toolkits git "perses==$VERS
 
 # Make directory and tell openeye where to find
 # license file
+USER root
 RUN mkdir /openeye
+USER $MAMBA_USER
 ENV OE_LICENSE=/openeye/oe_license.txt
 
 # Ensure that conda environment is automatically activated
