@@ -109,7 +109,7 @@ def get_ligand_names_from_edge(edge_index, target_name, branch="0.2.1"):
     # fetch edges information
     # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
     target_dir = get_target_dir(target_name, branch=branch)
-    edges_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/03_edges/01_perses_openfe.yml"
+    edges_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/03_edges/01_perses_mst_geom_score_openfe.yml"
     with fetch_url_contents(edges_url) as response:
         edges_dict = yaml.safe_load(response.read())
     edges_list = list(edges_dict["edges"].values())  # suscriptable edges object - note dicts are ordered for py>=3.7
@@ -123,7 +123,7 @@ def get_ligand_names_from_edge(edge_index, target_name, branch="0.2.1"):
 
 def get_ligand_index_from_file(sdf_file, ligand_name):
     """
-    Extract index for ligand in a sdf file given its name.
+    Extract index for ligand in an sdf file given its name.
 
     Parameters
     ----------
