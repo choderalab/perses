@@ -22,7 +22,7 @@ from perses.utils.url_utils import fetch_url_contents
 
 from simtk import unit
 
-from openff.arsenic import plotting, wrangle
+from cinnabar import plotting, wrangle
 
 # global variables
 base_repo_url = "https://github.com/openforcefield/protein-ligand-benchmark"
