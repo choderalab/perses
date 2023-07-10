@@ -587,6 +587,9 @@ class RelativeFEPSetup(object):
                 self._vacuum_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
             self._vacuum_geometry_engine = copy.deepcopy(self._geometry_engine)
 
+        # Serialize topologies and positions in PDB files
+        self._serialize_topologies()
+
     def _setup_complex_phase(self):
         """
         Runs setup on the protein/receptor file for relative simulations
@@ -610,6 +613,8 @@ class RelativeFEPSetup(object):
             raise ValueError("You need to provide either a protein pdb or a receptor mol2 to run a complex simulation.")
 
         self._complex_md_topology_old = self._receptor_md_topology_old.join(self._ligand_md_topology_old)
+        # receptor is the same for "old" and "new" -- only for small molecule pipeline
+        self._complex_md_topology_new = self._receptor_md_topology_old.join(self._ligand_md_topology_new)
 
         n_atoms_spectators = 0
         if self._spectator_filenames:
@@ -618,14 +623,22 @@ class RelativeFEPSetup(object):
                 self._complex_md_topology_old = self._complex_md_topology_old.join(spectator_topology)
                 n_atoms_spectators += spectator_topology.n_atoms
         self._complex_topology_old = self._complex_md_topology_old.to_openmm()
+        self._complex_topology_new = self._complex_md_topology_new.to_openmm()
 
         n_atoms_total_old = self._complex_topology_old.getNumAtoms()
+        n_atoms_total_new = self._complex_topology_new.getNumAtoms()
         n_atoms_protein_old = self._receptor_topology_old.getNumAtoms()
+        n_atoms_protein_new = n_atoms_protein_old  # Assumes it's the same target
         n_atoms_ligand_old = n_atoms_total_old - n_atoms_protein_old - n_atoms_spectators
+        n_atoms_ligand_new = n_atoms_total_new - n_atoms_protein_new - n_atoms_spectators
 
         self._complex_positions_old = unit.Quantity(np.zeros([n_atoms_total_old, 3]), unit=unit.nanometers)
         self._complex_positions_old[:n_atoms_protein_old, :] = self._receptor_positions_old
         self._complex_positions_old[n_atoms_protein_old:n_atoms_protein_old+n_atoms_ligand_old, :] = self._ligand_positions_old
+        self._complex_positions_new = unit.Quantity(np.zeros([n_atoms_total_new, 3]), unit=unit.nanometers)
+        self._complex_positions_new[:n_atoms_protein_new, :] = self._receptor_positions_old  # Assumes it's the same target
+        self._complex_positions_new[n_atoms_protein_new:n_atoms_protein_new + n_atoms_ligand_new,
+        :] = self._ligand_positions_new
 
         if self._spectator_filenames:
             start = n_atoms_protein_old+n_atoms_ligand_old
@@ -674,6 +687,9 @@ class RelativeFEPSetup(object):
         old_solvated_topology, old_solvated_positions, old_solvated_system = self._solvate_system(
             old_ligand_topology.to_openmm(), old_ligand_positions, phase='solvent',
             box_dimensions=self._solvent_box_dimensions, model=self._solvent_model)
+        # Update attributes
+        self._ligand_topology_old_solvated = old_solvated_topology
+        self._ligand_positions_old_solvated = old_solvated_positions
 
         old_solvated_md_topology = md.Topology.from_openmm(old_solvated_topology)
 
@@ -847,7 +863,6 @@ class RelativeFEPSetup(object):
             The parameterized system, containing a barostat if one was specified.
         """
         # DEBUG: Write PDB file being fed into Modeller to check why MOL isn't being matched
-        from simtk.openmm.app import PDBFile
         modeller = app.Modeller(topology, positions)
         # retaining protein protonation from input files
         #hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
@@ -880,13 +895,6 @@ class RelativeFEPSetup(object):
         _logger.info(f"\tparameterizing...")
         solvated_system = self._system_generator.create_system(solvated_topology)
         _logger.info(f"\tSystem parameterized")
-
-        if self._trajectory_directory is not None and self._trajectory_prefix is not None:
-            pdb_filename = AnyPath(f"{self._trajectory_directory}/{self._trajectory_prefix}-{phase}.pdb")
-            with open(pdb_filename, 'w') as outfile:
-                PDBFile.writeFile(solvated_topology, solvated_positions, outfile)
-        else:
-            _logger.info('Both trajectory_directory and trajectory_prefix need to be provided to save .pdb')
 
         return solvated_topology, solvated_positions, solvated_system
 
@@ -921,6 +929,56 @@ class RelativeFEPSetup(object):
 
             # modify the topology proposal
             modify_atom_classes(new_water_indices_to_ionize, topology_proposal)
+
+    def _serialize_topologies(self):
+        """
+        Serializes topologies and positions as PDB files.
+
+        Notes
+        -----
+        - The topologies and positions are serialized in the specified directory using the specified prefix.
+        - The directory will be created if it doesn't already exist.
+        - The topologies and positions are stored as PDB files in the "models" subdirectory of the trajectory directory.
+        - The following topologies and positions are serialized:
+            - "solvent_old": old solvent topology and positions
+            - "solvent_old_solvated": old solvated solvent topology and positions
+            - "solvent_new": new solvent topology and positions
+            - "complex_old": old complex topology and positions
+            - "complex_old_solvated": old solvated complex topology and positions
+            - "complex_new": new complex topology and positions
+        - Both the trajectory directory and trajectory prefix need to be provided in order to serialize the topologies.
+        - If any of the directories or files already exist, they will be overwritten.
+
+        Usage
+        -----
+        To serialize the topologies and positions, make sure to set the `trajectory_directory` and `trajectory_prefix`
+        attributes before calling this method.
+        """
+        from openmm.app import PDBFile
+        if self._trajectory_directory is not None and self._trajectory_prefix is not None:
+            topologies_to_serialize = {
+                "solvent_old": {"topology": self._ligand_topology_old, "positions": self._ligand_positions_old},
+                "solvent_old_solvated": {"topology": self._ligand_topology_old_solvated,
+                                         "positions": self._ligand_positions_old_solvated},
+                "solvent_new": {"topology": self._ligand_topology_new, "positions": self._ligand_positions_new},
+                "complex_old": {"topology": self._complex_topology_old, "positions": self._complex_positions_old},
+                "complex_old_solvated": {"topology": self._complex_topology_old_solvated,
+                                         "positions": self._complex_positions_old_solvated},
+                "complex_new": {"topology": self._complex_topology_new, "positions": self._complex_positions_new}}
+            # Serialize in "models" subdir -- create if doesn't exist
+            models_path = f"{self._trajectory_directory}/models"
+            if not os.path.exists(models_path):
+                os.makedirs(models_path)
+            for phase, phase_data in topologies_to_serialize.items():
+                pdb_filename = AnyPath(f"{models_path}/{self._trajectory_prefix}_{phase}.pdb")
+                with open(pdb_filename, 'w') as outfile:
+                    PDBFile.writeFile(phase_data["topology"], phase_data["positions"], outfile)
+        else:
+            _logger.info(
+                'Not serializing topologies. Both trajectory_directory and trajectory_prefix need to be provided to '
+                'store topology .pdb files')
+
+
 
     @property
     def complex_topology_proposal(self):

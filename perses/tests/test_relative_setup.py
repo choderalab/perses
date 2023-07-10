@@ -7,7 +7,6 @@ from perses.dispersed import feptasks
 from perses.app import setup_relative_calculation
 import mdtraj as md
 from openmmtools import states, alchemy, testsystems, cache
-from unittest import skipIf
 import pytest
 
 from perses.tests.utils import enter_temp_directory
@@ -18,7 +17,6 @@ default_forward_functions = {
         'lambda_sterics' : 'lambda',
         'lambda_electrostatics' : 'lambda',
     }
-
 
 def generate_example_waterbox_states(temperature=300.0*unit.kelvin, pressure=1.0*unit.atmosphere):
     """
@@ -260,47 +258,6 @@ def test_run_bace_spectator():
                 found_tla = True
         assert found_tla == True, 'Spectator TLA not in old topology'
 
-
-def test_host_guest_deterministic_geometries():
-    """
-    execute the `RelativeFEPSetup` with geometries specified for a host-guest relative free energy pair
-    """
-    from perses.app.relative_setup import RelativeFEPSetup
-
-    # Setup directory
-    ligand_sdf = resource_filename("perses", "data/given-geometries/ligands.sdf")
-    host_pdb = resource_filename("perses", "data/given-geometries/receptor.pdb")
-
-    setup = RelativeFEPSetup(
-                 ligand_input = ligand_sdf,
-                 old_ligand_index=0,
-                 new_ligand_index=1,
-                 forcefield_files = ['amber/ff14SB.xml','amber/tip3p_standard.xml','amber/tip3p_HFE_multivalent.xml'],
-                 phases = ['complex', 'solvent', 'vacuum'],
-                 protein_pdb_filename=host_pdb,
-                 receptor_mol2_filename=None,
-                 pressure=1.0 * unit.atmosphere,
-                 temperature=300.0 * unit.kelvin,
-                 solvent_padding=9.0 * unit.angstroms,
-                 ionic_strength=0.15 * unit.molar,
-                 hmass=3*unit.amus,
-                 neglect_angles=False,
-                 map_strength='default',
-                 atom_expr=None,
-                 bond_expr=None,
-                 anneal_14s=False,
-                 small_molecule_forcefield='gaff-2.11',
-                 small_molecule_parameters_cache=None,
-                 trajectory_directory=None,
-                 trajectory_prefix=None,
-                 spectator_filenames=None,
-                 nonbonded_method = 'PME',
-                 complex_box_dimensions=None,
-                 solvent_box_dimensions=None,
-                 remove_constraints=False,
-                 use_given_geometries = True
-                 )
-
 def test_relative_setup_charge_change():
     """
     execute `RelativeFEPSetup` in solvent/complex phase on a charge change and assert that the modified new system and old system charge difference is zero.
@@ -357,7 +314,6 @@ def test_relative_setup_solvent_padding():
     Check that the user inputted solvent_padding argument to `RelativeFEPSetup` actually changes the padding for the solvent phase
     """
     from perses.app.relative_setup import RelativeFEPSetup
-    import numpy as np
 
     input_solvent_padding = 1.7 * unit.nanometers
     smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
@@ -409,6 +365,58 @@ def test_relative_setup_list_ligand_input():
     assert ligand_input_size == expected_input_size, f"There should be {expected_input_size} ligand input files, " \
                                                      f"receiving {ligand_input_size} files."
 
+def test_relative_setup_topologies_serialization(tmp_path):
+    """
+    Check that topologies
+    """
+    from perses.app.relative_setup import RelativeFEPSetup
 
-# if __name__=="__main__":
-#     test_run_cdk2_iterations_repex()
+    # Setup directory
+    ligand_sdf = resource_filename("perses", "data/given-geometries/ligands.sdf")
+    host_pdb = resource_filename("perses", "data/given-geometries/receptor.pdb")
+
+    fe_setup = RelativeFEPSetup(
+        ligand_input=ligand_sdf,
+        old_ligand_index=0,
+        new_ligand_index=1,
+        forcefield_files=['amber/ff14SB.xml', 'amber/tip3p_standard.xml', 'amber/tip3p_HFE_multivalent.xml'],
+        phases=['complex', 'solvent', 'vacuum'],
+        protein_pdb_filename=host_pdb,
+        receptor_mol2_filename=None,
+        pressure=1.0 * unit.atmosphere,
+        temperature=300.0 * unit.kelvin,
+        solvent_padding=9.0 * unit.angstroms,
+        ionic_strength=0.15 * unit.molar,
+        hmass=3 * unit.amus,
+        neglect_angles=False,
+        map_strength='default',
+        atom_expr=None,
+        bond_expr=None,
+        anneal_14s=False,
+        small_molecule_forcefield='openff-2.1.0',
+        small_molecule_parameters_cache=None,
+        trajectory_directory=tmp_path,
+        trajectory_prefix="host-guest",
+        spectator_filenames=None,
+        nonbonded_method='PME',
+        complex_box_dimensions=None,
+        solvent_box_dimensions=None,
+        remove_constraints=False,
+        use_given_geometries=True
+    )
+
+    expected_files = [
+        'host-guest_solvent_old.pdb',
+        'host-guest_solvent_old_solvated.pdb',
+        'host-guest_solvent_new.pdb',
+        'host-guest_complex_old.pdb',
+        'host-guest_complex_old_solvated.pdb',
+        'host-guest_complex_new.pdb'
+    ]
+    for file in expected_files:
+        pdb_filename = f"{tmp_path}/models/{file}"
+        assert os.path.exists(pdb_filename)
+
+    # Assert that no extra files are created
+    files_in_directory = os.listdir(f"{tmp_path}/models")
+    assert len(files_in_directory) == len(expected_files)
