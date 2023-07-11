@@ -5,7 +5,7 @@ on:
   pull_request:
     branches:
       - "main"
-      - "0.10.x"
+      - "0.10.*"
   schedule:
     # nightly tests
     - cron: "0 0 * * *"
