@@ -1,15 +1,15 @@
 name: test
 channels:
-  - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
   - openeye
 dependencies:
+  - ambertools <23
   - arsenic
   - autograd
   - click
   - cloudpathlib-s3 >=0.13.0
   - coverage
-  - dask
+  - dask <2023.5
   - dask-jobqueue
   - dicttoxml
   - distributed
@@ -28,7 +28,7 @@ dependencies:
   - openff-units >=0.1.8
   - openmm >=7.7
   - openmmforcefields >=0.9.0
-  - openmmtools >=0.21.5 # may need to sort out ambermini/ambertools/parmed dependencies
+  - openmmtools # may need to sort out ambermini/ambertools/parmed dependencies
   - openmoltools # may need to sort out ambermini/ambertools/parmed dependencies (we don't want ambertools)
   - parmed ==3.4.4 # may need to sort out ambermini/ambertools/parmed dependencies
   - pdbfixer
