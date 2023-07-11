@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  merge_group:
   pull_request:
     branches:
       - "main"
@@ -23,8 +24,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.8, 3.9, "3.10",]
-        openmm: ["dev", "8.0", "7.7"]
+        python-version: [3.9, "3.10"]
+        openmm: ["8.0", "7.7"]
+        include:
+          - openmm: "dev"
+            python-version: "3.10"
 
     env:
       OPENMM: ${{ matrix.openmm }}
@@ -40,26 +44,33 @@ jobs:
           df -h
           ulimit -a
 
-      - name: Setup micromamba
+      - name: Setup micromamba dev
+        if: ${{ matrix.openmm == 'dev' }}
         uses: mamba-org/provision-with-micromamba@main
         with:
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: test
+          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmm_dev,conda-forge,openeye
+          channel-priority: flexible
+          cache-env: true
+          cache-downloads: true
           extra-specs: |
-            python=${{ matrix.python-version }}
+            python==${{ matrix.python-version }}
+            openmmtools==0.23.0
+            openmm==8.0.0dev3
 
-
-      - name: Refine test environment
-        shell: bash -l {0}
-        run: |
-          case ${{ matrix.openmm }} in
-            dev)
-              echo "Using dev build of OpenMM"
-              micromamba install -c conda-forge/label/openmm_dev -c conda-forge openmm;;
-            *)
-              echo "installing OpenMM version ${{ matrix.openmm }}"
-              micromamba install -y -c conda-forge openmm=${{ matrix.openmm }};;
-          esac
+      - name: Setup micromamba
+        if: ${{ matrix.openmm != 'dev' }}
+        uses: mamba-org/provision-with-micromamba@main
+        with:
+          environment-file: devtools/conda-envs/test_env.yaml
+          environment-name: test
+          cache-env: true
+          cache-downloads: true
+          extra-specs: |
+            python==${{ matrix.python-version }}
+            openmm==${{ matrix.openmm }}
+            openmmtools==0.23.0
 
       - name: Install package
         shell: bash -l {0}

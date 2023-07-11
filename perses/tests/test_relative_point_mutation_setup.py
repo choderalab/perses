@@ -1,3 +1,6 @@
+import pytest
+import os
+
 def test_PointMutationExecutor():
     """
     Check that a PointMutationExecutor can be instantiated properly for ALA->ASP dipeptide in solvent and that a
@@ -28,7 +31,7 @@ def test_PointMutationExecutor():
     assert len(solvent_atoms.intersection(htf._atom_classes['core_atoms'])) != 0, "There are no water atoms in the core atom " \
                                                                            "class, which may mean that the counterion was not introduced"
 
-
+@pytest.mark.skipif(os.getenv("OPENMM", default="7.7").upper() in ["8.0", "DEV"], reason="FastMath is BadMath")
 def test_PointMutationExecutor_endstate_validation():
     """
     Check that HybridTopologyFactory, RepartitionedHybridTopologyFactory, and RESTCapableHybridTopologyFactory objects
