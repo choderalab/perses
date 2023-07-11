@@ -63,7 +63,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_mutation():
                                                                           constraint_tolerance=1e-06),
                                      replica_mixing_scheme='swap-all',
                                      hybrid_factory=htf,
-                                     online_analysis_interval=None)
+                                     )
 
             hss.setup(n_states=12, temperature=300 * unit.kelvin, t_max=300 * unit.kelvin,
                       storage_file=reporter, minimisation_steps=0, endstates=True)
@@ -169,7 +169,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
                                                                               constraint_tolerance=1e-06),
                                          replica_mixing_scheme='swap-all',
                                          hybrid_factory=htf,
-                                         online_analysis_interval=None)
+                                         )
 
                 hss.setup(n_states=36, temperature=300 * unit.kelvin, t_max=300 * unit.kelvin,
                           storage_file=reporter, minimisation_steps=0, endstates=True)
@@ -279,7 +279,7 @@ def test_RESTCapableHybridTopologyFactory_repex_neutral_transformation():
                     constraint_tolerance=1e-06),
                 replica_mixing_scheme='swap-all',
                 hybrid_factory=htf,
-                online_analysis_interval=None)
+            )
 
             sampler.setup(
                 n_states=n_states,
@@ -394,7 +394,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
                         constraint_tolerance=1e-06),
                     replica_mixing_scheme='swap-all',
                     hybrid_factory=htf,
-                    online_analysis_interval=None)
+                )
 
                 sampler.setup(
                     n_states=n_states,

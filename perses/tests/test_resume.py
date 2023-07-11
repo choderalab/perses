@@ -1,7 +1,6 @@
 import logging
 import os
 import subprocess
-import tempfile
 
 import pytest
 import simtk.openmm.app as app
@@ -20,7 +19,9 @@ from perses.tests.utils import enter_temp_directory
 
 
 @pytest.mark.gpu_ci
-def test_cli_resume_repex():
+@pytest.mark.parametrize("input_params", ["input_template_obj_default_selection",
+                                          "input_template_not_water_selection"])
+def test_cli_resume_repex(input_params, request):
 
     with enter_temp_directory() as temp_dir:
         os.chdir(temp_dir)
@@ -33,34 +34,7 @@ def test_cli_resume_repex():
             os.path.join("data", "cdk2-example", "CDK2_ligands_shifted.sdf"),
         )
 
-        document = """
-        atom_selection: not water
-        checkpoint_interval: 5
-        fe_type: repex
-        forcefield_files:
-        - amber/ff14SB.xml
-        - amber/tip3p_standard.xml
-        - amber/tip3p_HFE_multivalent.xml
-        - amber/phosaa10.xml
-        n_cycles: 10
-        n_equilibration_iterations: 10
-        n_states: 3
-        n_steps_per_move_application: 50
-        new_ligand_index: 15
-        old_ligand_index: 14
-        phases:
-        - vacuum
-        pressure: 1.0
-        save_setup_pickle_as: fesetup_hbonds.pkl
-        small_molecule_forcefield: openff-2.0.0
-        solvent_padding: 9.0
-        temperature: 300.0
-        timestep: 4.0
-        trajectory_directory: cdk2_repex_hbonds
-        trajectory_prefix: cdk2
-        """
-
-        y_doc = yaml.load(document, Loader=yaml.UnsafeLoader)
+        y_doc = request.getfixturevalue(input_params)
         y_doc["protein_pdb"] = protein_pdb
         y_doc["ligand_file"] = ligand_file
 
