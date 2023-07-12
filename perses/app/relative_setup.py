@@ -21,8 +21,6 @@ import mdtraj as md
 from openmmtools.constants import kB
 import logging
 import os
-import dask.distributed as distributed
-from collections import namedtuple
 from collections import namedtuple
 import random
 from scipy.special import logsumexp
@@ -72,6 +70,7 @@ class RelativeFEPSetup(object):
                  use_given_geometries = False,
                  given_geometries_tolerance=0.2*unit.angstroms,
                  transform_waters_into_ions_for_charge_changes=True,
+                 solvent_model="tip3p"
                  ):
         """
         Initialize a NonequilibriumFEPSetup object
@@ -160,6 +159,7 @@ class RelativeFEPSetup(object):
         self._use_given_geometries = use_given_geometries
         self._given_geometries_tolerance = given_geometries_tolerance
         self.small_molecule_forcefield = small_molecule_forcefield
+        self._solvent_model = solvent_model
         if isinstance(ligand_input, str):
             self._ligand_input = AnyPath(ligand_input)
         else:
@@ -408,7 +408,9 @@ class RelativeFEPSetup(object):
             _logger.info(f"setting up complex phase...")
             self._setup_complex_phase()
             self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(
-            self._complex_topology_old, self._complex_positions_old,phase='complex',box_dimensions=self._complex_box_dimensions, ionic_strength=self._ionic_strength)
+                self._complex_topology_old, self._complex_positions_old, phase='complex',
+                box_dimensions=self._complex_box_dimensions, ionic_strength=self._ionic_strength,
+                model=self._solvent_model)
             _logger.info(f"successfully generated complex topology, positions, system")
 
             self._complex_md_topology_old_solvated = md.Topology.from_openmm(self._complex_topology_old_solvated)
@@ -466,7 +468,9 @@ class RelativeFEPSetup(object):
                 _logger.info(f"no complex detected in phases...generating unique topology/geometry proposals...")
                 _logger.info(f"solvating ligand...")
                 self._ligand_topology_old_solvated, self._ligand_positions_old_solvated, self._ligand_system_old_solvated = self._solvate_system(
-                self._ligand_topology_old, self._ligand_positions_old,phase='solvent',box_dimensions=self._solvent_box_dimensions,ionic_strength=self._ionic_strength)
+                    self._ligand_topology_old, self._ligand_positions_old, phase='solvent',
+                    box_dimensions=self._solvent_box_dimensions, ionic_strength=self._ionic_strength,
+                    model=self._solvent_model)
                 self._ligand_md_topology_old_solvated = md.Topology.from_openmm(self._ligand_topology_old_solvated)
 
                 _logger.info(f"creating TopologyProposal")
@@ -532,8 +536,10 @@ class RelativeFEPSetup(object):
 
             if self._proposal_phase is None:
                 _logger.info('No complex or solvent leg, so performing topology proposal for vacuum leg')
-                self._vacuum_topology_old, self._vacuum_positions_old, self._vacuum_system_old = self._solvate_system(self._ligand_topology_old,
-                                                                                                         self._ligand_positions_old,phase='vacuum')
+                # FIXME: We shouldn't use a "solvate" system method for the vacuum phase. Separate functionalities.
+                self._vacuum_topology_old, self._vacuum_positions_old, self._vacuum_system_old = self._solvate_system(
+                    self._ligand_topology_old,
+                    self._ligand_positions_old, phase='vacuum', model=self._solvent_model)
                 self._vacuum_topology_proposal = self._proposal_engine.propose(self._vacuum_system_old,
                                                                                self._vacuum_topology_old,
                                                                                current_mol_id=0, proposed_mol_id=1)
@@ -666,7 +672,8 @@ class RelativeFEPSetup(object):
 
         # solvate the old ligand topology:
         old_solvated_topology, old_solvated_positions, old_solvated_system = self._solvate_system(
-            old_ligand_topology.to_openmm(), old_ligand_positions,phase='solvent', box_dimensions=self._solvent_box_dimensions)
+            old_ligand_topology.to_openmm(), old_ligand_positions, phase='solvent',
+            box_dimensions=self._solvent_box_dimensions, model=self._solvent_model)
 
         old_solvated_md_topology = md.Topology.from_openmm(old_solvated_topology)
 
@@ -826,7 +833,7 @@ class RelativeFEPSetup(object):
         forcefield : SystemGenerator.forcefield
             forcefield file of solvent to add
         model : str, default 'tip3p'
-            solvent model to use for solvation
+            solvent model to use for solvation. Supported values are 'tip3p', 'spce', 'tip4pew', 'tip5p', and 'swm4ndp' (polarizable)
         box_dimensions : tuple of Vec3, default None
             if not None, padding distance will be omitted in favor of a pre-specified set of box dimensions
 
@@ -971,6 +978,7 @@ class DaskClient(object):
                         LSF = True,
                         num_processes = 2,
                         adapt = False):
+        import dask.distributed as distributed
 
         if LSF:
             from dask_jobqueue import LSFCluster
@@ -1056,6 +1064,7 @@ class DaskClient(object):
         """
         wrapper to wait until futures are complete.
         """
+        import dask.distributed as distributed
         if self.client is None:
             pass
         else:
