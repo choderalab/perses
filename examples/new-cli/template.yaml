@@ -67,7 +67,7 @@ trajectory_directory: lig0to1
 trajectory_prefix: out
 
 # Atoms to store in NetCDF files (MDTraj selection syntax)
-atom_selection: not water
+atom_selection: null
 
 # Calculation phases to run
 # Permitted phases: ['complex', 'solvent', 'vacuum']
@@ -78,3 +78,6 @@ phases:
 # Use geometry-derived mapping
 use_given_geometries: true
 given_geometries_tolerance: 0.4 # angstroms
+
+# Solvent model
+solvent_model: "tip3p"
