@@ -1,6 +1,6 @@
 import os
 
-import pymbar
+from openmmtools.multistate.pymbar import _pymbar_bar
 import pytest
 from perses.tests.utils import enter_temp_directory
 
@@ -195,7 +195,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_mutation():
         arg_lys_diff_error = np.sqrt(arg_fe_error + lys_fe_error)
 
         print(f"DDG: {arg_lys_diff}, 6*dDDG: {6 * arg_lys_diff_error}")  # debug control print
-        assert arg_lys_diff < 6 * arg_lys_diff_error, (f"DDG ({arg_lys_diff}) is greater than " 
+        assert arg_lys_diff < 6 * arg_lys_diff_error, (f"DDG ({arg_lys_diff}) is greater than "
                                                        f"6 * dDDG ({6 * arg_lys_diff_error})")
 
 
@@ -416,7 +416,7 @@ def test_RESTCapableHybridTopologyFactory_repex_charge_transformation():
                 # Extract uncorrelated energy matrix (u_ln) and samples from states (N_l)
                 energy_matrix, samples_per_state = analyzer._compute_mbar_decorrelated_energies()
                 # Compute free energies with boostrapping using pymbar
-                mbar = pymbar.MBAR(energy_matrix, samples_per_state, nbootstraps=200)
+                mbar = _pymbar_bar(energy_matrix, samples_per_state, nbootstraps=200)
                 f_ij, df_ij = mbar.getFreeEnergyDifferences(uncertainty_method="bootstrap", return_theta=False)
 
                 data[f"{ligand_A_index}-{ligand_B_index}_{phase}"] = {'free_energy': f_ij[0, -1], 'error': df_ij[0, -1]}
