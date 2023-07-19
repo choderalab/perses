@@ -47,5 +47,3 @@ dependencies:
   - sphinx
   - tinydb
   - tqdm
-  - pip:
-    - git+https://github.com/choderalab/openmmtools.git
