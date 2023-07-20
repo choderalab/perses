@@ -13,8 +13,6 @@ on:
   push:
     branches:
       - feat/improve_docker_building
-    tags:
-      - '*'  # Build on pushes with tags (unless they contain a / )
   workflow_dispatch:
 
 defaults:
