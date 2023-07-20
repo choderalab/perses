@@ -2,7 +2,7 @@ from cloudpathlib import AnyPath
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from pymbar import BAR
+from openmmtools.multistate.pymbar import _pymbar_bar
 import matplotlib.pyplot as plt
 import seaborn
 from simtk.openmm import unit
@@ -160,7 +160,7 @@ def free_energies(
                 f"less than {min_num_work_values} reverse work values (got {len(r_works)})"
             )
 
-        fe, err = bootstrap_uncorrelated(BAR, n_iters=n_bootstrap)(
+        fe, err = bootstrap_uncorrelated(_pymbar_bar, n_iters=n_bootstrap)(
             f_works.values, r_works.values
         )
 
@@ -227,7 +227,7 @@ def free_energies(
             axes[i].set_title(phase)
 
             # TODO add bootstrapping here
-            d[f"{phase}_fes"] = BAR(np.asarray(all_forward), np.asarray(all_reverse))
+            d[f"{phase}_fes"] = _pymbar_bar(np.asarray(all_forward), np.asarray(all_reverse))
 
         for i, phase in enumerate(projects.keys()):
             try:
