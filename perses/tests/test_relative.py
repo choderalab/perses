@@ -19,9 +19,8 @@ import openmmtools.cache as cache
 from openmmtools.integrators import LangevinIntegrator
 from unittest import skipIf
 
-import pymbar.timeseries as timeseries
+from openmmtools.multistate.pymbar import _pymbar_exp, detect_equilibration
 import pytest
-import pymbar
 
 running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
@@ -100,9 +99,9 @@ def calculate_cross_variance(all_results):
         non_b = all_results[2]
         hybrid_b = all_results[3]
     print('CROSS VALIDATION')
-    [df, ddf] = pymbar.EXP(non_a - hybrid_b)
+    [df, ddf] = _pymbar_exp(non_a - hybrid_b)
     print('df: {}, ddf: {}'.format(df, ddf))
-    [df, ddf] = pymbar.EXP(non_b - hybrid_a)
+    [df, ddf] = _pymbar_exp(non_b - hybrid_a)
     print('df: {}, ddf: {}'.format(df, ddf))
     return
 
@@ -395,9 +394,9 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
         md.Trajectory(nonalchemical_trajectory / unit.nanometers, nonalchemical_mdtraj_topology).save(f'nonalchemical{lambda_index}.pdb')
 
     # Analyze data and return results
-    [t0, g, Neff_max] = timeseries.detectEquilibration(w)
+    [t0, g, Neff_max] = detect_equilibration(w)
     w_burned_in = w[t0:]
-    [df, ddf] = pymbar.EXP(w_burned_in)
+    [df, ddf] = _pymbar_exp(w_burned_in)
     ddf_corrected = ddf * np.sqrt(g)
     results = [df, ddf_corrected, t0, Neff_max]
 
