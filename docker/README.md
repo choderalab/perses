@@ -1,6 +1,6 @@
 # Perses Container
 
-The container can be downloaded with `docker pull choderalab/perses:0.9.2`
+The container can be downloaded with `docker pull ghcr.io/choderalab/perses:latest`
 
 ## OpenEye License
 
@@ -11,7 +11,7 @@ To do that use the `--mount` option.
 For example, if you have an `oe_license.txt` file in `$HOME/.OpenEye/`.
 
 ```
-$ docker run --rm --mount type=bind,source=$HOME/.OpenEye/,target=/openeye/,readonly choderalab/perses:0.9.2 python -c "import openeye; assert openeye.oechem.OEChemIsLicensed(), 'OpenEye license checks failed!'"
+$ docker run --rm --mount type=bind,source=$HOME/.OpenEye/,target=/openeye/,readonly ghcr.io/choderalab/perses:latest python -c "import openeye; assert openeye.oechem.OEChemIsLicensed(), 'OpenEye license checks failed!'"
 ```
 
 There is also an example file `Dockerfile-add-license` if you want to build a new container with the openeye license file inside it.
@@ -23,7 +23,7 @@ Anyone with access to the container can extract the license.
 Pass the option `--gpus device=0` to use the host's GPU:
 
 ```
-$ docker run -it --rm --gpus device=0 --mount type=bind,source=$HOME/.OpenEye/,target=/openeye/,readonly choderalab/perses:0.9.2 python -m simtk.testInstallation
+$ docker run -it --rm --gpus device=0 --mount type=bind,source=$HOME/.OpenEye/,target=/openeye/,readonly ghcr.io/choderalab/perses:latest python -m simtk.testInstallation
 OpenMM Version: 7.5.1
 Git Revision: a9cfd7fb9343e21c3dbb76e377c721328830a3ee
 
@@ -43,6 +43,18 @@ All differences are within tolerance.
 ```
 Note: `perses` currently works best on a single GPU. 
 See the documentation [here](https://docs.docker.com/config/containers/resource_constraints/#access-an-nvidia-gpu) for how to specify a single GPU on a multi-GPU system.
+
+## Apptainer (formally singularity) image
+
+The apptainer image is pre-built and can be pulled with:
+
+singularity pull oras://ghcr.io/choderalab/perses:latest-apptainer
+
+And can be used like:
+
+```
+$ singularity run --nv perses_latest-apptainer.sif python -m openmm.testInstallation
+```
 
 ## Running perses examples from the container in GPUs using CUDA
 
