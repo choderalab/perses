@@ -128,7 +128,7 @@ jobs:
           mkdir test_apptainer
           cd test_apptainer
           singularity run ../perses_${{ steps.latest-version.outputs.VERSION }}.sif perses-cli --help
-          singularity run --bind $PWD/oe_license_dir/:/openeye/ --env "GITHUB_ACTIONS=true" ../perses_${{ steps.latest-version.outputs.VERSION }}.sif pytest --pyargs perses -a "not advanced" -n auto -m "not gpu_needed" -v
+          singularity run --bind ../oe_license_dir/:/openeye/ --env "GITHUB_ACTIONS=true" ../perses_${{ steps.latest-version.outputs.VERSION }}.sif pytest --pyargs perses -a "not advanced" -n auto -m "not gpu_needed" -v
           echo ${{ secrets.GITHUB_TOKEN }} | singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://ghcr.io
           singularity push ../perses_${{ steps.latest-version.outputs.VERSION }}.sif oras://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.latest-version.outputs.VERSION }}-apptainer
           singularity push ../perses_${{ steps.latest-version.outputs.VERSION }}.sif oras://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-apptainer
