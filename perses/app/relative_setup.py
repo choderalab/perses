@@ -587,8 +587,8 @@ class RelativeFEPSetup(object):
                 self._vacuum_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
             self._vacuum_geometry_engine = copy.deepcopy(self._geometry_engine)
 
-        # Serialize topologies and positions in PDB files
-        self._serialize_topologies()
+        # Store topologies and positions in PDB files
+        self._store_topologies()
 
     def _setup_complex_phase(self):
         """
@@ -930,41 +930,39 @@ class RelativeFEPSetup(object):
             # modify the topology proposal
             modify_atom_classes(new_water_indices_to_ionize, topology_proposal)
 
-    def _serialize_topologies(self):
+    def _store_topologies(self):
         """
-        Serializes topologies and positions as PDB files.
+        Stores solvated topologies and positions in PDB files.
 
         Notes
         -----
-        - The topologies and positions are serialized in the specified directory using the specified prefix.
+        - The topologies and positions are stored in the specified directory using the global trajectory prefix.
         - The directory will be created if it doesn't already exist.
         - The topologies and positions are stored as PDB files in the "models" subdirectory of the trajectory directory.
-        - The following topologies and positions are serialized:
+        - The following solvated topologies and positions are stored:
             - "solvent_old": old solvent topology and positions
-            - "solvent_old_solvated": old solvated solvent topology and positions
             - "solvent_new": new solvent topology and positions
             - "complex_old": old complex topology and positions
-            - "complex_old_solvated": old solvated complex topology and positions
             - "complex_new": new complex topology and positions
-        - Both the trajectory directory and trajectory prefix need to be provided in order to serialize the topologies.
+        - Both the trajectory directory and trajectory prefix need to be provided in order to store the topologies.
         - If any of the directories or files already exist, they will be overwritten.
 
         Usage
         -----
-        To serialize the topologies and positions, make sure to set the `trajectory_directory` and `trajectory_prefix`
+        To store the topologies and positions, make sure to set the `trajectory_directory` and `trajectory_prefix`
         attributes before calling this method.
         """
         from openmm.app import PDBFile
         if self._trajectory_directory is not None and self._trajectory_prefix is not None:
             topologies_to_serialize = {
-                "solvent_old": {"topology": self._ligand_topology_old, "positions": self._ligand_positions_old},
-                "solvent_old_solvated": {"topology": self._ligand_topology_old_solvated,
-                                         "positions": self._ligand_positions_old_solvated},
-                "solvent_new": {"topology": self._ligand_topology_new, "positions": self._ligand_positions_new},
-                "complex_old": {"topology": self._complex_topology_old, "positions": self._complex_positions_old},
-                "complex_old_solvated": {"topology": self._complex_topology_old_solvated,
-                                         "positions": self._complex_positions_old_solvated},
-                "complex_new": {"topology": self._complex_topology_new, "positions": self._complex_positions_new}}
+                "solvent_old": {"topology": self.solvent_topology_proposal.old_topology,
+                                "positions": self.solvent_old_positions},
+                "solvent_new": {"topology": self.solvent_topology_proposal.new_topology,
+                                "positions": self.solvent_new_positions},
+                "complex_old": {"topology": self.complex_topology_proposal.old_topology,
+                                "positions": self.complex_old_positions},
+                "complex_new": {"topology": self.complex_topology_proposal.new_topology,
+                                "positions": self.complex_new_positions}}
             # Serialize in "models" subdir -- create if doesn't exist
             models_path = f"{self._trajectory_directory}/models"
             if not os.path.exists(models_path):
@@ -974,9 +972,9 @@ class RelativeFEPSetup(object):
                 with open(pdb_filename, 'w') as outfile:
                     PDBFile.writeFile(phase_data["topology"], phase_data["positions"], outfile)
         else:
-            _logger.info(
-                'Not serializing topologies. Both trajectory_directory and trajectory_prefix need to be provided to '
-                'store topology .pdb files')
+            _logger.warning(
+                'Not storing topologies. Both trajectory_directory and trajectory_prefix arguments need to'
+                ' be provided to store topology .pdb files.')
 
 
 
