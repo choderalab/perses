@@ -406,10 +406,12 @@ def test_relative_setup_topologies_storage(tmp_path):
     )
 
     expected_files = [
+        'host-guest_vacuum_old.pdb',
+        'host-guest_vacuum_new.pdb',
         'host-guest_solvent_old.pdb',
         'host-guest_solvent_new.pdb',
         'host-guest_complex_old.pdb',
-        'host-guest_complex_new.pdb'
+        'host-guest_complex_new.pdb',
     ]
     for file in expected_files:
         pdb_filename = f"{tmp_path}/models/{file}"
