@@ -70,7 +70,6 @@ jobs:
           extra-specs: |
             python==${{ matrix.python-version }}
             openmm==${{ matrix.openmm }}
-            openmmtools==0.23.0
 
       - name: Install package
         shell: bash -l {0}
@@ -106,4 +105,4 @@ jobs:
         uses: codecov/codecov-action@v1
         with:
           file: ./coverage.xml
-          fail_ci_if_error: true
+          fail_ci_if_error: false
