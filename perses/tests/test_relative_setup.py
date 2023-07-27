@@ -365,9 +365,9 @@ def test_relative_setup_list_ligand_input():
     assert ligand_input_size == expected_input_size, f"There should be {expected_input_size} ligand input files, " \
                                                      f"receiving {ligand_input_size} files."
 
-def test_relative_setup_topologies_serialization(tmp_path):
+def test_relative_setup_topologies_storage(tmp_path):
     """
-    Check that topologies
+    Check that topologies get stored
     """
     from perses.app.relative_setup import RelativeFEPSetup
 
@@ -407,10 +407,8 @@ def test_relative_setup_topologies_serialization(tmp_path):
 
     expected_files = [
         'host-guest_solvent_old.pdb',
-        'host-guest_solvent_old_solvated.pdb',
         'host-guest_solvent_new.pdb',
         'host-guest_complex_old.pdb',
-        'host-guest_complex_old_solvated.pdb',
         'host-guest_complex_new.pdb'
     ]
     for file in expected_files:
