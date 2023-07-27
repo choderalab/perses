@@ -88,12 +88,14 @@ def _test_platform(platform_name):
 def cli(yaml, platform_name, override):
     """Run perses relative free energy calculation."""
     from perses.app.setup_relative_calculation import run
+    from perses import __version__ as perses_version
     logging.basicConfig(
         format="%(asctime)s %(levelname)-8s %(message)s",
         level=LOGLEVEL,
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     click.echo(click.style(percy, fg="bright_magenta"))
+    click.echo(f"Running perses version: {perses_version}")
     if override:
         click.echo("✍️ \t Overrides used")
     click.echo("🕵️\t Checking OpenEye license")

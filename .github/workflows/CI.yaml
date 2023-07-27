@@ -5,12 +5,14 @@ on:
   pull_request:
     branches:
       - "main"
+      - "0.10.*"
   schedule:
     # nightly tests
     - cron: "0 0 * * *"
   push:
     branches:
       - main
+      - "0.10.x"
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
