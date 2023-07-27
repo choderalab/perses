@@ -924,8 +924,10 @@ class RelativeFEPSetup(object):
 
     def _store_phase_topologies(self, phase: str):
         """
-        Stores topologies and positions in PDB file for the given the phase. Stores both solvent and solute
-        whenever possible (only "solute" in vacuum).
+        Stores topologies and positions in PDB file for the given the phase, for both the initial (old) and final (new)
+        states. Stores both solvent and solute whenever possible (only "solute" in vacuum).
+
+        Generates two PDB files, one for each state (old/new).
 
         Notes
         -----
