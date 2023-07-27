@@ -461,6 +461,9 @@ class RelativeFEPSetup(object):
             else:
                 _logger.info("Skipping counterion")
 
+            # Store phase topology and positions in PDB file
+            self._store_phase_topologies(phase="complex")
+
 
         if 'solvent' in phases:
             _logger.info(f"Detected solvent...")
@@ -520,6 +523,9 @@ class RelativeFEPSetup(object):
                                             new_positions=self._ligand_positions_new_solvated)
             else:
                 _logger.info("Skipping counterion")
+
+            # Store phase topology and positions in PDB file
+            self._store_phase_topologies(phase="solvent")
 
         if 'vacuum' in phases:
             _logger.info(f"Detected solvent...")
@@ -586,9 +592,8 @@ class RelativeFEPSetup(object):
                 self._vacuum_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
                 self._vacuum_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
             self._vacuum_geometry_engine = copy.deepcopy(self._geometry_engine)
-
-        # Store topologies and positions in PDB files
-        self._store_topologies()
+            # Store phase topology and positions in PDB file
+            self._store_phase_topologies(phase="vacuum")
 
     def _setup_complex_phase(self):
         """
@@ -917,22 +922,18 @@ class RelativeFEPSetup(object):
             # modify the topology proposal
             modify_atom_classes(new_water_indices_to_ionize, topology_proposal)
 
-    def _store_topologies(self):
+    def _store_phase_topologies(self, phase: str):
         """
-        Stores solvated topologies and positions in PDB files.
+        Stores topologies and positions in PDB file for the given the phase. Stores both solvent and solute
+        whenever possible (only "solute" in vacuum).
 
         Notes
         -----
         - The topologies and positions are stored in the specified directory using the global trajectory prefix.
         - The directory will be created if it doesn't already exist.
         - The topologies and positions are stored as PDB files in the "models" subdirectory of the trajectory directory.
-        - The following solvated topologies and positions are stored:
-            - "solvent_old": old solvent topology and positions
-            - "solvent_new": new solvent topology and positions
-            - "complex_old": old complex topology and positions
-            - "complex_new": new complex topology and positions
         - Both the trajectory directory and trajectory prefix need to be provided in order to store the topologies.
-        - If any of the directories or files already exist, they will be overwritten.
+        - If any of the directories or files already exist, they will get overwritten.
 
         Usage
         -----
@@ -941,21 +942,31 @@ class RelativeFEPSetup(object):
         """
         from openmm.app import PDBFile
         if self._trajectory_directory is not None and self._trajectory_prefix is not None:
-            topologies_to_serialize = {
-                "solvent_old": {"topology": self.solvent_topology_proposal.old_topology,
-                                "positions": self.solvent_old_positions},
-                "solvent_new": {"topology": self.solvent_topology_proposal.new_topology,
-                                "positions": self.solvent_new_positions},
-                "complex_old": {"topology": self.complex_topology_proposal.old_topology,
-                                "positions": self.complex_old_positions},
-                "complex_new": {"topology": self.complex_topology_proposal.new_topology,
-                                "positions": self.complex_new_positions}}
-            # Serialize in "models" subdir -- create if doesn't exist
+            if phase == "complex":
+                topology_proposal = self.complex_topology_proposal
+                old_positions = self.complex_old_positions
+                new_positions = self.complex_new_positions
+            elif phase == "solvent":
+                topology_proposal = self.solvent_topology_proposal
+                old_positions = self.solvent_old_positions
+                new_positions = self.solvent_new_positions
+            elif phase == "vacuum":
+                topology_proposal = self.vacuum_topology_proposal
+                old_positions = self.vacuum_old_positions
+                new_positions = self.vacuum_new_positions
+
+            topologies_to_store = {
+                f"{phase}_old": {"topology": topology_proposal.old_topology,
+                                "positions": old_positions},
+                f"{phase}_new": {"topology": topology_proposal.new_topology,
+                                "positions": new_positions},
+            }
+            # Store in "models" subdir -- create if doesn't exist
             models_path = f"{self._trajectory_directory}/models"
             if not os.path.exists(models_path):
                 os.makedirs(models_path)
-            for phase, phase_data in topologies_to_serialize.items():
-                pdb_filename = AnyPath(f"{models_path}/{self._trajectory_prefix}_{phase}.pdb")
+            for phase_key, phase_data in topologies_to_store.items():
+                pdb_filename = AnyPath(f"{models_path}/{self._trajectory_prefix}_{phase_key}.pdb")
                 with open(pdb_filename, 'w') as outfile:
                     PDBFile.writeFile(phase_data["topology"], phase_data["positions"], outfile)
         else:
