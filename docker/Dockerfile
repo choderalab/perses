@@ -18,7 +18,7 @@ USER $MAMBA_USER
 # https://docs.python.org/3/using/cmdline.html#cmdoption-u
 ENV PYTHONUNBUFFERED=1
 
-RUN micromamba install -y -n base -c conda-forge -c openeye openeye-toolkits git pytest-xdist pytest-attrib mmpi4py piplus "perses==$VERSION" cudatoolkit=11.2 && \
+RUN micromamba install -y -n base -c conda-forge -c openeye openeye-toolkits git pytest-xdist pytest-attrib mpiplus mpich mpi mpi4py clusterutils  "perses==$VERSION" cudatoolkit=11.2 && \
     micromamba clean --all --yes
 
 # Make directory and tell openeye where to find
