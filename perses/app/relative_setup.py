@@ -461,6 +461,9 @@ class RelativeFEPSetup(object):
             else:
                 _logger.info("Skipping counterion")
 
+            # Store phase topology and positions in PDB file
+            self._store_phase_topologies(phase="complex")
+
 
         if 'solvent' in phases:
             _logger.info(f"Detected solvent...")
@@ -520,6 +523,9 @@ class RelativeFEPSetup(object):
                                             new_positions=self._ligand_positions_new_solvated)
             else:
                 _logger.info("Skipping counterion")
+
+            # Store phase topology and positions in PDB file
+            self._store_phase_topologies(phase="solvent")
 
         if 'vacuum' in phases:
             _logger.info(f"Detected solvent...")
@@ -586,6 +592,8 @@ class RelativeFEPSetup(object):
                 self._vacuum_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
                 self._vacuum_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
             self._vacuum_geometry_engine = copy.deepcopy(self._geometry_engine)
+            # Store phase topology and positions in PDB file
+            self._store_phase_topologies(phase="vacuum")
 
     def _setup_complex_phase(self):
         """
@@ -847,7 +855,6 @@ class RelativeFEPSetup(object):
             The parameterized system, containing a barostat if one was specified.
         """
         # DEBUG: Write PDB file being fed into Modeller to check why MOL isn't being matched
-        from simtk.openmm.app import PDBFile
         modeller = app.Modeller(topology, positions)
         # retaining protein protonation from input files
         #hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
@@ -880,13 +887,6 @@ class RelativeFEPSetup(object):
         _logger.info(f"\tparameterizing...")
         solvated_system = self._system_generator.create_system(solvated_topology)
         _logger.info(f"\tSystem parameterized")
-
-        if self._trajectory_directory is not None and self._trajectory_prefix is not None:
-            pdb_filename = AnyPath(f"{self._trajectory_directory}/{self._trajectory_prefix}-{phase}.pdb")
-            with open(pdb_filename, 'w') as outfile:
-                PDBFile.writeFile(solvated_topology, solvated_positions, outfile)
-        else:
-            _logger.info('Both trajectory_directory and trajectory_prefix need to be provided to save .pdb')
 
         return solvated_topology, solvated_positions, solvated_system
 
@@ -921,6 +921,62 @@ class RelativeFEPSetup(object):
 
             # modify the topology proposal
             modify_atom_classes(new_water_indices_to_ionize, topology_proposal)
+
+    def _store_phase_topologies(self, phase: str):
+        """
+        Stores topologies and positions in PDB file for the given the phase, for both the initial (old) and final (new)
+        states. Stores both solvent and solute whenever possible (only "solute" in vacuum).
+
+        Generates two PDB files, one for each state (old/new).
+
+        Notes
+        -----
+        - The topologies and positions are stored in the specified directory using the global trajectory prefix.
+        - The directory will be created if it doesn't already exist.
+        - The topologies and positions are stored as PDB files in the "models" subdirectory of the trajectory directory.
+        - Both the trajectory directory and trajectory prefix need to be provided in order to store the topologies.
+        - If any of the directories or files already exist, they will get overwritten.
+
+        Usage
+        -----
+        To store the topologies and positions, make sure to set the `trajectory_directory` and `trajectory_prefix`
+        attributes before calling this method.
+        """
+        from openmm.app import PDBFile
+        if self._trajectory_directory is not None and self._trajectory_prefix is not None:
+            if phase == "complex":
+                topology_proposal = self.complex_topology_proposal
+                old_positions = self.complex_old_positions
+                new_positions = self.complex_new_positions
+            elif phase == "solvent":
+                topology_proposal = self.solvent_topology_proposal
+                old_positions = self.solvent_old_positions
+                new_positions = self.solvent_new_positions
+            elif phase == "vacuum":
+                topology_proposal = self.vacuum_topology_proposal
+                old_positions = self.vacuum_old_positions
+                new_positions = self.vacuum_new_positions
+
+            topologies_to_store = {
+                f"{phase}_old": {"topology": topology_proposal.old_topology,
+                                "positions": old_positions},
+                f"{phase}_new": {"topology": topology_proposal.new_topology,
+                                "positions": new_positions},
+            }
+            # Store in "models" subdir -- create if doesn't exist
+            models_path = f"{self._trajectory_directory}/models"
+            if not os.path.exists(models_path):
+                os.makedirs(models_path)
+            for phase_key, phase_data in topologies_to_store.items():
+                pdb_filename = AnyPath(f"{models_path}/{self._trajectory_prefix}_{phase_key}.pdb")
+                with open(pdb_filename, 'w') as outfile:
+                    PDBFile.writeFile(phase_data["topology"], phase_data["positions"], outfile)
+        else:
+            _logger.warning(
+                'Not storing topologies. Both trajectory_directory and trajectory_prefix arguments need to'
+                ' be provided to store topology .pdb files.')
+
+
 
     @property
     def complex_topology_proposal(self):
