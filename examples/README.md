@@ -13,4 +13,4 @@ each subdirectory.
 * [`dipeptide-neq-switching`](dipeptide-neq-switching) - Alanine dipeptide mutation using NEQ switching.
 * [`kinase-neq-switching`](kinase-neq-switching) - NTKR1 kinase protein-ligand FE simulation using NEQ cycling
 * [`moonshot-mainseries`](moonshot-mainseries) - Scripts used to prepare simulations to run with perses CLI for the COVID Moonshot
-* [`protein-ligand-repex`](protein-ligand-repex) - Tyk2 protein-ligand benchmark Replica Exchange simulation examples, using both perses CLI and its pythonic API.
+* [`protein-ligand-repex`](protein-ligand-repex) - Tyk2 protein-ligand benchmark Replica Exchange simulation examples, using perses CLI.
