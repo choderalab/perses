@@ -197,7 +197,7 @@ def to_arsenic_csv(experimental_data: dict, simulation_data: list, out_csv: str 
 # Defining command line arguments
 # fetching targets from github repo
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-targets_url = f"{base_repo_url}/raw/main/data/targets.yml"
+targets_url = f"{base_repo_url}/raw/main/data/targets.yml"  # Assuming main has the right targets info
 with urllib.request.urlopen(targets_url) as response:
     targets_dict = yaml.safe_load(response.read())
 # get the possible choices from targets yaml file
