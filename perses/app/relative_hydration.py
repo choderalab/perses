@@ -108,8 +108,8 @@ def check_alchemical_hybrid_elimination_bar(topology_proposal, old_positions, ne
         bar.update(i)
     del reverse_context, reverse_integrator
 
-    from pymbar import BAR
-    [df, ddf] = BAR(w_f, w_r)
+    from openmmtools.multistate.pymbar import _pymbar_bar
+    [df, ddf] = _pymbar_bar(w_f, w_r)
     print("df = %12.6f +- %12.5f kT" % (df, ddf))
 
 
