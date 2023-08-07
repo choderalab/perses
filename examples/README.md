@@ -8,7 +8,7 @@ Subdirectories
 The examples are organized in subdirectories as follows. More information on each example in the `README` files inside
 each subdirectory.
 
-* [`atom_mapping`](atom_mapping) - Notebooks and script with examples on how to use perses atom mapping capabilities.
+* [`atom-mapping`](atom-mapping) - Notebooks and script with examples on how to use perses atom mapping capabilities.
 * [`barnase-barstar-neq-switching`](barnase-barstar-neq-switching) - FE estimate using NEQ switching in protein:protein barnase-barnase complex.
 * [`dipeptide-neq-switching`](dipeptide-neq-switching) - Alanine dipeptide mutation using NEQ switching.
 * [`kinase-neq-switching`](kinase-neq-switching) - NTKR1 kinase protein-ligand FE simulation using NEQ cycling
