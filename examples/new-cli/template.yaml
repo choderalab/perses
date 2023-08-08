@@ -26,6 +26,9 @@ forcefield_files:
 # e.g. one of ['openff-2.0.0', 'gaff-2.11']
 small_molecule_forcefield: openff-2.0.0
 
+# Solvent model
+solvent_model: "tip3p"
+
 #
 # Simulation conditions
 #
@@ -36,6 +39,7 @@ pressure: 1 # atmsopheres
 temperature: 300 # kelvin
 timestep: 4 # femtoseconds
 ionic_strength: 0.15 # molar
+
 
 # Atom mapping specification
 atom_expression:
@@ -79,5 +83,12 @@ phases:
 use_given_geometries: true
 given_geometries_tolerance: 0.4 # angstroms
 
-# Solvent model
-solvent_model: "tip3p"
+# Realtime analysis frequency
+offline-freq: 100
+
+# Advanced (optional) -- Specify HTF (HybridTopologyFactory or RESTCapableHybridTopologyFactory)
+#hybrid_topology_factory: RESTCapableHybridTopologyFactory
+# REST specific parameters (optional)
+#max_temperature: 600  # Kelvin
+#rest_radius: 0.3  # nanometers
+#w_lifting: 0.3  # nanometers

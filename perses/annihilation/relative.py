@@ -2833,14 +2833,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     _new_system_exceptions : dict of key: tuple of ints, value: list of floats
         key: new system indices of the atoms in the exception, value: chargeProd (units of the proton charge squared), sigma (nm), and epsilon (kJ/mol) for the exception
     """
-    
-    # Constants copied from: https://github.com/openmm/openmm/blob/master/platforms/reference/include/SimTKOpenMMRealType.h#L89. These will be imported directly once we have addresssed https://github.com/choderalab/openmmtools/issues/522
-    M_PI = 3.14159265358979323846
-    E_CHARGE = (1.602176634e-19)
-    AVOGADRO = (6.02214076e23)
-    EPSILON0 = (1e-6*8.8541878128e-12/(E_CHARGE*E_CHARGE*AVOGADRO))
-    ONE_4PI_EPS0 = (1/(4*M_PI*EPSILON0))
-    #from openmmtools.constants import ONE_4PI_EPS0
+    from openmmtools.constants import ONE_4PI_EPS0
 
     _default_electrostatics_expression_list = [
 
@@ -3220,8 +3213,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
         # Retrieve neighboring atoms within self._rest_radius nm of the query atoms
         traj = md.Trajectory(np.array(self._hybrid_positions), self._hybrid_topology)
-        solute_atoms = list(traj.topology.select("is_protein"))
+        solute_atoms = list(traj.topology.select("not water"))
         rest_atoms = list(md.compute_neighbors(traj, self._rest_radius.value_in_unit_system(unit.md_unit_system), query_indices, haystack_indices=solute_atoms)[0])
+        # rest_atoms = list(
+        #     md.compute_neighbors(traj, self._rest_radius.value_in_unit_system(unit.md_unit_system), query_indices)[0])
 
         # Retrieve full residues for all atoms in rest region
         residues = [atom.residue.index for atom in traj.topology.atoms if atom.index in rest_atoms]

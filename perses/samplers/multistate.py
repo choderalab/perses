@@ -32,8 +32,40 @@ class HybridCompatibilityMixin(object):
     # TODO: Should this overload the create() method from parent instead of being setup()?
     def setup(self, n_states, temperature, storage_file, minimisation_steps=100,
               n_replicas=None, lambda_schedule=None,
-              lambda_protocol=None, endstates=True, t_max=300 * unit.kelvin):
+              lambda_protocol=None, endstates=True, t_max=None):
+        """
+        Set up the simulation with the specified parameters.
 
+        Parameters:
+        -----------
+        n_states : int
+            The number of alchemical states to simulate.
+        temperature : openmm.unit.Quantity
+            The temperature of the simulation in Kelvin.
+        storage_file : str
+            The path to the storage file to store the simulation results.
+        minimisation_steps : int, optional
+            The number of minimisation steps to perform before simulation. Default is 100.
+        n_replicas : int, optional
+            The number of replicas for replica exchange. If not specified, it will be set to `n_states`.
+        lambda_schedule : array-like, optional
+            The schedule of lambda values for the alchemical states. Default is a linear schedule from 0 to 1.
+        lambda_protocol : object, optional
+            The lambda protocol object that defines the alchemical transformation protocol. Default is None.
+        endstates : bool, optional
+            Whether to generate unsampled endstates. Default is True.
+        t_max : openmm.unit.Quantity, optional
+            The maximum temperature for REST scaling. Default is None.
+
+        Raises:
+        -------
+        ValueError
+            If the hybrid factory name is not supported.
+
+        Returns:
+        --------
+        None
+        """
         from perses.dispersed import feptasks
 
         # Retrieve class name, hybrid system, and hybrid positions
@@ -50,11 +82,15 @@ class HybridCompatibilityMixin(object):
             lambda_zero_alchemical_state = RESTCapableRelativeAlchemicalState.from_system(hybrid_system)
             lambda_protocol = RESTCapableLambdaProtocol() if lambda_protocol is None else lambda_protocol
 
+            # Default to current temperature if t_max is not specified (no REST scaling)
+            if t_max is None:
+                t_max = temperature
+
             # Set beta_0 and beta_m
             beta_0 = 1 / (kB * temperature)
             beta_m = 1 / (kB * t_max)
         else:
-            raise Exception(f"{factory_name} not supported")
+            raise ValueError(f"{factory_name} not supported")
 
         # Create reference compound thermodynamic state
         thermostate = ThermodynamicState(hybrid_system, temperature=temperature)
