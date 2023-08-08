@@ -3213,8 +3213,10 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
         # Retrieve neighboring atoms within self._rest_radius nm of the query atoms
         traj = md.Trajectory(np.array(self._hybrid_positions), self._hybrid_topology)
-        solute_atoms = list(traj.topology.select("is_protein"))
+        solute_atoms = list(traj.topology.select("not water"))
         rest_atoms = list(md.compute_neighbors(traj, self._rest_radius.value_in_unit_system(unit.md_unit_system), query_indices, haystack_indices=solute_atoms)[0])
+        # rest_atoms = list(
+        #     md.compute_neighbors(traj, self._rest_radius.value_in_unit_system(unit.md_unit_system), query_indices)[0])
 
         # Retrieve full residues for all atoms in rest region
         residues = [atom.residue.index for atom in traj.topology.atoms if atom.index in rest_atoms]
