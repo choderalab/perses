@@ -1,6 +1,6 @@
 #!/bin/bash
-#BSUB -P "perses-ripk2"
-#BSUB -J "perses-benchmark-rip2-5ns-[1-14]"
+#BSUB -P "perses-tyk2"
+#BSUB -J "perses-tyk2-5ns-[1-100]"
 #BSUB -n 1
 #BSUB -R rusage[mem=8]
 #BSUB -R span[hosts=1]
@@ -34,7 +34,10 @@ env | sort | grep 'CUDA'
 nvidia-smi -L
 nvidia-smi --query-gpu=name --format=csv
 
-# launching a benchmark pair (target, edge) per job (0-based thus substract 1)
-# python run_benchmarks.py --target tyk2 --edge $(( $LSB_JOBINDEX - 1 ))
-target_ligand=${LSB_JOBINDEX}
-perses-cli --yaml my.yaml --override old_ligand_index:0 --override new_ligand_index:${target_ligand} --override n_cycles:5000 --override trajectory_directory:5ns_lig0to${target_ligand}
+NLIGANDS=14
+old_ligand_index=$(( LSB_JOBINDEX / NLIGANDS ))
+new_ligand_index=$(( LSB_JOBINDEX % NLIGANDS ))
+if (( $old_ligand_index < $new_ligand_index )); then
+    perses-cli --yaml template.yaml --override old_ligand_index:${old_ligand_index} --override new_ligand_index:${new_ligand_index} --override n_cycles:5000 --override trajectory_directory:5ns_lig${old_ligand_index}to${new_ligand_index}
+fi
+

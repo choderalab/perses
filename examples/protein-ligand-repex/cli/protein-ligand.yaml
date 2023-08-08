@@ -1,12 +1,12 @@
 # Path to protein file
-protein_pdb: ripk2_receptor.pdb
+protein_pdb: tyk2_protein.pdb
 
 # Path to ligand SDF file
-ligand_file: ligands.sdf
+ligand_file: tyk2_ligands.sdf
 
 # Indices of old and new ligands within SDF file
 old_ligand_index: 0
-new_ligand_index: 1
+new_ligand_index: 3
 
 #
 # Force fields
@@ -23,8 +23,11 @@ forcefield_files:
 
 # Small molecule force field
 # Options include anything allowed by the openmmforcefields SystemGenerator
-# e.g. one of ['openff-2.0.0', 'gaff-2.11']
-small_molecule_forcefield: openff-2.0.0
+# Examples for this parameter are 'openff-2.1.0', 'gaff-2.11' or 'espaloma-0.3.1'
+small_molecule_forcefield: openff-2.1.0
+
+# Solvent model
+solvent_model: "tip3p"
 
 #
 # Simulation conditions
@@ -32,7 +35,7 @@ small_molecule_forcefield: openff-2.0.0
 
 # Simulation setup options
 solvent_padding: 9.0 # angstroms
-pressure: 1 # atmsopheres
+pressure: 1 # atmospheres
 temperature: 300 # kelvin
 timestep: 4 # femtoseconds
 ionic_strength: 0.15 # molar
@@ -46,12 +49,13 @@ bond_expession:
 # Multi-state sampling scheme
 # One of ['repex', 'nonequilibrium', 'sams']
 fe_type: repex
-checkpoint_interval: 50 # number of iterations
+checkpoint_interval: 100 # number of iterations
+offline-freq: 100  # Real time FE estimate analysis -- multiple of checkpoint interval
 
 # Number of iterations to run
 n_cycles: 5000
 
-# Number of integration stpes per iteration
+# Number of integration steps per iteration
 n_steps_per_move_application: 250
 
 # Number of alchemical intermediate states to use
@@ -61,7 +65,7 @@ n_states: 12
 n_equilibration_iterations: 0
 
 # Location for storing trajectories
-trajectory_directory: lig0to1
+trajectory_directory: lig0to3
 
 # Prefix for trajectory files (project-specific name)
 trajectory_prefix: out
@@ -78,6 +82,3 @@ phases:
 # Use geometry-derived mapping
 use_given_geometries: true
 given_geometries_tolerance: 0.4 # angstroms
-
-# Solvent model
-solvent_model: "tip3p"
