@@ -10,7 +10,7 @@ from collections import namedtuple
 from perses.annihilation.lambda_protocol import LambdaProtocol
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState
 import random
-import pymbar
+from openmmtools.multistate.pymbar import _pymbar_bar, _pymbar_exp
 from perses.dispersed.parallel import Parallelism
 # Instantiate logger
 _logger = logging.getLogger("sMC")
@@ -726,10 +726,10 @@ class SequentialMonteCarlo():
         self.dg_EXP = {}
         for _direction, _lst in cumulative_work_dict.items():
             self.cumulative_work[_direction] = _lst
-            self.dg_EXP[_direction] = np.array([pymbar.EXP(_lst[:,i]) for i in range(_lst.shape[1])])
+            self.dg_EXP[_direction] = np.array([_pymbar_exp(_lst[:,i]) for i in range(_lst.shape[1])])
             _logger.debug(f"cumulative_work for {_direction}: {self.cumulative_work[_direction]}")
         if len(list(self.cumulative_work.keys())) == 2:
-            self.dg_BAR = pymbar.BAR(self.cumulative_work['forward'][:, -1], self.cumulative_work['reverse'][:, -1])
+            self.dg_BAR = _pymbar_bar(self.cumulative_work['forward'][:, -1], self.cumulative_work['reverse'][:, -1])
 
     def minimize_sampler_states(self):
         """

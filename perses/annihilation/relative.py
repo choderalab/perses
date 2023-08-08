@@ -3304,28 +3304,26 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             else:
                 return False
 
-        assert type(particles) in [type(set()), int], f"`particles` must be an integer or a set, got {type(particles)}."
-
         if isinstance(particles, int):
-            rest_id = [0, 1, 0] # Set the default scale_id to nonrest solute
+            rest_id = [0, 1, 0] # Set the default rest_id to nonrest solute
             if not self._rest_region:
-                return rest_id  # If there are no rest regions, set everything as nonrest_solute bc these atoms are not scaled
+                return rest_id
             else:
-                if particles in self._rest_region: # Here, particles is a single int
+                if particles in self._rest_region: # The particle is in the REST region
                     rest_id = [1, 0, 0]
-                elif _is_solvent(particles): # If the particle is not in a rest region, check if it is a solvent atom
+                elif _is_solvent(particles): # The particle is a non-rest solvent atom
                     rest_id = [0, 0, 1]
                 return rest_id
 
         elif isinstance(particles, set):
-            rest_id = [0, 0, 1] # Set the default scale_id to nonrest solute
+            rest_id = [0, 0, 1] # Set the default rest_id to nonrest solute
             if not self._rest_region:
-                return rest_id # If there are no scale regions, set everything as nonrest bc these atoms are not scaled
+                return rest_id
             else:
-                if particles.intersection(self._rest_region) != set(): # At least one of the particles is in the idx_th rest region
-                    if particles.issubset(self._rest_region): # Then this term is wholly in the rest region
+                if particles.intersection(self._rest_region) != set(): # At least one of the particles is in the rest region
+                    if particles.issubset(self._rest_region): # All particles are in the rest region
                         rest_id = [1, 0, 0]
-                    else: # It is inter region
+                    else: # At least one (but not all) particles are in the rest region
                         rest_id = [0, 1, 0]
                 return rest_id
 
@@ -3435,8 +3433,8 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         custom_bond_force.addPerBondParameter('is_unique_new')
 
         # Add per-bond parameters for defining energy
-        custom_bond_force.addPerBondParameter('length_old')  # old bond length
-        custom_bond_force.addPerBondParameter('length_new')  # new bond length
+        custom_bond_force.addPerBondParameter('length_old')  # old equilibrium bond length
+        custom_bond_force.addPerBondParameter('length_new')  # new equilibrium bond length
         custom_bond_force.addPerBondParameter('K_old')  # old spring constant
         custom_bond_force.addPerBondParameter('K_new')  # new spring constant
 
@@ -3489,7 +3487,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
             rest_id = self.get_rest_identifier(idx_set)
             alch_id, atom_class = self.get_alch_identifier(idx_set)
 
-            # Get the old terms and if they exist, the old terms
+            # Get the old terms and if they exist, the new terms
             old_bond_idx, r0_old, k_old = old_term_collector[hybrid_index_pair]
             try:
                 new_bond_idx, r0_new, k_new = new_term_collector[hybrid_index_pair]
@@ -3581,8 +3579,8 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         custom_angle_force.addPerAngleParameter('is_unique_new')
 
         # Add per-angle parameters for defining energy
-        custom_angle_force.addPerAngleParameter('theta0_old')  # old angle length
-        custom_angle_force.addPerAngleParameter('theta0_new')  # new angle length
+        custom_angle_force.addPerAngleParameter('theta0_old')  # old equilibrium angle
+        custom_angle_force.addPerAngleParameter('theta0_new')  # new equilibrium angle
         custom_angle_force.addPerAngleParameter('K_old')  # old spring constant
         custom_angle_force.addPerAngleParameter('K_new')  # new spring constant
 

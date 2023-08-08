@@ -17,7 +17,6 @@ import logging
 import time
 from collections import namedtuple
 from perses.annihilation.lambda_protocol import LambdaProtocol
-import dask.distributed as distributed
 from scipy.special import logsumexp
 import openmmtools.cache as cache
 
@@ -307,10 +306,10 @@ def compute_timeseries(reduced_potentials):
         uncorrelated indices
 
     """
-    from pymbar import timeseries
-    t0, g, Neff_max = timeseries.detectEquilibration(reduced_potentials) #computing indices of uncorrelated timeseries
+    from openmmtools.multistate.pymbar import detect_equilibration, subsample_correlated_data
+    t0, g, Neff_max = detect_equilibration(reduced_potentials) #computing indices of uncorrelated timeseries
     A_t_equil = reduced_potentials[t0:]
-    uncorrelated_indices = timeseries.subsampleCorrelatedData(A_t_equil, g=g)
+    uncorrelated_indices = subsample_correlated_data(A_t_equil, g=g)
     A_t = A_t_equil[uncorrelated_indices]
     full_uncorrelated_indices = [i+t0 for i in uncorrelated_indices]
 
@@ -1117,6 +1116,7 @@ def activate_LocallyOptimalAnnealing(thermodynamic_state,
     """
     Function to set worker attributes for annealing.
     """
+    import dask.distributed as distributed
     supported_integrators = ['langevin', 'hmc']
 
     if remote_worker == 'remote':
@@ -1142,6 +1142,7 @@ def deactivate_worker_attributes(remote_worker):
     """
     Function to remove worker attributes for annealing
     """
+    import dask.distributed as distributed
     if remote_worker == 'remote':
         _logger.debug(f"\t\tremote_worker is True, getting worker")
         _class = distributed.get_worker()
@@ -1168,6 +1169,7 @@ def call_anneal_method(remote_worker,
     since we can only map functions with parallelisms (no actors), we need to submit a function that calls
     the LocallyOptimalAnnealing.anneal method.
     """
+    import dask.distributed as distributed
     if remote_worker == 'remote':
         _class = distributed.get_worker()
     else:
