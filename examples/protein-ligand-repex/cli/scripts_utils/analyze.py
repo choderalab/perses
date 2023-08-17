@@ -1,138 +1,10 @@
-"""
-Integrated retrospective and prospective analysis for perses free energy calculations.
-
-Issue: https://github.com/choderalab/perses/issues/1136
-
-
-
-
-# INPUTS
-- ligands.sdf : SDF file from which the calculations are run
-    - Assume it's a single file specified in the perses yaml ligand_file
-    - Assume all ligands represent single protonation/tautomer/stereochemical macrostate
-    - If there are multiple protonation/tautomer states that represent one real chemical compound:
-        - SDTag called PARENT_LIGAND_ID that corresponds to the LIGAND_ID of the real compound, for which this microstate represents a protonation/tautomer/stereochemical state.
-        - If this is a protonation/tautomer microstate it will have the following SDTags:
-            - `r_epik_State_Penalty` : state penalty of this microstate in kcal/mol.
-                - if no state penalty is specified, assume equal populations. This can be useful for stereoisomers.
-- experimental-data.sdf/csv : Tagged experimental data for one or more ligands
-    - could be the same ligands.sdf if tags are present with the following fields:
-            * EXP_BINDING_AFFINITY_IN_KCAL_PER_MOL
-            * EXP_BINDING_AFFINITY_IN_KCAL_PER_MOL_STDERR
-            - if csv it should have this format: SMILES, LIGAND_ID, SDData...
-            - if sdf the title should match the molecule LIGAND_ID and SDDATA is sdtags
--
-
-
-# OUTPUTS
-- optimal-predictions.yaml : Predicted optimal binding FEs of all compounds, using ALL available experimental data.
-    - Format:
-        metadata:
-            energy_units : kilocalories_per_mole
-            temperature : <temperature in kelvin>
-        ligand_data :
-            ligand_id :
-                absolute_binding_free_energy :
-                    estimate :
-                    standard_error :
-                microstates : [if any ligand has multiple microstates]
-                    microstate_id :
-                        estimate :
-                        standard_error :
-                        microstate_penalty :
-                        microstate_population_in_complex :
-                    ...
-                experimental_data:
-                    measurement :
-                    standard_error :
-            ...
-    Question: Do we also want to produce all ligand pairs with correct uncertainties?
-- retrospective-optimal-reliability.yaml : Reliability indicator for optimal predictions using experimental data for everything. For each compound with exp data we use all other experimental data to compute an optimal MLE estimate.
-    ligand_id :
-        absolute_binding_free_energy :
-            estimate :
-            standard_error :
-        microstates : [if any ligand has multiple microstates]
-            microstate_id :
-                estimate :
-                standard_error :
-                microstate_penalty :
-                microstate_population_in_complex :
-            ...
-        experimental_data:
-            measurement :
-            standard_error :
-        error :
-            deviation :
-            standard_error :
-    ...
-- retrospective-edges.yaml : Relative FE results sorted by absolute errors (magnitude) for those with experimental data. Only for edges between ligands with single microstates.
-    - initial_ligand_id :
-      final_ligand_id :
-      absolute_error :
-      signed_error :
-      error_standard_error :
-      calculated :
-      calculated_standard_error :
-      experimental :
-      experimental_standard_error :
-      statistics : [Optional]
-    ...
-
-- retrospective-absolutes.yaml : (For compounds with experimental data) MLE estimates of absoute binding free energies computed without experimental data, listed in order of absolute FE deviations from experiment
-    ligand_id :
-      absolute_error :
-      signed_error :
-      error_standard_error :
-      calculated :
-      calculated_standard_error :
-      experimental :
-      experimental_standard_error :
-      statistics : [Optional]
-      microstates : [Optional]
-        microstate_id :
-            estimate :
-            standard_error :
-            microstate_penalty :
-            microstate_population_in_complex :
-
-
-
-
-
-
-
-This script produces three major outputs:
-* Optimal predictions: The predicted absolute ΔGs with uncertainties 
-  (and ΔΔGs between compounds with uncertainties) integrating all available experimental data in the network
-* Reliability indicator for optimal predictions: If there is more than one compound with experimental data, 
-  we also provide a leave-one-out assessment of how accurately we predicted each compound with experimental data 
-  by leaving its experimental free energy out of the DiffNet analysis and reporting the deviation statistics
-* Retrospective debugging: For compounds with experimental data, a comparison of directly computed 
-  edge ΔΔGs(without using any experimental data) with the experimental ΔΔGs, as well as how the 
-  absolute ΔGs (without experimental data corrections) correlate with experimental absolute ΔGs 
-  (shifting to the experimental mean in both cases)
-
-Experimental data format:
-* CSV: CSV file containing the following fields
-
-
-
-TODO:
-* Refactor this stand-alone script into an integrated analysis class and CLI integrated into perses.
-* Support experimental data in YAML format as well
-
-"""
-
-# SDF filename containing all ligands annotated with experimental data
-# Ligands should be annotated with experimental data using the SD tags
-# EXP_BINDING_AFFINITY_IN_KCAL_PER_MOL
-# EXP_BINDING_AFFINITY_IN_KCAL_PER_MOL_STDERR
+"""Analysis script utility for perses simulations"""
 
 import argparse
+import os
 import numpy as np
 
-def get_molecule_titles(filename, add_warts=False):
+def get_molecule_titles(filename, add_warts=False, sdf_tag=None):
     """
     Get the list of molecule titles (names) from the specified SDF file.
 
@@ -142,6 +14,8 @@ def get_molecule_titles(filename, add_warts=False):
         The filename to read molecules from
     add_warts : bool, optional, default=False
         If True, if multiple molecules with the same title are read, a wart (_0, _1, ...) is appended.
+    sdf_tag : str , optional
+        Name of the sdf tag to read to get the molecule names. Defaults to ``None``.
 
     Returns
     -------
@@ -149,18 +23,16 @@ def get_molecule_titles(filename, add_warts=False):
         List of molecule titles from the provided SDF file
     """
     # Read titles
-    titles = list()
-    from openeye import oechem
-    with oechem.oemolistream(filename) as ifs:
-        oemol = oechem.OEGraphMol()
-        while oechem.OEReadMolecule(ifs, oemol):
-            title = oemol.GetTitle()
-            # Trim warts
-            title = title.rsplit('_')[0]
-            titles.append(title)
-            
+    from openff.toolkit import Molecule
+    molecules = Molecule.from_file(filename, allow_undefined_stereo=True)
+    # Use specified tag for names if given, if not use the name. Trims warts.
+    if sdf_tag:
+        mol_titles = [molecule.properties[sdf_tag].rsplit('_')[0] for molecule in molecules]
+    else:
+        mol_titles = [molecule.name.rsplit('_')[0] for molecule in molecules]
+
     if not add_warts:
-        return titles
+        return mol_titles
             
     #
     # Add warts to duplicate titles
@@ -169,57 +41,67 @@ def get_molecule_titles(filename, add_warts=False):
     # Count titles
     from collections import defaultdict
     title_counts = defaultdict(int)
-    for title in titles:
+    for title in mol_titles:
         title_counts[title] += 1
 
     # Add warts to titles that appear multiple times
     wart_index = defaultdict(int)
-    for index, title in enumerate(titles):
+    for index, title in enumerate(mol_titles):
         if title_counts[title] > 1:
             wart = f'_{wart_index[title]}'
             wart_index[title] += 1
-            titles[index] = title + wart
+            mol_titles[index] = title + wart
 
-    return titles
+    return mol_titles
 
-def read_sddata(filename):
-    """Read SD tag data from the specified SDF or CSV file.
+def read_sddata(filename, name_sdtag=None):
+    """
+    Read molecular data from an SD file.
+
+    This function reads molecular data, including properties, from an SD file.
 
     Parameters
     ----------
     filename : str
-        The SDF or CSV file to read from
+        The path to the SDF file containing molecular data.
+    name_sdtag : str, optional
+        The SD tag name to use as the identifier for each molecule.
+        If provided, the molecules will be stored in the returned dictionary using the values
+        of this SD tag as keys. If not provided, the 'name' SD tag will be used as the key.
 
     Returns
     -------
-    molecules : list of dict
-        molecules[index] is a dict containing the SD tag : data pairs from the file
-        Numeric values are converted to float when possible
+    dict
+        A dictionary containing the molecular data. The keys are either the values of the specified
+        SD tag (if `name_sdtag` is provided) or the 'name' SD tag. The values are dictionaries
+        containing the properties associated with each molecule.
 
+    Notes
+    -----
+    - The 'openff.toolkit.Molecule' class is used to read the molecular data from the SD file.
+    - If no `name_sdtag` is provided, the 'name' SD tag will be used by default as the key in the
+      returned dictionary.
+
+    Example
+    -------
+    data = read_sddata('molecules.sdf', name_sdtag='Molecule_ID')
+    print(data['mol123'])  # Display properties of the molecule with Molecule_ID 'mol123'
     """
-
-    molecules = list()
-    from openeye import oechem
-    with oechem.oemolistream(filename) as ifs:
-        oemol = oechem.OEGraphMol()        
-        while oechem.OEReadMolecule(ifs, oemol):
-            # The parent compound name name is stored in the `Name` SD tag
-            name = oechem.OEGetSDData(oemol, 'Name')
-
-            sddata = dict()
-            for dp in oechem.OEGetSDDataPairs(oemol):
-                try:
-                    sddata[dp.GetTag()] = float(dp.GetValue())
-                except ValueError as e:
-                    sddata[dp.GetTag()] = dp.GetValue()            
-            molecules.append(sddata)
+    from openff.toolkit import Molecule
+    read_molecules = Molecule.from_file(filename, allow_undefined_stereo=True)
+    if name_sdtag:
+        molecules = {molecule.properties[name_sdtag]: molecule.properties for molecule in read_molecules}
+    else:
+        molecules = {molecule.name: molecule.properties for molecule in read_molecules}
 
     return molecules
 
 
 def get_experimental_data_network(filename,
                                   exp_tag_name="EXP_BINDING_AFFINITY_IN_KCAL_PER_MOL",
-                                  uncertainty_tag_name="EXP_BINDING_AFFINITY_IN_KCAL_PER_MOL_STDERR"):
+                                  uncertainty_tag_name="EXP_BINDING_AFFINITY_IN_KCAL_PER_MOL_STDERR",
+                                  name_sdtag=None
+                                  ):
     """
     Get experimental data for all physical molecules from an SDF or CSV file.
 
@@ -254,25 +136,15 @@ def get_experimental_data_network(filename,
     from openmmtools.constants import kB
     kT = kB * 300 * unit.kelvin # thermal energy at 300 K
 
-    # Get titles with warts
-    titles = get_molecule_titles(filename, add_warts=False)
+    # Get sddata
+    mols_sddata = read_sddata(filename, name_sdtag=name_sdtag)
 
-    molecule_index = 0
-    from openeye import oechem
-    with oechem.oemolistream(filename) as ifs:
-        oemol = oechem.OEGraphMol()
-        while oechem.OEReadMolecule(ifs, oemol):
-            #title = oemol.GetTitle()
-            title = titles[molecule_index] # use title with warts added
-            tagname = 'EXP_BINDING_AFFINITY_IN_KCAL_PER_MOL'
-            if oechem.OEHasSDData(oemol, tagname):
-                node_data = {
-                    'exp_g_i' : float(oechem.OEGetSDData(oemol, tagname)) * unit.kilocalories_per_mole / kT,
-                    'exp_dg_i' : float(oechem.OEGetSDData(oemol, tagname+'_STDERR')) * unit.kilocalories_per_mole  / kT,
-                    }
-
-                graph.add_node(title, **node_data)
-            molecule_index += 1
+    for name, properties in mols_sddata:
+        node_data = {
+            'exp_g_i': properties[exp_tag_name] * unit.kilocalories_per_mole / kT,
+            'exp_dg_i': properties[uncertainty_tag_name] * unit.kilocalories_per_mole / kT,
+        }
+        graph.add_node(name, **node_data)
 
     return graph
 
@@ -287,8 +159,8 @@ def collapse_states(perses_graph, microstates):
     ----------
     perses_graph : networkx.DiGraph
         The perses graph of microstates where nodes are named with microstate titles
-    microstates : list of dict
-        microstates[index] is a dict that contains
+    microstates : dict
+        microstates[name] is a dict that contains
             'compound' : microstate title
             'parent_compound' : parent macrostate title
             'r_epik_State_Penalty' : solution microstate penalty in kcal/mol
@@ -305,14 +177,19 @@ def collapse_states(perses_graph, microstates):
     from openmmtools.constants import kB
     kT = kB * 300 * unit.kelvin # thermal energy at 300 K
 
-    macrostates = { microstate['compound'] : microstate['parent_compound'] for microstate in microstates }
+    try:
+        macrostates = { name : properties['parent_compound'] for name, properties in microstates.items() }
+    except KeyError:
+        # Must be non-enumerated sdf file, therefore just get the name
+        macrostates = {name : name for name, _ in microstates.items()}
 
     # Annotate graph with macrostate titles
     for microstate in perses_graph.nodes:
         perses_graph.nodes[microstate]['ligand_title'] = macrostates[microstate]
 
     # Read state penalties into perses network
-    microstate_penalties_in_kT = { microstate['compound'] : microstate['r_epik_State_Penalty'] * unit.kilocalories_per_mole / kT for microstate in microstates } # microstate penalties in kT
+    microstate_penalties_in_kT = {name: float(properties['r_epik_State_Penalty']) * unit.kilocalories_per_mole / kT for
+                                  name, properties in microstates.items()}  # microstate penalties in kT
     for microstate in perses_graph.nodes:
         perses_graph.nodes[microstate]['state_penalty_dg_i'] = microstate_penalties_in_kT[microstate]
 
@@ -387,7 +264,6 @@ def get_perses_realtime_statistics(basepath):
     statistics = dict()
 
     import yaml
-    import os
 
     # Get list of all YAML files generated by the CLI
     import glob
@@ -401,7 +277,7 @@ def get_perses_realtime_statistics(basepath):
     return statistics
 
 
-def get_perses_network_results(basepath, mirostates):
+def get_perses_network_results(basepath, microstates):
     """
     Read real-time statistics for all perses transformations in 'basepath' launched via the perses CLI and build a network of estimated free energies.
 
@@ -429,14 +305,6 @@ def get_perses_network_results(basepath, mirostates):
            'g_dij' : standard error uncertainty estimate for g_ij (also in units of kT)
         
     """
-
-    # DEBUG
-    #import os
-    #filename = 'test.edgelist'
-    #if os.path.exists(filename):
-    #    import networkx as nx
-    #    return nx.read_edgelist(filename)
-
     # Get list of all YAML files generated by the CLI
     import glob
     yaml_filenames = glob.glob(f'{basepath}/perses-*.yaml')
@@ -580,13 +448,9 @@ def get_perses_network_results_multiprocessing(basepath):
     # Read each transformation summary and assemble the statistics into a graph
     import networkx as nx
     graph = nx.DiGraph() # graph of free energy estimates
-    
-    import yaml
-    import numpy as np
 
     from rich.progress import track
     from multiprocessing import Pool
-    from tqdm import tqdm
     import os
     processes = None
     if 'LSB_DJOB_NUMPROC' in os.environ:
@@ -620,7 +484,7 @@ def solve_mle(graph):
     return graph
 
 def generate_arsenic_plots(experimental_data, perses_graph, arsenic_csv_filename='benchmark.csv', target='benchmark',
-                           relative_plot_filename='relative.pdf', absolute_plot_filename='absolute.pdf', pIC50_sdtag="pChEMBL Value"):
+                           relative_plot_filename='relative.pdf', absolute_plot_filename='absolute.pdf', pic50_sdtag="pChEMBL Value"):
     """
     Generate an arsenic CSV file and arsenic plots
 
@@ -652,7 +516,7 @@ def generate_arsenic_plots(experimental_data, perses_graph, arsenic_csv_filename
     from openmm import unit
     from openmmtools.constants import kB
     import numpy as np
-    kT = kB * 300 * unit.kelvin # thermal energy at 300 K
+    kT = kB * 300 * unit.kelvin # thermal energy at 300 K in J/mol
 
     # Write arsenic CSV file
     with open(arsenic_csv_filename, 'w') as csv_file:
@@ -661,10 +525,10 @@ def generate_arsenic_plots(experimental_data, perses_graph, arsenic_csv_filename
         csv_file.write("# Experimental block\n")
         csv_file.write("# Ligand, expt_DG, expt_dDG\n")
         # Extract ligand name, expt_DG and expt_dDG from ligands dictionary
-        for sddata in experimental_data:
+        for name, metadata in experimental_data.items():
             # Compute experimental affinity in kcal/mol
-            ligand_name = sddata['Name']
-            dg_exp = - kT * np.log(10) * sddata['pChEMBL Value']
+            ligand_name = name
+            dg_exp = - kT.value_in_unit(unit.kilocalorie_per_mole) * np.log(10) * metadata[pic50_sdtag]
             ddg_exp = 0.3 # estimate
             # Write CSV
             csv_file.write(f"{ligand_name}, {dg_exp}, {ddg_exp}\n")            
@@ -683,6 +547,12 @@ def generate_arsenic_plots(experimental_data, perses_graph, arsenic_csv_filename
     # Generate comparison plots
     from cinnabar import plotting, wrangle
 
+    # Compute mean and mean error for absolute plot
+    experimental_mean_pic50 = np.asarray([sddata[pic50_sdtag] for name, sddata in experimental_data.items()]).mean()
+    experimental_mean_dg = - kT.value_in_unit(unit.kilocalorie_per_mole) * np.log(10) * experimental_mean_pic50
+    # DEBUG:
+    # print(f"MEAN: {experimental_mean_pic50}; ERROR: {experimental_mean_dg}")
+
     # Generate arsenic plots comparing experimental and calculated free energies
     fe = wrangle.FEMap(arsenic_csv_filename)
 
@@ -698,9 +568,7 @@ def generate_arsenic_plots(experimental_data, perses_graph, arsenic_csv_filename
 
     # Generate absolute plot, with experimental data shifted to correct mean
     print(f'Generating {absolute_plot_filename}...')
-    #experimental_mean_dg = np.asarray([node[1]["exp_DG"] for node in fe.graph.nodes(data=True)]).mean()
-    experimental_mean_pChEMBL = np.asarray([sddata['pChEMBL Value'] for sddata in experimental_data]).mean()
-    experimental_mean_dg = - 0.592 * np.log(10) * experimental_mean_pChEMBL
+
     plotting.plot_DGs(fe.graph,
                       target_name=f'{target}',
                       title=f'Absolute binding energies - {target}',
@@ -834,14 +702,14 @@ if __name__ == '__main__':
     #        perses_graph.remove_node(node)
 
     # TODO: Collapse microstates
-    #collapsed_graph = collapse_states(perses_graph, microstate_info)
+    collapsed_graph = collapse_states(perses_graph, microstates)
     
     #plot_sign_accuracy(collapsed_graph, experimental_data_graph, 'accuracy.pdf')
 
     # Show the predictions
-    display_predictions(perses_graph)
+    display_predictions(collapsed_graph)
 
     # Generate arsenic plots comparing experimental and calculated
     arsenic_csv_filename = 'arsenic.csv' # CSV file to generate containing experimental absolute free energies and raw edge computed free energies from perses    
     target_name = 'benchmark'
-    generate_arsenic_plots(macrostates, perses_graph, arsenic_csv_filename=arsenic_csv_filename, target=target_name, pIC50_sdtag=pIC50_sdtag)
+    generate_arsenic_plots(macrostates, collapsed_graph, arsenic_csv_filename=arsenic_csv_filename, target=target_name, pic50_sdtag=pIC50_sdtag)
