@@ -15,7 +15,7 @@ __author__ = 'John D. Chodera'
 
 import numpy as np
 import itertools
-import pymbar
+from openmmtools.multistate.pymbar import _pymbar_bar
 from perses import storage
 import seaborn as sns
 
@@ -203,7 +203,7 @@ class Analysis(object):
                 resampled_w_F = np.random.choice(w_F, len(w_F), replace=True)
                 resampled_w_R = np.random.choice(w_R, len(w_R), replace=True)
 
-                [df, ddf] = pymbar.BAR(resampled_w_F, resampled_w_R)
+                [df, ddf] = _pymbar_bar(resampled_w_F, resampled_w_R)
                 bootstrapped_bar[i] = df
 
             free_energies[state_pair] = [np.mean(bootstrapped_bar), np.std(bootstrapped_bar)]
