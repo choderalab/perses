@@ -73,7 +73,7 @@ phases:
 timestep: 4.
 
 # Interval in iterations to use for offline real time analysis
-offline-freq: 2
+#offline-freq: 100
 
 # Create unsampled endstates for long-range sterics correction
 unsampled_endstates: True
