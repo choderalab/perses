@@ -50,7 +50,7 @@ bond_expession:
 # One of ['repex', 'nonequilibrium', 'sams']
 fe_type: repex
 checkpoint_interval: 100 # number of iterations
-offline-freq: 100  # Real time FE estimate analysis -- multiple of checkpoint interval
+#offline-freq: 100  # Real time FE estimate analysis -- multiple of checkpoint interval (optional)
 
 # Number of iterations to run
 n_cycles: 5000
