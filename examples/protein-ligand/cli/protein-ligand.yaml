@@ -1,12 +1,16 @@
-#provide the full path of the protein PDB file
-protein_pdb: Tyk2_protein.pdb
-#provide the path to the ligand file with coordinates
-ligand_file: Tyk2_ligands_shifted.sdf 
+# Path to protein file
+protein_pdb: tyk2_protein.pdb
 
-#The ligand file contains multiple ligands. Choose the indices of the ligands
-#between which we should compute a relative free energy
+# Path to ligand SDF file
+ligand_file: tyk2_ligands.sdf
+
+# Indices of old and new ligands within SDF file
 old_ligand_index: 0
 new_ligand_index: 3
+
+#
+# Force fields
+#
 
 # OpenMM ffxml force field files installed via the openmm-forcefields package
 # for biopolymers and solvents.
@@ -18,62 +22,63 @@ forcefield_files:
     - amber/phosaa10.xml # HANDLES THE TPO
 
 # Small molecule force field
-# We recommnd one of ['gaff-1.81', 'gaff-2.11', 'smirnoff99Frosst-1.1.0', 'openff-2.0.0']
-small_molecule_forcefield: openff-2.0.0 
+# Options include anything allowed by the openmmforcefields SystemGenerator
+# Examples for this parameter are 'openff-2.1.0', 'gaff-2.11' or 'espaloma-0.3.1'
+small_molecule_forcefield: openff-2.1.0
 
-#the temperature and pressure of the simulation, as well as how much solvent paddding to add
-#units:
-#pressure: atm
-#temperature: Kelvin
-#padding: angstroms
-pressure: 1.0
-temperature: 300.0
-solvent_padding: 9.0
+# Solvent model
+solvent_model: "tip3p"
 
+#
+# Simulation conditions
+#
+
+# Simulation setup options
+solvent_padding: 9.0 # angstroms
+pressure: 1 # atmospheres
+temperature: 300 # kelvin
+timestep: 4 # femtoseconds
+ionic_strength: 0.15 # molar
+
+# Atom mapping specification
 atom_expression:
-    - IntType
+  - IntType
 bond_expession:
-    - DefaultBonds
+  - DefaultBonds
 
-#number of equilibrium steps per move application
-n_steps_per_move_application: 1
+# Multi-state sampling scheme
+# One of ['repex', 'nonequilibrium', 'sams']
+fe_type: repex
+checkpoint_interval: 100 # number of iterations
+offline-freq: 100  # Real time FE estimate analysis -- multiple of checkpoint interval
 
-#the type of free energy calculation.
-#currently, this could be either nonequilibrium, sams or repex
-fe_type: repex 
+# Number of iterations to run
+n_cycles: 5000
 
-#checkpoint interval in iterations:
-checkpoint_interval: 50 
+# Number of integration steps per iteration
+n_steps_per_move_application: 250
 
-#number of iterations
-n_cycles: 4
+# Number of alchemical intermediate states to use
+n_states: 12
 
-#The number of SAMS states
-n_states: 3
-
-#the number of equilibration iterations:
+# Number of equilibration iterations
 n_equilibration_iterations: 0
 
-#where to put the trajectories
-trajectory_directory: temp/offlig10to24 
+# Location for storing trajectories
+trajectory_directory: lig0to3
 
-#how to prefix the trajectory files (project-specific name)
-trajectory_prefix: out 
+# Prefix for trajectory files (project-specific name)
+trajectory_prefix: out
 
-#which atoms to save (MDTraj selection syntax)
-atom_selection: not water 
+# Atoms to store in NetCDF files (MDTraj selection syntax)
+atom_selection: null
 
-#which phases do we want to run. Any combination or number of complex, solvent or vacuum will be accepted 
+# Calculation phases to run
+# Permitted phases: ['complex', 'solvent', 'vacuum']
 phases:
-    - vacuum
     - solvent
     - complex
 
-#timestep in fs
-timestep: 4.
-
-# Interval in iterations to use for offline real time analysis
-#offline-freq: 100
-
-# Create unsampled endstates for long-range sterics correction
-unsampled_endstates: True
+# Use geometry-derived mapping
+use_given_geometries: true
+given_geometries_tolerance: 0.4 # angstroms
