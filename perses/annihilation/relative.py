@@ -254,14 +254,14 @@ class HybridTopologyFactory(object):
         _logger.info("Adding and mapping old atoms to hybrid system...")
         for particle_idx in range(self._topology_proposal.n_atoms_old):
             particle_mass_old = self._old_system.getParticleMass(particle_idx)
-            
+
             if particle_idx in self._topology_proposal.old_to_new_atom_map.keys():
                 particle_index_in_new_system = self._topology_proposal.old_to_new_atom_map[particle_idx]
                 particle_mass_new = self._new_system.getParticleMass(particle_index_in_new_system)
                 particle_mass = (particle_mass_old + particle_mass_new) / 2 # Take the average of the masses if the atom is mapped
             else:
                 particle_mass = particle_mass_old
-            
+
             hybrid_idx = self._hybrid_system.addParticle(particle_mass)
             self._old_to_hybrid_map[particle_idx] = hybrid_idx
 
@@ -800,8 +800,10 @@ class HybridTopologyFactory(object):
         sterics_custom_nonbonded_force = openmm.CustomNonbondedForce(total_sterics_energy)
         if self._softcore_LJ_v2:
             sterics_custom_nonbonded_force.addGlobalParameter("softcore_alpha", self._softcore_LJ_v2_alpha)
+            sterics_custom_nonbonded_force.setCutoffDistance(self.r_cutoff)
         else:
             sterics_custom_nonbonded_force.addGlobalParameter("softcore_alpha", self.softcore_alpha)
+            sterics_custom_nonbonded_force.setCutoffDistance(self.r_cutoff)
 
         sterics_custom_nonbonded_force.addPerParticleParameter("sigmaA") # Lennard-Jones sigma initial
         sterics_custom_nonbonded_force.addPerParticleParameter("epsilonA") # Lennard-Jones epsilon initial
@@ -1834,7 +1836,7 @@ class HybridTopologyFactory(object):
 
 
         nonbonded_exceptions_force = openmm.CustomBondForce(old_new_nonbonded_exceptions)
-        name = f"{nonbonded_exceptions_force.__class__.__name__}_exceptions"        
+        name = f"{nonbonded_exceptions_force.__class__.__name__}_exceptions"
         nonbonded_exceptions_force.setName(name)
         self._hybrid_system.addForce(nonbonded_exceptions_force)
         _logger.debug(f"\thandle_old_new_exceptions: {nonbonded_exceptions_force} added to hybrid system")
@@ -2745,7 +2747,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     - is_rest - indicates whether the atom is in the rest region (1), otherwise 0
     - is_nonrest_solute - indicates whether the atom is outside the rest region and is solute (1), otherwise 0
     - is_nonrest_solvent - indicates whether the atom is outside the rest region and is solvent (1), otherwise 0
-    These per particle parameters are defined to allow for scaling of rest-solvent interactions by beta/beta0, if desired. 
+    These per particle parameters are defined to allow for scaling of rest-solvent interactions by beta/beta0, if desired.
     If the scaling of rest-solvent interactions is desired, the functional form will need to be changed.
 
     In order to avoid singularities in the alchemical region (specifically in interactions of unique old/new atoms),
@@ -2774,11 +2776,11 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     _default_exceptions_expression_list : list of str
         strings that will form the custom expression that will be used to create the CustomBondForce for exceptions
     _default_electrostatics_expression : str
-        the custom expression that will be used to create the CustomNonbondedForce for electrostatics (created from joining the corresponding list of strings) 
+        the custom expression that will be used to create the CustomNonbondedForce for electrostatics (created from joining the corresponding list of strings)
     _default_sterics_expression : str
         the custom expression that will be used to create the CustomNonbondedForce for sterics (created from joining the corresponding list of strings)
     _default_exceptions_expression : str
-        the custom expression that will be used to create the CustomBondForce for exceptions (created from joining the corresponding list of strings)   
+        the custom expression that will be used to create the CustomBondForce for exceptions (created from joining the corresponding list of strings)
     _topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
         topology proposal of the old-to-new transformation
     _old_system : openmm.System
@@ -2819,7 +2821,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         key: name of the atom class (unique_old_atoms, unique_new_atoms, core_atoms, environment_atoms)
         value: set of (hybrid-indexed) atoms in the atom class
     _hybrid_positions : [l,3] np.ndarray of float
-        positions of coordinates of hybrid system, where l is the number of atoms in the hybrid system 
+        positions of coordinates of hybrid system, where l is the number of atoms in the hybrid system
     _hybrid_topology : mdtraj.Topology
         topology for the hybrid system
     _rest_radius : float
@@ -2828,12 +2830,12 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
         list of (hybrid-indexed) atoms that should be considered as part of the rest region
     _atom_idx_to_object : dict of key: int, value: openmm or mtraj atom object
         key: hybrid system index for the atom, value: openmm.app.topology.Atom or mdtraj.topology.Atom object (depending on what class type self._hybrid_topology is)
-    _old_system_exceptions : dict of key: tuple of ints, value: list of floats 
+    _old_system_exceptions : dict of key: tuple of ints, value: list of floats
         key: old system indices of the atoms in the exception, value: chargeProd (units of the proton charge squared), sigma (nm), and epsilon (kJ/mol) for the exception
     _new_system_exceptions : dict of key: tuple of ints, value: list of floats
         key: new system indices of the atoms in the exception, value: chargeProd (units of the proton charge squared), sigma (nm), and epsilon (kJ/mol) for the exception
     """
-    
+
     # Constants copied from: https://github.com/openmm/openmm/blob/master/platforms/reference/include/SimTKOpenMMRealType.h#L89. These will be imported directly once we have addresssed https://github.com/choderalab/openmmtools/issues/522
     M_PI = 3.14159265358979323846
     E_CHARGE = (1.602176634e-19)
@@ -3200,7 +3202,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
     def _generate_rest_region(self):
         """
         Generate rest region.
-        
+
         Returns
         -------
         rest_atoms
@@ -3835,7 +3837,7 @@ class RESTCapableHybridTopologyFactory(HybridTopologyFactory):
 
         # Now iterate over the new term collector and add appropriate torsions.
         for new_torsion_idx in range(new_system_torsion_force.getNumTorsions()):
- 
+
             # Get new terms and hybrid indices
             p1, p2, p3, p4, periodicity_new, phase_new, K_new = new_system_torsion_force.getTorsionParameters(new_torsion_idx)  # Grab the parameters
             hybrid_p1, hybrid_p2, hybrid_p3, hybrid_p4 = self._new_to_hybrid_map[p1], self._new_to_hybrid_map[p2], self._new_to_hybrid_map[p3], self._new_to_hybrid_map[p4] # Get hybrid indices
