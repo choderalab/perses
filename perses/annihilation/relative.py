@@ -758,22 +758,20 @@ class HybridTopologyFactory(object):
         # Create a CustomNonbondedForce to handle alchemically interpolated nonbonded parameters.
         # Select functional form based on nonbonded method.
         # TODO: check _nonbonded_custom_ewald and _nonbonded_custom_cutoff since they take arguments that are never used...
+        r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
+        sterics_energy_expression = self._nonbonded_custom(self._softcore_LJ_v2)
         if self._nonbonded_method in [openmm.NonbondedForce.NoCutoff]:
             _logger.info("\t_add_nonbonded_force_terms: nonbonded_method is NoCutoff")
             sterics_energy_expression = self._nonbonded_custom(self._softcore_LJ_v2)
         elif self._nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.CutoffNonPeriodic]:
             _logger.info("\t_add_nonbonded_force_terms: nonbonded_method is Cutoff(Periodic or NonPeriodic)")
             epsilon_solvent = self._old_system_forces['NonbondedForce'].getReactionFieldDielectric()
-            r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
-            sterics_energy_expression = self._nonbonded_custom(self._softcore_LJ_v2)
             standard_nonbonded_force.setReactionFieldDielectric(epsilon_solvent)
             standard_nonbonded_force.setCutoffDistance(r_cutoff)
         elif self._nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
             _logger.info("\t_add_nonbonded_force_terms: nonbonded_method is PME or Ewald")
             [alpha_ewald, nx, ny, nz] = self._old_system_forces['NonbondedForce'].getPMEParameters()
             delta = self._old_system_forces['NonbondedForce'].getEwaldErrorTolerance()
-            r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
-            sterics_energy_expression = self._nonbonded_custom(self._softcore_LJ_v2)
             standard_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
             standard_nonbonded_force.setEwaldErrorTolerance(delta)
             standard_nonbonded_force.setCutoffDistance(r_cutoff)
@@ -798,12 +796,12 @@ class HybridTopologyFactory(object):
                 raise e
 
         sterics_custom_nonbonded_force = openmm.CustomNonbondedForce(total_sterics_energy)
+        sterics_custom_nonbonded_force.setCutoffDistance(r_cutoff)  # Match cutoff from non-custom NB forces
         if self._softcore_LJ_v2:
             sterics_custom_nonbonded_force.addGlobalParameter("softcore_alpha", self._softcore_LJ_v2_alpha)
-            sterics_custom_nonbonded_force.setCutoffDistance(self.r_cutoff)
+
         else:
             sterics_custom_nonbonded_force.addGlobalParameter("softcore_alpha", self.softcore_alpha)
-            sterics_custom_nonbonded_force.setCutoffDistance(self.r_cutoff)
 
         sterics_custom_nonbonded_force.addPerParticleParameter("sigmaA") # Lennard-Jones sigma initial
         sterics_custom_nonbonded_force.addPerParticleParameter("epsilonA") # Lennard-Jones epsilon initial
