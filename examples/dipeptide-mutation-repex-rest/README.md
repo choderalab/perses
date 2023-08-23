@@ -1,6 +1,6 @@
 # Barnase-Barstar protein-protein interaction example
 
-This example is based on the work by Ivy Zhang in https://pubs.acs.org/doi/full/10.1021/acs.jctc.3c00333
+This example is based on the tools and work by Ivy Zhang in https://pubs.acs.org/doi/full/10.1021/acs.jctc.3c00333
 
 More info: https://github.com/choderalab/perses-barnase-barstar-paper
 
@@ -9,11 +9,20 @@ More info: https://github.com/choderalab/perses-barnase-barstar-paper
 This example assumes that you will be running on an HPC infrastructure using MPI, running with
 multiple GPUs.
 
+### Why MPI?
+
+Sampling protein-protein interactions for Free Energy calculations is a very computationally costly task, by
+parallelizing the replica propagation (lambda windows) using MPI and multiple GPUs a higher throughput can be
+achieved.
+
 ### Running environment
 
 Make sure your environment has a `mpiplus` and `mpi4py` installed in your environment, besides of `perses`.
 
 ### Pipeline
+
+Please note that in order to run in an MPI environment we have to separate the generation of the Hybrid Topology
+with respect to the actual computation parts of the repex algorithm.
 
 1. Generate HTFs with
 ```bash
