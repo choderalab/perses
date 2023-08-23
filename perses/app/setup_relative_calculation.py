@@ -149,8 +149,8 @@ def getSetupOptions(filename, override_string=None):
             setup_options['flatness-criteria'] = 'minimum-visits'
             _logger.info(f"\t\t\tflatness-criteria not specified: default to minimum-visits.")
         if 'offline-freq' not in setup_options:
-            setup_options['offline-freq'] = 10
-            _logger.info(f"\t\t\toffline-freq not specified: default to 10.")
+            setup_options['offline-freq'] = setup_options["checkpoint_interval"]
+            _logger.info(f"\t\t\toffline-freq not specified: default to checkpoint interval.")
         if 'gamma0' not in setup_options:
             setup_options['gamma0'] = 1.
             _logger.info(f"\t\t\tgamma0 not specified: default to 1.0.")
@@ -162,8 +162,8 @@ def getSetupOptions(filename, override_string=None):
     elif setup_options['fe_type'] == 'repex':
         _logger.info(f"\t\tfe_type: repex")
         if 'offline-freq' not in setup_options:
-            setup_options['offline-freq'] = 10
-            _logger.info(f"\t\t\toffline-freq not specified: default to 10.")
+            setup_options['offline-freq'] = setup_options["checkpoint_interval"]
+            _logger.info(f"\t\t\toffline-freq not specified: default to checkpoint interval.")
     elif setup_options['fe_type'] == 'neq': #there are some neq attributes that are not used with the equilibrium samplers...
         _logger.info(f"\t\tfe_type: neq")
         if 'n_equilibrium_steps_per_iteration' not in setup_options:
