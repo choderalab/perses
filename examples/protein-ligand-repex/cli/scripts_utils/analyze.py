@@ -543,7 +543,8 @@ def generate_arsenic_plots(experimental_data, perses_graph, arsenic_csv_filename
         # write string in csv file
         for ligand1, ligand2, data in perses_graph.edges(data=True):
             csv_file.write(
-                f"{ligand1}, {ligand2}, {data['g_ij'] * kT/unit.kilocalories_per_mole}, {data['g_dij'] * kT/unit.kilocalories_per_mole}, 0.0\n")  # hardcoding additional error as 0.0
+                f"{ligand1}, {ligand2}, {data['g_ij'] * kT.value_in_unit(unit.kilocalorie_per_mole)},"
+                f" {data['g_dij'] * kT.value_in_unit(unit.kilocalorie_per_mole)}, 0.0\n")  # hardcoding additional error as 0.0
 
     # Generate comparison plots
     from cinnabar import plotting, wrangle
