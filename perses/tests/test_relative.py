@@ -1219,3 +1219,38 @@ def test_unsampled_endstate_energies_GPU():
 
     # Tyk2 -- Run point and MD energy validation tests
     run_unsampled_endstate_energies('tyk2', use_point_energies=True, use_md_energies=True)
+
+class TestHybridTopologyFactory:
+    """Class to test the base/vanilla HybridTopologyFactory object"""
+    def test_custom_nonbonded_cutoff(self):
+        """
+        Test that nonbonded cutoff gets propagated to the custom nonbonded forces generated in the HTF via the
+        _add_nonbonded_force_terms method.
+
+        Creates an HTF and manually changes the cutoff in the OLD system of the hybrid topology factory and checks the
+        expected behavior with both running or not running the referenced method.
+        """
+        from openmm import NonbondedForce,CustomNonbondedForce
+        # TODO: we should probably make a fixture with the following top proposal and factory
+        topology_proposal, current_positions, new_positions = utils.generate_solvated_hybrid_test_topology(
+            current_mol_name='propane', proposed_mol_name='pentane', vacuum=False)
+        hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions,
+                                               use_dispersion_correction=True)
+        old_system_forces = hybrid_factory._old_system_forces
+        hybrid_system_forces = hybrid_factory.hybrid_system.getForces()
+        old_nonbonded_forces = [force for force in old_system_forces if isinstance(force, NonbondedForce)]
+        hybrid_custom_nonbonded_forces = [force for force in hybrid_system_forces if isinstance(force, CustomNonbondedForce)]
+        # Modify the cutoff for nonbonded forces in the OLD system (!)
+        for force in old_nonbonded_forces:
+            force.setCutoffDistance(force.getCutoffDistance() + 1*unit.nanometer)
+            # Assert that the nb cutoff distance is different compared to the custom nb forces
+            for custom_force in hybrid_custom_nonbonded_forces:
+                assert custom_force.getCutoffDistance() != \
+                       force.getCutoffDistance(), "Expected different cutoff distances between NB and custom NB forces."
+        # propagate the cutoffs
+        hybrid_factory._add_nonbonded_force_terms(add_custom_sterics_force=True)
+        # Check now that cutoff match for all nonbonded forces (including custom)
+        for force in old_nonbonded_forces:
+            for custom_force in hybrid_custom_nonbonded_forces:
+                assert custom_force.getCutoffDistance() == \
+                       force.getCutoffDistance(), "Expected equal cutoff distances between NB and custom NB forces."
