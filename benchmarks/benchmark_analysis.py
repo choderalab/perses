@@ -7,7 +7,9 @@ Intended to be used on systems from https://github.com/openforcefield/protein-li
 import argparse
 import glob
 import itertools
+import os
 import re
+import traceback
 import warnings
 
 import numpy as np
@@ -16,16 +18,28 @@ import yaml
 
 from openmmtools.constants import kB
 from perses.analysis.load_simulations import Simulation
+from perses.utils.url_utils import fetch_url_contents
 
 from simtk import unit
 
-from openff.arsenic import plotting, wrangle
+from cinnabar import plotting, wrangle
 
 # global variables
 base_repo_url = "https://github.com/openforcefield/protein-ligand-benchmark"
 
 
 # Helper functions
+def get_target_dir(target_name, branch="0.2.1"):
+    """
+    Retrieves the target subdirectory in upstream repo structure given the target name.
+    """
+    # Targets information on branch
+    targets_url = f"{base_repo_url}/raw/{branch}/data/targets.yml"
+    with fetch_url_contents(targets_url) as response:
+        targets_dict = yaml.safe_load(response.read())
+    target_dir = targets_dict[target]['dir']
+    return target_dir
+
 
 def get_simdir_list(base_dir='.', is_reversed=False):
     """
@@ -65,11 +79,40 @@ def get_simulations_data(simulation_dirs):
             simulation = Simulation(out_dir)
             simulations.append(simulation)
         except Exception:
+            # Print traceback anyway
+            print(traceback.format_exc())
             warnings.warn(f"Edge in {out_dir} could not be loaded. Check simulation output is complete.")
     return simulations
 
 
-def to_arsenic_csv(experimental_data: dict, simulation_data: list, out_csv: str = 'out_benchmark.csv'):
+def get_ligands_information(ligands_file="ligands.sdf"):
+    """Extract ligands information, namely index and name, from sdf file.
+
+    Parameters
+    ----------
+    ligands_file : str
+        Path to sdf file where from extract the information.
+
+    Returns
+    -------
+    ligands_dict : dict
+        Dictionary with ligands information with (index, name) as key-value pairs.
+    """
+    from openff.toolkit.topology import Molecule
+    molecules = Molecule.from_file(ligands_file)
+    # Making sure the sdf file has a list of molecules
+    if not isinstance(molecules, list):
+        raise TypeError(f"Could not read a list of ligands from {ligands_file}.")
+    ligands_dict = {}
+    # Fill ligand dictionary information
+    for index, molecule in enumerate(molecules):
+        ligands_dict[index] = molecule.name
+
+    return ligands_dict
+
+
+def to_arsenic_csv(experimental_data: dict, simulation_data: list, out_csv: str = 'out_benchmark.csv',
+                   ligands_file="ligands.sdf"):
     """
     Generates a csv file to be used with openff-arsenic. Energy units in kcal/mol.
 
@@ -94,10 +137,11 @@ def to_arsenic_csv(experimental_data: dict, simulation_data: list, out_csv: str 
             Python iterable object with perses Simulation objects as entries.
         out_csv: str
             Path to output csv file to be generated.
+        ligands_file : str
+            Path to sdf file where from extract the information.
     """
-    # Ligand information
-    ligands_names = list(ligands_dict.keys())
-    lig_id_to_name = dict(enumerate(ligands_names))
+    # get ligand information from ligands file
+    ligands_dict = get_ligands_information(ligands_file=ligands_file)
     kBT = kB * 300 * unit.kelvin  # useful when converting to kcal/mol
     # Write csv file
     with open(out_csv, 'w') as csv_file:
@@ -124,7 +168,7 @@ def to_arsenic_csv(experimental_data: dict, simulation_data: list, out_csv: str 
                 relative_error = 0.3
             else:
                 relative_error = measurement_error / measurement_value
-            # Convert to free eneriges
+            # Convert to free energies
             expt_DG = kBT.value_in_unit(unit.kilocalorie_per_mole) * np.log(measurement_value * value_to_molar)
             expt_dDG = kBT.value_in_unit(unit.kilocalorie_per_mole) * relative_error
             csv_file.write(f"{ligand_name}, {expt_DG}, {expt_dDG}\n")
@@ -137,11 +181,11 @@ def to_arsenic_csv(experimental_data: dict, simulation_data: list, out_csv: str 
         # ligand1, ligand2, calc_DDG, calc_dDDG(MBAR), calc_dDDG(additional)
         # write string in csv file
         for simulation in simulation_data:
-            out_dir = simulation.directory.split('/')[-1]
+            out_dir = os.path.basename(simulation.directory)
             # getting integer indices
             ligand1_id, ligand2_id = int(out_dir.split('_')[-1]), int(out_dir.split('_')[-2])  # CHECK ORDER!
             # getting names of ligands
-            ligand1, ligand2 = lig_id_to_name[ligand1_id], lig_id_to_name[ligand2_id]
+            ligand1, ligand2 = ligands_dict[ligand1_id], ligands_dict[ligand2_id]
             # getting calc_DDG in kcal/mol
             calc_DDG = simulation.bindingdg.value_in_unit(unit.kilocalorie_per_mole)
             # getting calc_dDDG in kcal/mol
@@ -172,23 +216,28 @@ arg_parser.add_argument(
     action='store_true',
     help="Analyze reversed edge simulations. Helpful for testing/consistency checks."
 )
+arg_parser.add_argument(
+    "--revision",
+    type=str,
+    default="0.2.1",
+    help="Specify revision, release or branch in upstream repo to use. Defaults to using the 0.2.1 release branch."
+)
 args = arg_parser.parse_args()
 target = args.target
+branch = args.revision
 
 # Download experimental data
 # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-# TODO: Let's cache this data when we set up the initial simulations in case it changes in between setting up and running the calculations and analysis.
-# TODO: Let's also be sure to use a specific release tag rather than 'main'
-target_dir = targets_dict[target]['dir']
-ligands_url = f"{base_repo_url}/raw/main/data/{target_dir}/00_data/ligands.yml"
+target_dir = get_target_dir(target, branch=branch)
+ligands_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/00_data/ligands.yml"
 with urllib.request.urlopen(ligands_url) as response:
     yaml_contents = response.read()
     print(yaml_contents)
-    ligands_dict = yaml.safe_load(yaml_contents)
+    ligands_experimental_dict = yaml.safe_load(yaml_contents)
 
 # DEBUG
-print('')
-print(yaml.dump(ligands_dict))
+# print('')
+# print(yaml.dump(ligands_dict))
 
 # Get paths for simulation output directories
 out_dirs = get_simdir_list(is_reversed=args.reversed)
@@ -198,7 +247,7 @@ simulations = get_simulations_data(out_dirs)
 
 # Generate csv file
 csv_path = f'./{target}_arsenic.csv'
-to_arsenic_csv(ligands_dict, simulations, out_csv=csv_path)
+to_arsenic_csv(ligands_experimental_dict, simulations, out_csv=csv_path)
 
 
 # TODO: Separate plotting in a different file

@@ -18,7 +18,7 @@ from perses.utils.url_utils import retrieve_file_url
 from perses.utils.url_utils import fetch_url_contents
 
 # Setting logging level config
-LOGLEVEL = os.environ.get("LOGLEVEL", "WARNING").upper()
+LOGLEVEL = os.environ.get("LOGLEVEL", "DEBUG").upper()
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(message)s',
     level=LOGLEVEL,
@@ -34,11 +34,122 @@ def concatenate_files(input_files, output_file):
     """
     Concatenate files given in input_files iterator into output_file.
     """
+    input_files = list(input_files)  # handles both single or multiple files
     with open(output_file, 'w') as outfile:
         for filename in input_files:
             with open(filename) as infile:
                 for line in infile:
                     outfile.write(line)
+
+
+def get_target_dir(target_name, branch="0.2.1"):
+    """
+    Retrieves the target subdirectory in upstream repo structure given the target name.
+    """
+    # Targets information on branch
+    targets_url = f"{base_repo_url}/raw/{branch}/data/targets.yml"
+    with fetch_url_contents(targets_url) as response:
+        targets_dict = yaml.safe_load(response.read())
+    target_dir = targets_dict[target_name]['dir']
+    return target_dir
+
+
+def get_ligands_information(target_name, branch="0.2.1"):
+    """
+    Retrieves the ligands information in a dictionary given the target name,
+    """
+    # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
+    target_dir = get_target_dir(target_name, branch=branch)
+    ligands_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/00_data/ligands.yml"
+    with fetch_url_contents(ligands_url) as response:
+        ligands_dict = yaml.safe_load(response.read())
+    return ligands_dict
+
+
+def generate_ligands_sdf(ligands_dict, target, branch='0.2.1'):
+    """
+    Generates input ligands.sdf file for running the simulation given a dictionary
+    with the ligands information.
+
+    Can handle previous and new structure of upstream repo to date (26-Oct-2022).
+    """
+    from urllib.error import HTTPError
+    # Get target dir where to get ligands sdf files
+    target_dir = get_target_dir(target, branch=branch)
+    # Fetch ligands sdf files and concatenate them in one
+    # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
+    try:
+        # _logger.info(f'Must be previous old repository structure. Trying downloading individual ligand files.')
+        ligand_files = []
+        for ligand in ligands_dict.keys():
+            ligand_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/02_ligands/{ligand}/crd/{ligand}.sdf"
+            ligand_file = retrieve_file_url(ligand_url)
+            ligand_files.append(ligand_file)
+        new_repo = False
+    except HTTPError:
+        _logger.info(f'Must be a newer revision and repository structure. Trying to download single ligands file.')
+        ligands_file_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/02_ligands/ligands.sdf"
+        ligand_files = retrieve_file_url(ligands_file_url)
+        new_repo = True
+
+    # concatenate sdf files as needed
+    if new_repo:
+        # TODO: Just retrieve the ligands file to the working directory without need to concatenate
+        concatenate_files((ligand_files,), "ligands.sdf")  # "concatenate" single file
+    else:
+        concatenate_files(ligand_files, 'ligands.sdf')  # concatenate multiple files
+
+
+def get_ligand_names_from_edge(edge_index, target_name, branch="0.2.1", yaml_filename="01_perses_mst_geom_score_openfe.yml"):
+    """
+    Returns the ligand names from the edge index according to edges.yaml file in repo.
+
+    Allows specifying a branch/revision in repo.
+    """
+    # fetch edges information
+    # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
+    target_dir = get_target_dir(target_name, branch=branch)
+    edges_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/03_edges/{yaml_filename}"
+    with fetch_url_contents(edges_url) as response:
+        edges_dict = yaml.safe_load(response.read())
+    edges_list = list(edges_dict["edges"].values())  # suscriptable edges object - note dicts are ordered for py>=3.7
+
+    edge = edges_list[edge_index]
+    ligand_a_name = edge['ligand_a']
+    ligand_b_name = edge['ligand_b']
+
+    return ligand_a_name, ligand_b_name
+
+
+def get_ligand_index_from_file(sdf_file, ligand_name):
+    """
+    Extract index for ligand in an sdf file given its name.
+
+    Parameters
+    ----------
+    sdf_file : str
+        Path to sdf file with ligands information.
+    ligand_name : str
+        Name of the ligand.
+
+    Returns
+    -------
+    index : int
+        Index of the ligand in the sdf file
+    """
+    from openff.toolkit.topology import Molecule
+
+    # Reading with off-toolkit should preserve the order
+    molecule_objects = Molecule.from_file(sdf_file)
+    names = []
+    try:
+        for molecule in molecule_objects:
+            names.append(molecule.name)
+        index = names.index(ligand_name)
+    except TypeError:  # assuming it must be a single molecule sdf file
+        index = 0
+
+    return index
 
 
 def run_relative_perturbation(lig_a_idx, lig_b_idx, reverse=False, tidy=True):
@@ -125,52 +236,65 @@ arg_parser.add_argument(
     action='store_true',
     help="Whether to run the edge in reverse direction. Helpful for consistency checks."
 )
+arg_parser.add_argument(
+    "--revision",
+    type=str,
+    default="0.2.1",
+    help="Specify revision, release or branch in upstream repo to use. Defaults to using the 0.2.1 release branch."
+)
+arg_parser.add_argument(
+    "--local",
+    action='store_true',
+    help="Run simulation with local data. It expects template.yaml, "
+         "ligands.sdf and target.pdb in the same directory as this script."
+)
+arg_parser.add_argument(
+    "--edges-filename",
+    type=str,
+    default="01_perses_mst_geom_score_openfe.yml",
+    help="File name for the yaml file containing the edges information. "
+         "Must be a filename that exists in the repository file tree."
+)
 args = arg_parser.parse_args()
 target = args.target
+edge_index = args.edge
 is_reversed = args.reversed
+branch = args.revision
+local_run = args.local
+edges_filename = args.edges_filename
 
-# Fetch protein pdb file
-# TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-target_dir = targets_dict[target]['dir']
-pdb_url = f"{base_repo_url}/raw/main/data/{target_dir}/01_protein/crd/protein.pdb"
-pdb_file = retrieve_file_url(pdb_url)
+if local_run:
+    # FIXME: This isn't working we need something that takes a local edges.yaml file
+    lig_a_name, lig_b_name = get_ligand_names_from_edge(edge_index, target, branch=branch, yaml_filename=edges_filename)
+    # get ligand indices from names -- expects ligands.sdf file in the same dir
+    lig_a_index = get_ligand_index_from_file("ligands.sdf", lig_a_name)
+    lig_b_index = get_ligand_index_from_file("ligands.sdf", lig_b_name)
+    run_relative_perturbation(lig_a_index, lig_b_index, reverse=is_reversed)
+else:
+    # get target information
+    target_dir = get_target_dir(target, branch=branch)
+    pdb_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/01_protein/crd/protein.pdb"
+    pdb_file = retrieve_file_url(pdb_url)
 
-# Fetch cofactors crystalwater pdb file
-# TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-cofactors_url = f"{base_repo_url}/raw/main/data/{target_dir}/01_protein/crd/cofactors_crystalwater.pdb"
-cofactors_file = retrieve_file_url(cofactors_url)
+    # Fetch cofactors crystalwater pdb file
+    # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
+    # TODO: No cofactors now in fix_data branch
+    #cofactors_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/01_protein/crd/cofactors_crystalwater.pdb"
+    #cofactors_file = retrieve_file_url(cofactors_url)
 
-# Concatenate protein with cofactors pdbs
-concatenate_files((pdb_file, cofactors_file), 'target.pdb')
+    # Concatenate protein with cofactors pdbs
+    # TODO: No need to concatenate now that there are no cofactors
+    concatenate_files((pdb_file,), 'target.pdb')
 
-# Fetch ligands sdf files and concatenate them in one
-# TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-ligands_url = f"{base_repo_url}/raw/main/data/{target_dir}/00_data/ligands.yml"
-with fetch_url_contents(ligands_url) as response:
-    ligands_dict = yaml.safe_load(response.read())
-ligand_files = []
-for ligand in ligands_dict.keys():
-    ligand_url = f"{base_repo_url}/raw/main/data/{target_dir}/02_ligands/{ligand}/crd/{ligand}.sdf"
-    ligand_file = retrieve_file_url(ligand_url)
-    ligand_files.append(ligand_file)
-# concatenate sdfs
-concatenate_files(ligand_files, 'ligands.sdf')
+    # Fetch ligands sdf files and concatenate them in one
+    ligands_dict = get_ligands_information(target, branch=branch)
+    generate_ligands_sdf(ligands_dict, target, branch=branch)
 
-# run simulation
-# fetch edges information
-# TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-edges_url = f"{base_repo_url}/raw/main/data/{target_dir}/00_data/edges.yml"
-with fetch_url_contents(edges_url) as response:
-    edges_dict = yaml.safe_load(response.read())
-edges_list = list(edges_dict.values())  # suscriptable edges object - note dicts are ordered for py>=3.7
-# edge list to access by index
-edge_index = args.edge  # read from cli arguments
-edge = edges_list[edge_index]
-ligand_a_name = edge['ligand_a']
-ligand_b_name = edge['ligand_b']
-# ligands list to get indices -- preserving same order as upstream yaml file
-ligands_list = list(ligands_dict.keys())
-lig_a_index = ligands_list.index(ligand_a_name)
-lig_b_index = ligands_list.index(ligand_b_name)
-# Perform the simulation
-run_relative_perturbation(lig_a_index, lig_b_index, reverse=is_reversed)
+    # get ligand names
+    lig_a_name, lig_b_name = get_ligand_names_from_edge(edge_index, target, branch=branch, yaml_filename=edges_filename)
+    # get ligand indices from names -- expects ligands.sdf file in the same dir
+    lig_a_index = get_ligand_index_from_file("ligands.sdf", lig_a_name)
+    lig_b_index = get_ligand_index_from_file("ligands.sdf", lig_b_name)
+
+    # run simulation
+    run_relative_perturbation(lig_a_index, lig_b_index, reverse=is_reversed)
