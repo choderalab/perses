@@ -326,12 +326,6 @@ class RelativeFEPSetup(object):
         self._ligand_md_topology_new = md.Topology.from_openmm(self._ligand_topology_new)
         _logger.info(f"Created mdtraj topologies for both ligands.")
 
-        # We must generate the complex topology and positions before the SystemGenerator is created because if the
-        # receptor is a mol2, it must be added to mol_list, which is use to create self._molecules, which is fed to the SystemGenerator
-        if 'complex' in phases:
-            _logger.info(f"setting up complex phase...")
-            self._setup_complex_phase()
-
         # Select barostat
         NONPERIODIC_NONBONDED_METHODS = [app.NoCutoff, app.CutoffNonPeriodic]
         if pressure is not None:
@@ -365,7 +359,7 @@ class RelativeFEPSetup(object):
                 spectator_mol = generate_unique_atom_names(spectator_mol)
                 self._spectator_molecules.append(spectator_mol)
                 # add this to a small molecule register
-                self._molecules.append(Molecule.from_openeye(spectator_mol,allow_undefined_stereo=True))
+                molecules.append(Molecule.from_openeye(spectator_mol, allow_undefined_stereo=True))
                 self._spectator_positions.append(extractPositionsFromOEMol(spectator_mol))
                 spectator_topology = forcefield_generators.generateTopologyFromOEMol(spectator_mol)
                 self._spectator_md_topologies.append(md.Topology.from_openmm(spectator_topology))
