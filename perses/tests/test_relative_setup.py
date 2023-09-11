@@ -204,8 +204,8 @@ def test_run_cdk2_iterations_repex():
 
         # TODO: Check output
 
-
-# @pytest.mark.skip(reason="Skip analysis test on GH Actions. SLOW")
+# Running it on gpu CI -- slow
+@pytest.mark.gpu_needed
 def test_run_bace_spectator():
     """
     Ensure that we can setup a simulation of BACE system with an spectator
