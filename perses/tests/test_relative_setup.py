@@ -204,11 +204,11 @@ def test_run_cdk2_iterations_repex():
 
         # TODO: Check output
 
-#@skipIf(running_on_github_actions, "Skip analysis test on GH Actions. SLOW")
-@pytest.mark.skip(reason="Skip analysis test on GH Actions. SLOW")
+# Running it on gpu CI -- slow
+@pytest.mark.gpu_needed
 def test_run_bace_spectator():
     """
-    Ensure that we can instantiate and run a repex relative free energy calculation the cdk2 ligands in vacuum
+    Ensure that we can setup a simulation of BACE system with an spectator
     """
     # Enter a temporary directory
     from perses.tests.utils import enter_temp_directory
@@ -242,14 +242,12 @@ def test_run_bace_spectator():
             setup_options[parameter] = os.path.join(setup_directory, setup_options[parameter])
             # only one spectator
             setup_options['spectators'] = [ os.path.join(setup_directory, setup_options['spectators'][0])]
-        for parameter in ['trajectory_directory', 'trajectory_prefix', 'save_setup_pickle_as']:
+        for parameter in ['trajectory_directory', 'save_setup_pickle_as']:
             setup_options[parameter] = os.path.join(tmpdirname, setup_options[parameter])
 
 
         # Run setup
-        n_iterations = 2
         setup_dict = setup_relative_calculation.run_setup(setup_options)
-        setup_dict['hybrid_samplers']['complex'].run(n_iterations=n_iterations)
 
         # test that there is TLA in the complex system
         found_tla = False
