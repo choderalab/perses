@@ -149,8 +149,8 @@ def getSetupOptions(filename, override_string=None):
             setup_options['flatness-criteria'] = 'minimum-visits'
             _logger.info(f"\t\t\tflatness-criteria not specified: default to minimum-visits.")
         if 'offline-freq' not in setup_options:
-            setup_options['offline-freq'] = 10
-            _logger.info(f"\t\t\toffline-freq not specified: default to 10.")
+            setup_options['offline-freq'] = setup_options["checkpoint_interval"]
+            _logger.info(f"\t\t\toffline-freq not specified: default to checkpoint interval.")
         if 'gamma0' not in setup_options:
             setup_options['gamma0'] = 1.
             _logger.info(f"\t\t\tgamma0 not specified: default to 1.0.")
@@ -162,8 +162,8 @@ def getSetupOptions(filename, override_string=None):
     elif setup_options['fe_type'] == 'repex':
         _logger.info(f"\t\tfe_type: repex")
         if 'offline-freq' not in setup_options:
-            setup_options['offline-freq'] = 10
-            _logger.info(f"\t\t\toffline-freq not specified: default to 10.")
+            setup_options['offline-freq'] = setup_options["checkpoint_interval"]
+            _logger.info(f"\t\t\toffline-freq not specified: default to checkpoint interval.")
     elif setup_options['fe_type'] == 'neq': #there are some neq attributes that are not used with the equilibrium samplers...
         _logger.info(f"\t\tfe_type: neq")
         if 'n_equilibrium_steps_per_iteration' not in setup_options:
@@ -753,7 +753,7 @@ def run_setup(setup_options, serialize_systems=True, build_samplers=True):
 def run(yaml_filename=None, override_string=None):
     cli_tool_name = sys.argv[0].split(os.sep)[-1]
     if cli_tool_name == "perses-relative":
-        warnings.warn("perses-relative will be removed in 0.11, see https://github.com/choderalab/perses/tree/main/examples/new-cli for new CLI tool", FutureWarning)
+        warning.warn("perses-relative will be removed in 0.11, see https://github.com/choderalab/perses/tree/main/examples/new-cli for new CLI tool", FutureWarning)
     _logger.info("Beginning Setup...")
     if yaml_filename is None:
        try:
@@ -954,6 +954,7 @@ def run(yaml_filename=None, override_string=None):
                 logZ[phase] = hss_run._logZ[-1] - hss_run._logZ[0]
                 free_energies[phase] = hss_run._last_mbar_f_k[-1] - hss_run._last_mbar_f_k[0]
                 _logger.info(f"\t\tFinished phase {phase}")
+                del hss[phase].energy_context_cache, hss[phase].sampler_context_cache
 
             for phase in free_energies:
                 print(f"Comparing ligand {setup_options['old_ligand_index']} to {setup_options['new_ligand_index']}")
@@ -984,6 +985,7 @@ def run(yaml_filename=None, override_string=None):
                 _logger.info(f"\n\n")
 
                 _logger.info(f"\t\tFinished phase {phase}")
+                del hss[phase].energy_context_cache, hss[phase].sampler_context_cache
 
 
 def _resume_run(setup_options):
@@ -1018,6 +1020,7 @@ def _resume_run(setup_options):
             logZ[phase] = simulation._logZ[-1] - simulation._logZ[0]
             free_energies[phase] = simulation._last_mbar_f_k[-1] - simulation._last_mbar_f_k[0]
             _logger.info(f"\t\tFinished phase {phase}")
+            del simulation.sampler_context_cache, simulation.energy_context_cache
         for phase in free_energies:
             print(f"Comparing ligand {setup_options['old_ligand_index']} to {setup_options['new_ligand_index']}")
             print(f"{phase} phase has a free energy of {free_energies[phase]}")
@@ -1041,6 +1044,7 @@ def _resume_run(setup_options):
             simulation.extend(n_iterations=left_to_do)
             _logger.info(f"\n\n")
             _logger.info(f"\t\tFinished phase {phase}")
+            del simulation.sampler_context_cache, simulation.energy_context_cache
     else:
         raise("Can't resume")
 

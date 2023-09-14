@@ -1,0 +1,2 @@
+-np 1 -env CUDA_VISIBLE_DEVICES 0 run_repex.py results_dir solvent 36 10000 300
+-np 1 -env CUDA_VISIBLE_DEVICES 1 run_repex.py results_dir solvent 36 10000 300

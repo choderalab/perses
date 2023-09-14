@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - "0.10.x"
   workflow_dispatch:
   schedule:
     # nightly tests
@@ -68,6 +69,7 @@ jobs:
             python==3.9
             openmm>=8.0
             cudatoolkit==11.7
+            pymbar<4
       
       - name: Additional info about the build
         run: |

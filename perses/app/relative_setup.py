@@ -9,7 +9,7 @@ from perses.rjmc.geometry import FFAllAngleGeometryEngine
 
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
 
-import pymbar
+from openmmtools.multistate.pymbar import _pymbar_bar, _pymbar_exp, detect_equilibration
 from cloudpathlib import AnyPath
 import simtk.openmm as openmm
 import simtk.openmm.app as app
@@ -326,12 +326,6 @@ class RelativeFEPSetup(object):
         self._ligand_md_topology_new = md.Topology.from_openmm(self._ligand_topology_new)
         _logger.info(f"Created mdtraj topologies for both ligands.")
 
-        # We must generate the complex topology and positions before the SystemGenerator is created because if the
-        # receptor is a mol2, it must be added to mol_list, which is use to create self._molecules, which is fed to the SystemGenerator
-        if 'complex' in phases:
-            _logger.info(f"setting up complex phase...")
-            self._setup_complex_phase()
-
         # Select barostat
         NONPERIODIC_NONBONDED_METHODS = [app.NoCutoff, app.CutoffNonPeriodic]
         if pressure is not None:
@@ -365,7 +359,7 @@ class RelativeFEPSetup(object):
                 spectator_mol = generate_unique_atom_names(spectator_mol)
                 self._spectator_molecules.append(spectator_mol)
                 # add this to a small molecule register
-                self._molecules.append(Molecule.from_openeye(spectator_mol,allow_undefined_stereo=True))
+                molecules.append(Molecule.from_openeye(spectator_mol, allow_undefined_stereo=True))
                 self._spectator_positions.append(extractPositionsFromOEMol(spectator_mol))
                 spectator_topology = forcefield_generators.generateTopologyFromOEMol(spectator_mol)
                 self._spectator_md_topologies.append(md.Topology.from_openmm(spectator_topology))
@@ -461,6 +455,9 @@ class RelativeFEPSetup(object):
             else:
                 _logger.info("Skipping counterion")
 
+            # Store phase topology and positions in PDB file
+            self._store_phase_topologies(phase="complex")
+
 
         if 'solvent' in phases:
             _logger.info(f"Detected solvent...")
@@ -520,6 +517,9 @@ class RelativeFEPSetup(object):
                                             new_positions=self._ligand_positions_new_solvated)
             else:
                 _logger.info("Skipping counterion")
+
+            # Store phase topology and positions in PDB file
+            self._store_phase_topologies(phase="solvent")
 
         if 'vacuum' in phases:
             _logger.info(f"Detected solvent...")
@@ -586,6 +586,8 @@ class RelativeFEPSetup(object):
                 self._vacuum_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
                 self._vacuum_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
             self._vacuum_geometry_engine = copy.deepcopy(self._geometry_engine)
+            # Store phase topology and positions in PDB file
+            self._store_phase_topologies(phase="vacuum")
 
     def _setup_complex_phase(self):
         """
@@ -847,7 +849,6 @@ class RelativeFEPSetup(object):
             The parameterized system, containing a barostat if one was specified.
         """
         # DEBUG: Write PDB file being fed into Modeller to check why MOL isn't being matched
-        from simtk.openmm.app import PDBFile
         modeller = app.Modeller(topology, positions)
         # retaining protein protonation from input files
         #hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
@@ -880,13 +881,6 @@ class RelativeFEPSetup(object):
         _logger.info(f"\tparameterizing...")
         solvated_system = self._system_generator.create_system(solvated_topology)
         _logger.info(f"\tSystem parameterized")
-
-        if self._trajectory_directory is not None and self._trajectory_prefix is not None:
-            pdb_filename = AnyPath(f"{self._trajectory_directory}/{self._trajectory_prefix}-{phase}.pdb")
-            with open(pdb_filename, 'w') as outfile:
-                PDBFile.writeFile(solvated_topology, solvated_positions, outfile)
-        else:
-            _logger.info('Both trajectory_directory and trajectory_prefix need to be provided to save .pdb')
 
         return solvated_topology, solvated_positions, solvated_system
 
@@ -921,6 +915,62 @@ class RelativeFEPSetup(object):
 
             # modify the topology proposal
             modify_atom_classes(new_water_indices_to_ionize, topology_proposal)
+
+    def _store_phase_topologies(self, phase: str):
+        """
+        Stores topologies and positions in PDB file for the given the phase, for both the initial (old) and final (new)
+        states. Stores both solvent and solute whenever possible (only "solute" in vacuum).
+
+        Generates two PDB files, one for each state (old/new).
+
+        Notes
+        -----
+        - The topologies and positions are stored in the specified directory using the global trajectory prefix.
+        - The directory will be created if it doesn't already exist.
+        - The topologies and positions are stored as PDB files in the "models" subdirectory of the trajectory directory.
+        - Both the trajectory directory and trajectory prefix need to be provided in order to store the topologies.
+        - If any of the directories or files already exist, they will get overwritten.
+
+        Usage
+        -----
+        To store the topologies and positions, make sure to set the `trajectory_directory` and `trajectory_prefix`
+        attributes before calling this method.
+        """
+        from openmm.app import PDBFile
+        if self._trajectory_directory is not None and self._trajectory_prefix is not None:
+            if phase == "complex":
+                topology_proposal = self.complex_topology_proposal
+                old_positions = self.complex_old_positions
+                new_positions = self.complex_new_positions
+            elif phase == "solvent":
+                topology_proposal = self.solvent_topology_proposal
+                old_positions = self.solvent_old_positions
+                new_positions = self.solvent_new_positions
+            elif phase == "vacuum":
+                topology_proposal = self.vacuum_topology_proposal
+                old_positions = self.vacuum_old_positions
+                new_positions = self.vacuum_new_positions
+
+            topologies_to_store = {
+                f"{phase}_old": {"topology": topology_proposal.old_topology,
+                                "positions": old_positions},
+                f"{phase}_new": {"topology": topology_proposal.new_topology,
+                                "positions": new_positions},
+            }
+            # Store in "models" subdir -- create if doesn't exist
+            models_path = f"{self._trajectory_directory}/models"
+            if not os.path.exists(models_path):
+                os.makedirs(models_path)
+            for phase_key, phase_data in topologies_to_store.items():
+                pdb_filename = AnyPath(f"{models_path}/{self._trajectory_prefix}_{phase_key}.pdb")
+                with open(pdb_filename, 'w') as outfile:
+                    PDBFile.writeFile(phase_data["topology"], phase_data["positions"], outfile)
+        else:
+            _logger.warning(
+                'Not storing topologies. Both trajectory_directory and trajectory_prefix arguments need to'
+                ' be provided to store topology .pdb files.')
+
+
 
     @property
     def complex_topology_proposal(self):
@@ -1661,11 +1711,11 @@ class NonequilibriumSwitchingFEP(DaskClient):
         """
         for _direction, works in self._nonequilibrium_cumulative_work.items():
             if works is not None:
-                self.dg_EXP[_direction] = pymbar.EXP(works[:,-1])
+                self.dg_EXP[_direction] = _pymbar_exp(works[:,-1])
 
         if all(work is not None for work in self._nonequilibrium_cumulative_work.values()):
             #then we can compute a BAR estimate
-            self.dg_BAR = pymbar.BAR(self._nonequilibrium_cumulative_work['forward'][:,-1], self._nonequilibrium_cumulative_work['reverse'][:,-1])
+            self.dg_BAR = _pymbar_bar(self._nonequilibrium_cumulative_work['forward'][:,-1], self._nonequilibrium_cumulative_work['reverse'][:,-1])
 
 
     def attempt_resample(self, observable = 'ESS', resampling_method = 'multinomial', resample_observable_threshold = 0.5):
@@ -2096,7 +2146,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
         Neff_max : float
             Max number of uncorrelated samples
         """
-        [t0, g, Neff_max] = pymbar.timeseries.detectEquilibration(timeseries_array)
+        [t0, g, Neff_max] = detect_equilibration(timeseries_array)
 
         return timeseries_array[t0:], g, Neff_max
 
@@ -2147,11 +2197,11 @@ class NonequilibriumSwitchingFEP(DaskClient):
             self._nonalchemical_reduced_potential_differences[start_lambda] = np.array([nonalchemical_reduced_potential_differences[i] for i in nonalch_full_uncorrelated_indices])
 
             #now to bootstrap results
-            alchemical_exp_results = np.array([pymbar.EXP(np.random.choice(self._alchemical_reduced_potential_differences[_direction], size = (len(self._alchemical_reduced_potential_differences[_direction]))), compute_uncertainty=False) for _ in range(num_subsamples)])
+            alchemical_exp_results = np.array([_pymbar_exp(np.random.choice(self._alchemical_reduced_potential_differences[_direction], size = (len(self._alchemical_reduced_potential_differences[_direction]))), compute_uncertainty=False) for _ in range(num_subsamples)])
             self._EXP[_direction] = (np.average(alchemical_exp_results), np.std(alchemical_exp_results)/np.sqrt(num_subsamples))
             _logger.debug(f"alchemical exp result for {_direction}: {self._EXP[_direction]}")
 
-            nonalchemical_exp_results = np.array([pymbar.EXP(np.random.choice(self._nonalchemical_reduced_potential_differences[start_lambda], size = (len(self._nonalchemical_reduced_potential_differences[start_lambda]))), compute_uncertainty=False) for _ in range(num_subsamples)])
+            nonalchemical_exp_results = np.array([_pymbar_exp(np.random.choice(self._nonalchemical_reduced_potential_differences[start_lambda], size = (len(self._nonalchemical_reduced_potential_differences[start_lambda]))), compute_uncertainty=False) for _ in range(num_subsamples)])
             self._EXP[start_lambda] = (np.average(nonalchemical_exp_results), np.std(nonalchemical_exp_results)/np.sqrt(num_subsamples))
             _logger.debug(f"nonalchemical exp result for {start_lambda}: {self._EXP[start_lambda]}")
 
@@ -2167,7 +2217,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
         work_subsamples = {'forward': [np.random.choice(self._nonequilibrium_cum_work['forward'], size = (len(self._nonequilibrium_cum_work['forward']))) for _ in range(num_subsamples)],
                            'reverse': [np.random.choice(self._nonequilibrium_cum_work['reverse'], size = (len(self._nonequilibrium_cum_work['reverse']))) for _ in range(num_subsamples)]}
 
-        bar_estimates = np.array([pymbar.BAR(forward_sample, reverse_sample, compute_uncertainty=False) for forward_sample, reverse_sample in zip(work_subsamples['forward'], work_subsamples['reverse'])])
+        bar_estimates = np.array([_pymbar_bar(forward_sample, reverse_sample, compute_uncertainty=False) for forward_sample, reverse_sample in zip(work_subsamples['forward'], work_subsamples['reverse'])])
         df, ddf = np.average(bar_estimates), np.std(bar_estimates) / np.sqrt(num_subsamples)
         self._BAR = [df, ddf]
         return (df, ddf)
