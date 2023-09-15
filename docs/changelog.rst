@@ -25,13 +25,14 @@ Documentation
 ^^^^^^^^^^^^^
 
 * Added MPI example with dipeptide mutation by @ijpulidos in https://github.com/choderalab/perses/pull/1228
-* Update comments in `RESTCapableHybridTopologyFactory` doc string by @zhang-ivy in https://github.com/choderalab/perses/pull/1189
+* Update comments in ``RESTCapableHybridTopologyFactory`` doc string by @zhang-ivy in https://github.com/choderalab/perses/pull/1189
+* Clean examples -- CLI protein-ligand example for Tyk2 by @ijpulidos in https://github.com/choderalab/perses/pull/1223
 
 Bug Fixes
 ^^^^^^^^^
 * Fix spectator support by @ijpulidos in https://github.com/choderalab/perses/pull/1233
 * Realtime analysis interval to default to checkpoint interval by @ijpulidos in https://github.com/choderalab/perses/pull/1227
-* Correctly set cutoff for `CustomNonbondedForce` in `HybridTopologyFactory` when using a non-default cutoff distance. by @mikemhenry in 
+* Correctly set cutoff for ``CustomNonbondedForce`` in ``HybridTopologyFactory`` when using a non-default cutoff distance. by @mikemhenry in 
 * Backport openfe fixes for context deletion by @mikemhenry in https://github.com/choderalab/perses/pull/1229
 
 Testing/CI/Packaging
@@ -42,7 +43,6 @@ Testing/CI/Packaging
 * Remove example testing by @mikemhenry in https://github.com/choderalab/perses/pull/1214
 * CI miscellaneous fixes by @ijpulidos in https://github.com/choderalab/perses/pull/1217
 * Improve docker building by @mikemhenry in https://github.com/choderalab/perses/pull/1200
-* Clean examples -- CLI protein-ligand example for Tyk2 by @ijpulidos in https://github.com/choderalab/perses/pull/1223
 
 
 **Full Changelog**: https://github.com/choderalab/perses/compare/0.10.2...0.10.3
