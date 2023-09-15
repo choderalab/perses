@@ -8,6 +8,45 @@ This section lists features and improvements of note in each release.
 
 The full release history can be viewed `at the GitHub perses releases page <https://github.com/choderalab/perses/releases>`_.
 
+0.10.3 - Release
+----------------
+
+Bugfix release.
+
+
+Enhancements
+^^^^^^^^^^^^
+
+* Print perses version on startup by @mikemhenry in https://github.com/choderalab/perses/pull/1176
+* Support pymbar 3 & 4 by @mikemhenry in https://github.com/choderalab/perses/pull/1173
+* Store initial and final topologies for all phases -- small molecule pipeline by @ijpulidos in https://github.com/choderalab/perses/pull/1210
+
+Documentation
+^^^^^^^^^^^^^
+
+* Added MPI example with dipeptide mutation by @ijpulidos in https://github.com/choderalab/perses/pull/1228
+* Update comments in `RESTCapableHybridTopologyFactory` doc string by @zhang-ivy in https://github.com/choderalab/perses/pull/1189
+
+Bug Fixes
+^^^^^^^^^
+* Fix spectator support by @ijpulidos in https://github.com/choderalab/perses/pull/1233
+* Realtime analysis interval to default to checkpoint interval by @ijpulidos in https://github.com/choderalab/perses/pull/1227
+* Correctly set cutoff for `CustomNonbondedForce` in `HybridTopologyFactory` when using a non-default cutoff distance. by @mikemhenry in 
+* Backport openfe fixes for context deletion by @mikemhenry in https://github.com/choderalab/perses/pull/1229
+
+Testing/CI/Packaging
+^^^^^^^^^^^^^^^^^^^^
+
+* Run CI on new 0.10.x branch by @mikemhenry in https://github.com/choderalab/perses/pull/1212
+* Use python executable from env by @mikemhenry in https://github.com/choderalab/perses/pull/1174
+* Remove example testing by @mikemhenry in https://github.com/choderalab/perses/pull/1214
+* CI miscellaneous fixes by @ijpulidos in https://github.com/choderalab/perses/pull/1217
+* Improve docker building by @mikemhenry in https://github.com/choderalab/perses/pull/1200
+* Clean examples -- CLI protein-ligand example for Tyk2 by @ijpulidos in https://github.com/choderalab/perses/pull/1223
+
+
+**Full Changelog**: https://github.com/choderalab/perses/compare/0.10.2...0.10.3
+
 0.10.2 - Release
 ----------------
 
