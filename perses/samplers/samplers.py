@@ -18,6 +18,7 @@ __author__ = 'John D. Chodera'
 import mdtraj as md
 import numpy as np
 import time
+from scipy.special import logsumexp
 from openmmtools.states import SamplerState, ThermodynamicState
 
 from perses.annihilation.ncmc_switching import NCMCEngine
@@ -49,7 +50,7 @@ def log_sum_exp(a_n):
 
     """
     a_n = np.array(list(a_n.values()))
-    return np.log( np.sum( np.exp(a_n - a_n.max() ) ) )
+    return logsumexp(a_n)
 
 
 ################################################################################
