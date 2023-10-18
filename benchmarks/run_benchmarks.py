@@ -306,8 +306,11 @@ arg_parser.add_argument(
          "ligands.sdf and target.pdb in the same directory as this script."
 )
 arg_parser.add_argument(
-    "--ligand-a",
-
+    "--edges-file-name",
+    type=str,
+    default="edges.yml",
+    help="Specify the name of the file for the edges in the repo. "
+         "Useful when we have multiple edges files for the same system.",
 )
 args = arg_parser.parse_args()
 target = args.target
@@ -315,10 +318,12 @@ edge_index = args.edge
 is_reversed = args.reversed
 branch = args.revision
 local_run = args.local
+edges_file_name = args.edges_file_name
 
 if local_run:
     # FIXME: This isn't working we need something that takes a local edges.yaml file
-    lig_a_name, lig_b_name = get_ligand_names_from_edge(edge_index, target, branch=branch)
+    lig_a_name, lig_b_name = get_ligand_names_from_edge(edge_index, target, branch=branch,
+                                                        edges_file_name=edges_file_name)
     # get ligand indices from names -- expects ligands.sdf file in the same dir
     lig_a_index = get_ligand_index_from_file("ligands.sdf", lig_a_name)
     lig_b_index = get_ligand_index_from_file("ligands.sdf", lig_b_name)
@@ -344,7 +349,8 @@ else:
     generate_ligands_sdf(ligands_dict, target, branch=branch)
 
     # get ligand names
-    lig_a_name, lig_b_name = get_ligand_names_from_edge(edge_index, target, branch=branch)
+    lig_a_name, lig_b_name = get_ligand_names_from_edge(edge_index, target, branch=branch,
+                                                        edges_file_name=edges_file_name)
     # get ligand indices from names -- expects ligands.sdf file in the same dir
     lig_a_index = get_ligand_index_from_file("ligands.sdf", lig_a_name)
     lig_b_index = get_ligand_index_from_file("ligands.sdf", lig_b_name)
