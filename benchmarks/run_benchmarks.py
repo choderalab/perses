@@ -100,19 +100,76 @@ def generate_ligands_sdf(ligands_dict, target, branch='0.2.1'):
         concatenate_files(ligand_files, 'ligands.sdf')  # concatenate multiple files
 
 
-def get_ligand_names_from_edge(edge_index, target_name, branch="0.2.1"):
+def get_edges_data_from_repo(target_name, revision="0.2.1", edges_file_name="edges.yml",
+                             base_url="https://github.com/openforcefield/protein-ligand-benchmark"):
     """
-    Returns the ligand names from the edge index according to edges.yaml file in repo.
+    Gets the content of edges file according to branch and edges file name specified.
 
-    Allows specifying a branch/revision in repo.
+    Meant to be used with https://github.com/openforcefield/protein-ligand-benchmark/
+
+    Legacy revision/branch (0.2.1) only has one edge file. Newer revisions could have multiple
+    edges files.
+
+    Parameters
+    ----------
+    target_name: str
+        Target name from the dataset. E.g. "tyk2".
+    revision: str
+        Revision/branch to use when looking up information in the repo.
+    edges_file_name: str
+        File name for the edges file. Useful to specify edges file in repo when there are multiple
+        options. Defaults to legacy "edges.yml".
+    base_url: str
+        URL to repository where to get the data from.
+
+    Returns
+    -------
+    edges_dict: dict
+        Dictionary with edges information
+
+    """
+    # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
+    target_dir = get_target_dir(target_name, branch=revision)
+    if revision == "0.2.1":
+        edges_url = f"{base_url}/raw/{branch}/data/{target_dir}/00_data/{edges_file_name}"
+    else:
+        edges_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/03_edges/{edges_file_name}"
+    with fetch_url_contents(edges_url) as response:
+        data = yaml.safe_load(response.read())
+        try:
+            edges_dict = data["edges"]
+        except KeyError:  # "edges" key doesn't exist for legacy revision (0.2.1)
+            edges_dict = data
+    return edges_dict
+
+
+def get_ligand_names_from_edge(edge_index, target_name, branch="0.2.1", edges_file_name="edges.yml"):
+    """
+    Retrieve the names of ligands associated with a specific edge from a protein-ligand benchmark dataset.
+
+    Parameters:
+        edge_index (int): The index of the edge for which to retrieve ligand names.
+        target_name (str): The name of the target protein in the benchmark dataset.
+        branch (str, optional): The revision or branch of the dataset (default is "0.2.1").
+        edges_file_name (str, optional): The name of the edges file in the repository (default is "edges.yml").
+
+    Returns:
+        tuple: A tuple containing the names of the ligands connected by the specified edge.
+            - ligand_a_name (str): Name of the first ligand (ligand A).
+            - ligand_b_name (str): Name of the second ligand (ligand B).
+
+    Note:
+        This function retrieves the benchmark dataset information from a GitHub repository and extracts
+        ligand names based on the provided edge index and target protein name. It relies on the
+        'get_edges_data_from_repo' function to access the dataset.
+
+    Example:
+        ligand_a, ligand_b = get_ligand_names_from_edge(0, "tyk2, branch="0.2.1")
+        print(f"Ligand A name: {ligand_a}, Ligand B name: {ligand_b}")
     """
     # fetch edges information
-    # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
-    target_dir = get_target_dir(target_name, branch=branch)
-    edges_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/03_edges/01_perses_mst_geom_score_openfe.yml"
-    with fetch_url_contents(edges_url) as response:
-        edges_dict = yaml.safe_load(response.read())
-    edges_list = list(edges_dict["edges"].values())  # suscriptable edges object - note dicts are ordered for py>=3.7
+    edges_dict = get_edges_data_from_repo(target_name, revision=branch, edges_file_name=edges_file_name)
+    edges_list = list(edges_dict.values())  # suscriptable edges object - note dicts are ordered for py>=3.7
 
     edge = edges_list[edge_index]
     ligand_a_name = edge['ligand_a']

@@ -47,6 +47,7 @@ fe_type: repex
 
 # Checkpoint interval
 checkpoint_interval: 50 # number of iterations
+offline-freq: 100  # must be a multiple of checkpoint interval
 
 # Number of equilibration iterations
 n_equilibration_iterations: 0
