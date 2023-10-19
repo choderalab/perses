@@ -40,6 +40,7 @@ def concatenate_files(input_files, output_file):
             with open(filename) as infile:
                 for line in infile:
                     outfile.write(line)
+                outfile.write("\n")  # End with empty line
 
 
 def get_target_dir(target_name, branch="0.2.1"):
@@ -101,7 +102,8 @@ def generate_ligands_sdf(ligands_dict, target, branch='0.2.1'):
 
 
 def get_edges_data_from_repo(target_name, revision="0.2.1", edges_file_name="edges.yml",
-                             base_url="https://github.com/openforcefield/protein-ligand-benchmark"):
+                             base_url="https://github.com/openforcefield/protein-ligand-benchmark",
+                             legacy=False):
     """
     Gets the content of edges file according to branch and edges file name specified.
 
@@ -121,6 +123,8 @@ def get_edges_data_from_repo(target_name, revision="0.2.1", edges_file_name="edg
         options. Defaults to legacy "edges.yml".
     base_url: str
         URL to repository where to get the data from.
+    legacy: bool
+        Tell whether the revision has the old/legacy structure. Default is False.
 
     Returns
     -------
@@ -130,7 +134,7 @@ def get_edges_data_from_repo(target_name, revision="0.2.1", edges_file_name="edg
     """
     # TODO: This part should be done using plbenchmarks API - once there is a conda pkg
     target_dir = get_target_dir(target_name, branch=revision)
-    if revision == "0.2.1":
+    if revision == "0.2.1" or legacy:
         edges_url = f"{base_url}/raw/{branch}/data/{target_dir}/00_data/{edges_file_name}"
     else:
         edges_url = f"{base_repo_url}/raw/{branch}/data/{target_dir}/03_edges/{edges_file_name}"
@@ -143,7 +147,7 @@ def get_edges_data_from_repo(target_name, revision="0.2.1", edges_file_name="edg
     return edges_dict
 
 
-def get_ligand_names_from_edge(edge_index, target_name, branch="0.2.1", edges_file_name="edges.yml"):
+def get_ligand_names_from_edge(edge_index, target_name, branch="0.2.1", edges_file_name="edges.yml", legacy=False):
     """
     Retrieve the names of ligands associated with a specific edge from a protein-ligand benchmark dataset.
 
@@ -152,6 +156,7 @@ def get_ligand_names_from_edge(edge_index, target_name, branch="0.2.1", edges_fi
         target_name (str): The name of the target protein in the benchmark dataset.
         branch (str, optional): The revision or branch of the dataset (default is "0.2.1").
         edges_file_name (str, optional): The name of the edges file in the repository (default is "edges.yml").
+        legacy (bool, optional): Whether the structure of the data repository is old/legacy.
 
     Returns:
         tuple: A tuple containing the names of the ligands connected by the specified edge.
@@ -168,7 +173,7 @@ def get_ligand_names_from_edge(edge_index, target_name, branch="0.2.1", edges_fi
         print(f"Ligand A name: {ligand_a}, Ligand B name: {ligand_b}")
     """
     # fetch edges information
-    edges_dict = get_edges_data_from_repo(target_name, revision=branch, edges_file_name=edges_file_name)
+    edges_dict = get_edges_data_from_repo(target_name, revision=branch, edges_file_name=edges_file_name, legacy=legacy)
     edges_list = list(edges_dict.values())  # suscriptable edges object - note dicts are ordered for py>=3.7
 
     edge = edges_list[edge_index]
@@ -312,6 +317,11 @@ arg_parser.add_argument(
     help="Specify the name of the file for the edges in the repo. "
          "Useful when we have multiple edges files for the same system.",
 )
+arg_parser.add_argument(
+    "--legacy",
+    action="store_true",
+    help="Tell whether to look for legacy/old structure of the dataset repository.",
+)
 args = arg_parser.parse_args()
 target = args.target
 edge_index = args.edge
@@ -319,11 +329,12 @@ is_reversed = args.reversed
 branch = args.revision
 local_run = args.local
 edges_file_name = args.edges_file_name
+legacy = args.legacy
 
 if local_run:
     # FIXME: This isn't working we need something that takes a local edges.yaml file
     lig_a_name, lig_b_name = get_ligand_names_from_edge(edge_index, target, branch=branch,
-                                                        edges_file_name=edges_file_name)
+                                                        edges_file_name=edges_file_name, legacy=legacy)
     # get ligand indices from names -- expects ligands.sdf file in the same dir
     lig_a_index = get_ligand_index_from_file("ligands.sdf", lig_a_name)
     lig_b_index = get_ligand_index_from_file("ligands.sdf", lig_b_name)
@@ -350,7 +361,7 @@ else:
 
     # get ligand names
     lig_a_name, lig_b_name = get_ligand_names_from_edge(edge_index, target, branch=branch,
-                                                        edges_file_name=edges_file_name)
+                                                        edges_file_name=edges_file_name, legacy=legacy)
     # get ligand indices from names -- expects ligands.sdf file in the same dir
     lig_a_index = get_ligand_index_from_file("ligands.sdf", lig_a_name)
     lig_b_index = get_ligand_index_from_file("ligands.sdf", lig_b_name)
