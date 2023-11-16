@@ -68,7 +68,7 @@ jobs:
           channel-priority: strict
           extra-specs: |
             python==3.9
-            openmm>=8.1
+            openmm==8.1.0rc1
             cudatoolkit==11.7
             pymbar<4
       

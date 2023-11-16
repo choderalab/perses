@@ -56,7 +56,7 @@ jobs:
           extra-specs: |
             python==${{ matrix.python-version }}
             openmmtools>=0.23.1
-            openmm
+            openmm==8.1.0rc1
 
       - name: Setup micromamba
         if: ${{ matrix.openmm != 'dev' }}
