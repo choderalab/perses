@@ -61,11 +61,11 @@ jobs:
           echo $HOME
 
       - uses: actions/checkout@v3
-      - uses: mamba-org/provision-with-micromamba@main
+      - uses: mamba-org/setup-micromamba@v1
         with:
           environment-file: devtools/conda-envs/test_env.yaml
-          channels: conda-forge,conda-forge/label/openmm_rc,conda-forge,openeye
-          extra-specs: |
+          channels: conda-forge/label/openmm_rc,conda-forge,openeye
+          create-args: >-
             python==3.9
             openmm==8.1.0rc1
             cudatoolkit==11.7
