@@ -61,19 +61,18 @@ jobs:
           echo $HOME
 
       - uses: actions/checkout@v3
-      - uses: mamba-org/setup-micromamba@v1
+        uses: mamba-org/provision-with-micromamba@main
         with:
           environment-file: devtools/conda-envs/test_env.yaml
-          condarc: |
-            channels:
-              - conda-forge/label/openmm_rc
-              - conda-forge
-              - openeye
-          create-args: >-
-            python==3.9
+          environment-name: test
+          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmm_dev,conda-forge/label/openmm_rc,conda-forge,openeye
+          channel-priority: flexible
+          cache-env: true
+          cache-downloads: true
+          extra-specs: |
+            python==${{ matrix.python-version }}
+            openmmtools==0.23.1
             openmm==8.1.0rc1
-            cudatoolkit==11.7
-            pymbar<4
       
       - name: Additional info about the build
         run: |
