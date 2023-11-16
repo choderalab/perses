@@ -67,8 +67,6 @@ jobs:
           environment-name: test
           channels: conda-forge/label/openmm_dev,conda-forge/label/openmm_rc,conda-forge,openeye
           channel-priority: flexible
-          cache-env: true
-          cache-downloads: true
           extra-specs: |
             python=3.9
             openmmtools==0.23.1
