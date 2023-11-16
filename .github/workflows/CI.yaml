@@ -52,14 +52,14 @@ jobs:
         with:
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: test
-          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmm_dev,conda-forge/label/openmm_rc,conda-forge,openeye
-          channel-priority: flexible
+          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmm_rc,conda-forge,openeye
+          channel-priority: strict
           cache-env: true
           cache-downloads: true
           extra-specs: |
             python==${{ matrix.python-version }}
             openmmtools==0.23.1
-            openmm==8.1.0beta
+            openmm==8.1
 
       - name: Setup micromamba
         if: ${{ matrix.openmm != 'dev' }}
