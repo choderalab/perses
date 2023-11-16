@@ -55,8 +55,8 @@ jobs:
           cache-downloads: true
           extra-specs: |
             python==${{ matrix.python-version }}
-            openmmtools==0.23.1
-            openmm==8.1
+            openmmtools>=0.23.1
+            openmm>=8.1
 
       - name: Setup micromamba
         if: ${{ matrix.openmm != 'dev' }}
