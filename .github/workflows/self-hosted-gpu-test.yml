@@ -65,7 +65,7 @@ jobs:
         with:
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: test
-          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmm_dev,conda-forge/label/openmm_rc,conda-forge,openeye
+          channels: conda-forge/label/openmm_dev,conda-forge/label/openmm_rc,conda-forge,openeye
           channel-priority: flexible
           cache-env: true
           cache-downloads: true
