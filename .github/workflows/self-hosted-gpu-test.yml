@@ -64,10 +64,11 @@ jobs:
       - uses: mamba-org/provision-with-micromamba@main
         with:
           environment-file: devtools/conda-envs/test_env.yaml
-          channels: conda-forge,openeye
+          channels: conda-forge/label/openmm_rc,conda-forge,openeye
+          channel-priority: strict
           extra-specs: |
             python==3.9
-            openmm>=8.0
+            openmm>=8.1
             cudatoolkit==11.7
             pymbar<4
       
