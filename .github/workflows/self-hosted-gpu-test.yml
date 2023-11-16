@@ -61,7 +61,7 @@ jobs:
           echo $HOME
 
       - uses: actions/checkout@v3
-        uses: mamba-org/provision-with-micromamba@main
+      - uses: mamba-org/provision-with-micromamba@main
         with:
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: test
