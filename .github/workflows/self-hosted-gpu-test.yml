@@ -71,6 +71,7 @@ jobs:
             python=3.9
             openmmtools==0.23.1
             openmm==8.1.0rc1
+            cudatoolkit==11.7
       
       - name: Additional info about the build
         run: |
