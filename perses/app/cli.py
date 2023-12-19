@@ -82,7 +82,7 @@ def _test_platform(platform_name):
 @click.option("--yaml", type=click.Path(path_type=AnyPath), required=True,
               help='Input yaml file with simulation parameters and options.')
 @click.option("--platform-name", "--platform", type=str, default=None,
-              help='Platform name to be used during the simulation. (i.e. cuda, OpenCL, CPU, Reference).')
+              help='Platform name to be used during the simulation. (i.e. CUDA, OpenCL, CPU, Reference).')
 @click.option("--override", multiple=True, required=False, default=None,
               help='Override specific option using key:value format.')
 def cli(yaml, platform_name, override):
