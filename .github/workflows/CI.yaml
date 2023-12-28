@@ -77,6 +77,7 @@ jobs:
         shell: bash -l {0}
         run: |
           python -m pip install --no-deps -v .
+          python -m pip install --no-cache-dir --pre -i https://pypi.anaconda.org/OpenEye/channel/beta/simple OpenEye-toolkits
 
       - name: Environment Information
         shell: bash -l {0}
