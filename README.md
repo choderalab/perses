@@ -54,3 +54,18 @@ Major contributors include:
 * Jaime Rodríguez-Guerra
 * Dominic A. Rufa
 * Ivy Zhang
+
+## Cite
+Please consider citing:
+* **Software**:
+
+Rufa, D. A., Zhang, I., Bruce Macdonald, H. E., Grinaway, P. B., Pulido, I., Henry, M. M., Rodríguez-Guerra, J., Wittmann, M., Albanese, S. K., Glass, W. G., Silveira, A., Schaller, D., Naden, L. N., & Chodera, J. D. (2023). Perses (0.10.3). Zenodo. https://doi.org/10.5281/zenodo.8350218
+
+* **Protein mutations**:
+
+Zhang, I., Rufa, D. A., Pulido, I., Henry, M. M., Rosen, L. E., Hauser, K., Singh, S., & Chodera, J. D. (2023). Identifying and Overcoming the Sampling Challenges in Relative Binding Free Energy Calculations of a Model Protein:Protein Complex. Journal of chemical theory and computation, 19(15), 4863–4882. https://doi.org/10.1021/acs.jctc.3c00333
+
+* **Small molecule transformations**:
+
+Rufa, D. A., Bruce Macdonald, H. E., Fass, J., Wieder, M., Grinaway, P. B., Roitberg, A. E., Isayev, O., & Chodera, J. D. (2020). Towards chemical accuracy for alchemical free energy calculations with hybrid physics-based machine learning / molecular mechanics potentials. In bioRxiv (p. 2020.07.29.227959). https://doi.org/10.1101/2020.07.29.227959
+
