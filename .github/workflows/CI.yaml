@@ -26,11 +26,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.9, "3.10"]
-        openmm: ["8.0", "7.7"]
-        include:
-          - openmm: "dev"
-            python-version: "3.10"
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        openmm: ["8.0", "8.1.2"]
+        exclude:
+          - python-version: "3.12"
+            openmm: "8.0"
 
     env:
       OPENMM: ${{ matrix.openmm }}
@@ -46,30 +46,12 @@ jobs:
           df -h
           ulimit -a
 
-      - name: Setup micromamba dev
-        if: ${{ matrix.openmm == 'dev' }}
-        uses: mamba-org/provision-with-micromamba@main
-        with:
-          environment-file: devtools/conda-envs/test_env.yaml
-          environment-name: test
-          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmm_dev,conda-forge,openeye
-          channel-priority: flexible
-          cache-env: true
-          cache-downloads: true
-          extra-specs: |
-            python==${{ matrix.python-version }}
-            openmmtools==0.23.0
-            openmm==8.0.0dev3
-
       - name: Setup micromamba
-        if: ${{ matrix.openmm != 'dev' }}
-        uses: mamba-org/provision-with-micromamba@main
+        uses: mamba-org/setup-micromamba@v2
         with:
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: test
-          cache-env: true
-          cache-downloads: true
-          extra-specs: |
+          create-args: >-
             python==${{ matrix.python-version }}
             openmm==${{ matrix.openmm }}
 
