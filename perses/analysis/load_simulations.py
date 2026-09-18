@@ -232,18 +232,18 @@ class Simulation(object):
             the relative free energy and it's associated std error (kcal/mol)
 
         """
-        vac = self._vacdg_history[self.count]
         sol = self._soldg_history[self.count]
-        com = self._comdg_history[self.count]
-        vacvar = self._vacddg_history[self.count]
         solvar = self._solddg_history[self.count]
-        comvar = self._comddg_history[self.count]
-
-        self.count += 1
 
         if method == 'binding':
+            com = self._comdg_history[self.count]
+            comvar = self._comddg_history[self.count]
+            self.count += 1
             return sol - com, (solvar**2 + comvar**2)**0.5
         elif method == 'hydration':
+            vac = self._vacdg_history[self.count]
+            vacvar = self._vacddg_history[self.count]
+            self.count += 1
             return vac - sol, (solvar**2 + vacvar**2)**0.5
         else:
             print('method not recognised, choose binding or hydration')
